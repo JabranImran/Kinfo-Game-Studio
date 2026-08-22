@@ -593,7 +593,11 @@ let spawnTimer = 0;
 let difficultyTimer = 0;
 
 let empCharge = 0;
+
+/* NEW: EMP cooldown */
+let empCooldown = 0;
 const EMP_MAX = 100;
+const EMP_COOLDOWN = 10;
 
 let lastTime = 0;
 
@@ -861,11 +865,6 @@ class Asteroid {
             this.hitFlash -= dt;
         }
 
-        /*
-         * Screen wrap for asteroid field.
-         * Keeps the field continuously populated.
-         */
-
         const margin = this.radius + 80;
 
         if (this.x < -margin) this.x = W + margin;
@@ -915,10 +914,6 @@ class Asteroid {
         ctx.lineWidth = 2;
         ctx.strokeStyle = glow;
         ctx.stroke();
-
-        /*
-         * Craters
-         */
 
         ctx.globalAlpha = .35;
         ctx.strokeStyle = this.color;
@@ -1219,17 +1214,9 @@ function detonateAsteroid(index, chain=false) {
 
     const asteroid=asteroids[index];
 
-    /*
-     * Remove asteroid immediately.
-     */
-
     asteroids.splice(index,1);
 
     destroyed++;
-
-    /*
-     * Larger asteroids are worth more.
-     */
 
     const basePoints =
         asteroid.size === 3 ? 100 :
@@ -1248,10 +1235,6 @@ function detonateAsteroid(index, chain=false) {
             EMP_MAX
         );
 
-    /*
-     * Combo.
-     */
-
     comboTimer=1.15;
 
     if (chain) {
@@ -1261,10 +1244,6 @@ function detonateAsteroid(index, chain=false) {
                 12
             );
     }
-
-    /*
-     * Explosion.
-     */
 
     const power =
         asteroid.size === 3 ? 1.8 :
@@ -1278,12 +1257,6 @@ function detonateAsteroid(index, chain=false) {
             power
         )
     );
-
-    /*
-     * Shockwave changes trajectory.
-     *
-     * This is the central game mechanic.
-     */
 
     const radius =
         110 * power;
@@ -1309,30 +1282,13 @@ function detonateAsteroid(index, chain=false) {
             const nx=dx/dist;
             const ny=dy/dist;
 
-            /*
-             * Radial blast.
-             */
-
             other.vx += nx * strength;
             other.vy += ny * strength;
-
-            /*
-             * Add a small sideways impulse.
-             * This makes the asteroid trajectories
-             * unpredictable and fun.
-             */
 
             other.vx += -ny * strength * .35;
             other.vy += nx * strength * .35;
 
             other.hitFlash=.18;
-
-            /*
-             * Chain reaction chance.
-             *
-             * Fast-moving nearby asteroids have
-             * a higher chance of being destroyed.
-             */
 
             const chance =
                 .025 +
@@ -1365,10 +1321,6 @@ function detonateAsteroid(index, chain=false) {
             }
         }
     }
-
-    /*
-     * Break large asteroids into smaller ones.
-     */
 
     if (asteroid.size > 1) {
 
@@ -1447,11 +1399,6 @@ function checkPlayerCollisions() {
             a.radius + player.radius
         ) {
 
-            /*
-             * Destroy the asteroid when it
-             * hits the ship.
-             */
-
             asteroids.splice(i,1);
 
             explosions.push(
@@ -1490,10 +1437,6 @@ function drawPlayer() {
     const x=W/2;
     const y=H/2;
 
-    /*
-     * Protective glow.
-     */
-
     const glow=ctx.createRadialGradient(
         x,y,5,
         x,y,55
@@ -1516,10 +1459,6 @@ function drawPlayer() {
     ctx.arc(x,y,55,0,Math.PI*2);
 
     ctx.fill();
-
-    /*
-     * Ship.
-     */
 
     ctx.save();
 
@@ -1550,10 +1489,6 @@ function drawPlayer() {
 
     ctx.stroke();
 
-    /*
-     * Engine.
-     */
-
     ctx.beginPath();
 
     ctx.moveTo(-6,17);
@@ -1564,10 +1499,6 @@ function drawPlayer() {
     ctx.fill();
 
     ctx.restore();
-
-    /*
-     * Shield rings.
-     */
 
     const shieldAlpha =
         .15 +
@@ -1596,11 +1527,27 @@ function drawPlayer() {
 
 function activateEMP() {
 
-    if(empCharge < EMP_MAX || !running || paused) {
+    /*
+     * EMP cannot activate while cooling down.
+     */
+
+    if(
+        empCharge < EMP_MAX ||
+        !running ||
+        paused ||
+        gameOver ||
+        empCooldown > 0
+    ) {
         return;
     }
 
+    /*
+     * Consume the EMP charge and start
+     * the 10 second cooldown.
+     */
+
     empCharge=0;
+    empCooldown=EMP_COOLDOWN;
 
     sound("emp");
 
@@ -1702,10 +1649,6 @@ function handlePointer(event) {
         return;
     }
 
-    /*
-     * Don't fire when touching UI.
-     */
-
     if(
         event.target !== canvas
     ) {
@@ -1717,10 +1660,6 @@ function handlePointer(event) {
     initAudio();
 
     const p=pointerPosition(event);
-
-    /*
-     * Find closest asteroid under finger.
-     */
 
     let best=-1;
     let bestDistance=Infinity;
@@ -1840,6 +1779,12 @@ function startGame() {
 
     empCharge=0;
 
+    /*
+     * NEW: Reset EMP cooldown
+     */
+
+    empCooldown=0;
+
     shake=0;
 
     asteroids=[];
@@ -1916,12 +1861,6 @@ function updateDifficulty(dt) {
 
     difficultyTimer += dt;
 
-    /*
-     * New wave approximately every 25 seconds,
-     * with additional wave progression based
-     * on destruction.
-     */
-
     const calculatedWave =
         1 +
         Math.floor(
@@ -1959,6 +1898,22 @@ function update(dt) {
     }
 
     dt=Math.min(dt,.033);
+
+    /*
+     * EMP cooldown.
+     *
+     * Because this is inside update(), the timer
+     * automatically pauses whenever the game is paused.
+     */
+
+    if(empCooldown > 0) {
+
+        empCooldown =
+            Math.max(
+                0,
+                empCooldown - dt
+            );
+    }
 
     updateStars(dt);
 
@@ -1999,11 +1954,6 @@ function update(dt) {
         spawnTimer=spawnInterval;
 
         spawnAsteroid();
-
-        /*
-         * Chance of an extra asteroid
-         * increases with difficulty.
-         */
 
         if(
             wave>4 &&
@@ -2097,10 +2047,6 @@ function drawBackground() {
     ctx.fillStyle=gradient;
 
     ctx.fillRect(0,0,W,H);
-
-    /*
-     * Very subtle nebula.
-     */
 
     const nebula=ctx.createRadialGradient(
         W*.5,
@@ -2254,12 +2200,27 @@ function updateHUD() {
         "♥".repeat(Math.max(0,lives)) +
         "♡".repeat(Math.max(0,3-lives));
 
+    /*
+     * NEW: EMP cooldown display.
+     */
+
+    const coolingDown =
+        empCooldown > 0;
+
     empButton.classList.toggle(
         "ready",
-        empCharge>=EMP_MAX
+        empCharge >= EMP_MAX &&
+        !coolingDown
     );
 
-    if(empCharge>=EMP_MAX) {
+    if(coolingDown) {
+
+        empButton.innerHTML =
+            "⚡<small>" +
+            Math.ceil(empCooldown) +
+            "s</small>";
+
+    } else if(empCharge>=EMP_MAX) {
 
         empButton.innerHTML =
             "⚡<small>READY</small>";
