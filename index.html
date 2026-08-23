@@ -162,6 +162,10 @@ canvas {
     box-shadow:
         0 0 20px rgba(50,190,255,.15),
         inset 0 0 20px rgba(50,190,255,.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
 }
 
 .ability.ready {
@@ -706,8 +710,6 @@ canvas {
 
         </div>
 
-        <!-- NAME -->
-
         <div class="leaderboard-title">
             Submit Global Score
         </div>
@@ -729,8 +731,6 @@ canvas {
         </button>
 
         <div id="leaderboardStatus"></div>
-
-        <!-- LEADERBOARD -->
 
         <div class="leaderboard-title">
             🏆 Global Top 10
@@ -971,12 +971,33 @@ let destroyed = 0;
 let spawnTimer = 0;
 let difficultyTimer = 0;
 
-let empCharge = 0;
 
+/*
+ * EMP SYSTEM
+ *
+ * The player can use the EMP three times.
+ *
+ * Each use:
+ *
+ * 100% charge
+ *     ↓
+ * EMP
+ *     ↓
+ * charge resets to 0
+ *
+ * After the third use:
+ *
+ * 10 second cooldown
+ *
+ */
+
+let empCharge = 0;
 let empCooldown = 0;
+let empUses = 0;
 
 const EMP_MAX = 100;
 const EMP_COOLDOWN = 10;
+const EMP_USES_BEFORE_COOLDOWN = 3;
 
 let lastTime = 0;
 
@@ -2319,26 +2340,31 @@ function drawPlayer() {
 function activateEMP() {
 
     if(
-        empCharge<EMP_MAX ||
+        empCharge < EMP_MAX ||
         !running ||
         paused ||
         gameOver ||
-        empCooldown>0
+        empCooldown > 0
     ) {
 
         return;
     }
 
-    empCharge=0;
+    /*
+     * Consume charge.
+     */
+    empCharge = 0;
 
-    empCooldown=
-        EMP_COOLDOWN;
+    /*
+     * Count this EMP.
+     */
+    empUses++;
 
     sound("emp");
 
-    shake=12;
+    shake = 12;
 
-    const targets=[
+    const targets = [
         ...asteroids
     ];
 
@@ -2346,12 +2372,12 @@ function activateEMP() {
         const asteroid of targets
     ) {
 
-        const index=
+        const index =
             asteroids.indexOf(
                 asteroid
             );
 
-        if(index!==-1) {
+        if(index !== -1) {
 
             detonateAsteroid(
                 index,
@@ -2374,8 +2400,11 @@ function activateEMP() {
         i++
     ) {
 
-        const angle=
-            random(0,Math.PI*2);
+        const angle =
+            random(
+                0,
+                Math.PI*2
+            );
 
         particles.push({
 
@@ -2411,6 +2440,27 @@ function activateEMP() {
         H/2-30,
         "#64e9ff"
     );
+
+    /*
+     * THIRD EMP triggers cooldown.
+     */
+    if(
+        empUses >=
+        EMP_USES_BEFORE_COOLDOWN
+    ) {
+
+        empCooldown =
+            EMP_COOLDOWN;
+
+        empUses = 0;
+
+        floatingText(
+            "EMP COOLDOWN",
+            W/2,
+            H/2+10,
+            "#ff8ad8"
+        );
+    }
 
     updateHUD();
 }
@@ -2643,8 +2693,12 @@ function startGame() {
     spawnTimer=0;
     difficultyTimer=0;
 
+    /*
+     * Reset EMP completely.
+     */
     empCharge=0;
     empCooldown=0;
+    empUses=0;
 
     shake=0;
 
@@ -2741,10 +2795,6 @@ function endGame() {
     .classList
     .remove("hidden");
 
-    /*
-     * Load the global leaderboard.
-     */
-
     loadLeaderboard(
         leaderboardEl,
         leaderboardStatus
@@ -2811,6 +2861,9 @@ function update(dt) {
             .033
         );
 
+    /*
+     * EMP cooldown countdown.
+     */
     if(empCooldown>0) {
 
         empCooldown=
@@ -3109,10 +3162,13 @@ function updateHUD() {
     const coolingDown =
         empCooldown>0;
 
+    const ready =
+        empCharge>=EMP_MAX &&
+        !coolingDown;
+
     empButton.classList.toggle(
         "ready",
-        empCharge>=EMP_MAX &&
-        !coolingDown
+        ready
     );
 
     if(coolingDown) {
@@ -3122,9 +3178,7 @@ function updateHUD() {
             Math.ceil(empCooldown)+
             "s</small>";
 
-    } else if(
-        empCharge>=EMP_MAX
-    ) {
+    } else if(ready) {
 
         empButton.innerHTML =
             "⚡<small>READY</small>";
@@ -3142,10 +3196,6 @@ function updateHUD() {
 /* =========================================================
    GLOBAL LEADERBOARD
    ========================================================= */
-
-/*
- * Get leaderboard from Google Apps Script.
- */
 
 async function fetchLeaderboard() {
 
@@ -3178,10 +3228,6 @@ async function fetchLeaderboard() {
     return data;
 }
 
-
-/*
- * Draw leaderboard into an element.
- */
 
 function renderLeaderboard(
     element,
@@ -3241,11 +3287,6 @@ function renderLeaderboard(
 }
 
 
-/*
- * Escape names before putting them
- * into the HTML.
- */
-
 function escapeHTML(value) {
 
     return String(value)
@@ -3256,10 +3297,6 @@ function escapeHTML(value) {
         .replace(/'/g,"&#039;");
 }
 
-
-/*
- * Load leaderboard.
- */
 
 async function loadLeaderboard(
     element,
@@ -3301,10 +3338,6 @@ async function loadLeaderboard(
     }
 }
 
-
-/*
- * Submit score.
- */
 
 async function submitScore() {
 
@@ -3381,11 +3414,6 @@ async function submitScore() {
         leaderboardStatus.textContent =
             "✓ Score submitted!";
 
-        /*
-         * Reload leaderboard after
-         * successful submission.
-         */
-
         await loadLeaderboard(
             leaderboardEl,
             leaderboardStatus
@@ -3428,11 +3456,6 @@ document
     }
 );
 
-
-/*
- * Main menu leaderboard.
- */
-
 document
 .getElementById(
     "startLeaderboardButton"
@@ -3455,11 +3478,6 @@ document
         );
     }
 );
-
-
-/*
- * Close leaderboard.
- */
 
 document
 .getElementById(
