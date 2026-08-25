@@ -103,10 +103,6 @@ canvas {
     color:#eef7ff;
 }
 
-#score {
-    color:#fff;
-}
-
 #combo {
     color:#53d9ff;
 }
@@ -168,6 +164,9 @@ canvas {
         );
     color:#67ddff;
     font-size:25px;
+    box-shadow:
+        0 0 20px rgba(50,190,255,.15),
+        inset 0 0 20px rgba(50,190,255,.08);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -185,6 +184,7 @@ canvas {
     display:block;
     font-size:7px;
     letter-spacing:1px;
+    margin-top:-2px;
 }
 
 #hint {
@@ -207,8 +207,8 @@ canvas {
     display:flex;
     align-items:center;
     justify-content:center;
-    padding:20px;
-    background:rgba(1,4,12,.68);
+    padding:25px;
+    background:rgba(1,4,12,.65);
     backdrop-filter:blur(10px);
 }
 
@@ -217,29 +217,30 @@ canvas {
 }
 
 .card {
-    width:min(460px,100%);
+    width:min(440px,100%);
     max-height:92vh;
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-    overscroll-behavior:contain;
-
-    padding:28px 22px;
+    overflow:hidden;
+    padding:30px 24px;
     border-radius:24px;
-
     text-align:center;
-
     background:
         linear-gradient(
             145deg,
-            rgba(13,24,48,.95),
-            rgba(4,9,22,.98)
+            rgba(13,24,48,.94),
+            rgba(4,9,22,.97)
         );
-
     border:1px solid rgba(95,185,255,.2);
-
     box-shadow:
         0 30px 80px rgba(0,0,0,.55),
         inset 0 0 50px rgba(70,130,255,.035);
+}
+
+.card-scroll {
+    max-height:calc(92vh - 60px);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding-right:3px;
 }
 
 .logo {
@@ -247,7 +248,6 @@ canvas {
     font-weight:900;
     letter-spacing:-3px;
     line-height:.95;
-
     background:
         linear-gradient(
             90deg,
@@ -255,11 +255,9 @@ canvas {
             #a58cff,
             #ff66a8
         );
-
     -webkit-background-clip:text;
     background-clip:text;
     color:transparent;
-
     margin-bottom:8px;
 }
 
@@ -268,14 +266,14 @@ canvas {
     font-size:11px;
     letter-spacing:4px;
     text-transform:uppercase;
-    margin-bottom:22px;
+    margin-bottom:25px;
 }
 
 .description {
     color:#9eb1cb;
-    line-height:1.6;
+    line-height:1.65;
     font-size:14px;
-    margin:0 auto 22px;
+    margin:0 auto 25px;
     max-width:340px;
 }
 
@@ -289,17 +287,14 @@ canvas {
     letter-spacing:2px;
     text-transform:uppercase;
     color:#04101c;
-
     background:
         linear-gradient(
             90deg,
             #56dcff,
             #8da8ff
         );
-
     box-shadow:
         0 8px 30px rgba(55,190,255,.22);
-
     cursor:pointer;
 }
 
@@ -322,51 +317,246 @@ canvas {
 
 
 /* =========================================================
-   GAME OVER
+   PLANET MAP
    ========================================================= */
 
-.game-over-title {
-    color:#ff789c;
-    font-size:13px;
+.map-title {
+    color:#65dcff;
+    font-size:12px;
     letter-spacing:4px;
     text-transform:uppercase;
-    margin-bottom:8px;
 }
 
-.final-score {
-    font-size:54px;
-    font-weight:900;
-    margin:5px 0;
+.map-subtitle {
+    color:#7189a9;
+    font-size:10px;
+    margin:0 0 12px;
+}
 
+.planet-map {
+    position:relative;
+    height:360px;
+    width:100%;
+    margin:10px 0 15px;
+    overflow:hidden;
+    border-radius:18px;
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            rgba(50,80,150,.12),
+            rgba(0,0,0,.12)
+        );
+    border:1px solid rgba(100,180,255,.1);
+}
+
+.planet-route {
+    position:absolute;
+    height:1px;
+    transform-origin:0 50%;
     background:
         linear-gradient(
             90deg,
-            #fff,
-            #7ddcff
+            rgba(80,180,255,.08),
+            rgba(100,200,255,.4),
+            rgba(80,180,255,.08)
         );
-
-    -webkit-background-clip:text;
-    background-clip:text;
-    color:transparent;
+    pointer-events:none;
 }
 
-.high-score {
-    color:#697e9d;
-    font-size:11px;
-    margin-bottom:15px;
+.planet {
+    position:absolute;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    cursor:pointer;
+    box-shadow:
+        0 0 25px rgba(80,180,255,.2);
+    transition:
+        transform .15s,
+        filter .15s;
 }
 
-#newRecord {
+.planet:active {
+    transform:translate(-50%,-50%) scale(.92);
+}
+
+.planet.locked {
+    filter:grayscale(1);
+    opacity:.25;
+    cursor:default;
+}
+
+.planet.current {
+    box-shadow:
+        0 0 0 2px rgba(100,220,255,.7),
+        0 0 30px rgba(70,210,255,.45);
+}
+
+.planet.earth {
+    width:70px;
+    height:70px;
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #72d6ff,
+            #2370b5 55%,
+            #071b3c
+        );
+}
+
+.planet.tier2 {
+    width:56px;
+    height:56px;
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #ffcc7a,
+            #a8553a 55%,
+            #3b1320
+        );
+}
+
+.planet.tier3 {
+    width:60px;
+    height:60px;
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #d0a5ff,
+            #6739a5 55%,
+            #190b38
+        );
+}
+
+.planet.tier4 {
+    width:64px;
+    height:64px;
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #b7fff4,
+            #238b82 50%,
+            #062b2d
+        );
+}
+
+.planet.tier5 {
+    width:72px;
+    height:72px;
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #fff4a0,
+            #e76d28 45%,
+            #451309 75%
+        );
+}
+
+.planet-name {
+    position:absolute;
+    top:calc(100% + 5px);
+    white-space:nowrap;
+    font-size:9px;
+    font-weight:800;
+    color:#b9dfff;
+    letter-spacing:1px;
+}
+
+.planet-score {
+    position:absolute;
+    top:calc(100% + 19px);
+    white-space:nowrap;
+    font-size:7px;
+    color:#667e9e;
+}
+
+.ship-count {
+    position:absolute;
+    bottom:-13px;
+    white-space:nowrap;
+    font-size:7px;
+    font-weight:800;
+    color:#66ddff;
+    background:rgba(2,6,15,.8);
+    border-radius:6px;
+    padding:2px 4px;
+}
+
+.map-info {
+    color:#7189a9;
+    font-size:10px;
+    line-height:1.5;
+    min-height:42px;
+}
+
+.map-info strong {
+    color:#b9dfff;
+}
+
+
+/* =========================================================
+   ARRIVAL / ROUTE CHOICE
+   ========================================================= */
+
+.arrival-icon {
+    font-size:58px;
+    margin:5px 0 8px;
+}
+
+.arrival-title {
+    color:#65dcff;
+    font-size:12px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+}
+
+.arrival-planet {
+    font-size:34px;
+    font-weight:900;
+    margin:5px 0 10px;
+}
+
+.arrival-text {
+    color:#8ea4c1;
+    line-height:1.6;
+    font-size:13px;
+    margin-bottom:18px;
+}
+
+.route-choice {
+    display:grid;
+    gap:8px;
+    margin:12px 0;
+}
+
+.route-button {
+    text-align:left;
+    padding:13px;
+    border-radius:13px;
+    border:1px solid rgba(90,190,255,.16);
+    background:rgba(255,255,255,.035);
+    color:#c8ddf5;
+}
+
+.route-button strong {
+    color:#68ddff;
+}
+
+.route-button small {
+    display:block;
+    margin-top:4px;
+    color:#6f87a6;
+}
+
+.route-timer {
     color:#ffd75e;
-    font-size:11px;
+    font-size:10px;
     letter-spacing:2px;
     text-transform:uppercase;
-    margin-bottom:15px;
-    display:none;
-}
-
-#newRecord.show {
-    display:block;
+    margin:10px 0;
 }
 
 
@@ -397,32 +587,16 @@ canvas {
     outline:none;
 }
 
-.name-input:focus {
-    border-color:#55d9ff;
-    box-shadow:0 0 15px rgba(85,217,255,.15);
-}
-
 .leaderboard-scroll {
-    width:100%;
-    max-height:230px;
+    max-height:220px;
     overflow-y:auto;
-    overflow-x:hidden;
-
     -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
-
-    border-radius:13px;
-
-    padding:4px;
-
-    background:
-        rgba(0,0,0,.16);
-
-    border:
-        1px solid rgba(100,180,255,.08);
+    border-radius:12px;
 }
 
 .leaderboard {
+    margin-top:12px;
     text-align:left;
 }
 
@@ -430,22 +604,16 @@ canvas {
     display:flex;
     align-items:center;
     gap:8px;
-
     padding:9px 10px;
     margin-bottom:5px;
-
     border-radius:10px;
-
-    background:
-        rgba(255,255,255,.025);
-
+    background:rgba(255,255,255,.025);
     color:#a9bdd8;
     font-size:12px;
 }
 
 .leaderboard-row.top {
-    background:
-        rgba(85,210,255,.08);
+    background:rgba(85,210,255,.08);
 }
 
 .leaderboard-rank {
@@ -476,190 +644,48 @@ canvas {
 
 
 /* =========================================================
-   PLANET MAP
+   GAME OVER
    ========================================================= */
 
-.map-title {
-    color:#65dcff;
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:3px;
+.game-over-title {
+    color:#ff789c;
+    font-size:13px;
+    letter-spacing:4px;
     text-transform:uppercase;
 }
 
-.map-subtitle {
-    color:#7189a9;
-    font-size:10px;
-    margin-bottom:12px;
-}
-
-.planet-map {
-    position:relative;
-    width:100%;
-    height:430px;
-
-    border-radius:20px;
-
-    overflow:hidden;
-
-    background:
-        radial-gradient(
-            circle at 50% 50%,
-            rgba(35,60,130,.15),
-            rgba(2,5,15,.95)
-        );
-
-    border:
-        1px solid rgba(100,180,255,.12);
-
-    box-shadow:
-        inset 0 0 50px rgba(50,100,255,.05);
-}
-
-.planet-route {
-    position:absolute;
-    height:1px;
-    transform-origin:left center;
-
+.final-score {
+    font-size:54px;
+    font-weight:900;
+    margin:5px 0;
     background:
         linear-gradient(
             90deg,
-            rgba(80,200,255,.08),
-            rgba(80,200,255,.35),
-            rgba(80,200,255,.08)
+            #fff,
+            #7ddcff
         );
-
-    pointer-events:none;
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
 }
 
-.planet {
-    position:absolute;
-
-    transform:
-        translate(-50%,-50%);
-
-    width:72px;
-    min-height:58px;
-
-    padding:6px 3px;
-
-    border-radius:14px;
-
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-
-    cursor:pointer;
-
-    background:
-        rgba(7,15,35,.8);
-
-    border:
-        1px solid rgba(100,180,255,.18);
-
-    transition:
-        transform .15s,
-        box-shadow .15s;
-}
-
-.planet:active {
-    transform:
-        translate(-50%,-50%)
-        scale(.94);
-}
-
-.planet.locked {
-    opacity:.3;
-    cursor:default;
-}
-
-.planet.current {
-    box-shadow:
-        0 0 25px rgba(75,210,255,.25);
-    border-color:
-        rgba(75,210,255,.55);
-}
-
-.planet.ship {
-    border-color:
-        rgba(100,230,255,.5);
-}
-
-.planet-name {
-    font-size:9px;
-    font-weight:800;
-    letter-spacing:.7px;
-}
-
-.planet-score {
-    font-size:7px;
-    color:#647c9d;
-    margin-top:2px;
-}
-
-.ship-count {
-    color:#65e5ff;
-    font-size:8px;
-    font-weight:800;
-    margin-top:2px;
-}
-
-.ship-score {
-    color:#a5b7d2;
-    font-size:7px;
-}
-
-.map-info {
-    min-height:50px;
-
-    margin-top:12px;
-    padding:12px;
-
-    border-radius:12px;
-
-    background:
-        rgba(255,255,255,.025);
-
-    color:#8198b7;
-
+.high-score {
+    color:#697e9d;
     font-size:11px;
-    line-height:1.5;
+    margin-bottom:15px;
 }
 
-.map-info strong {
-    color:#dceeff;
-}
-
-
-/* =========================================================
-   ARRIVAL
-   ========================================================= */
-
-.arrival-icon {
-    font-size:55px;
-    margin-bottom:8px;
-}
-
-.arrival-title {
-    color:#65dcff;
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:3px;
+#newRecord {
+    color:#ffd75e;
+    font-size:11px;
+    letter-spacing:2px;
     text-transform:uppercase;
+    margin-bottom:15px;
+    display:none;
 }
 
-.arrival-planet {
-    font-size:30px;
-    font-weight:900;
-    margin:12px 0;
-}
-
-.arrival-text {
-    color:#91a8c5;
-    line-height:1.6;
-    font-size:13px;
-    margin-bottom:20px;
+#newRecord.show {
+    display:block;
 }
 
 
@@ -671,15 +697,10 @@ canvas {
     position:absolute;
     z-index:20;
     pointer-events:none;
-
     font-weight:900;
     font-size:20px;
-
-    text-shadow:
-        0 0 12px #53d9ff;
-
-    animation:
-        floatUp .7s ease-out forwards;
+    text-shadow:0 0 12px #53d9ff;
+    animation:floatUp .7s ease-out forwards;
 }
 
 @keyframes floatUp {
@@ -704,6 +725,7 @@ canvas {
             scale(1);
         opacity:0;
     }
+
 }
 
 
@@ -711,15 +733,12 @@ canvas {
    LANDSCAPE
    ========================================================= */
 
-@media (orientation:landscape)
-       and (max-height:500px) {
+@media
+(orientation:landscape)
+and (max-height:500px) {
 
-    .card {
-        padding:18px;
-    }
-
-    .planet-map {
-        height:260px;
+    #hud {
+        padding:7px 10px;
     }
 
     .stat-value {
@@ -730,9 +749,22 @@ canvas {
         padding:5px 9px;
     }
 
+    #bottomUI {
+        bottom:8px;
+    }
+
     .ability {
         width:50px;
         height:50px;
+        font-size:20px;
+    }
+
+    .planet-map {
+        height:260px;
+    }
+
+    .card {
+        padding:20px;
     }
 
 }
@@ -806,43 +838,48 @@ canvas {
 
     <div class="card">
 
-        <div class="logo">
-            ASTEROID<br>IMPACT
+        <div class="card-scroll">
+
+            <div class="logo">
+                ASTEROID<br>IMPACT
+            </div>
+
+            <div class="subtitle">
+                Chain Reaction Protocol
+            </div>
+
+            <p class="description">
+
+                Defend your ship through an expanding
+                asteroid field and travel deeper into space.
+
+            </p>
+
+            <button
+                class="big-button"
+                id="startButton">
+
+                Launch Mission
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="mapButton">
+
+                🪐 Planet Map
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="startLeaderboardButton">
+
+                🏆 Global Leaderboard
+
+            </button>
+
         </div>
-
-        <div class="subtitle">
-            Chain Reaction Protocol
-        </div>
-
-        <p class="description">
-            Defend your ship, explore the galaxy,
-            establish new planetary bases and
-            build your fleet.
-        </p>
-
-        <button
-            class="big-button"
-            id="startButton">
-
-            Launch Mission
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="mapButton">
-
-            🪐 Planet Map
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="startLeaderboardButton">
-
-            🏆 Global Leaderboard
-
-        </button>
 
     </div>
 
@@ -859,50 +896,57 @@ canvas {
 
     <div class="card">
 
-        <div class="map-title">
-            STAR NAVIGATION
+        <div class="card-scroll">
+
+            <div class="map-title">
+                STAR NAVIGATION
+            </div>
+
+            <div
+                class="logo"
+                style="font-size:40px">
+
+                PLANET MAP
+
+            </div>
+
+            <div class="map-subtitle">
+
+                Select a planet containing one
+                of your ships.
+
+            </div>
+
+            <div
+                class="planet-map"
+                id="planetMap">
+            </div>
+
+            <div
+                class="map-info"
+                id="mapInfo">
+
+                Select a planet to view its status.
+
+            </div>
+
+            <button
+                class="big-button"
+                id="mapLaunchButton">
+
+                Launch From Earth
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="closeMapButton">
+
+                Back
+
+            </button>
+
         </div>
-
-        <div
-            class="logo"
-            style="font-size:40px">
-
-            PLANET MAP
-
-        </div>
-
-        <div class="map-subtitle">
-            Select a planet to view your ships
-        </div>
-
-        <div
-            class="planet-map"
-            id="planetMap">
-        </div>
-
-        <div
-            class="map-info"
-            id="mapInfo">
-
-            Select a planet.
-
-        </div>
-
-        <button
-            class="big-button"
-            id="mapLaunchButton">
-
-            Launch
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="closeMapButton">
-
-            Back
-
-        </button>
 
     </div>
 
@@ -953,7 +997,7 @@ canvas {
 
 
 <!-- =======================================================
-     PLANET ARRIVAL
+     PLANET DECISION
      ======================================================= -->
 
 <div
@@ -962,42 +1006,53 @@ canvas {
 
     <div class="card">
 
-        <div class="arrival-icon">
-            🪐
+        <div class="card-scroll">
+
+            <div class="arrival-icon">
+                🪐
+            </div>
+
+            <div class="arrival-title">
+                Navigation Point Reached
+            </div>
+
+            <div
+                class="arrival-planet"
+                id="arrivalPlanetName">
+
+                ROUTE AVAILABLE
+
+            </div>
+
+            <div
+                class="arrival-text"
+                id="arrivalText">
+
+            </div>
+
+            <div
+                class="route-choice"
+                id="routeChoice">
+
+            </div>
+
+            <div
+                class="route-timer"
+                id="routeTimer">
+
+                AUTO-SELECT IN 8s
+
+            </div>
+
+            <button
+                class="big-button secondary-button"
+                id="landButton">
+
+                Land Here & Return to Map
+
+            </button>
+
         </div>
-
-        <div class="arrival-title">
-            Planet Reached
-        </div>
-
-        <div
-            class="arrival-planet"
-            id="arrivalPlanetName">
-
-            UNKNOWN
-
-        </div>
-
-        <div
-            class="arrival-text"
-            id="arrivalText">
-        </div>
-
-        <button
-            class="big-button"
-            id="landButton">
-
-            Land & Return to Menu
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="continueButton">
-
-            Continue Mission
-
-        </button>
 
     </div>
 
@@ -1014,88 +1069,94 @@ canvas {
 
     <div class="card">
 
-        <div class="game-over-title">
-            Ship Lost
-        </div>
+        <div class="card-scroll">
 
-        <div
-            class="final-score"
-            id="finalScore">
-
-            0
-
-        </div>
-
-        <div id="newRecord">
-            ★ NEW HIGH SCORE ★
-        </div>
-
-        <div class="high-score">
-            BEST:
-            <span id="bestScore">0</span>
-        </div>
-
-        <div class="leaderboard-title">
-            Submit Global Score
-        </div>
-
-        <input
-            id="playerName"
-            class="name-input"
-            type="text"
-            maxlength="20"
-            placeholder="Enter your name"
-            autocomplete="nickname">
-
-        <button
-            class="big-button"
-            id="submitScoreButton">
-
-            Submit Score
-
-        </button>
-
-        <div id="leaderboardStatus"></div>
-
-        <div class="leaderboard-title">
-            🏆 Global Top 10
-        </div>
-
-        <div class="leaderboard-scroll">
+            <div class="game-over-title">
+                Ship Lost
+            </div>
 
             <div
-                class="leaderboard"
-                id="leaderboard">
+                class="final-score"
+                id="finalScore">
 
-                Loading leaderboard...
+                0
 
             </div>
 
+            <div id="newRecord">
+                ★ NEW HIGH SCORE ★
+            </div>
+
+            <div class="high-score">
+
+                BEST:
+                <span id="bestScore">0</span>
+
+            </div>
+
+            <div class="leaderboard-title">
+                Submit Global Score
+            </div>
+
+            <input
+                id="playerName"
+                class="name-input"
+                type="text"
+                maxlength="20"
+                placeholder="Enter your name"
+                autocomplete="nickname">
+
+            <button
+                class="big-button"
+                id="submitScoreButton">
+
+                Submit Score
+
+            </button>
+
+            <div id="leaderboardStatus"></div>
+
+            <div class="leaderboard-title">
+                🏆 Global Top 10
+            </div>
+
+            <div class="leaderboard-scroll">
+
+                <div
+                    class="leaderboard"
+                    id="leaderboard">
+
+                    Loading leaderboard...
+
+                </div>
+
+            </div>
+
+            <button
+                class="big-button secondary-button"
+                id="refreshLeaderboardButton">
+
+                Refresh Leaderboard
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="restartButton">
+
+                Try Again
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="menuButton">
+
+                Main Menu
+
+            </button>
+
         </div>
-
-        <button
-            class="big-button secondary-button"
-            id="refreshLeaderboardButton">
-
-            Refresh Leaderboard
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="restartButton">
-
-            Try Again
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="menuButton">
-
-            Main Menu
-
-        </button>
 
     </div>
 
@@ -1112,39 +1173,43 @@ canvas {
 
     <div class="card">
 
-        <div class="game-over-title">
-            Asteroid Impact
-        </div>
+        <div class="card-scroll">
 
-        <div
-            class="logo"
-            style="font-size:40px">
-
-            LEADERBOARD
-
-        </div>
-
-        <div class="leaderboard-scroll">
+            <div class="game-over-title">
+                Asteroid Impact
+            </div>
 
             <div
-                id="mainLeaderboard"
-                class="leaderboard">
+                class="logo"
+                style="font-size:40px">
 
-                Loading leaderboard...
+                LEADERBOARD
 
             </div>
 
+            <div class="leaderboard-scroll">
+
+                <div
+                    id="mainLeaderboard"
+                    class="leaderboard">
+
+                    Loading leaderboard...
+
+                </div>
+
+            </div>
+
+            <div id="mainLeaderboardStatus"></div>
+
+            <button
+                class="big-button secondary-button"
+                id="closeLeaderboardButton">
+
+                Back
+
+            </button>
+
         </div>
-
-        <div id="mainLeaderboardStatus"></div>
-
-        <button
-            class="big-button secondary-button"
-            id="closeLeaderboardButton">
-
-            Back
-
-        </button>
 
     </div>
 
@@ -1157,7 +1222,7 @@ canvas {
 
 
 /* =========================================================
-   GOOGLE LEADERBOARD
+   LEADERBOARD
    ========================================================= */
 
 const LEADERBOARD_URL =
@@ -1177,7 +1242,7 @@ const PLANETS = [
         required:0,
         emoji:"🌍",
         x:50,
-        y:82,
+        y:78,
         className:"earth",
         asteroid:"earth"
     },
@@ -1324,32 +1389,11 @@ const ROUTES = [
 
 
 /* =========================================================
-   PLANET SAVE SYSTEM — VERSION 3
-   =========================================================
-
-   Earth:
-       Infinite ships.
-
-   Other planets:
-       Array of ship objects.
-
-   Example:
-
-       ships:{
-           earth:[],
-           mars:[
-               {id:"ship1",score:12500},
-               {id:"ship2",score:18400}
-           ]
-       }
-
-*/
+   PERSISTENT PLANET SAVE
+   ========================================================= */
 
 const SAVE_KEY =
     "asteroidImpactPlanetSaveV3";
-
-let planetSave =
-    loadPlanetSave();
 
 
 function defaultPlanetSave() {
@@ -1371,142 +1415,51 @@ function defaultPlanetSave() {
 }
 
 
-/*
- * Convert older Version 2 saves.
- */
-function convertOldSave(saved) {
-
-    const result =
-        defaultPlanetSave();
-
-    result.bestProgress =
-        Number(saved.bestProgress) || 0;
-
-    result.currentPlanet =
-        saved.currentPlanet ||
-        "earth";
-
-    const oldShips =
-        saved.ships || {};
-
-    for(
-        const planet of PLANETS
-    ) {
-
-        if(
-            planet.id==="earth"
-        ) {
-
-            result.ships.earth=[];
-
-            continue;
-        }
-
-        if(
-            oldShips[planet.id]
-        ) {
-
-            result.ships[planet.id]=[
-
-                {
-                    id:
-                        "legacy_"+planet.id,
-
-                    score:
-                        planet.required
-                }
-
-            ];
-
-        }
-
-    }
-
-    return result;
-
-}
-
-
 function loadPlanetSave() {
 
     try {
 
-        const raw =
-            localStorage.getItem(
-                SAVE_KEY
+        const saved =
+            JSON.parse(
+                localStorage.getItem(
+                    SAVE_KEY
+                )
             );
 
-        if(raw) {
+        if(saved) {
 
-            const saved =
-                JSON.parse(raw);
+            const result = {
 
-            if(
-                saved.ships &&
-                typeof saved.ships==="object"
-            ) {
-
-                for(
-                    const planet of PLANETS
-                ) {
-
-                    if(
-                        !Array.isArray(
-                            saved.ships[
-                                planet.id
-                            ]
-                        )
-                    ) {
-
-                        saved.ships[
-                            planet.id
-                        ]=[];
-
-                    }
-
-                }
-
-                saved.bestProgress =
+                bestProgress:
                     Number(
                         saved.bestProgress
-                    ) || 0;
+                    ) || 0,
 
-                saved.currentPlanet =
+                ships:
+                    saved.ships || {},
+
+                currentPlanet:
                     saved.currentPlanet ||
-                    "earth";
+                    "earth",
 
-                saved.nextShipId =
+                nextShipId:
                     Number(
                         saved.nextShipId
-                    ) || 1;
+                    ) || 1
 
-                return saved;
+            };
+
+            if(
+                !Array.isArray(
+                    result.ships.earth
+                )
+            ) {
+
+                result.ships.earth=[];
 
             }
 
-        }
-
-        /*
-         * Try previous V2 save.
-         */
-        const oldRaw =
-            localStorage.getItem(
-                "asteroidImpactPlanetSaveV2"
-            );
-
-        if(oldRaw) {
-
-            const old =
-                JSON.parse(oldRaw);
-
-            const converted =
-                convertOldSave(old);
-
-            savePlanetProgress(
-                converted
-            );
-
-            return converted;
+            return result;
 
         }
 
@@ -1524,49 +1477,106 @@ function loadPlanetSave() {
 }
 
 
-function savePlanetProgress(
-    data=planetSave
-) {
+let planetSave =
+    loadPlanetSave();
+
+
+function savePlanetProgress() {
 
     localStorage.setItem(
         SAVE_KEY,
-        JSON.stringify(data)
+        JSON.stringify(
+            planetSave
+        )
     );
 
 }
 
-
-/* =========================================================
-   SHIP SYSTEM
-   ========================================================= */
 
 function ensurePlanetArray(
     planetId
 ) {
 
     if(
+        planetId==="earth"
+    )
+        return;
+
+    if(
         !Array.isArray(
-            planetSave.ships[planetId]
+            planetSave.ships[
+                planetId
+            ]
         )
     ) {
 
-        planetSave.ships[planetId]=[];
+        planetSave.ships[
+            planetId
+        ]=[];
 
     }
 
 }
 
 
+function getShips(
+    planetId
+) {
+
+    if(
+        planetId==="earth"
+    )
+        return [];
+
+    ensurePlanetArray(
+        planetId
+    );
+
+    return planetSave.ships[
+        planetId
+    ];
+
+}
+
+
+function shipCount(
+    planetId
+) {
+
+    if(
+        planetId==="earth"
+    )
+        return Infinity;
+
+    return getShips(
+        planetId
+    ).length;
+
+}
+
+
+function hasShip(
+    planetId
+) {
+
+    return (
+        planetId==="earth" ||
+        shipCount(planetId)>0
+    );
+
+}
+
+
 function createShip(
     planetId,
-    score
+    shipScore
 ) {
 
     ensurePlanetArray(
         planetId
     );
 
-    const ship={
+    const ship = {
 
         id:
             "ship_"+(
@@ -1574,9 +1584,8 @@ function createShip(
             ),
 
         score:
-            Math.max(
-                0,
-                Math.floor(score)
+            Math.floor(
+                shipScore || 0
             )
 
     };
@@ -1599,14 +1608,8 @@ function removeShip(
 
     if(
         planetId==="earth"
-    ) {
-
-        /*
-         * Earth is infinite.
-         */
+    )
         return;
-
-    }
 
     ensurePlanetArray(
         planetId
@@ -1637,66 +1640,14 @@ function removeShip(
 }
 
 
-function getShips(
-    planetId
-) {
-
-    if(
-        planetId==="earth"
-    ) {
-
-        return null;
-
-    }
-
-    ensurePlanetArray(
-        planetId
-    );
-
-    return planetSave.ships[
-        planetId
-    ];
-
-}
-
-
-function shipCount(
-    planetId
-) {
-
-    if(
-        planetId==="earth"
-    ) {
-
-        return Infinity;
-
-    }
-
-    return getShips(
-        planetId
-    ).length;
-
-}
-
-
-function hasShip(
-    planetId
-) {
-
-    return (
-        planetId==="earth" ||
-        shipCount(planetId)>0
-    );
-
-}
-
-
 /* =========================================================
    DOM
    ========================================================= */
 
 const canvas =
-    document.getElementById("game");
+    document.getElementById(
+        "game"
+    );
 
 const ctx =
     canvas.getContext(
@@ -1705,49 +1656,79 @@ const ctx =
     );
 
 const scoreEl =
-    document.getElementById("score");
+    document.getElementById(
+        "score"
+    );
 
 const comboEl =
-    document.getElementById("combo");
+    document.getElementById(
+        "combo"
+    );
 
 const levelEl =
-    document.getElementById("level");
+    document.getElementById(
+        "level"
+    );
 
 const livesEl =
-    document.getElementById("lives");
+    document.getElementById(
+        "lives"
+    );
 
 const empButton =
-    document.getElementById("empButton");
+    document.getElementById(
+        "empButton"
+    );
 
 const startScreen =
-    document.getElementById("startScreen");
+    document.getElementById(
+        "startScreen"
+    );
 
 const planetScreen =
-    document.getElementById("planetScreen");
+    document.getElementById(
+        "planetScreen"
+    );
 
 const pauseScreen =
-    document.getElementById("pauseScreen");
+    document.getElementById(
+        "pauseScreen"
+    );
 
 const arrivalScreen =
-    document.getElementById("arrivalScreen");
+    document.getElementById(
+        "arrivalScreen"
+    );
 
 const gameOverScreen =
-    document.getElementById("gameOverScreen");
+    document.getElementById(
+        "gameOverScreen"
+    );
 
 const leaderboardScreen =
-    document.getElementById("leaderboardScreen");
+    document.getElementById(
+        "leaderboardScreen"
+    );
 
 const finalScoreEl =
-    document.getElementById("finalScore");
+    document.getElementById(
+        "finalScore"
+    );
 
 const bestScoreEl =
-    document.getElementById("bestScore");
+    document.getElementById(
+        "bestScore"
+    );
 
 const newRecordEl =
-    document.getElementById("newRecord");
+    document.getElementById(
+        "newRecord"
+    );
 
 const playerNameInput =
-    document.getElementById("playerName");
+    document.getElementById(
+        "playerName"
+    );
 
 const submitScoreButton =
     document.getElementById(
@@ -1799,6 +1780,16 @@ const arrivalText =
         "arrivalText"
     );
 
+const routeChoice =
+    document.getElementById(
+        "routeChoice"
+    );
+
+const routeTimer =
+    document.getElementById(
+        "routeTimer"
+    );
+
 
 /* =========================================================
    CANVAS
@@ -1817,22 +1808,22 @@ function resize() {
             2
         );
 
-    W =
+    W=
         window.innerWidth;
 
-    H =
+    H=
         window.innerHeight;
 
-    canvas.width =
+    canvas.width=
         W*DPR;
 
-    canvas.height =
+    canvas.height=
         H*DPR;
 
-    canvas.style.width =
+    canvas.style.width=
         W+"px";
 
-    canvas.style.height =
+    canvas.style.height=
         H+"px";
 
     ctx.setTransform(
@@ -1843,6 +1834,8 @@ function resize() {
         0,
         0
     );
+
+    createStars();
 
 }
 
@@ -1865,7 +1858,7 @@ let gameOver=false;
 
 let score=0;
 
-let highScore =
+let highScore=
     Number(
         localStorage.getItem(
             "asteroidImpactHighScore"
@@ -1892,7 +1885,6 @@ const EMP_COOLDOWN=3;
 const EMP_USES_BEFORE_COOLDOWN=3;
 
 let lastTime=0;
-
 let shake=0;
 
 let asteroids=[];
@@ -1903,18 +1895,47 @@ let shockwaves=[];
 
 
 /*
- * Current mission information.
+ * Current mission location.
  */
+let missionPlanet=
+    planetSave.currentPlanet ||
+    "earth";
 
-let missionPlanet =
-    planetSave.currentPlanet;
 
+/*
+ * Stored ship currently being flown.
+ *
+ * null when launching from Earth.
+ */
 let currentShipId=null;
 
+
+/*
+ * Planets already offered during
+ * this mission.
+ */
+let reachedPlanets=
+    new Set();
+
+
+/*
+ * Whether the route-selection overlay
+ * is currently active.
+ */
 let awaitingPlanetDecision=false;
 
-let reachedPlanets =
-    new Set();
+
+/*
+ * Valid planets currently offered.
+ */
+let currentRouteOptions=[];
+
+
+/*
+ * Automatic selection timer.
+ */
+let routeDecisionTimer=null;
+let routeDecisionSeconds=8;
 
 
 /* =========================================================
@@ -1930,7 +1951,7 @@ function initAudio() {
 
         try {
 
-            audioContext =
+            audioContext=
                 new (
                     window.AudioContext ||
                     window.webkitAudioContext
@@ -1957,17 +1978,16 @@ function sound(type) {
     if(!audioContext)
         return;
 
-    const now =
+    const now=
         audioContext.currentTime;
 
-    const osc =
+    const osc=
         audioContext.createOscillator();
 
-    const gain =
+    const gain=
         audioContext.createGain();
 
     osc.connect(gain);
-
     gain.connect(
         audioContext.destination
     );
@@ -2163,7 +2183,7 @@ function createStars() {
 
     stars.length=0;
 
-    const count =
+    const count=
         Math.floor(
             (W*H)/7000
         );
@@ -2202,16 +2222,13 @@ function createStars() {
 }
 
 
-createStars();
-
-
 function updateStars(dt) {
 
     for(
         const s of stars
     ) {
 
-        s.y +=
+        s.y+=
             s.speed*
             dt*
             60;
@@ -2225,7 +2242,7 @@ function updateStars(dt) {
 
         }
 
-        s.twinkle +=
+        s.twinkle+=
             dt*2;
 
     }
@@ -2239,13 +2256,13 @@ function drawStars() {
         const s of stars
     ) {
 
-        const a =
+        const a=
             s.alpha+
             Math.sin(
                 s.twinkle
             )*.15;
 
-        ctx.fillStyle =
+        ctx.fillStyle=
             `rgba(
                 180,
                 215,
@@ -2269,7 +2286,10 @@ function drawStars() {
    UTILS
    ========================================================= */
 
-function random(min,max) {
+function random(
+    min,
+    max
+) {
 
     return Math.random()*
         (max-min)+min;
@@ -2295,7 +2315,10 @@ function clamp(
 
     return Math.max(
         min,
-        Math.min(max,value)
+        Math.min(
+            max,
+            value
+        )
     );
 
 }
@@ -2303,37 +2326,28 @@ function clamp(
 
 function edgeSpawn() {
 
-    const side =
+    const side=
         Math.floor(
             Math.random()*4
         );
 
-    if(side===0) {
-
+    if(side===0)
         return {
             x:random(-40,W+40),
             y:-70
         };
 
-    }
-
-    if(side===1) {
-
+    if(side===1)
         return {
             x:W+70,
             y:random(-40,H+40)
         };
 
-    }
-
-    if(side===2) {
-
+    if(side===2)
         return {
             x:random(-40,W+40),
             y:H+70
         };
-
-    }
 
     return {
         x:-70,
@@ -2342,10 +2356,6 @@ function edgeSpawn() {
 
 }
 
-
-/* =========================================================
-   CURRENT PLANET
-   ========================================================= */
 
 function getMissionPlanet() {
 
@@ -2360,11 +2370,31 @@ function getMissionPlanet() {
 }
 
 
+function isRoute(
+    a,
+    b
+) {
+
+    return ROUTES.some(
+        route =>
+            (
+                route[0]===a &&
+                route[1]===b
+            ) ||
+            (
+                route[1]===a &&
+                route[0]===b
+            )
+    );
+
+}
+
+
 /* =========================================================
    ASTEROID ENVIRONMENTS
    ========================================================= */
 
-const ASTEROID_TYPES = {
+const ASTEROID_TYPES={
 
     earth:{
         name:"Standard",
@@ -2459,7 +2489,7 @@ class Asteroid {
         x,
         y,
         size,
-        type
+        typeId
     ) {
 
         this.x=x;
@@ -2467,41 +2497,43 @@ class Asteroid {
 
         this.size=size;
 
+        this.typeId=
+            typeId ||
+            "earth";
+
         this.type=
             ASTEROID_TYPES[
-                type
+                this.typeId
             ] ||
             ASTEROID_TYPES.earth;
 
-        this.typeId=type;
-
-        this.radius =
+        this.radius=
             size===3
             ? random(38,52)
             : size===2
             ? random(25,34)
             : random(15,23);
 
-        this.angle =
+        this.angle=
             random(
                 0,
                 Math.PI*2
             );
 
-        this.rotation =
+        this.rotation=
             random(
                 -.015,
                 .015
             );
 
-        const targetX =
+        const targetX=
             W/2+
             random(
                 -W*.25,
                 W*.25
             );
 
-        const targetY =
+        const targetY=
             H/2+
             random(
                 -H*.25,
@@ -2515,32 +2547,33 @@ class Asteroid {
             targetY-y;
 
         const length=
-            Math.hypot(dx,dy)||1;
+            Math.hypot(
+                dx,
+                dy
+            ) || 1;
 
-        const baseSpeed =
+        const baseSpeed=
             size===3
             ? random(18,30)
             : size===2
             ? random(28,45)
             : random(45,70);
 
-        const difficultyBoost =
-            1+wave*.055;
-
-        const speedBoost =
-            this.type.speed;
+        const difficultyBoost=
+            1+
+            wave*.055;
 
         this.vx=
             dx/length*
             baseSpeed*
             difficultyBoost*
-            speedBoost;
+            this.type.speed;
 
         this.vy=
             dy/length*
             baseSpeed*
             difficultyBoost*
-            speedBoost;
+            this.type.speed;
 
         this.hp=size;
 
@@ -2583,25 +2616,19 @@ class Asteroid {
 
     update(dt) {
 
-        this.phase +=
+        this.phase+=
             dt*3;
-
-        /*
-         * Different planetary
-         * asteroid behaviours.
-         */
 
         if(
             this.type.behavior==="electric"
         ) {
 
-            const side =
+            this.vx+=
                 Math.sin(
                     this.phase*3
-                )*18;
-
-            this.vx +=
-                side*dt;
+                )*
+                18*
+                dt;
 
         }
 
@@ -2609,15 +2636,19 @@ class Asteroid {
             this.type.behavior==="void"
         ) {
 
-            this.vx +=
+            this.vx+=
                 Math.sin(
                     this.phase
-                )*10*dt;
+                )*
+                10*
+                dt;
 
-            this.vy +=
+            this.vy+=
                 Math.cos(
                     this.phase
-                )*10*dt;
+                )*
+                10*
+                dt;
 
         }
 
@@ -2625,15 +2656,19 @@ class Asteroid {
             this.type.behavior==="quantum"
         ) {
 
-            this.vx +=
+            this.vx+=
                 Math.sin(
                     this.phase*5
-                )*25*dt;
+                )*
+                25*
+                dt;
 
-            this.vy +=
+            this.vy+=
                 Math.cos(
                     this.phase*4
-                )*25*dt;
+                )*
+                25*
+                dt;
 
         }
 
@@ -2641,36 +2676,37 @@ class Asteroid {
             this.type.behavior==="cosmic"
         ) {
 
-            this.vx +=
+            this.vx+=
                 Math.sin(
                     this.phase*2
-                )*12*dt;
+                )*
+                12*
+                dt;
 
-            this.vy +=
+            this.vy+=
                 Math.cos(
                     this.phase*2
-                )*12*dt;
+                )*
+                12*
+                dt;
 
         }
 
-        this.x +=
+        this.x+=
             this.vx*dt;
 
-        this.y +=
+        this.y+=
             this.vy*dt;
 
-        this.angle +=
+        this.angle+=
             this.rotation*
             dt*
             60;
 
-        if(this.hitFlash>0) {
-
+        if(this.hitFlash>0)
             this.hitFlash-=dt;
 
-        }
-
-        const margin =
+        const margin=
             this.radius+80;
 
         if(this.x<-margin)
@@ -2701,27 +2737,10 @@ class Asteroid {
             this.angle
         );
 
-        /*
-         * Special visual effects.
-         */
-
-        if(
+        ctx.shadowBlur=
             this.type.behavior==="solar"
-        ) {
-
-            ctx.shadowBlur=22;
-
-        } else if(
-            this.type.behavior==="void"
-        ) {
-
-            ctx.shadowBlur=18;
-
-        } else {
-
-            ctx.shadowBlur=12;
-
-        }
+            ? 22
+            : 12;
 
         ctx.shadowColor=
             this.type.color;
@@ -2731,20 +2750,15 @@ class Asteroid {
         this.vertices.forEach(
             (v,i)=>{
 
-                let radius =
+                let radius=
                     this.radius*
                     v.r;
-
-                /*
-                 * Crystal asteroids
-                 * become sharper.
-                 */
 
                 if(
                     this.type.behavior==="crystal"
                 ) {
 
-                    radius *=
+                    radius*=
                         i%2===0
                         ? 1.25
                         : .72;
@@ -2769,7 +2783,7 @@ class Asteroid {
 
         ctx.closePath();
 
-        ctx.fillStyle =
+        ctx.fillStyle=
             this.hitFlash>0
             ? "#ffffff"
             : "rgba(8,15,30,.95)";
@@ -2780,7 +2794,7 @@ class Asteroid {
 
         ctx.lineWidth=2;
 
-        ctx.strokeStyle =
+        ctx.strokeStyle=
             this.hitFlash>0
             ? "#ffffff"
             : this.type.color;
@@ -2788,19 +2802,12 @@ class Asteroid {
         ctx.stroke();
 
 
-        /*
-         * Planet-specific internal
-         * markings.
-         */
-
         if(
-            this.type.behavior==="ice"
+            this.type.behavior==="crystal"
         ) {
 
+            ctx.strokeStyle="#d9ffff";
             ctx.globalAlpha=.6;
-
-            ctx.strokeStyle=
-                "#d9ffff";
 
             ctx.beginPath();
 
@@ -2825,9 +2832,7 @@ class Asteroid {
             this.type.behavior==="electric"
         ) {
 
-            ctx.strokeStyle=
-                "#ffffff";
-
+            ctx.strokeStyle="#ffffff";
             ctx.globalAlpha=.65;
 
             ctx.beginPath();
@@ -2880,9 +2885,7 @@ class Asteroid {
             this.type.behavior==="solar"
         ) {
 
-            ctx.strokeStyle=
-                "#fff2a0";
-
+            ctx.strokeStyle="#fff2a0";
             ctx.globalAlpha=.7;
 
             ctx.beginPath();
@@ -2906,9 +2909,7 @@ class Asteroid {
             this.type.behavior==="quantum"
         ) {
 
-            ctx.strokeStyle=
-                "#ffffff";
-
+            ctx.strokeStyle="#ffffff";
             ctx.globalAlpha=.65;
 
             ctx.beginPath();
@@ -2932,9 +2933,7 @@ class Asteroid {
             this.type.behavior==="cosmic"
         ) {
 
-            ctx.fillStyle=
-                "#ffffff";
-
+            ctx.fillStyle="#ffffff";
             ctx.globalAlpha=.8;
 
             for(
@@ -3045,16 +3044,10 @@ class Explosion {
                     speed,
 
                 life:
-                    random(
-                        .25,
-                        .65
-                    ),
+                    random(.25,.65),
 
                 maxLife:
-                    random(
-                        .25,
-                        .65
-                    ),
+                    random(.25,.65),
 
                 size:
                     random(1,4),
@@ -3081,10 +3074,18 @@ class Explosion {
 
         this.radius=
             this.maxRadius*
-            (1-Math.pow(1-p,2));
+            (
+                1-
+                Math.pow(
+                    1-p,
+                    2
+                )
+            );
 
-        return this.life<
-            this.maxLife;
+        return (
+            this.life<
+            this.maxLife
+        );
 
     }
 
@@ -3095,8 +3096,7 @@ class Explosion {
             this.life/
             this.maxLife;
 
-        const alpha=
-            1-p;
+        const alpha=1-p;
 
         const gradient=
             ctx.createRadialGradient(
@@ -3201,8 +3201,10 @@ class Shockwave {
                 this.duration
             );
 
-        return this.life<
-            this.duration;
+        return (
+            this.life<
+            this.duration
+        );
 
     }
 
@@ -3256,16 +3258,16 @@ function updateParticles(dt) {
         const p=
             particles[i];
 
-        p.x +=
+        p.x+=
             p.vx*dt;
 
-        p.y +=
+        p.y+=
             p.vy*dt;
 
-        p.vx *=
+        p.vx*=
             Math.pow(.05,dt);
 
-        p.vy *=
+        p.vy*=
             Math.pow(.05,dt);
 
         p.life-=dt;
@@ -3366,21 +3368,20 @@ function floatingText(
 
 
 /* =========================================================
-   SPAWNING
+   SPAWN
    ========================================================= */
-
-function getAsteroidType() {
-
-    return getMissionPlanet()
-        .asteroid;
-
-}
-
 
 function spawnAsteroid() {
 
     const pos=
         edgeSpawn();
+
+    const planet=
+        getMissionPlanet();
+
+    const type=
+        planet.asteroid ||
+        "earth";
 
     let size=1;
 
@@ -3408,7 +3409,7 @@ function spawnAsteroid() {
             pos.x,
             pos.y,
             size,
-            getAsteroidType()
+            type
         )
     );
 
@@ -3477,24 +3478,23 @@ function detonateAsteroid(
 
     destroyed++;
 
-    const basePoints =
+    const basePoints=
         asteroid.size===3
         ? 100
         : asteroid.size===2
         ? 50
         : 20;
 
-    const earned =
+    const earned=
         Math.round(
             basePoints*
             combo*
             asteroid.type.multiplier
         );
 
-    score +=
-        earned;
+    score+=earned;
 
-    empCharge =
+    empCharge=
         clamp(
             empCharge+
             asteroid.size*7,
@@ -3502,8 +3502,7 @@ function detonateAsteroid(
             EMP_MAX
         );
 
-    comboTimer=
-        1.15;
+    comboTimer=1.15;
 
     if(chain) {
 
@@ -3515,19 +3514,12 @@ function detonateAsteroid(
 
     }
 
-    const power=
+    let explosionPower=
         asteroid.size===3
         ? 1.8
         : asteroid.size===2
         ? 1.35
         : 1;
-
-    /*
-     * Special asteroid explosions.
-     */
-
-    let explosionPower=
-        power;
 
     if(
         asteroid.type.behavior==="solar"
@@ -3593,17 +3585,17 @@ function detonateAsteroid(
             const ny=
                 dy/dist;
 
-            other.vx +=
+            other.vx+=
                 nx*strength;
 
-            other.vy +=
+            other.vy+=
                 ny*strength;
 
-            other.vx +=
+            other.vx+=
                 -ny*
                 strength*.35;
 
-            other.vy +=
+            other.vy+=
                 nx*
                 strength*.35;
 
@@ -3633,8 +3625,7 @@ function detonateAsteroid(
 
                         if(current!==-1) {
 
-                            other.chainQueued=
-                                false;
+                            other.chainQueued=false;
 
                             detonateAsteroid(
                                 current,
@@ -3653,10 +3644,6 @@ function detonateAsteroid(
 
     }
 
-
-    /*
-     * Larger asteroids split.
-     */
 
     if(
         asteroid.size>1
@@ -3699,9 +3686,7 @@ function detonateAsteroid(
                 Math.sin(angle)*
                 random(50,120);
 
-            asteroids.push(
-                child
-            );
+            asteroids.push(child);
 
         }
 
@@ -3725,16 +3710,13 @@ function detonateAsteroid(
         earned,
         asteroid.x,
         asteroid.y,
-
         combo>=4
         ? "#ffe36b"
         : asteroid.type.color
     );
 
     updateProgress();
-
     updateCurrentShipScore();
-
     updateHUD();
 
 }
@@ -3773,24 +3755,12 @@ function planetUnlocked(
 }
 
 
-/* =========================================================
-   CURRENT SHIP SCORE
-   ========================================================= */
-
 function updateCurrentShipScore() {
-
-    /*
-     * Earth ships are infinite and
-     * don't need to be stored.
-     */
 
     if(
         missionPlanet==="earth"
-    ) {
-
+    )
         return;
-
-    }
 
     if(!currentShipId)
         return;
@@ -3799,7 +3769,7 @@ function updateCurrentShipScore() {
         missionPlanet
     );
 
-    const ship =
+    const ship=
         planetSave.ships[
             missionPlanet
         ].find(
@@ -3809,7 +3779,7 @@ function updateCurrentShipScore() {
 
     if(ship) {
 
-        ship.score =
+        ship.score=
             Math.floor(score);
 
         savePlanetProgress();
@@ -3865,14 +3835,15 @@ function checkPlayerCollisions() {
             lives--;
 
             combo=1;
-
             comboTimer=0;
 
             shake=16;
 
             sound("damage");
 
-            if(lives<=0) {
+            if(
+                lives<=0
+            ) {
 
                 endGame();
 
@@ -3881,7 +3852,6 @@ function checkPlayerCollisions() {
             }
 
             updateCurrentShipScore();
-
             updateHUD();
 
         }
@@ -3916,8 +3886,7 @@ function drawPlayer() {
         "rgba(80,220,255,0)"
     );
 
-    ctx.fillStyle=
-        glow;
+    ctx.fillStyle=glow;
 
     ctx.beginPath();
 
@@ -3950,43 +3919,58 @@ function drawPlayer() {
         -22-pulse
     );
 
-    ctx.lineTo(
-        16,
-        18
-    );
-
-    ctx.lineTo(
-        0,
-        11
-    );
-
-    ctx.lineTo(
-        -16,
-        18
-    );
+    ctx.lineTo(16,18);
+    ctx.lineTo(0,11);
+    ctx.lineTo(-16,18);
 
     ctx.closePath();
 
-    ctx.fillStyle=
-        "#071522";
+    ctx.fillStyle="#071522";
 
     ctx.shadowBlur=18;
-
-    ctx.shadowColor=
-        "#5ce4ff";
+    ctx.shadowColor="#5ce4ff";
 
     ctx.fill();
 
     ctx.shadowBlur=0;
 
     ctx.lineWidth=2;
-
-    ctx.strokeStyle=
-        "#6ce8ff";
+    ctx.strokeStyle="#6ce8ff";
 
     ctx.stroke();
 
+    ctx.beginPath();
+
+    ctx.moveTo(-6,17);
+    ctx.lineTo(
+        0,
+        28+
+        random(0,5)
+    );
+    ctx.lineTo(6,17);
+
+    ctx.fillStyle="#4de0ff";
+
+    ctx.fill();
+
     ctx.restore();
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        35,
+        0,
+        Math.PI*2
+    );
+
+    ctx.strokeStyle=
+        "rgba(75,205,255,.18)";
+
+    ctx.lineWidth=1;
+
+    ctx.stroke();
 
 }
 
@@ -4004,11 +3988,8 @@ function activateEMP() {
         gameOver ||
         awaitingPlanetDecision ||
         empCooldown>0
-    ) {
-
+    )
         return;
-
-    }
 
     empCharge=0;
 
@@ -4124,79 +4105,382 @@ function activateEMP() {
 
 
 /* =========================================================
-   PLANET ARRIVAL
+   PLANET ROUTE SYSTEM
    ========================================================= */
 
-function isRoute(
-    a,
-    b
-) {
+/*
+ * Returns planets that can be selected
+ * from the current planet.
+ *
+ * We deliberately only offer the next
+ * tier here. This prevents the old bug
+ * where the game would automatically jump
+ * multiple tiers.
+ */
+function getNextRouteOptions() {
 
-    return ROUTES.some(
-        route =>
-            (
-                route[0]===a &&
-                route[1]===b
-            ) ||
-            (
-                route[1]===a &&
-                route[0]===b
+    const current=
+        getMissionPlanet();
+
+    return PLANETS.filter(
+        planet => {
+
+            if(
+                planet.id===current.id
             )
+                return false;
+
+            if(
+                planet.tier!==current.tier+1
+            )
+                return false;
+
+            if(
+                !planetUnlocked(planet)
+            )
+                return false;
+
+            if(
+                !isRoute(
+                    current.id,
+                    planet.id
+                )
+            )
+                return false;
+
+            return true;
+
+        }
     );
 
 }
 
 
-function checkPlanetArrival() {
+/*
+ * A planet can also be reached backwards
+ * if the player has already established
+ * a ship there.
+ *
+ * These are not automatic progression
+ * targets; they are optional navigation
+ * choices.
+ */
+function getPreviousRouteOptions() {
 
     const current=
         getMissionPlanet();
 
+    return PLANETS.filter(
+        planet => {
+
+            if(
+                planet.id===current.id
+            )
+                return false;
+
+            if(
+                planet.tier>=current.tier
+            )
+                return false;
+
+            if(
+                !isRoute(
+                    current.id,
+                    planet.id
+                )
+            )
+                return false;
+
+            return hasShip(
+                planet.id
+            );
+
+        }
+    );
+
+}
+
+
+/*
+ * The player has reached a score threshold.
+ *
+ * IMPORTANT:
+ *
+ * This does NOT move the ship.
+ *
+ * It only opens the route selector.
+ */
+function checkPlanetArrival() {
+
+    if(
+        awaitingPlanetDecision
+    )
+        return;
+
+    const options=
+        getNextRouteOptions();
+
+    if(!options.length)
+        return;
+
+    /*
+     * Find the first option whose
+     * threshold has just become available.
+     */
+    const current=
+        getMissionPlanet();
+
+    const nextTier=
+        current.tier+1;
+
+    const thresholdPlanet=
+        options.find(
+            p =>
+                p.tier===nextTier &&
+                score>=p.required &&
+                !reachedPlanets.has(p.id)
+        );
+
+    if(!thresholdPlanet)
+        return;
+
+    openRouteDecision(
+        options
+    );
+
+}
+
+
+/*
+ * Open the route selector.
+ */
+function openRouteDecision(
+    options
+) {
+
+    if(
+        awaitingPlanetDecision
+    )
+        return;
+
+    awaitingPlanetDecision=true;
+
+    currentRouteOptions=
+        [...options];
+
+    /*
+     * Clear the asteroid field.
+     *
+     * This is the "breathing room"
+     * before choosing the destination.
+     */
+    asteroids.length=0;
+
+    explosions.length=0;
+
+    shockwaves.length=0;
+
+    sound("arrival");
+
+    arrivalPlanetName.textContent=
+        "CHOOSE DESTINATION";
+
+    arrivalText.innerHTML=
+        `
+        You have reached
+        <strong>${score.toLocaleString()} points</strong>.
+        <br><br>
+        The route ahead is now available.
+        Choose where this ship travels next.
+        `;
+
+    routeChoice.innerHTML="";
+
     for(
-        const planet of PLANETS
+        const planet of options
     ) {
 
-        if(
-            planet.id===current.id
-        )
-            continue;
+        const button=
+            document.createElement(
+                "button"
+            );
 
-        if(
-            reachedPlanets.has(
-                planet.id
-            )
-        )
-            continue;
+        button.className=
+            "route-button";
 
-        if(
-            planet.tier<=current.tier
-        )
-            continue;
+        button.innerHTML=
+            `
+            <strong>
+                ${planet.emoji}
+                ${planet.name}
+            </strong>
 
-        if(
-            !planetUnlocked(
-                planet
-            )
-        )
-            continue;
+            <small>
+                ${planet.required.toLocaleString()}
+                points •
+                ${ASTEROID_TYPES[
+                    planet.asteroid
+                ].name}
+                asteroid field
+            </small>
+            `;
 
-        if(
-            !isRoute(
-                current.id,
-                planet.id
-            )
-        )
-            continue;
+        button.addEventListener(
+            "click",
+            ()=>{
 
-        reachedPlanets.add(
-            planet.id
+                chooseRoute(
+                    planet
+                );
+
+            }
         );
 
-        arriveAtPlanet(
-            planet
+        routeChoice.appendChild(
+            button
         );
 
-        return;
+    }
+
+
+    const previous=
+        getPreviousRouteOptions();
+
+    if(previous.length) {
+
+        const backTitle=
+            document.createElement(
+                "div"
+            );
+
+        backTitle.style.cssText=
+            `
+            margin-top:8px;
+            color:#7189a9;
+            font-size:9px;
+            letter-spacing:2px;
+            text-transform:uppercase;
+            `;
+
+        backTitle.textContent=
+            "RETURN ROUTES";
+
+        routeChoice.appendChild(
+            backTitle
+        );
+
+        for(
+            const planet of previous
+        ) {
+
+            const button=
+                document.createElement(
+                    "button"
+                );
+
+            button.className=
+                "route-button";
+
+            button.innerHTML=
+                `
+                <strong>
+                    ${planet.emoji}
+                    ${planet.name}
+                </strong>
+
+                <small>
+                    Return to your stationed
+                    ship at this planet.
+                </small>
+                `;
+
+            button.addEventListener(
+                "click",
+                ()=>{
+
+                    chooseRoute(
+                        planet
+                    );
+
+                }
+            );
+
+            routeChoice.appendChild(
+                button
+            );
+
+        }
+
+    }
+
+
+    routeDecisionSeconds=8;
+
+    routeTimer.textContent=
+        "AUTO-SELECT IN 8s";
+
+    arrivalScreen
+        .classList
+        .remove("hidden");
+
+
+    clearRouteTimer();
+
+    routeDecisionTimer=
+        setInterval(
+            ()=>{
+
+                routeDecisionSeconds--;
+
+                if(
+                    routeDecisionSeconds<=0
+                ) {
+
+                    clearRouteTimer();
+
+                    const next=
+                        currentRouteOptions[
+                            Math.floor(
+                                Math.random()*
+                                currentRouteOptions.length
+                            )
+                        ];
+
+                    chooseRoute(
+                        next,
+                        true
+                    );
+
+                    return;
+
+                }
+
+                routeTimer.textContent=
+                    "AUTO-SELECT IN "+
+                    routeDecisionSeconds+
+                    "s";
+
+            },
+            1000
+        );
+
+}
+
+
+/*
+ * Clear decision timer.
+ */
+function clearRouteTimer() {
+
+    if(
+        routeDecisionTimer
+    ) {
+
+        clearInterval(
+            routeDecisionTimer
+        );
+
+        routeDecisionTimer=null;
 
     }
 
@@ -4204,98 +4488,133 @@ function checkPlanetArrival() {
 
 
 /*
- * Move the current ship to the
- * newly reached planet.
- *
- * The score is preserved.
+ * Move the current ship to the selected
+ * destination.
  */
-function arriveAtPlanet(
-    planet
+function chooseRoute(
+    planet,
+    automatic=false
 ) {
 
-    awaitingPlanetDecision=true;
+    if(
+        !planet ||
+        !awaitingPlanetDecision
+    )
+        return;
 
-    asteroids.length=0;
+    clearRouteTimer();
 
-    sound("arrival");
+    const oldPlanet=
+        missionPlanet;
+
+    const oldShipId=
+        currentShipId;
+
 
     /*
-     * If we were flying from Earth,
-     * Earth has infinite ships.
-     *
-     * Otherwise the ship is moved
-     * from the old planet to the new
-     * planet.
+     * Mark this planet as reached so
+     * the same threshold does not open
+     * repeatedly during this mission.
      */
+    reachedPlanets.add(
+        planet.id
+    );
 
+
+    /*
+     * Save the current score before moving.
+     */
+    updateCurrentShipScore();
+
+
+    /*
+     * If we're travelling from a non-Earth
+     * planet, physically move the ship object.
+     */
     if(
-        missionPlanet!=="earth" &&
-        currentShipId
+        oldPlanet!=="earth" &&
+        oldShipId
     ) {
 
         ensurePlanetArray(
-            missionPlanet
+            oldPlanet
         );
 
-        const oldShips =
+        const oldShips=
             planetSave.ships[
-                missionPlanet
+                oldPlanet
             ];
 
-        const index =
+        const index=
             oldShips.findIndex(
                 ship =>
-                    ship.id===currentShipId
+                    ship.id===oldShipId
             );
 
-        let ship;
+        let ship=null;
 
         if(index!==-1) {
 
-            ship =
+            ship=
                 oldShips.splice(
                     index,
                     1
                 )[0];
 
-        } else {
+        }
+
+        if(!ship) {
 
             ship={
-                id:currentShipId,
-                score:score
+                id:oldShipId,
+                score:Math.floor(score)
             };
 
         }
 
-        ship.score =
+        ship.score=
             Math.floor(score);
 
         ensurePlanetArray(
             planet.id
         );
 
-        planetSave.ships[
-            planet.id
-        ].push(ship);
+        /*
+         * Prevent duplicate ship IDs.
+         */
+        const alreadyThere=
+            planetSave.ships[
+                planet.id
+            ].some(
+                s =>
+                    s.id===ship.id
+            );
+
+        if(!alreadyThere) {
+
+            planetSave.ships[
+                planet.id
+            ].push(ship);
+
+        }
 
     } else {
 
         /*
-         * Leaving Earth creates a
-         * brand new ship at the first
-         * planet reached.
+         * Leaving Earth establishes a new
+         * persistent ship at the destination.
          */
-
-        const ship =
+        const newShip=
             createShip(
                 planet.id,
                 score
             );
 
         currentShipId=
-            ship.id;
+            newShip.id;
 
     }
+
 
     missionPlanet=
         planet.id;
@@ -4305,47 +4624,96 @@ function arriveAtPlanet(
 
     savePlanetProgress();
 
-    arrivalPlanetName.textContent=
-        planet.emoji+
-        " "+
-        planet.name;
 
-    arrivalText.innerHTML=
-        `
-        You have reached
-        <strong>${planet.name}</strong>.<br><br>
-
-        Your ship has reached this planet
-        with a score of
-        <strong>${score.toLocaleString()}</strong>.
-
-        <br><br>
-
-        The local asteroid field is now
-        changing to the
-        <strong>${ASTEROID_TYPES[
-            planet.asteroid
-        ].name}</strong>
-        environment.
-        `;
+    awaitingPlanetDecision=false;
 
     arrivalScreen
         .classList
-        .remove("hidden");
+        .add("hidden");
+
+
+    /*
+     * Continue the same mission.
+     *
+     * Score is deliberately NOT reset.
+     */
+    running=true;
+
+    paused=false;
+
+    /*
+     * Give the player a short clean
+     * period after travelling.
+     */
+    spawnTimer=2.2;
+
+    lastTime=
+        performance.now();
+
+
+    floatingText(
+        automatic
+        ? "ROUTE AUTO-SELECTED"
+        : planet.name.toUpperCase(),
+        W/2,
+        H*.28,
+        "#65dcff"
+    );
+
+
+    /*
+     * Small visual transition.
+     */
+    for(
+        let i=0;
+        i<25;
+        i++
+    ) {
+
+        const angle=
+            Math.random()*
+            Math.PI*2;
+
+        particles.push({
+
+            x:W/2,
+            y:H/2,
+
+            vx:
+                Math.cos(angle)*
+                random(80,260),
+
+            vy:
+                Math.sin(angle)*
+                random(80,260),
+
+            life:
+                random(.3,.8),
+
+            maxLife:.8,
+
+            size:
+                random(1,3),
+
+            color:
+                "#6ce7ff"
+
+        });
+
+    }
+
+    updateHUD();
 
 }
 
 
-/* =========================================================
-   LAND
-   ========================================================= */
+/*
+ * Land at the planet where the ship
+ * is currently stationed.
+ */
+function landAtCurrentPlanet() {
 
-function landAtPlanet() {
-
-    /*
-     * The ship is already stored at
-     * the current planet.
-     */
+    clearRouteTimer();
 
     updateCurrentShipScore();
 
@@ -4357,184 +4725,386 @@ function landAtPlanet() {
         .classList
         .add("hidden");
 
-    planetScreen
-        .classList
-        .remove("hidden");
+    planetSave.currentPlanet=
+        missionPlanet;
+
+    savePlanetProgress();
 
     selectedPlanet=
         getMissionPlanet();
 
     renderPlanetMap();
 
-}
-
-
-/* =========================================================
-   CONTINUE
-   ========================================================= */
-
-function continueMission() {
-
-    awaitingPlanetDecision=false;
-
-    arrivalScreen
+    planetScreen
         .classList
-        .add("hidden");
-
-    running=true;
-
-    paused=false;
-
-    lastTime=
-        performance.now();
-
-    spawnWaveBurst();
+        .remove("hidden");
 
 }
 
 
 /* =========================================================
-   INPUT
+   PLANET MAP
    ========================================================= */
 
-function pointerPosition(
-    event
-) {
-
-    const rect=
-        canvas.getBoundingClientRect();
-
-    return {
-
-        x:
-            event.clientX-
-            rect.left,
-
-        y:
-            event.clientY-
-            rect.top
-
-    };
-
-}
+let selectedPlanet=
+    PLANETS.find(
+        p =>
+            p.id===
+            planetSave.currentPlanet
+    ) ||
+    PLANETS[0];
 
 
-function handlePointer(
-    event
-) {
+function renderPlanetMap() {
 
-    if(
-        !running ||
-        paused ||
-        gameOver ||
-        awaitingPlanetDecision
-    )
-        return;
+    planetMap.innerHTML="";
 
-    if(
-        event.target!==canvas
-    )
-        return;
 
-    event.preventDefault();
-
-    initAudio();
-
-    const p=
-        pointerPosition(
-            event
-        );
-
-    let best=-1;
-
-    let bestDistance=
-        Infinity;
-
+    /*
+     * Routes.
+     */
     for(
-        let i=0;
-        i<asteroids.length;
-        i++
+        const route of ROUTES
     ) {
 
         const a=
-            asteroids[i];
-
-        const d=
-            Math.hypot(
-                a.x-p.x,
-                a.y-p.y
+            PLANETS.find(
+                p =>
+                    p.id===route[0]
             );
 
+        const b=
+            PLANETS.find(
+                p =>
+                    p.id===route[1]
+            );
+
+        if(!a || !b)
+            continue;
+
+        const element=
+            document.createElement(
+                "div"
+            );
+
+        element.className=
+            "planet-route";
+
+        const dx=
+            b.x-a.x;
+
+        const dy=
+            b.y-a.y;
+
+        const length=
+            Math.sqrt(
+                dx*dx+
+                dy*dy
+            );
+
+        const angle=
+            Math.atan2(
+                dy,
+                dx
+            )*
+            180/
+            Math.PI;
+
+        element.style.left=
+            a.x+"%";
+
+        element.style.top=
+            a.y+"%";
+
+        element.style.width=
+            length+"%";
+
+        element.style.transform=
+            `rotate(${angle}deg)`;
+
+        planetMap.appendChild(
+            element
+        );
+
+    }
+
+
+    /*
+     * Planets.
+     */
+    for(
+        const planet of PLANETS
+    ) {
+
+        const unlocked=
+            planetUnlocked(
+                planet
+            );
+
+        const count=
+            shipCount(
+                planet.id
+            );
+
+        const current=
+            planet.id===
+            planetSave.currentPlanet;
+
+        const element=
+            document.createElement(
+                "div"
+            );
+
+        element.className=
+            "planet "+
+            planet.className+
+            (
+                !unlocked
+                ? " locked"
+                : ""
+            )+
+            (
+                current
+                ? " current"
+                : ""
+            )+
+            (
+                count>0 ||
+                planet.id==="earth"
+                ? " ship"
+                : ""
+            );
+
+        element.style.left=
+            planet.x+"%";
+
+        element.style.top=
+            planet.y+"%";
+
+
+        let shipHTML="";
+
         if(
-            d<=a.radius+18 &&
-            d<bestDistance
+            planet.id==="earth"
         ) {
 
-            best=i;
+            shipHTML=
+                `
+                <div class="ship-count">
+                    ∞ SHIPS
+                </div>
+                `;
 
-            bestDistance=d;
+        } else if(
+            count>0
+        ) {
+
+            shipHTML=
+                `
+                <div class="ship-count">
+                    🚀 ${count}
+                    SHIP${count===1?"":"S"}
+                </div>
+                `;
 
         }
 
-    }
 
-    if(best!==-1) {
+        element.innerHTML=
+            `
+            <span style="
+                font-size:${
+                    planet.tier===0
+                    ? 28
+                    : 20
+                }px">
 
-        detonateAsteroid(
-            best,
-            false
+                ${planet.emoji}
+
+            </span>
+
+            <div class="planet-name">
+                ${planet.name}
+            </div>
+
+            <div class="planet-score">
+                ${
+                    planet.required===0
+                    ? "START"
+                    : planet.required.toLocaleString()+
+                      " PTS"
+                }
+            </div>
+
+            ${shipHTML}
+            `;
+
+
+        if(unlocked) {
+
+            element.addEventListener(
+                "click",
+                ()=>{
+
+                    selectPlanet(
+                        planet
+                    );
+
+                }
+            );
+
+        }
+
+        planetMap.appendChild(
+            element
         );
 
-        sound("click");
-
     }
+
+    updateMapInfo();
 
 }
 
 
-canvas.addEventListener(
-    "pointerdown",
-    handlePointer,
-    {passive:false}
-);
+function selectPlanet(
+    planet
+) {
+
+    if(
+        !planetUnlocked(
+            planet
+        )
+    )
+        return;
+
+    selectedPlanet=
+        planet;
+
+    updateMapInfo();
+
+}
 
 
-/*
- * Allow scrolling inside UI cards.
- */
-document.addEventListener(
-    "touchmove",
-    event=>{
+function updateMapInfo() {
 
-        if(
-            event.target.closest(
-                ".card"
-            )
-        ) {
+    if(!selectedPlanet)
+        return;
 
-            return;
+    const planet=
+        selectedPlanet;
 
-        }
+    const unlocked=
+        planetUnlocked(
+            planet
+        );
 
-        event.preventDefault();
+    if(!unlocked) {
 
-    },
-    {passive:false}
-);
+        mapInfo.innerHTML=
+            `
+            <strong>
+                ${planet.name}
+            </strong>
+            requires
+            <strong>
+                ${planet.required.toLocaleString()}
+            </strong>
+            points.
+            `;
 
+        mapLaunchButton.disabled=true;
 
-empButton.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-
-        initAudio();
-
-        activateEMP();
+        return;
 
     }
-);
+
+
+    if(
+        planet.id==="earth"
+    ) {
+
+        mapInfo.innerHTML=
+            `
+            <strong>
+                🌍 Earth
+            </strong><br>
+
+            Starting base.<br>
+
+            Earth has
+            <strong>
+                infinite ships
+            </strong>.
+            `;
+
+        mapLaunchButton.disabled=false;
+
+        mapLaunchButton.textContent=
+            "Launch From Earth";
+
+        return;
+
+    }
+
+
+    const ships=
+        getShips(
+            planet.id
+        );
+
+    if(
+        ships.length
+    ) {
+
+        const highest=
+            [...ships]
+            .sort(
+                (a,b) =>
+                    b.score-a.score
+            )[0];
+
+        mapInfo.innerHTML=
+            `
+            <strong>
+                ${planet.emoji}
+                ${planet.name}
+            </strong><br>
+
+            ${ships.length}
+            ship${ships.length===1?"":"s"}
+            stationed here.<br>
+
+            Highest score:
+            <strong>
+                ${Number(
+                    highest.score
+                ).toLocaleString()}
+            </strong>
+            `;
+
+        mapLaunchButton.disabled=false;
+
+        mapLaunchButton.textContent=
+            "Launch From "+
+            planet.name;
+
+    } else {
+
+        mapInfo.innerHTML=
+            `
+            <strong>
+                ${planet.emoji}
+                ${planet.name}
+            </strong><br>
+
+            No ship stationed here yet.
+            `;
+
+        mapLaunchButton.disabled=true;
+
+    }
+
+}
 
 
 /* =========================================================
@@ -4543,16 +5113,20 @@ empButton.addEventListener(
 
 function startGame(
     planetId=
-        planetSave.currentPlanet
+        selectedPlanet?.id ||
+        "earth"
 ) {
 
     initAudio();
+
+    clearRouteTimer();
 
     const planet=
         PLANETS.find(
             p =>
                 p.id===planetId
         );
+
 
     if(
         !planet
@@ -4563,16 +5137,13 @@ function startGame(
     }
 
 
-    /*
-     * Launching from Earth:
-     * create a fresh infinite ship.
-     *
-     * Launching elsewhere:
-     * take one stored ship.
-     */
-
     let launchScore=0;
 
+
+    /*
+     * Earth:
+     * fresh infinite ship.
+     */
     if(
         planetId==="earth"
     ) {
@@ -4581,50 +5152,49 @@ function startGame(
 
         launchScore=0;
 
-    } else {
+    }
 
-        const ships =
+
+    /*
+     * Other planet:
+     * consume exactly one stored ship.
+     *
+     * We choose the highest scoring ship
+     * because that gives the player the
+     * strongest available continuation.
+     */
+    else {
+
+        const ships=
             getShips(
                 planetId
             );
 
         if(
-            !ships ||
             !ships.length
         ) {
 
-            planetId="earth";
-
-            currentShipId=null;
-
-            launchScore=0;
-
-        } else {
-
-            /*
-             * For now launch the ship
-             * with the highest stored score.
-             */
-
-            ships.sort(
-                (a,b) =>
-                    b.score-a.score
-            );
-
-            const ship=
-                ships.shift();
-
-            currentShipId=
-                ship.id;
-
-            launchScore=
-                Number(
-                    ship.score
-                ) || 0;
-
-            savePlanetProgress();
+            return;
 
         }
+
+        ships.sort(
+            (a,b) =>
+                b.score-a.score
+        );
+
+        const ship=
+            ships.shift();
+
+        currentShipId=
+            ship.id;
+
+        launchScore=
+            Number(
+                ship.score
+            ) || 0;
+
+        savePlanetProgress();
 
     }
 
@@ -4655,7 +5225,7 @@ function startGame(
     wave=1;
     destroyed=0;
 
-    spawnTimer=0;
+    spawnTimer=1.5;
     difficultyTimer=0;
 
     empCharge=0;
@@ -4666,6 +5236,7 @@ function startGame(
 
     reachedPlanets=
         new Set();
+
 
     asteroids=[];
     explosions=[];
@@ -4694,7 +5265,23 @@ function startGame(
         .add("hidden");
 
 
-    spawnWaveBurst();
+    /*
+     * Give the player a clear start.
+     */
+    setTimeout(
+        ()=>{
+            if(
+                running &&
+                !gameOver
+            ) {
+
+                spawnWaveBurst();
+
+            }
+        },
+        1000
+    );
+
 
     updateHUD();
 
@@ -4704,7 +5291,16 @@ function startGame(
 }
 
 
+/* =========================================================
+   PAUSE
+   ========================================================= */
+
 function pauseGame() {
+
+    if(
+        awaitingPlanetDecision
+    )
+        return;
 
     updateCurrentShipScore();
 
@@ -4741,12 +5337,12 @@ function endGame() {
 
     gameOver=true;
 
-    /*
-     * The ship being flown is lost.
-     *
-     * Earth ships are infinite.
-     */
+    clearRouteTimer();
 
+
+    /*
+     * Non-Earth ships are permanently lost.
+     */
     if(
         missionPlanet!=="earth" &&
         currentShipId
@@ -4760,6 +5356,7 @@ function endGame() {
     }
 
     currentShipId=null;
+
 
     planetSave.currentPlanet=
         "earth";
@@ -4783,31 +5380,34 @@ function endGame() {
 
     updateProgress();
 
+
     finalScoreEl.textContent=
         score.toLocaleString();
 
     bestScoreEl.textContent=
         highScore.toLocaleString();
 
-    newRecordEl
-        .classList
-        .toggle(
-            "show",
-            isNewRecord
-        );
+    newRecordEl.classList.toggle(
+        "show",
+        isNewRecord
+    );
+
 
     playerNameInput.value=
         localStorage.getItem(
             "asteroidImpactPlayerName"
         ) || "";
 
+
     submitScoreButton.disabled=false;
 
     leaderboardStatus.textContent="";
 
+
     gameOverScreen
         .classList
         .remove("hidden");
+
 
     loadLeaderboard(
         leaderboardEl,
@@ -4956,6 +5556,14 @@ function update(dt) {
     checkPlayerCollisions();
 
 
+    /*
+     * The important fix:
+     *
+     * We do NOT automatically travel
+     * to a planet.
+     *
+     * This only opens the route selector.
+     */
     if(
         running &&
         !gameOver &&
@@ -5012,7 +5620,7 @@ function update(dt) {
     updateParticles(dt);
 
 
-    shake *=
+    shake*=
         Math.pow(
             .015,
             dt
@@ -5021,11 +5629,6 @@ function update(dt) {
     if(shake<.1)
         shake=0;
 
-
-    /*
-     * Continuously save the ship's
-     * current score.
-     */
 
     updateCurrentShipScore();
 
@@ -5039,9 +5642,6 @@ function update(dt) {
    ========================================================= */
 
 function drawBackground() {
-
-    const planet=
-        getMissionPlanet();
 
     const gradient=
         ctx.createLinearGradient(
@@ -5077,45 +5677,6 @@ function drawBackground() {
     );
 
 
-    /*
-     * Environment tint.
-     */
-
-    const tintMap={
-
-        earth:
-            "rgba(30,80,140,.08)",
-
-        mars:
-            "rgba(150,40,20,.10)",
-
-        europa:
-            "rgba(80,180,255,.10)",
-
-        titan:
-            "rgba(130,160,40,.09)",
-
-        neptune:
-            "rgba(60,70,200,.11)",
-
-        kepler:
-            "rgba(180,50,190,.10)",
-
-        aurora:
-            "rgba(110,40,190,.12)",
-
-        helios:
-            "rgba(255,130,20,.13)",
-
-        nova:
-            "rgba(30,220,210,.10)",
-
-        zenith:
-            "rgba(150,100,255,.13)"
-
-    };
-
-
     const nebula=
         ctx.createRadialGradient(
             W*.5,
@@ -5128,7 +5689,6 @@ function drawBackground() {
 
     nebula.addColorStop(
         0,
-        tintMap[planet.id] ||
         "rgba(30,50,110,.13)"
     );
 
@@ -5266,6 +5826,7 @@ function draw() {
 
     drawParticles();
 
+
     ctx.restore();
 
 }
@@ -5353,473 +5914,155 @@ function updateHUD() {
 
 
 /* =========================================================
-   PLANET MAP
+   INPUT
    ========================================================= */
 
-function renderPlanetMap() {
+function pointerPosition(
+    event
+) {
 
-    planetMap.innerHTML="";
+    const rect=
+        canvas.getBoundingClientRect();
 
+    return {
 
-    /*
-     * Draw routes first.
-     */
+        x:
+            event.clientX-
+            rect.left,
 
-    for(
-        const route of ROUTES
-    ) {
+        y:
+            event.clientY-
+            rect.top
 
-        const a=
-            PLANETS.find(
-                p =>
-                    p.id===route[0]
-            );
-
-        const b=
-            PLANETS.find(
-                p =>
-                    p.id===route[1]
-            );
-
-        if(!a || !b)
-            continue;
-
-        const routeElement=
-            document.createElement(
-                "div"
-            );
-
-        routeElement.className=
-            "planet-route";
-
-        const dx=
-            b.x-a.x;
-
-        const dy=
-            b.y-a.y;
-
-        const length=
-            Math.sqrt(
-                dx*dx+
-                dy*dy
-            );
-
-        const angle=
-            Math.atan2(
-                dy,
-                dx
-            )*
-            180/
-            Math.PI;
-
-        routeElement.style.left=
-            a.x+"%";
-
-        routeElement.style.top=
-            a.y+"%";
-
-        routeElement.style.width=
-            length+"%";
-
-        routeElement.style.transform=
-            `rotate(${angle}deg)`;
-
-        planetMap.appendChild(
-            routeElement
-        );
-
-    }
-
-
-    /*
-     * Draw planets.
-     */
-
-    for(
-        const planet of PLANETS
-    ) {
-
-        const unlocked=
-            planetUnlocked(
-                planet
-            );
-
-        const count=
-            shipCount(
-                planet.id
-            );
-
-        const current=
-            planet.id===
-            planetSave.currentPlanet;
-
-        const element=
-            document.createElement(
-                "div"
-            );
-
-        element.className=
-            "planet "+
-            planet.className+
-            (
-                !unlocked
-                ? " locked"
-                : ""
-            )+
-            (
-                current
-                ? " current"
-                : ""
-            )+
-            (
-                count>0 ||
-                planet.id==="earth"
-                ? " ship"
-                : ""
-            );
-
-        element.style.left=
-            planet.x+"%";
-
-        element.style.top=
-            planet.y+"%";
-
-
-        let shipHTML="";
-
-
-        if(
-            planet.id==="earth"
-        ) {
-
-            shipHTML=
-                `
-                <div class="ship-count">
-                    ∞ SHIPS
-                </div>
-                `;
-
-        } else if(
-            count>0
-        ) {
-
-            shipHTML=
-                `
-                <div class="ship-count">
-                    🚀 ${count} SHIP${count===1?"":"S"}
-                </div>
-                `;
-
-        }
-
-
-        element.innerHTML=
-            `
-
-            <span style="
-                font-size:${
-                    planet.tier===0
-                    ? 28
-                    : 20
-                }px">
-
-                ${planet.emoji}
-
-            </span>
-
-            <div class="planet-name">
-                ${planet.name}
-            </div>
-
-            <div class="planet-score">
-
-                ${
-                    planet.required===0
-                    ? "START"
-                    : planet.required.toLocaleString()+
-                      " PTS"
-                }
-
-            </div>
-
-            ${shipHTML}
-
-            `;
-
-
-        if(unlocked) {
-
-            element.addEventListener(
-                "click",
-                ()=>{
-
-                    selectPlanet(
-                        planet
-                    );
-
-                }
-            );
-
-        }
-
-
-        planetMap.appendChild(
-            element
-        );
-
-    }
-
-
-    updateMapInfo();
+    };
 
 }
 
 
-/* =========================================================
-   MAP SELECTION
-   ========================================================= */
-
-let selectedPlanet=
-    PLANETS.find(
-        p =>
-            p.id===
-            planetSave.currentPlanet
-    ) ||
-    PLANETS[0];
-
-
-function selectPlanet(
-    planet
+function handlePointer(
+    event
 ) {
 
     if(
-        !planetUnlocked(
-            planet
-        )
+        !running ||
+        paused ||
+        gameOver ||
+        awaitingPlanetDecision
     )
         return;
 
-    selectedPlanet=
-        planet;
-
-    updateMapInfo();
-
-}
-
-
-/* =========================================================
-   MAP INFORMATION
-   ========================================================= */
-
-function updateMapInfo() {
-
-    if(!selectedPlanet)
+    if(
+        event.target!==canvas
+    )
         return;
 
+    event.preventDefault();
 
-    const planet=
-        selectedPlanet;
+    initAudio();
 
-    const unlocked=
-        planetUnlocked(
-            planet
+    const p=
+        pointerPosition(
+            event
         );
 
+    let best=-1;
 
-    if(!unlocked) {
+    let bestDistance=
+        Infinity;
 
-        mapInfo.innerHTML=
-            `
-            <strong>
-                ${planet.name}
-            </strong>
-            requires
-            <strong>
-                ${planet.required.toLocaleString()}
-            </strong>
-            points.
-            `;
+    for(
+        let i=0;
+        i<asteroids.length;
+        i++
+    ) {
 
-        mapLaunchButton.disabled=
-            true;
+        const a=
+            asteroids[i];
 
-        return;
+        const d=
+            Math.hypot(
+                a.x-p.x,
+                a.y-p.y
+            );
+
+        if(
+            d<=a.radius+18 &&
+            d<bestDistance
+        ) {
+
+            best=i;
+
+            bestDistance=d;
+
+        }
 
     }
 
+    if(best!==-1) {
 
-    if(
-        planet.id==="earth"
-    ) {
-
-        mapInfo.innerHTML=
-            `
-            <strong>
-                🌍 Earth
-            </strong><br>
-            Your starting base.
-            Earth has an
-            <strong>infinite supply of ships</strong>.
-            `;
-
-        mapLaunchButton.disabled=
-            false;
-
-        mapLaunchButton.textContent=
-            "Launch From Earth";
-
-        return;
-
-    }
-
-
-    const ships=
-        getShips(
-            planet.id
+        detonateAsteroid(
+            best,
+            false
         );
 
-
-    if(
-        ships.length
-    ) {
-
-        const highest =
-            [...ships]
-            .sort(
-                (a,b) =>
-                    b.score-a.score
-            )[0];
-
-        mapInfo.innerHTML=
-            `
-            <strong>
-                ${planet.emoji}
-                ${planet.name}
-            </strong><br>
-
-            ${ships.length}
-            ship${ships.length===1?"":"s"}
-            stationed here.<br>
-
-            Highest ship score:
-            <strong>
-                ${highest.score.toLocaleString()}
-            </strong>
-
-            `;
-
-        mapLaunchButton.disabled=
-            false;
-
-        mapLaunchButton.textContent=
-            "Launch From "+
-            planet.name;
-
-    } else {
-
-        mapInfo.innerHTML=
-            `
-            <strong>
-                ${planet.emoji}
-                ${planet.name}
-            </strong><br>
-
-            No ships stationed here yet.
-            Reach this planet during a mission
-            to establish a ship.
-
-            `;
-
-        mapLaunchButton.disabled=
-            true;
+        sound("click");
 
     }
 
 }
 
 
-/* =========================================================
-   MAP BUTTONS
-   ========================================================= */
+canvas.addEventListener(
+    "pointerdown",
+    handlePointer,
+    {passive:false}
+);
 
-document
-.getElementById(
-    "mapButton"
-)
-.addEventListener(
-    "click",
-    ()=>{
 
-        startScreen
-            .classList
-            .add("hidden");
+/*
+ * Allow scrolling inside UI cards,
+ * while preventing page-level scrolling.
+ */
+document.addEventListener(
+    "touchmove",
+    event=>{
 
-        planetScreen
-            .classList
-            .remove("hidden");
-
-        selectedPlanet=
-            PLANETS.find(
-                p =>
-                    p.id===
-                    planetSave.currentPlanet
+        if(
+            event.target.closest(
+                ".card-scroll"
             ) ||
-            PLANETS[0];
-
-        renderPlanetMap();
-
-    }
-);
-
-
-document
-.getElementById(
-    "closeMapButton"
-)
-.addEventListener(
-    "click",
-    ()=>{
-
-        planetScreen
-            .classList
-            .add("hidden");
-
-        startScreen
-            .classList
-            .remove("hidden");
-
-    }
-);
-
-
-mapLaunchButton
-.addEventListener(
-    "click",
-    ()=>{
-
-        if(
-            !selectedPlanet
-        )
-            return;
-
-        if(
-            selectedPlanet.id!=="earth" &&
-            !hasShip(
-                selectedPlanet.id
+            event.target.closest(
+                ".leaderboard-scroll"
             )
-        )
+        ) {
+
             return;
 
-        startGame(
-            selectedPlanet.id
-        );
+        }
+
+        event.preventDefault();
+
+    },
+    {passive:false}
+);
+
+
+empButton.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+
+        initAudio();
+
+        activateEMP();
 
     }
 );
 
 
 /* =========================================================
-   STANDARD BUTTONS
+   BUTTONS
    ========================================================= */
 
 document
@@ -5856,7 +6099,15 @@ document
 
         initAudio();
 
+        /*
+         * Launch from the selected map planet.
+         *
+         * If the player has not selected
+         * anything, use their current planet.
+         */
         startGame(
+            selectedPlanet?.id ||
+            planetSave.currentPlanet ||
             "earth"
         );
 
@@ -5890,34 +6141,28 @@ document
 );
 
 
-/* =========================================================
-   ARRIVAL BUTTONS
-   ========================================================= */
-
+/*
+ * Land at current planet.
+ */
 document
 .getElementById(
     "landButton"
 )
 .addEventListener(
     "click",
-    landAtPlanet
+    landAtCurrentPlanet
 );
 
 
-document
-.getElementById(
-    "continueButton"
-)
-.addEventListener(
-    "click",
-    continueMission
-);
-
-
-/* =========================================================
-   RESTART
-   ========================================================= */
-
+/*
+ * Restart:
+ *
+ * If the player dies, their current
+ * non-Earth ship is already removed.
+ *
+ * Therefore restart safely starts
+ * from Earth.
+ */
 document
 .getElementById(
     "restartButton"
@@ -5928,11 +6173,11 @@ document
 
         initAudio();
 
-        /*
-         * A restart starts from Earth.
-         * This prevents accidentally reusing
-         * a ship that was already destroyed.
-         */
+        selectedPlanet=
+            PLANETS.find(
+                p =>
+                    p.id==="earth"
+            );
 
         startGame(
             "earth"
@@ -5942,10 +6187,9 @@ document
 );
 
 
-/* =========================================================
-   MENU
-   ========================================================= */
-
+/*
+ * Main menu.
+ */
 document
 .getElementById(
     "menuButton"
@@ -5961,6 +6205,81 @@ document
         startScreen
             .classList
             .remove("hidden");
+
+    }
+);
+
+
+/* =========================================================
+   MAP BUTTONS
+   ========================================================= */
+
+document
+.getElementById(
+    "mapButton"
+)
+.addEventListener(
+    "click",
+    ()=>{
+
+        startScreen
+            .classList
+            .add("hidden");
+
+        planetScreen
+            .classList
+            .remove("hidden");
+
+        renderPlanetMap();
+
+    }
+);
+
+
+document
+.getElementById(
+    "closeMapButton"
+)
+.addEventListener(
+    "click",
+    ()=>{
+
+        planetScreen
+            .classList
+            .add("hidden");
+
+        startScreen
+            .classList
+            .remove("hidden");
+
+    }
+);
+
+
+mapLaunchButton.addEventListener(
+    "click",
+    ()=>{
+
+        if(
+            !selectedPlanet
+        )
+            return;
+
+        if(
+            !hasShip(
+                selectedPlanet.id
+            )
+        )
+            return;
+
+        planetSave.currentPlanet=
+            selectedPlanet.id;
+
+        savePlanetProgress();
+
+        startGame(
+            selectedPlanet.id
+        );
 
     }
 );
@@ -6079,9 +6398,7 @@ function renderLeaderboard(
                 if(rank===3)
                     medal="🥉";
 
-
                 return `
-
                 <div class="leaderboard-row ${
                     rank<=3
                     ? "top"
@@ -6099,15 +6416,12 @@ function renderLeaderboard(
                     </div>
 
                     <div class="leaderboard-score">
-                        ${
-                            Number(
-                                entry.score
-                            ).toLocaleString()
-                        }
+                        ${Number(
+                            entry.score
+                        ).toLocaleString()}
                     </div>
 
                 </div>
-
                 `;
 
             }
@@ -6292,10 +6606,6 @@ async function submitScore() {
 }
 
 
-/* =========================================================
-   LEADERBOARD BUTTONS
-   ========================================================= */
-
 submitScoreButton
 .addEventListener(
     "click",
@@ -6310,10 +6620,12 @@ document
 .addEventListener(
     "click",
     ()=>{
+
         loadLeaderboard(
             leaderboardEl,
             leaderboardStatus
         );
+
     }
 );
 
@@ -6364,6 +6676,29 @@ document
 
 
 /* =========================================================
+   VISIBILITY
+   ========================================================= */
+
+document.addEventListener(
+    "visibilitychange",
+    ()=>{
+
+        if(
+            document.hidden &&
+            running &&
+            !gameOver &&
+            !awaitingPlanetDecision
+        ) {
+
+            pauseGame();
+
+        }
+
+    }
+);
+
+
+/* =========================================================
    GAME LOOP
    ========================================================= */
 
@@ -6388,29 +6723,6 @@ function loop(time) {
 
 requestAnimationFrame(
     loop
-);
-
-
-/* =========================================================
-   VISIBILITY
-   ========================================================= */
-
-document.addEventListener(
-    "visibilitychange",
-    ()=>{
-
-        if(
-            document.hidden &&
-            running &&
-            !gameOver &&
-            !awaitingPlanetDecision
-        ) {
-
-            pauseGame();
-
-        }
-
-    }
 );
 
 
