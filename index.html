@@ -4,13 +4,10 @@
 <meta charset="UTF-8">
 
 <meta name="viewport"
-      content="width=device-width,
-      initial-scale=1,
-      maximum-scale=1,
-      user-scalable=no,
-      viewport-fit=cover">
+      content="width=device-width, initial-scale=1, maximum-scale=1,
+      user-scalable=no, viewport-fit=cover">
 
-<meta name="theme-color" content="#020511">
+<meta name="theme-color" content="#02040a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Asteroid Impact">
@@ -20,18 +17,18 @@
 <style>
 
 * {
-    box-sizing:border-box;
-    -webkit-tap-highlight-color:transparent;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 html,
 body {
-    margin:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    background:#02040a;
-    color:white;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #02040a;
+    color: white;
     font-family:
         Inter,
         system-ui,
@@ -39,20 +36,31 @@ body {
         BlinkMacSystemFont,
         "Segoe UI",
         sans-serif;
-    touch-action:none;
 }
 
 body {
-    position:fixed;
-    inset:0;
+    position: fixed;
+    inset: 0;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 canvas {
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
-    display:block;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+    touch-action: none;
 }
 
 /* =========================================================
@@ -60,78 +68,73 @@ canvas {
    ========================================================= */
 
 #hud {
-    position:absolute;
-    z-index:10;
-    top:max(10px,env(safe-area-inset-top));
-    left:0;
-    right:0;
-    padding:10px 12px;
-    pointer-events:none;
+    position: fixed;
+    z-index: 10;
+    top: max(8px, env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    padding: 10px 12px;
+    pointer-events: none;
 }
 
 .hud-row {
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap:7px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 7px;
 }
 
 .panel {
-    background:rgba(5,10,25,.68);
-    border:1px solid rgba(100,180,255,.18);
-    border-radius:13px;
-    padding:7px 10px;
-    backdrop-filter:blur(8px);
-    box-shadow:
-        0 8px 30px rgba(0,0,0,.2),
-        inset 0 0 20px rgba(50,120,255,.03);
+    background: rgba(5, 10, 25, .72);
+    border: 1px solid rgba(100, 180, 255, .18);
+    border-radius: 12px;
+    padding: 7px 10px;
+    backdrop-filter: blur(8px);
 }
 
 .stat-label {
-    color:#7690b7;
-    font-size:8px;
-    letter-spacing:1.5px;
-    text-transform:uppercase;
+    color: #7690b7;
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
 }
 
 .stat-value {
-    font-size:18px;
-    font-weight:800;
-    letter-spacing:1px;
-    color:#eef7ff;
+    font-size: 18px;
+    font-weight: 800;
+    color: #eef7ff;
+}
+
+#score {
+    color: #fff;
 }
 
 #combo {
-    color:#53d9ff;
+    color: #53d9ff;
 }
 
 #combo.hot {
-    color:#ffe36b;
-    text-shadow:0 0 12px #ffb300;
+    color: #ffe36b;
+    text-shadow: 0 0 12px #ffb300;
 }
 
 #level {
-    color:#b990ff;
+    color: #b990ff;
 }
 
 #lives {
-    color:#ff6b8a;
-    white-space:nowrap;
-}
-
-#phaseLabel {
-    color:#71e7ff;
+    color: #ff6b8a;
+    white-space: nowrap;
 }
 
 #pauseButton {
-    pointer-events:auto;
-    border:1px solid rgba(130,190,255,.25);
-    background:rgba(8,15,35,.8);
-    color:#b9dfff;
-    width:40px;
-    height:40px;
-    border-radius:12px;
-    font-size:16px;
+    pointer-events: auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    border: 1px solid rgba(130,190,255,.25);
+    background: rgba(8,15,35,.8);
+    color: #b9dfff;
 }
 
 /* =========================================================
@@ -139,61 +142,57 @@ canvas {
    ========================================================= */
 
 #bottomUI {
-    position:absolute;
-    z-index:10;
-    left:0;
-    right:0;
-    bottom:max(12px,env(safe-area-inset-bottom));
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:0 16px;
-    pointer-events:none;
+    position: fixed;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    pointer-events: none;
 }
 
 .ability {
-    pointer-events:auto;
-    width:64px;
-    height:64px;
-    border-radius:50%;
-    border:2px solid rgba(78,214,255,.4);
+    pointer-events: auto;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    border: 2px solid rgba(78,214,255,.4);
     background:
-        radial-gradient(
-            circle at 35% 30%,
-            #16425e,
-            #07101f 65%
-        );
-    color:#67ddff;
-    font-size:24px;
+        radial-gradient(circle at 35% 30%, #16425e, #07101f 65%);
+    color: #67ddff;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
     box-shadow:
-        0 0 20px rgba(50,190,255,.12),
+        0 0 20px rgba(50,190,255,.15),
         inset 0 0 20px rgba(50,190,255,.08);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
 }
 
 .ability.ready {
-    border-color:#61e8ff;
+    border-color: #61e8ff;
     box-shadow:
         0 0 28px rgba(50,210,255,.45),
         inset 0 0 25px rgba(50,210,255,.15);
 }
 
 .ability small {
-    display:block;
-    font-size:7px;
-    letter-spacing:1px;
-    margin-top:-2px;
+    display: block;
+    font-size: 7px;
+    letter-spacing: 1px;
+    margin-top: -2px;
 }
 
 #hint {
-    color:rgba(180,210,240,.55);
-    font-size:9px;
-    letter-spacing:1px;
-    text-align:center;
-    text-transform:uppercase;
+    color: rgba(180,210,240,.55);
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-align: center;
+    text-transform: uppercase;
 }
 
 /* =========================================================
@@ -201,47 +200,89 @@ canvas {
    ========================================================= */
 
 .overlay {
-    position:absolute;
-    z-index:30;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:16px;
-    background:rgba(1,4,12,.7);
-    backdrop-filter:blur(10px);
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding:
+        max(16px, env(safe-area-inset-top))
+        16px
+        max(16px, env(safe-area-inset-bottom));
+
+    background: rgba(1,4,12,.72);
+    backdrop-filter: blur(10px);
+
+    pointer-events: auto;
 }
 
 .overlay.hidden {
-    display:none;
+    display: none !important;
 }
 
+/*
+ * IMPORTANT:
+ * The overlay itself is fixed, while the card has its own
+ * scrolling region. This prevents the iPhone touch system
+ * from trapping the launch button underneath the planet map.
+ */
+
 .card {
-    width:min(450px,100%);
-    max-height:calc(100vh - 28px);
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-    overscroll-behavior:contain;
-    padding:25px 20px;
-    border-radius:23px;
-    text-align:center;
+    width: min(440px, 100%);
+    max-height: min(92vh, 760px);
+
+    display: flex;
+    flex-direction: column;
+
+    padding: 24px 20px;
+
+    border-radius: 24px;
+
     background:
         linear-gradient(
             145deg,
-            rgba(13,24,48,.96),
-            rgba(4,9,22,.98)
+            rgba(13,24,48,.97),
+            rgba(4,9,22,.985)
         );
-    border:1px solid rgba(95,185,255,.2);
+
+    border: 1px solid rgba(95,185,255,.2);
+
     box-shadow:
         0 30px 80px rgba(0,0,0,.55),
         inset 0 0 50px rgba(70,130,255,.035);
+
+    overflow: hidden;
 }
 
+.card-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    -webkit-overflow-scrolling: touch;
+
+    overscroll-behavior: contain;
+
+    padding: 2px 3px 4px;
+
+    touch-action: pan-y;
+}
+
+/* =========================================================
+   TYPOGRAPHY
+   ========================================================= */
+
 .logo {
-    font-size:clamp(34px,10vw,56px);
-    font-weight:900;
-    letter-spacing:-3px;
-    line-height:.95;
+    flex-shrink: 0;
+
+    font-size: clamp(34px, 10vw, 56px);
+    font-weight: 900;
+    letter-spacing: -3px;
+    line-height: .95;
+
     background:
         linear-gradient(
             90deg,
@@ -249,59 +290,88 @@ canvas {
             #a58cff,
             #ff66a8
         );
-    -webkit-background-clip:text;
-    background-clip:text;
-    color:transparent;
-    margin-bottom:7px;
+
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    color: transparent;
+
+    margin-bottom: 8px;
 }
 
 .subtitle {
-    color:#7590b6;
-    font-size:10px;
-    letter-spacing:3px;
-    text-transform:uppercase;
-    margin-bottom:20px;
+    color: #7590b6;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 18px;
 }
 
 .description {
-    color:#9eb1cb;
-    line-height:1.55;
-    font-size:13px;
-    margin:0 auto 18px;
-    max-width:350px;
+    color: #9eb1cb;
+    line-height: 1.55;
+    font-size: 13px;
+    margin: 0 auto 18px;
+    max-width: 340px;
+    text-align: center;
+}
+
+.game-over-title {
+    color: #ff789c;
+    font-size: 12px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    text-align: center;
 }
 
 .big-button {
-    width:100%;
-    border:0;
-    border-radius:15px;
-    padding:15px 18px;
-    font-size:14px;
-    font-weight:800;
-    letter-spacing:2px;
-    text-transform:uppercase;
-    color:#04101c;
+    width: 100%;
+    border: 0;
+    border-radius: 15px;
+
+    padding: 15px 18px;
+
+    font-size: 14px;
+    font-weight: 800;
+
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+
+    color: #04101c;
+
     background:
         linear-gradient(
             90deg,
             #56dcff,
             #8da8ff
         );
+
     box-shadow:
         0 8px 30px rgba(55,190,255,.22);
-    touch-action:manipulation;
+
+    margin-top: 9px;
+
+    position: relative;
+    z-index: 2;
 }
 
 .big-button:active {
-    transform:scale(.97);
+    transform: scale(.97);
 }
 
 .secondary-button {
-    margin-top:9px;
-    background:rgba(255,255,255,.05);
-    color:#91a8c5;
-    border:1px solid rgba(150,190,240,.12);
-    box-shadow:none;
+    background: rgba(255,255,255,.05);
+    color: #91a8c5;
+    border: 1px solid rgba(150,190,240,.12);
+    box-shadow: none;
+}
+
+.danger-button {
+    background: rgba(255,90,130,.08);
+    color: #ff91ab;
+    border: 1px solid rgba(255,90,130,.2);
+    box-shadow: none;
 }
 
 /* =========================================================
@@ -309,362 +379,636 @@ canvas {
    ========================================================= */
 
 .map-title {
-    color:#65dcff;
-    font-size:11px;
-    font-weight:800;
-    letter-spacing:3px;
-    text-transform:uppercase;
-    margin:18px 0 10px;
+    color: #65dcff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+    margin: 8px 0 10px;
 }
 
 .planet-map {
-    position:relative;
-    width:100%;
-    min-height:255px;
-    margin:8px 0 15px;
-    border-radius:18px;
-    overflow:hidden;
+    position: relative;
+
+    width: 100%;
+    min-height: 300px;
+
+    margin: 4px 0 12px;
+
+    border-radius: 18px;
+
     background:
         radial-gradient(
             circle at 50% 50%,
-            rgba(50,90,180,.12),
-            rgba(0,0,0,.2)
-        );
-    border:1px solid rgba(100,180,255,.1);
+            rgba(35,65,125,.12),
+            transparent 65%
+        ),
+        rgba(0,0,0,.16);
+
+    border: 1px solid rgba(100,180,255,.1);
+
+    overflow: hidden;
 }
 
 .map-line {
-    position:absolute;
-    height:2px;
-    background:rgba(100,190,255,.16);
-    transform-origin:left center;
+    position: absolute;
+    height: 1px;
+    background: rgba(100,190,255,.18);
+    transform-origin: left center;
 }
 
 .planet-node {
-    position:absolute;
-    width:58px;
-    height:58px;
-    border-radius:50%;
-    border:2px solid rgba(130,200,255,.35);
+    position: absolute;
+
+    width: 70px;
+    height: 70px;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    border: 2px solid rgba(120,190,255,.22);
+
     background:
         radial-gradient(
             circle at 35% 30%,
-            #214f72,
-            #081323 70%
+            #263e72,
+            #07101f 70%
         );
-    color:white;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    font-size:22px;
-    z-index:2;
-    box-shadow:
-        0 0 15px rgba(60,170,255,.12);
-    cursor:pointer;
-    touch-action:manipulation;
-}
 
-.planet-node small {
-    font-size:7px;
-    letter-spacing:.7px;
-    margin-top:2px;
-    color:#9eb7d6;
-}
+    color: white;
 
-.planet-node.selected {
-    border-color:#66e5ff;
-    box-shadow:
-        0 0 25px rgba(70,220,255,.45);
-}
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-.planet-node.locked {
-    opacity:.35;
-    filter:grayscale(.7);
+    flex-direction: column;
+
+    font-size: 25px;
+
+    transition:
+        transform .15s,
+        border-color .15s,
+        box-shadow .15s;
 }
 
 .planet-node.available {
-    border-color:#b78cff;
+    border-color: #55d9ff;
+
+    box-shadow:
+        0 0 22px rgba(70,210,255,.25);
+
+    cursor: pointer;
 }
 
-.planet-node.current {
-    border-color:#64e9ff;
+.planet-node.available:active {
+    transform:
+        translate(-50%, -50%)
+        scale(.93);
+}
+
+.planet-node.selected {
+    border-color: #ffe36b;
+
     box-shadow:
-        0 0 28px rgba(70,220,255,.5);
+        0 0 30px rgba(255,220,80,.35);
+}
+
+.planet-node.locked {
+    opacity: .38;
+    filter: grayscale(.6);
+}
+
+.planet-node span {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .8px;
+    margin-top: 2px;
+}
+
+.planet-node small {
+    font-size: 7px;
+    color: #7790af;
+    margin-top: 2px;
+}
+
+.map-info {
+    min-height: 18px;
+    text-align: center;
+    color: #7189a9;
+    font-size: 9px;
+    margin-bottom: 5px;
 }
 
 /* =========================================================
-   PLANET PHASE / DESTINATIONS
+   INSTRUCTIONS
    ========================================================= */
 
-#phaseUI {
-    position:absolute;
-    z-index:15;
-    left:0;
-    right:0;
-    bottom:calc(92px + env(safe-area-inset-bottom));
-    display:flex;
-    justify-content:center;
-    pointer-events:none;
+.instructions {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 7px;
+    margin: 10px 0 14px;
 }
 
-.phase-message {
-    padding:9px 15px;
-    border-radius:14px;
-    background:rgba(4,10,25,.8);
-    border:1px solid rgba(100,200,255,.2);
-    color:#a8c9e9;
-    font-size:10px;
-    letter-spacing:1px;
-    text-transform:uppercase;
-    text-align:center;
+.instruction {
+    padding: 10px 4px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.025);
+    text-align: center;
 }
 
-#destinationUI {
-    position:absolute;
-    z-index:16;
-    inset:0;
-    pointer-events:none;
+.instruction-icon {
+    font-size: 19px;
+    margin-bottom: 5px;
 }
 
-.destination-bubble,
-.land-bubble {
-    position:absolute;
-    pointer-events:auto;
-    width:76px;
-    height:76px;
-    border-radius:50%;
-    border:1px solid rgba(110,215,255,.45);
-    background:
-        radial-gradient(
-            circle at 35% 30%,
-            rgba(40,95,145,.95),
-            rgba(4,13,29,.95)
-        );
-    color:white;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    box-shadow:
-        0 0 25px rgba(60,200,255,.2);
-    animation:bubbleIn .35s ease-out;
-    touch-action:manipulation;
-}
-
-.destination-bubble:active,
-.land-bubble:active {
-    transform:scale(.92);
-}
-
-.destination-bubble strong,
-.land-bubble strong {
-    font-size:10px;
-    letter-spacing:1px;
-}
-
-.destination-bubble small,
-.land-bubble small {
-    font-size:7px;
-    color:#8fb1d0;
-    margin-top:3px;
-}
-
-.land-bubble {
-    width:82px;
-    height:82px;
-    border-color:rgba(255,210,100,.55);
-    background:
-        radial-gradient(
-            circle at 35% 30%,
-            rgba(115,80,35,.95),
-            rgba(20,13,5,.96)
-        );
-    box-shadow:
-        0 0 30px rgba(255,190,70,.22);
-}
-
-@keyframes bubbleIn {
-    from {
-        transform:scale(.4);
-        opacity:0;
-    }
-    to {
-        transform:scale(1);
-        opacity:1;
-    }
+.instruction-text {
+    color: #7289a8;
+    font-size: 8px;
+    line-height: 1.3;
 }
 
 /* =========================================================
    GAME OVER
    ========================================================= */
 
-.game-over-title {
-    color:#ff789c;
-    font-size:12px;
-    letter-spacing:4px;
-    text-transform:uppercase;
-    margin-bottom:7px;
-}
-
 .final-score {
-    font-size:50px;
-    font-weight:900;
-    margin:4px 0;
+    font-size: 52px;
+    font-weight: 900;
+    text-align: center;
+
+    margin: 2px 0;
+
     background:
         linear-gradient(
             90deg,
             #fff,
             #7ddcff
         );
-    -webkit-background-clip:text;
-    background-clip:text;
-    color:transparent;
+
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }
 
 .high-score {
-    color:#697e9d;
-    font-size:10px;
-    margin-bottom:15px;
+    color: #697e9d;
+    font-size: 10px;
+    text-align: center;
+    margin-bottom: 14px;
 }
 
 #newRecord {
-    color:#ffd75e;
-    font-size:10px;
-    letter-spacing:2px;
-    text-transform:uppercase;
-    margin-bottom:12px;
-    display:none;
+    color: #ffd75e;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 10px;
+    display: none;
 }
 
 #newRecord.show {
-    display:block;
+    display: block;
 }
 
+/* =========================================================
+   LEADERBOARD
+   ========================================================= */
+
 .leaderboard-title {
-    margin-top:17px;
-    margin-bottom:8px;
-    color:#65dcff;
-    font-size:11px;
-    font-weight:800;
-    letter-spacing:3px;
-    text-transform:uppercase;
+    margin-top: 14px;
+    margin-bottom: 8px;
+    color: #65dcff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    text-align: center;
 }
 
 .name-input {
-    width:100%;
-    border:1px solid rgba(100,190,255,.25);
-    border-radius:13px;
-    padding:13px;
-    margin-bottom:8px;
-    background:rgba(0,0,0,.25);
-    color:white;
-    text-align:center;
-    font-size:16px;
-    outline:none;
+    width: 100%;
+
+    border: 1px solid rgba(100,190,255,.25);
+    border-radius: 13px;
+
+    padding: 13px;
+
+    margin-bottom: 5px;
+
+    background: rgba(0,0,0,.25);
+    color: white;
+
+    text-align: center;
+    font-size: 16px;
+
+    outline: none;
+
+    position: relative;
+    z-index: 3;
+}
+
+.name-input:focus {
+    border-color: #55d9ff;
 }
 
 .leaderboard-box {
-    max-height:210px;
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-    border-radius:12px;
-    padding-right:2px;
+    max-height: 170px;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    -webkit-overflow-scrolling: touch;
+
+    border-radius: 12px;
+
+    padding: 4px;
+
+    background: rgba(0,0,0,.12);
+
+    border: 1px solid rgba(100,180,255,.08);
+
+    touch-action: pan-y;
+
+    overscroll-behavior: contain;
 }
 
 .leaderboard {
-    text-align:left;
+    text-align: left;
 }
 
 .leaderboard-row {
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:8px 9px;
-    margin-bottom:4px;
-    border-radius:9px;
-    background:rgba(255,255,255,.025);
-    color:#a9bdd8;
-    font-size:11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 8px 9px;
+
+    margin-bottom: 4px;
+
+    border-radius: 9px;
+
+    background: rgba(255,255,255,.025);
+
+    color: #a9bdd8;
+
+    font-size: 11px;
 }
 
 .leaderboard-row.top {
-    background:rgba(85,210,255,.08);
+    background: rgba(85,210,255,.08);
 }
 
 .leaderboard-rank {
-    width:27px;
-    font-weight:900;
-    color:#6bdfff;
+    width: 27px;
+    font-weight: 900;
+    color: #6bdfff;
 }
 
 .leaderboard-name {
-    flex:1;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+    flex: 1;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .leaderboard-score {
-    font-weight:800;
-    color:white;
+    font-weight: 800;
+    color: white;
 }
 
 #leaderboardStatus,
 #mainLeaderboardStatus {
-    min-height:16px;
-    margin:6px 0;
-    color:#7189a9;
-    font-size:9px;
+    min-height: 17px;
+    margin: 6px 0;
+
+    color: #7189a9;
+    font-size: 9px;
+
+    text-align: center;
 }
 
 #submitScoreButton:disabled {
-    opacity:.5;
+    opacity: .5;
+}
+
+/* =========================================================
+   IN-GAME DESTINATION BUBBLES
+   ========================================================= */
+
+#transitionUI {
+    position: fixed;
+    z-index: 25;
+    inset: 0;
+
+    pointer-events: none;
+}
+
+#transitionUI.hidden {
+    display: none;
+}
+
+.transition-title {
+    position: absolute;
+
+    top: 16%;
+    left: 50%;
+
+    transform: translateX(-50%);
+
+    color: #a9dfff;
+
+    font-size: 10px;
+    font-weight: 800;
+
+    letter-spacing: 3px;
+    text-transform: uppercase;
+
+    text-align: center;
+
+    text-shadow:
+        0 0 15px rgba(80,210,255,.6);
+
+    white-space: nowrap;
+}
+
+.destination-bubble,
+.land-bubble,
+.depart-bubble {
+    position: absolute;
+
+    width: 78px;
+    height: 78px;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    pointer-events: auto;
+
+    border: 1px solid rgba(100,220,255,.5);
+
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            rgba(60,130,200,.8),
+            rgba(5,15,30,.92)
+        );
+
+    color: #d9f5ff;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    flex-direction: column;
+
+    box-shadow:
+        0 0 25px rgba(50,190,255,.2),
+        inset 0 0 20px rgba(50,190,255,.08);
+
+    animation:
+        bubbleFloat 2.2s ease-in-out infinite;
+}
+
+.destination-bubble:active,
+.land-bubble:active,
+.depart-bubble:active {
+    transform:
+        translate(-50%, -50%)
+        scale(.9);
+}
+
+.destination-bubble strong,
+.land-bubble strong,
+.depart-bubble strong {
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.destination-bubble small,
+.land-bubble small,
+.depart-bubble small {
+    margin-top: 3px;
+    font-size: 7px;
+    color: #779fbe;
+}
+
+@keyframes bubbleFloat {
+    0%,100% {
+        margin-top: 0;
+    }
+
+    50% {
+        margin-top: -6px;
+    }
+}
+
+/* =========================================================
+   FLOATING TEXT
+   ========================================================= */
+
+.floating-text {
+    position: fixed;
+    z-index: 40;
+
+    pointer-events: none;
+
+    font-weight: 900;
+    font-size: 20px;
+
+    color: white;
+
+    text-shadow:
+        0 0 12px #53d9ff;
+
+    animation:
+        floatUp .7s ease-out forwards;
+}
+
+@keyframes floatUp {
+
+    from {
+        transform:
+            translate(-50%,0)
+            scale(.7);
+
+        opacity: 0;
+    }
+
+    15% {
+        opacity: 1;
+
+        transform:
+            translate(-50%,-8px)
+            scale(1.1);
+    }
+
+    to {
+        transform:
+            translate(-50%,-60px)
+            scale(1);
+
+        opacity: 0;
+    }
+}
+
+/* =========================================================
+   PLANET PHASE BACKGROUND
+   ========================================================= */
+
+#planetPhaseIndicator {
+    position: fixed;
+
+    z-index: 5;
+
+    inset: 0;
+
+    pointer-events: none;
+
+    display: none;
+}
+
+#planetPhaseIndicator.active {
+    display: block;
+}
+
+.planet-horizon {
+    position: absolute;
+
+    width: min(120vw, 700px);
+    height: min(120vw, 700px);
+
+    left: 50%;
+    top: 70%;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    opacity: .65;
+
+    filter:
+        blur(.2px);
+
+    box-shadow:
+        0 -20px 80px rgba(70,180,255,.18);
+}
+
+.planet-horizon.earth {
+    background:
+        radial-gradient(
+            circle at 35% 28%,
+            #62c8ff,
+            #1765a1 45%,
+            #071b35 75%
+        );
+}
+
+.planet-horizon.mars {
+    background:
+        radial-gradient(
+            circle at 35% 28%,
+            #ffb079,
+            #9b3e31 45%,
+            #351318 75%
+        );
+}
+
+.planet-horizon.ice {
+    background:
+        radial-gradient(
+            circle at 35% 28%,
+            #d8f7ff,
+            #6ca8c7 45%,
+            #152c3d 75%
+        );
+}
+
+.planet-horizon.volcanic {
+    background:
+        radial-gradient(
+            circle at 35% 28%,
+            #ffb15a,
+            #8f3028 45%,
+            #21090a 75%
+        );
+}
+
+.planet-horizon.gas {
+    background:
+        radial-gradient(
+            circle at 35% 28%,
+            #dfb4ff,
+            #704fa3 45%,
+            #211633 75%
+        );
 }
 
 /* =========================================================
    RESPONSIVE
    ========================================================= */
 
-@media(max-height:650px) {
+@media (max-height: 650px) {
 
     .card {
-        padding:18px 16px;
+        max-height: 94vh;
+        padding: 18px 16px;
+    }
+
+    .logo {
+        font-size: 34px;
+    }
+
+    .subtitle {
+        margin-bottom: 10px;
     }
 
     .planet-map {
-        min-height:205px;
+        min-height: 240px;
     }
 
-    .map-title {
-        margin-top:10px;
+    .instructions {
+        display: none;
     }
 
-    .description {
-        margin-bottom:12px;
+    .leaderboard-box {
+        max-height: 125px;
     }
-
 }
 
-@media(max-width:380px) {
+@media (orientation: landscape) and (max-height: 500px) {
 
-    .panel {
-        padding:6px 7px;
+    .card {
+        max-height: 94vh;
+        max-width: 600px;
+        padding: 14px 18px;
     }
 
-    .stat-value {
-        font-size:15px;
+    .planet-map {
+        min-height: 180px;
     }
 
-    .stat-label {
-        font-size:7px;
+    .logo {
+        font-size: 30px;
     }
 
-    #pauseButton {
-        width:36px;
-        height:36px;
+    .instructions {
+        display: none;
     }
 
+    #bottomUI {
+        bottom: 7px;
+    }
+
+    .ability {
+        width: 50px;
+        height: 50px;
+    }
 }
 
 </style>
@@ -674,9 +1018,13 @@ canvas {
 
 <canvas id="game"></canvas>
 
-<!-- =========================================================
+<div id="planetPhaseIndicator">
+    <div id="planetHorizon" class="planet-horizon earth"></div>
+</div>
+
+<!-- ========================================================
      HUD
-     ========================================================= -->
+     ======================================================== -->
 
 <div id="hud">
 
@@ -708,23 +1056,16 @@ canvas {
 
 </div>
 
-<!-- =========================================================
-     PHASE UI
-     ========================================================= -->
-
-<div id="phaseUI"></div>
-<div id="destinationUI"></div>
-
-<!-- =========================================================
+<!-- ========================================================
      BOTTOM UI
-     ========================================================= -->
+     ======================================================== -->
 
 <div id="bottomUI">
 
-    <button class="ability" id="empButton">
+    <div class="ability" id="empButton">
         ⚡
         <small>0%</small>
-    </button>
+    </div>
 
     <div id="hint">
         TAP ASTEROIDS • CHAIN REACTIONS
@@ -732,193 +1073,327 @@ canvas {
 
 </div>
 
-<!-- =========================================================
+<!-- ========================================================
+     TRANSITION UI
+     ======================================================== -->
+
+<div id="transitionUI" class="hidden">
+
+    <div
+        id="transitionTitle"
+        class="transition-title">
+    </div>
+
+</div>
+
+<!-- ========================================================
      START SCREEN
-     ========================================================= -->
+     ======================================================== -->
 
 <div class="overlay" id="startScreen">
 
     <div class="card">
 
-        <div class="logo">
-            ASTEROID<br>IMPACT
+        <div class="card-scroll">
+
+            <div class="logo">
+                ASTEROID<br>IMPACT
+            </div>
+
+            <div class="subtitle">
+                Chain Reaction Protocol
+            </div>
+
+            <div class="map-title">
+                ★ YOUR SPACE NETWORK ★
+            </div>
+
+            <div
+                class="planet-map"
+                id="planetMap">
+
+                <!-- Lines and planets generated by JS -->
+
+            </div>
+
+            <div
+                class="map-info"
+                id="mapInfo">
+                Select a planet with an available ship.
+            </div>
+
+            <p class="description">
+                Choose where to begin your mission.
+                Reach new planets by surviving their asteroid
+                fields and building enough score to travel onward.
+            </p>
+
+            <div class="instructions">
+
+                <div class="instruction">
+
+                    <div class="instruction-icon">
+                        ☄️
+                    </div>
+
+                    <div class="instruction-text">
+                        SURVIVE<br>THE FIELD
+                    </div>
+
+                </div>
+
+                <div class="instruction">
+
+                    <div class="instruction-icon">
+                        🌎
+                    </div>
+
+                    <div class="instruction-text">
+                        REACH<br>PLANETS
+                    </div>
+
+                </div>
+
+                <div class="instruction">
+
+                    <div class="instruction-icon">
+                        🚀
+                    </div>
+
+                    <div class="instruction-text">
+                        BUILD<br>YOUR FLEET
+                    </div>
+
+                </div>
+
+            </div>
+
+            <button
+                class="big-button"
+                id="startButton">
+
+                Launch Mission
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="startLeaderboardButton">
+
+                🏆 Global Leaderboard
+
+            </button>
+
         </div>
-
-        <div class="subtitle">
-            Chain Reaction Protocol
-        </div>
-
-        <p class="description">
-            Navigate from planet to planet,
-            survive their asteroid fields,
-            build your score and establish
-            new spacecraft bases.
-        </p>
-
-        <div class="map-title">
-            SELECT DEPARTURE PLANET
-        </div>
-
-        <div class="planet-map" id="planetMap"></div>
-
-        <button class="big-button" id="startButton">
-            Launch Mission
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="startLeaderboardButton">
-            🏆 Global Leaderboard
-        </button>
 
     </div>
 
 </div>
 
-<!-- =========================================================
+<!-- ========================================================
      PAUSE
-     ========================================================= -->
+     ======================================================== -->
 
-<div class="overlay hidden" id="pauseScreen">
+<div
+    class="overlay hidden"
+    id="pauseScreen">
 
     <div class="card">
 
-        <div class="game-over-title">
-            Mission Paused
+        <div class="card-scroll">
+
+            <div class="game-over-title">
+                Mission Paused
+            </div>
+
+            <div
+                class="logo"
+                style="font-size:42px">
+
+                PAUSED
+
+            </div>
+
+            <button
+                class="big-button"
+                id="resumeButton">
+
+                Resume
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="pauseRestart">
+
+                Restart Mission
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="pauseMenu">
+
+                Main Menu
+
+            </button>
+
         </div>
-
-        <div
-            class="logo"
-            style="font-size:42px">
-            PAUSED
-        </div>
-
-        <button class="big-button" id="resumeButton">
-            Resume
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="pauseRestart">
-            Restart Mission
-        </button>
 
     </div>
 
 </div>
 
-<!-- =========================================================
+<!-- ========================================================
      GAME OVER
-     ========================================================= -->
+     ======================================================== -->
 
-<div class="overlay hidden" id="gameOverScreen">
+<div
+    class="overlay hidden"
+    id="gameOverScreen">
 
     <div class="card">
 
-        <div class="game-over-title">
-            Ship Lost
-        </div>
+        <div class="card-scroll">
 
-        <div class="final-score" id="finalScore">
-            0
-        </div>
-
-        <div id="newRecord">
-            ★ NEW HIGH SCORE ★
-        </div>
-
-        <div class="high-score">
-            BEST:
-            <span id="bestScore">0</span>
-        </div>
-
-        <div class="leaderboard-title">
-            Submit Global Score
-        </div>
-
-        <input
-            id="playerName"
-            class="name-input"
-            type="text"
-            maxlength="20"
-            placeholder="Enter your name"
-            autocomplete="nickname">
-
-        <button
-            class="big-button"
-            id="submitScoreButton">
-            Submit Score
-        </button>
-
-        <div id="leaderboardStatus"></div>
-
-        <div class="leaderboard-title">
-            🏆 Global Top 10
-        </div>
-
-        <div class="leaderboard-box">
-            <div
-                class="leaderboard"
-                id="leaderboard">
-                Loading leaderboard...
+            <div class="game-over-title">
+                Ship Lost
             </div>
+
+            <div
+                class="final-score"
+                id="finalScore">
+
+                0
+
+            </div>
+
+            <div id="newRecord">
+                ★ NEW HIGH SCORE ★
+            </div>
+
+            <div class="high-score">
+
+                BEST:
+                <span id="bestScore">0</span>
+
+            </div>
+
+            <div class="leaderboard-title">
+                Submit Global Score
+            </div>
+
+            <input
+                id="playerName"
+                class="name-input"
+                type="text"
+                maxlength="20"
+                placeholder="Enter your name"
+                autocomplete="nickname">
+
+            <button
+                class="big-button"
+                id="submitScoreButton">
+
+                Submit Score
+
+            </button>
+
+            <div id="leaderboardStatus"></div>
+
+            <div class="leaderboard-title">
+                🏆 Global Top 10
+            </div>
+
+            <div class="leaderboard-box">
+
+                <div
+                    class="leaderboard"
+                    id="leaderboard">
+
+                    Loading leaderboard...
+
+                </div>
+
+            </div>
+
+            <button
+                class="big-button secondary-button"
+                id="refreshLeaderboardButton">
+
+                Refresh Leaderboard
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="restartButton">
+
+                Try Again
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="menuButton">
+
+                Main Menu
+
+            </button>
+
         </div>
-
-        <button
-            class="big-button secondary-button"
-            id="refreshLeaderboardButton">
-            Refresh Leaderboard
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="restartButton">
-            Try Again
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="menuButton">
-            Main Menu
-        </button>
 
     </div>
 
 </div>
 
-<!-- =========================================================
-     LEADERBOARD
-     ========================================================= -->
+<!-- ========================================================
+     LEADERBOARD SCREEN
+     ======================================================== -->
 
-<div class="overlay hidden" id="leaderboardScreen">
+<div
+    class="overlay hidden"
+    id="leaderboardScreen">
 
     <div class="card">
 
-        <div class="game-over-title">
-            Asteroid Impact
-        </div>
+        <div class="card-scroll">
 
-        <div
-            class="logo"
-            style="font-size:40px">
-            LEADERBOARD
-        </div>
-
-        <div class="leaderboard-box">
-            <div
-                id="mainLeaderboard"
-                class="leaderboard">
-                Loading leaderboard...
+            <div class="game-over-title">
+                Asteroid Impact
             </div>
+
+            <div
+                class="logo"
+                style="font-size:40px">
+
+                LEADERBOARD
+
+            </div>
+
+            <div class="leaderboard-box">
+
+                <div
+                    id="mainLeaderboard"
+                    class="leaderboard">
+
+                    Loading leaderboard...
+
+                </div>
+
+            </div>
+
+            <div id="mainLeaderboardStatus"></div>
+
+            <button
+                class="big-button secondary-button"
+                id="closeLeaderboardButton">
+
+                Back
+
+            </button>
+
         </div>
-
-        <div id="mainLeaderboardStatus"></div>
-
-        <button
-            class="big-button secondary-button"
-            id="closeLeaderboardButton">
-            Back
-        </button>
 
     </div>
 
@@ -929,7 +1404,7 @@ canvas {
 "use strict";
 
 /* =========================================================
-   GOOGLE LEADERBOARD
+   LEADERBOARD
    ========================================================= */
 
 const LEADERBOARD_URL =
@@ -941,105 +1416,123 @@ const LEADERBOARD_URL =
    ========================================================= */
 
 const canvas =
-document.getElementById("game");
+    document.getElementById("game");
 
 const ctx =
-canvas.getContext("2d", {alpha:false});
+    canvas.getContext("2d", { alpha:false });
 
 const scoreEl =
-document.getElementById("score");
+    document.getElementById("score");
 
 const comboEl =
-document.getElementById("combo");
+    document.getElementById("combo");
 
 const levelEl =
-document.getElementById("level");
+    document.getElementById("level");
 
 const livesEl =
-document.getElementById("lives");
+    document.getElementById("lives");
 
 const empButton =
-document.getElementById("empButton");
-
-const phaseUI =
-document.getElementById("phaseUI");
-
-const destinationUI =
-document.getElementById("destinationUI");
+    document.getElementById("empButton");
 
 const startScreen =
-document.getElementById("startScreen");
+    document.getElementById("startScreen");
 
 const pauseScreen =
-document.getElementById("pauseScreen");
+    document.getElementById("pauseScreen");
 
 const gameOverScreen =
-document.getElementById("gameOverScreen");
+    document.getElementById("gameOverScreen");
 
 const leaderboardScreen =
-document.getElementById("leaderboardScreen");
+    document.getElementById("leaderboardScreen");
 
 const finalScoreEl =
-document.getElementById("finalScore");
+    document.getElementById("finalScore");
 
 const bestScoreEl =
-document.getElementById("bestScore");
+    document.getElementById("bestScore");
 
 const newRecordEl =
-document.getElementById("newRecord");
+    document.getElementById("newRecord");
 
 const playerNameInput =
-document.getElementById("playerName");
+    document.getElementById("playerName");
 
 const submitScoreButton =
-document.getElementById("submitScoreButton");
+    document.getElementById("submitScoreButton");
 
 const leaderboardEl =
-document.getElementById("leaderboard");
+    document.getElementById("leaderboard");
 
 const leaderboardStatus =
-document.getElementById("leaderboardStatus");
+    document.getElementById("leaderboardStatus");
 
 const mainLeaderboard =
-document.getElementById("mainLeaderboard");
+    document.getElementById("mainLeaderboard");
 
 const mainLeaderboardStatus =
-document.getElementById("mainLeaderboardStatus");
+    document.getElementById("mainLeaderboardStatus");
 
 const planetMap =
-document.getElementById("planetMap");
+    document.getElementById("planetMap");
+
+const mapInfo =
+    document.getElementById("mapInfo");
+
+const transitionUI =
+    document.getElementById("transitionUI");
+
+const transitionTitle =
+    document.getElementById("transitionTitle");
+
+const planetPhaseIndicator =
+    document.getElementById("planetPhaseIndicator");
+
+const planetHorizon =
+    document.getElementById("planetHorizon");
 
 
 /* =========================================================
    CANVAS
    ========================================================= */
 
-let W=0;
-let H=0;
-let DPR=1;
+let W = 0;
+let H = 0;
+let DPR = 1;
 
 function resize() {
 
-    DPR=
+    W = window.innerWidth;
+    H = window.innerHeight;
+
+    DPR =
         Math.min(
-            window.devicePixelRatio||1,
+            window.devicePixelRatio || 1,
             2
         );
 
-    W=window.innerWidth;
-    H=window.innerHeight;
+    canvas.width =
+        Math.floor(W * DPR);
 
-    canvas.width=W*DPR;
-    canvas.height=H*DPR;
+    canvas.height =
+        Math.floor(H * DPR);
 
-    canvas.style.width=W+"px";
-    canvas.style.height=H+"px";
+    canvas.style.width =
+        W + "px";
+
+    canvas.style.height =
+        H + "px";
 
     ctx.setTransform(
-        DPR,0,0,DPR,0,0
+        DPR,
+        0,
+        0,
+        DPR,
+        0,
+        0
     );
-
-    createStars();
 }
 
 window.addEventListener(
@@ -1047,481 +1540,21 @@ window.addEventListener(
     resize
 );
 
+window.addEventListener(
+    "orientationchange",
+    ()=>{
+        setTimeout(resize,100);
+    }
+);
+
 resize();
-
-
-/* =========================================================
-   PLANETS
-   ========================================================= */
-
-const planets = [
-
-    {
-        id:"earth",
-        name:"Earth",
-        emoji:"🌍",
-        tier:0,
-        required:0,
-        infinite:true
-    },
-
-    {
-        id:"mars",
-        name:"Mars",
-        emoji:"🔴",
-        tier:1,
-        required:10000
-    },
-
-    {
-        id:"venus",
-        name:"Venus",
-        emoji:"🟠",
-        tier:1,
-        required:10000
-    },
-
-    {
-        id:"moon",
-        name:"Luna",
-        emoji:"🌕",
-        tier:1,
-        required:10000
-    },
-
-    {
-        id:"jupiter",
-        name:"Jupiter",
-        emoji:"🪐",
-        tier:2,
-        required:50000
-    },
-
-    {
-        id:"saturn",
-        name:"Saturn",
-        emoji:"🪐",
-        tier:2,
-        required:50000
-    },
-
-    {
-        id:"neptune",
-        name:"Neptune",
-        emoji:"🔵",
-        tier:2,
-        required:50000
-    },
-
-    {
-        id:"uranus",
-        name:"Uranus",
-        emoji:"🔵",
-        tier:3,
-        required:100000
-    },
-
-    {
-        id:"titan",
-        name:"Titan",
-        emoji:"🟤",
-        tier:3,
-        required:100000
-    },
-
-    {
-        id:"pluto",
-        name:"Pluto",
-        emoji:"⚪",
-        tier:4,
-        required:250000
-    }
-
-];
-
-
-/* =========================================================
-   SHIP STORAGE
-   ========================================================= */
-
-let ships={};
-
-function loadShips() {
-
-    try {
-
-        ships=
-            JSON.parse(
-                localStorage.getItem(
-                    "asteroidImpactShips"
-                )||"{}"
-            );
-
-    } catch(e) {
-
-        ships={};
-    }
-
-    if(!ships.earth) {
-
-        ships.earth=[
-            {score:0}
-        ];
-    }
-}
-
-function saveShips() {
-
-    localStorage.setItem(
-        "asteroidImpactShips",
-        JSON.stringify(ships)
-    );
-}
-
-loadShips();
-
-
-/* =========================================================
-   PLANET HELPERS
-   ========================================================= */
-
-function getPlanet(id) {
-
-    return planets.find(
-        p=>p.id===id
-    );
-}
-
-function planetUnlocked(planet) {
-
-    if(!planet) return false;
-
-    if(planet.tier===0)
-        return true;
-
-    return highestScoreEver() >=
-        planet.required;
-}
-
-function highestScoreEver() {
-
-    return Number(
-        localStorage.getItem(
-            "asteroidImpactHighestScore"
-        )||0
-    );
-}
-
-function setHighestScore(value) {
-
-    if(value>highestScoreEver()) {
-
-        localStorage.setItem(
-            "asteroidImpactHighestScore",
-            String(value)
-        );
-    }
-}
-
-function shipCount(id) {
-
-    if(id==="earth")
-        return Infinity;
-
-    return ships[id]
-        ? ships[id].length
-        : 0;
-}
-
-
-/* =========================================================
-   START MAP
-   ========================================================= */
-
-let selectedStartPlanet="earth";
-
-function renderPlanetMap() {
-
-    planetMap.innerHTML="";
-
-    const positions={
-
-        earth:[50,82],
-
-        mars:[18,60],
-        venus:[50,60],
-        moon:[82,60],
-
-        jupiter:[18,37],
-        saturn:[50,37],
-        neptune:[82,37],
-
-        uranus:[30,16],
-        titan:[70,16],
-
-        pluto:[50,3]
-
-    };
-
-    function addLine(a,b) {
-
-        const p1=positions[a];
-        const p2=positions[b];
-
-        if(!p1||!p2) return;
-
-        const dx=p2[0]-p1[0];
-        const dy=p2[1]-p1[1];
-
-        const length=
-            Math.hypot(dx,dy);
-
-        const angle=
-            Math.atan2(dy,dx)*
-            180/Math.PI;
-
-        const line=
-            document.createElement("div");
-
-        line.className="map-line";
-
-        line.style.left=
-            p1[0]+"%";
-
-        line.style.top=
-            p1[1]+"%";
-
-        line.style.width=
-            length+"%";
-
-        line.style.transform=
-            `rotate(${angle}deg)`;
-
-        planetMap.appendChild(line);
-    }
-
-    addLine("earth","mars");
-    addLine("earth","venus");
-    addLine("earth","moon");
-
-    addLine("mars","jupiter");
-    addLine("venus","saturn");
-    addLine("moon","neptune");
-
-    addLine("jupiter","uranus");
-    addLine("saturn","titan");
-
-    addLine("uranus","pluto");
-
-    planets.forEach(
-        planet=>{
-
-            const pos=
-                positions[planet.id];
-
-            const button=
-                document.createElement("button");
-
-            button.className=
-                "planet-node";
-
-            button.style.left=
-                `calc(${pos[0]}% - 29px)`;
-
-            button.style.top=
-                `calc(${pos[1]}% - 29px)`;
-
-            const unlocked=
-                planetUnlocked(planet);
-
-            if(!unlocked)
-                button.classList.add("locked");
-
-            if(
-                planet.id===
-                selectedStartPlanet
-            ) {
-
-                button.classList.add(
-                    "selected"
-                );
-            }
-
-            if(
-                planet.id!=="earth" &&
-                shipCount(planet.id)>0
-            ) {
-
-                button.classList.add(
-                    "available"
-                );
-            }
-
-            if(planet.id==="earth") {
-
-                button.classList.add(
-                    "current"
-                );
-            }
-
-            button.innerHTML=
-                planet.emoji+
-                `<small>${planet.name}</small>`;
-
-            button.addEventListener(
-                "click",
-                e=>{
-
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if(
-                        !unlocked &&
-                        planet.id!=="earth"
-                    ) {
-
-                        return;
-                    }
-
-                    if(
-                        planet.id!=="earth" &&
-                        shipCount(
-                            planet.id
-                        )<=0
-                    ) {
-
-                        return;
-                    }
-
-                    selectedStartPlanet=
-                        planet.id;
-
-                    renderPlanetMap();
-                }
-            );
-
-            planetMap.appendChild(
-                button
-            );
-        }
-    );
-}
-
-
-/* =========================================================
-   GAME STATE
-   ========================================================= */
-
-let running=false;
-let paused=false;
-let gameOver=false;
-
-let score=0;
-let highScore=
-    Number(
-        localStorage.getItem(
-            "asteroidImpactHighScore"
-        )||0
-    );
-
-let combo=1;
-let comboTimer=0;
-
-let lives=3;
-
-let wave=1;
-let destroyed=0;
-
-let spawnTimer=0;
-let difficultyTimer=0;
-
-
-/* =========================================================
-   EMP
-   ========================================================= */
-
-let empCharge=0;
-let empCooldown=0;
-let empUses=0;
-
-const EMP_MAX=100;
-const EMP_COOLDOWN=3;
-const EMP_USES_BEFORE_COOLDOWN=3;
-
-
-/*
- * IMPORTANT:
- *
- * EMP CHARGE IS GENERATED DIRECTLY
- * WHEN AN ASTEROID IS DESTROYED.
- *
- * This is the part fixed in this version.
- */
-
-function addEMPCharge(amount) {
-
-    if(
-        !Number.isFinite(amount) ||
-        amount<=0
-    ) {
-
-        return;
-    }
-
-    if(empCooldown>0)
-        return;
-
-    empCharge=
-        clamp(
-            empCharge+amount,
-            0,
-            EMP_MAX
-        );
-
-    updateHUD();
-}
-
-
-/* =========================================================
-   TRAVEL PHASES
-   ========================================================= */
-
-/*
-   asteroid
-   ↓
-   interplanetary
-   ↓
-   asteroid
-   ↓
-   planet
-   ↓
-   asteroid
-   ↓
-   interplanetary
-*/
-
-let phase="asteroid";
-
-let currentPlanetId=
-    "earth";
-
-let destinationPlanetId=
-    null;
-
-let transitionTimer=0;
-
-let planetPhaseDuration=6;
-let interplanetaryDuration=7;
-
-let destinationShown=false;
-let landShown=false;
 
 
 /* =========================================================
    AUDIO
    ========================================================= */
 
-let audioContext=null;
+let audioContext = null;
 
 function initAudio() {
 
@@ -1529,22 +1562,25 @@ function initAudio() {
 
         try {
 
-            audioContext=
+            audioContext =
                 new (
-                    window.AudioContext||
+                    window.AudioContext ||
                     window.webkitAudioContext
                 )();
 
-        } catch(e) {}
+        } catch(e) {
 
+            return;
+        }
     }
 
     if(
         audioContext &&
-        audioContext.state==="suspended"
+        audioContext.state === "suspended"
     ) {
 
         audioContext.resume();
+
     }
 }
 
@@ -1553,13 +1589,13 @@ function sound(type) {
     if(!audioContext)
         return;
 
-    const now=
+    const now =
         audioContext.currentTime;
 
-    const osc=
+    const osc =
         audioContext.createOscillator();
 
-    const gain=
+    const gain =
         audioContext.createGain();
 
     osc.connect(gain);
@@ -1567,7 +1603,9 @@ function sound(type) {
         audioContext.destination
     );
 
-    if(type==="click") {
+    let duration = .2;
+
+    if(type === "click") {
 
         osc.type="sine";
 
@@ -1582,7 +1620,7 @@ function sound(type) {
         );
 
         gain.gain.setValueAtTime(
-            .06,
+            .05,
             now
         );
 
@@ -1591,11 +1629,10 @@ function sound(type) {
             now+.12
         );
 
-        osc.start(now);
-        osc.stop(now+.13);
+        duration=.13;
     }
 
-    if(type==="explosion") {
+    if(type === "explosion") {
 
         osc.type="sawtooth";
 
@@ -1610,7 +1647,7 @@ function sound(type) {
         );
 
         gain.gain.setValueAtTime(
-            .09,
+            .08,
             now
         );
 
@@ -1619,11 +1656,10 @@ function sound(type) {
             now+.28
         );
 
-        osc.start(now);
-        osc.stop(now+.3);
+        duration=.3;
     }
 
-    if(type==="combo") {
+    if(type === "combo") {
 
         osc.type="triangle";
 
@@ -1647,11 +1683,10 @@ function sound(type) {
             now+.18
         );
 
-        osc.start(now);
-        osc.stop(now+.2);
+        duration=.2;
     }
 
-    if(type==="damage") {
+    if(type === "damage") {
 
         osc.type="square";
 
@@ -1666,7 +1701,7 @@ function sound(type) {
         );
 
         gain.gain.setValueAtTime(
-            .09,
+            .08,
             now
         );
 
@@ -1675,11 +1710,10 @@ function sound(type) {
             now+.3
         );
 
-        osc.start(now);
-        osc.stop(now+.32);
+        duration=.32;
     }
 
-    if(type==="emp") {
+    if(type === "emp") {
 
         osc.type="sine";
 
@@ -1703,37 +1737,845 @@ function sound(type) {
             now+.55
         );
 
-        osc.start(now);
-        osc.stop(now+.6);
+        duration=.6;
     }
 
-    if(type==="travel") {
+    osc.start(now);
+    osc.stop(now+duration);
+}
 
-        osc.type="triangle";
 
-        osc.frequency.setValueAtTime(
-            180,
-            now
-        );
+/* =========================================================
+   GAME STATE
+   ========================================================= */
 
-        osc.frequency.exponentialRampToValueAtTime(
-            700,
-            now+.7
-        );
+let running = false;
+let paused = false;
+let gameOver = false;
 
-        gain.gain.setValueAtTime(
-            .035,
-            now
-        );
+let score = 0;
+let combo = 1;
+let comboTimer = 0;
 
-        gain.gain.exponentialRampToValueAtTime(
-            .001,
-            now+.8
-        );
+let lives = 3;
 
-        osc.start(now);
-        osc.stop(now+.85);
+let wave = 1;
+let destroyed = 0;
+
+let spawnTimer = 0;
+let difficultyTimer = 0;
+
+let lastTime = 0;
+let shake = 0;
+
+
+/* =========================================================
+   EMP
+   ========================================================= */
+
+let empCharge = 0;
+let empCooldown = 0;
+let empUses = 0;
+
+const EMP_MAX = 100;
+const EMP_COOLDOWN = 3;
+const EMP_USES_BEFORE_COOLDOWN = 3;
+
+
+/* =========================================================
+   ARRAYS
+   ========================================================= */
+
+let asteroids = [];
+let explosions = [];
+let particles = [];
+let stars = [];
+let shockwaves = [];
+
+
+/* =========================================================
+   PLANETS
+   ========================================================= */
+
+const planets = [
+
+    {
+        id:"earth",
+        name:"Earth",
+        emoji:"🌎",
+        tier:0,
+        threshold:0,
+        type:"earth",
+        x:50,
+        y:82,
+        ships:Infinity
+    },
+
+    {
+        id:"mars",
+        name:"Mars",
+        emoji:"🔴",
+        tier:1,
+        threshold:10000,
+        type:"mars",
+        x:28,
+        y:63,
+        ships:0
+    },
+
+    {
+        id:"luna",
+        name:"Luna",
+        emoji:"🌕",
+        tier:1,
+        threshold:10000,
+        type:"ice",
+        x:72,
+        y:63,
+        ships:0
+    },
+
+    {
+        id:"europa",
+        name:"Europa",
+        emoji:"🧊",
+        tier:2,
+        threshold:50000,
+        type:"ice",
+        x:20,
+        y:40,
+        ships:0
+    },
+
+    {
+        id:"venus",
+        name:"Venus",
+        emoji:"🟠",
+        tier:2,
+        threshold:50000,
+        type:"volcanic",
+        x:50,
+        y:40,
+        ships:0
+    },
+
+    {
+        id:"titan",
+        name:"Titan",
+        emoji:"🪐",
+        tier:2,
+        threshold:50000,
+        type:"gas",
+        x:80,
+        y:40,
+        ships:0
+    },
+
+    {
+        id:"neptune",
+        name:"Neptune",
+        emoji:"🔵",
+        tier:3,
+        threshold:100000,
+        type:"ice",
+        x:30,
+        y:18,
+        ships:0
+    },
+
+    {
+        id:"vulcan",
+        name:"Vulcan",
+        emoji:"🌋",
+        tier:3,
+        threshold:100000,
+        type:"volcanic",
+        x:70,
+        y:18,
+        ships:0
+    },
+
+    {
+        id:"nova",
+        name:"Nova",
+        emoji:"✨",
+        tier:4,
+        threshold:250000,
+        type:"gas",
+        x:50,
+        y:6,
+        ships:0
     }
+
+];
+
+
+/* =========================================================
+   PERSISTENT FLEET
+   ========================================================= */
+
+const FLEET_KEY =
+    "asteroidImpactFleetV3";
+
+let fleet = {};
+
+function loadFleet() {
+
+    try {
+
+        const saved =
+            JSON.parse(
+                localStorage.getItem(
+                    FLEET_KEY
+                ) || "{}"
+            );
+
+        fleet = saved || {};
+
+    } catch(e) {
+
+        fleet = {};
+    }
+
+    if(
+        typeof fleet.earth !== "object"
+    ) {
+
+        fleet.earth = {
+            ships:Infinity,
+            score:0
+        };
+    }
+
+    for(const planet of planets) {
+
+        if(planet.id === "earth")
+            continue;
+
+        if(
+            !fleet[planet.id] ||
+            typeof fleet[planet.id] !== "object"
+        ) {
+
+            fleet[planet.id] = {
+                ships:0,
+                scores:[]
+            };
+        }
+
+        if(
+            !Array.isArray(
+                fleet[planet.id].scores
+            )
+        ) {
+
+            fleet[planet.id].scores=[];
+        }
+    }
+}
+
+function saveFleet() {
+
+    const copy =
+        JSON.parse(
+            JSON.stringify(fleet)
+        );
+
+    copy.earth.ships = "infinite";
+
+    localStorage.setItem(
+        FLEET_KEY,
+        JSON.stringify(copy)
+    );
+}
+
+function getShipCount(id) {
+
+    if(id==="earth")
+        return Infinity;
+
+    return Math.max(
+        0,
+        Number(
+            fleet[id]?.ships || 0
+        )
+    );
+}
+
+
+/*
+ * A ship is ONLY created here.
+ *
+ * This function is called after the player explicitly
+ * chooses LAND.
+ */
+
+function landShipAtPlanet(
+    planetId,
+    shipScore
+) {
+
+    if(planetId==="earth")
+        return;
+
+    if(
+        !fleet[planetId]
+    ) {
+
+        fleet[planetId]={
+            ships:0,
+            scores:[]
+        };
+    }
+
+    fleet[planetId].ships++;
+
+    fleet[planetId].scores.push(
+        Math.floor(shipScore)
+    );
+
+    saveFleet();
+
+    renderPlanetMap();
+}
+
+
+/*
+ * Selecting a ship does NOT remove it.
+ *
+ * The ship is only removed if that ship dies.
+ */
+
+function useShipFromPlanet(
+    planetId
+) {
+
+    if(
+        planetId==="earth"
+    ) {
+
+        return {
+            score:0
+        };
+    }
+
+    const data =
+        fleet[planetId];
+
+    if(
+        !data ||
+        data.ships<=0
+    ) {
+
+        return null;
+    }
+
+    /*
+     * Use the highest-score ship.
+     *
+     * It remains in the fleet until destroyed.
+     */
+    const index =
+        data.scores.length
+        ? data.scores.length-1
+        : -1;
+
+    const shipScore =
+        index>=0
+        ? Number(data.scores[index]) || 0
+        : 0;
+
+    return {
+        score:shipScore,
+        fleetPlanet:planetId,
+        fleetIndex:index
+    };
+}
+
+
+/*
+ * Remove a ship ONLY when it actually dies.
+ */
+
+function destroySavedShip(
+    planetId,
+    scoreValue
+) {
+
+    if(
+        !planetId ||
+        planetId==="earth"
+    ) {
+
+        return;
+    }
+
+    const data =
+        fleet[planetId];
+
+    if(
+        !data ||
+        data.ships<=0
+    ) {
+
+        return;
+    }
+
+    data.ships =
+        Math.max(
+            0,
+            data.ships-1
+        );
+
+    if(
+        Array.isArray(data.scores) &&
+        data.scores.length
+    ) {
+
+        /*
+         * Remove the ship that was used.
+         * We use the closest matching score.
+         */
+        let bestIndex=0;
+        let bestDiff=Infinity;
+
+        for(
+            let i=0;
+            i<data.scores.length;
+            i++
+        ) {
+
+            const diff =
+                Math.abs(
+                    Number(data.scores[i])-
+                    Number(scoreValue)
+                );
+
+            if(diff<bestDiff) {
+
+                bestDiff=diff;
+                bestIndex=i;
+            }
+        }
+
+        data.scores.splice(
+            bestIndex,
+            1
+        );
+    }
+
+    saveFleet();
+}
+
+
+/* =========================================================
+   CURRENT MISSION
+   ========================================================= */
+
+let currentPlanetId = "earth";
+
+let currentShipOrigin = "earth";
+
+let currentShipSavedScore = 0;
+
+
+/*
+ * The planet currently being approached.
+ */
+
+let destinationPlanetId = null;
+
+
+/* =========================================================
+   GAME PHASES
+   ========================================================= */
+
+const PHASE_FIELD = "field";
+const PHASE_INTERPLANETARY = "interplanetary";
+const PHASE_PLANET = "planet";
+
+let gamePhase =
+    PHASE_FIELD;
+
+let phaseTimer = 0;
+
+let destinationDeadline = 0;
+
+let planetPhaseTimer = 0;
+
+const PLANET_PHASE_DURATION = 8;
+
+const INTERPLANETARY_DURATION = 7;
+
+
+/* =========================================================
+   START SCREEN PLANET MAP
+   ========================================================= */
+
+let selectedStartPlanet =
+    "earth";
+
+
+function renderPlanetMap() {
+
+    planetMap.innerHTML="";
+
+    /*
+     * Connection lines.
+     */
+
+    for(
+        let tier=0;
+        tier<4;
+        tier++
+    ) {
+
+        const from =
+            planets.filter(
+                p=>p.tier===tier
+            );
+
+        const to =
+            planets.filter(
+                p=>p.tier===tier+1
+            );
+
+        for(const a of from) {
+
+            for(const b of to) {
+
+                const x1 =
+                    a.x / 100 *
+                    planetMap.clientWidth;
+
+                const y1 =
+                    a.y / 100 *
+                    planetMap.clientHeight;
+
+                const x2 =
+                    b.x / 100 *
+                    planetMap.clientWidth;
+
+                const y2 =
+                    b.y / 100 *
+                    planetMap.clientHeight;
+
+                const dx=x2-x1;
+                const dy=y2-y1;
+
+                const length =
+                    Math.hypot(dx,dy);
+
+                const angle =
+                    Math.atan2(dy,dx)*
+                    180/Math.PI;
+
+                const line =
+                    document.createElement(
+                        "div"
+                    );
+
+                line.className=
+                    "map-line";
+
+                line.style.left=
+                    x1+"px";
+
+                line.style.top=
+                    y1+"px";
+
+                line.style.width=
+                    length+"px";
+
+                line.style.transform=
+                    `rotate(${angle}deg)`;
+
+                planetMap.appendChild(line);
+            }
+        }
+    }
+
+    for(const planet of planets) {
+
+        const node =
+            document.createElement(
+                "button"
+            );
+
+        node.className=
+            "planet-node";
+
+        node.style.left=
+            planet.x+"%";
+
+        node.style.top=
+            planet.y+"%";
+
+        const ships =
+            getShipCount(
+                planet.id
+            );
+
+        const canStart =
+            planet.id==="earth"
+            ? true
+            : ships>0;
+
+        if(canStart)
+            node.classList.add(
+                "available"
+            );
+        else
+            node.classList.add(
+                "locked"
+            );
+
+        if(
+            selectedStartPlanet===
+            planet.id
+        ) {
+
+            node.classList.add(
+                "selected"
+            );
+        }
+
+        let shipText="";
+
+        if(planet.id==="earth") {
+
+            shipText="∞ SHIPS";
+
+        } else if(ships>0) {
+
+            shipText=
+                ships+
+                (
+                    ships===1
+                    ? " SHIP"
+                    : " SHIPS"
+                );
+
+        } else {
+
+            shipText=
+                planet.threshold.toLocaleString()+
+                " PTS";
+        }
+
+        node.innerHTML =
+            `${planet.emoji}
+             <span>${planet.name}</span>
+             <small>${shipText}</small>`;
+
+        /*
+         * IMPORTANT:
+         * Only available planets get an event listener.
+         * Locked decorative nodes cannot interfere with the menu.
+         */
+
+        if(canStart) {
+
+            node.addEventListener(
+                "click",
+                function(e) {
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    selectedStartPlanet =
+                        planet.id;
+
+                    mapInfo.textContent =
+                        planet.id==="earth"
+                        ? "Earth selected — unlimited launch ships."
+                        :
+                        `${planet.name} selected — ${ships} ship${ships===1?"":"s"} available.`;
+
+                    renderPlanetMap();
+                }
+            );
+        }
+
+        planetMap.appendChild(node);
+    }
+}
+
+
+/* =========================================================
+   START MISSION
+   ========================================================= */
+
+function startGame() {
+
+    initAudio();
+
+    /*
+     * Close every possible overlay FIRST.
+     */
+
+    startScreen.classList.add("hidden");
+    pauseScreen.classList.add("hidden");
+    gameOverScreen.classList.add("hidden");
+    leaderboardScreen.classList.add("hidden");
+
+    transitionUI.classList.add("hidden");
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    running=true;
+    paused=false;
+    gameOver=false;
+
+    score=0;
+
+    combo=1;
+    comboTimer=0;
+
+    lives=3;
+
+    wave=1;
+    destroyed=0;
+
+    spawnTimer=0;
+    difficultyTimer=0;
+
+    empCharge=0;
+    empCooldown=0;
+    empUses=0;
+
+    shake=0;
+
+    asteroids=[];
+    explosions=[];
+    particles=[];
+    shockwaves=[];
+
+    currentPlanetId =
+        selectedStartPlanet;
+
+    currentShipOrigin =
+        selectedStartPlanet;
+
+    /*
+     * The selected ship's retained score becomes the
+     * starting score.
+     */
+
+    const ship =
+        useShipFromPlanet(
+            selectedStartPlanet
+        );
+
+    currentShipSavedScore =
+        ship
+        ? Number(ship.score)||0
+        : 0;
+
+    score =
+        currentShipSavedScore;
+
+    destinationPlanetId=null;
+
+    /*
+     * Every launch starts in the asteroid field
+     * surrounding the selected planet.
+     */
+
+    gamePhase =
+        PHASE_FIELD;
+
+    phaseTimer=0;
+
+    planetPhaseTimer=0;
+
+    destinationDeadline=0;
+
+    updatePlanetVisual();
+
+    /*
+     * Spawn a clear initial wave.
+     */
+
+    spawnWaveBurst();
+
+    updateHUD();
+
+    lastTime=
+        performance.now();
+}
+
+
+/* =========================================================
+   PAUSE
+   ========================================================= */
+
+function pauseGame() {
+
+    if(
+        !running ||
+        gameOver
+    ) {
+
+        return;
+    }
+
+    paused=true;
+
+    pauseScreen.classList.remove(
+        "hidden"
+    );
+}
+
+function resumeGame() {
+
+    paused=false;
+
+    pauseScreen.classList.add(
+        "hidden"
+    );
+
+    lastTime=
+        performance.now();
+}
+
+
+/* =========================================================
+   RETURN TO MENU
+   ========================================================= */
+
+function returnToMenu() {
+
+    running=false;
+    paused=false;
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    pauseScreen.classList.add(
+        "hidden"
+    );
+
+    gameOverScreen.classList.add(
+        "hidden"
+    );
+
+    leaderboardScreen.classList.add(
+        "hidden"
+    );
+
+    startScreen.classList.remove(
+        "hidden"
+    );
+
+    renderPlanetMap();
 }
 
 
@@ -1741,15 +2583,13 @@ function sound(type) {
    STARS
    ========================================================= */
 
-let stars=[];
-
 function createStars() {
 
     stars=[];
 
-    const count=
+    const count =
         Math.floor(
-            (W*H)/7000
+            W*H/7000
         );
 
     for(
@@ -1761,6 +2601,7 @@ function createStars() {
         stars.push({
 
             x:Math.random()*W,
+
             y:Math.random()*H,
 
             size:
@@ -1779,11 +2620,14 @@ function createStars() {
     }
 }
 
+createStars();
+
+
 function updateStars(dt) {
 
     for(const s of stars) {
 
-        s.y+=
+        s.y +=
             s.speed*
             dt*
             60;
@@ -1791,22 +2635,28 @@ function updateStars(dt) {
         if(s.y>H+3) {
 
             s.y=-3;
-            s.x=Math.random()*W;
+
+            s.x=
+                Math.random()*W;
         }
 
-        s.twinkle+=dt*2;
+        s.twinkle +=
+            dt*2;
     }
 }
+
 
 function drawStars() {
 
     for(const s of stars) {
 
-        const a=
+        const a =
             s.alpha+
-            Math.sin(s.twinkle)*.15;
+            Math.sin(
+                s.twinkle
+            )*.15;
 
-        ctx.fillStyle=
+        ctx.fillStyle =
             `rgba(180,215,255,${Math.max(.05,a)})`;
 
         ctx.fillRect(
@@ -1829,13 +2679,19 @@ function random(min,max) {
         (max-min)+min;
 }
 
-function clamp(value,min,max) {
+
+function clamp(
+    value,
+    min,
+    max
+) {
 
     return Math.max(
         min,
         Math.min(max,value)
     );
 }
+
 
 function distance(a,b) {
 
@@ -1845,9 +2701,10 @@ function distance(a,b) {
     );
 }
 
+
 function edgeSpawn() {
 
-    const side=
+    const side =
         Math.floor(
             Math.random()*4
         );
@@ -1883,63 +2740,75 @@ function edgeSpawn() {
 
 class Asteroid {
 
-    constructor(x,y,size) {
+    constructor(
+        x,
+        y,
+        size
+    ) {
 
         this.x=x;
         this.y=y;
 
         this.size=size;
 
-        this.radius=
+        this.radius =
             size===3
             ? random(38,52)
             : size===2
             ? random(25,34)
             : random(15,23);
 
-        this.angle=
+        this.angle =
             random(
                 0,
                 Math.PI*2
             );
 
-        this.rotation=
-            random(-.015,.015);
+        this.rotation =
+            random(
+                -.015,
+                .015
+            );
 
-        const targetX=
+        const targetX =
             W/2+
-            random(-W*.25,W*.25);
+            random(
+                -W*.25,
+                W*.25
+            );
 
-        const targetY=
+        const targetY =
             H/2+
-            random(-H*.25,H*.25);
+            random(
+                -H*.25,
+                H*.25
+            );
 
-        let dx=
+        let dx =
             targetX-x;
 
-        let dy=
+        let dy =
             targetY-y;
 
-        const length=
+        const length =
             Math.hypot(dx,dy)||1;
 
-        const baseSpeed=
+        const baseSpeed =
             size===3
             ? random(18,30)
             : size===2
             ? random(28,45)
             : random(45,70);
 
-        const difficultyBoost=
-            1+
-            wave*.055;
+        const difficultyBoost =
+            1+wave*.055;
 
-        this.vx=
+        this.vx =
             dx/length*
             baseSpeed*
             difficultyBoost;
 
-        this.vy=
+        this.vy =
             dy/length*
             baseSpeed*
             difficultyBoost;
@@ -1948,7 +2817,7 @@ class Asteroid {
 
         this.vertices=[];
 
-        const points=
+        const points =
             Math.floor(
                 random(7,11)
             );
@@ -1969,31 +2838,82 @@ class Asteroid {
             });
         }
 
-        this.color=
-            size===3
-            ? "#a97dff"
-            : size===2
-            ? "#679dff"
-            : "#4ee5ff";
+        /*
+         * Different asteroid fields have slightly
+         * different colour palettes.
+         */
+
+        const field =
+            currentPlanetId;
+
+        if(
+            field==="mars" ||
+            field==="vulcan"
+        ) {
+
+            this.color =
+                size===3
+                ? "#ff816d"
+                : size===2
+                ? "#ffad66"
+                : "#ffd166";
+
+        } else if(
+            field==="europa" ||
+            field==="neptune"
+        ) {
+
+            this.color =
+                size===3
+                ? "#a98cff"
+                : size===2
+                ? "#73cfff"
+                : "#75f1ff";
+
+        } else if(
+            field==="venus"
+        ) {
+
+            this.color =
+                size===3
+                ? "#ff9b55"
+                : size===2
+                ? "#ffcf66"
+                : "#ffe89b";
+
+        } else {
+
+            this.color =
+                size===3
+                ? "#a97dff"
+                : size===2
+                ? "#679dff"
+                : "#4ee5ff";
+        }
 
         this.hitFlash=0;
 
         this.chainQueued=false;
     }
 
+
     update(dt) {
 
-        this.x+=this.vx*dt;
-        this.y+=this.vy*dt;
+        this.x +=
+            this.vx*dt;
 
-        this.angle+=
+        this.y +=
+            this.vy*dt;
+
+        this.angle +=
             this.rotation*
-            dt*60;
+            dt*
+            60;
 
         if(this.hitFlash>0)
             this.hitFlash-=dt;
 
-        const margin=
+        const margin =
             this.radius+80;
 
         if(this.x<-margin)
@@ -2008,6 +2928,7 @@ class Asteroid {
         if(this.y>H+margin)
             this.y=-margin;
     }
+
 
     draw() {
 
@@ -2027,12 +2948,12 @@ class Asteroid {
         this.vertices.forEach(
             (v,i)=>{
 
-                const x=
+                const x =
                     Math.cos(v.a)*
                     this.radius*
                     v.r;
 
-                const y=
+                const y =
                     Math.sin(v.a)*
                     this.radius*
                     v.r;
@@ -2046,11 +2967,17 @@ class Asteroid {
 
         ctx.closePath();
 
+        const glow =
+            this.hitFlash>0
+            ? "#ffffff"
+            : this.color;
+
         ctx.shadowBlur=12;
+
         ctx.shadowColor=
             this.color;
 
-        ctx.fillStyle=
+        ctx.fillStyle =
             this.hitFlash>0
             ? "#ffffff"
             : "rgba(8,15,30,.95)";
@@ -2062,11 +2989,44 @@ class Asteroid {
         ctx.lineWidth=2;
 
         ctx.strokeStyle=
-            this.hitFlash>0
-            ? "#ffffff"
-            : this.color;
+            glow;
 
         ctx.stroke();
+
+        ctx.globalAlpha=.35;
+
+        ctx.strokeStyle=
+            this.color;
+
+        ctx.lineWidth=1;
+
+        for(
+            let i=0;
+            i<this.size+1;
+            i++
+        ) {
+
+            const cx =
+                random(-.4,.4)*
+                this.radius;
+
+            const cy =
+                random(-.4,.4)*
+                this.radius;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                cx,
+                cy,
+                random(2,5)*
+                (this.radius/25),
+                0,
+                Math.PI*2
+            );
+
+            ctx.stroke();
+        }
 
         ctx.restore();
     }
@@ -2079,7 +3039,11 @@ class Asteroid {
 
 class Explosion {
 
-    constructor(x,y,power=1) {
+    constructor(
+        x,
+        y,
+        power=1
+    ) {
 
         this.x=x;
         this.y=y;
@@ -2088,13 +3052,13 @@ class Explosion {
 
         this.life=0;
 
-        this.maxLife=
+        this.maxLife =
             .42+
             power*.06;
 
         this.radius=5;
 
-        this.maxRadius=
+        this.maxRadius =
             45*power;
 
         shockwaves.push(
@@ -2111,13 +3075,13 @@ class Explosion {
             i++
         ) {
 
-            const a=
+            const a =
                 random(
                     0,
                     Math.PI*2
                 );
 
-            const speed=
+            const speed =
                 random(50,240)*
                 power;
 
@@ -2127,10 +3091,12 @@ class Explosion {
                 y,
 
                 vx:
-                    Math.cos(a)*speed,
+                    Math.cos(a)*
+                    speed,
 
                 vy:
-                    Math.sin(a)*speed,
+                    Math.sin(a)*
+                    speed,
 
                 life:
                     random(.25,.65),
@@ -2149,31 +3115,40 @@ class Explosion {
         }
     }
 
+
     update(dt) {
 
         this.life+=dt;
 
-        const p=
+        const p =
             this.life/
             this.maxLife;
 
-        this.radius=
+        this.radius =
             this.maxRadius*
-            (1-Math.pow(1-p,2));
+            (
+                1-
+                Math.pow(
+                    1-p,
+                    2
+                )
+            );
 
         return this.life<
             this.maxLife;
     }
 
+
     draw() {
 
-        const p=
+        const p =
             this.life/
             this.maxLife;
 
-        const alpha=1-p;
+        const alpha =
+            1-p;
 
-        const gradient=
+        const gradient =
             ctx.createRadialGradient(
                 this.x,
                 this.y,
@@ -2203,7 +3178,8 @@ class Explosion {
             "rgba(0,0,0,0)"
         );
 
-        ctx.fillStyle=gradient;
+        ctx.fillStyle=
+            gradient;
 
         ctx.beginPath();
 
@@ -2226,25 +3202,31 @@ class Explosion {
 
 class Shockwave {
 
-    constructor(x,y,maxRadius) {
+    constructor(
+        x,
+        y,
+        maxRadius
+    ) {
 
         this.x=x;
         this.y=y;
 
         this.radius=5;
 
-        this.maxRadius=maxRadius;
+        this.maxRadius=
+            maxRadius;
 
         this.life=0;
 
         this.duration=.5;
     }
 
+
     update(dt) {
 
         this.life+=dt;
 
-        this.radius=
+        this.radius =
             this.maxRadius*
             (
                 this.life/
@@ -2255,9 +3237,10 @@ class Shockwave {
             this.duration;
     }
 
+
     draw() {
 
-        const alpha=
+        const alpha =
             1-
             this.life/
             this.duration;
@@ -2272,7 +3255,7 @@ class Shockwave {
             Math.PI*2
         );
 
-        ctx.strokeStyle=
+        ctx.strokeStyle =
             `rgba(90,220,255,${alpha*.6})`;
 
         ctx.lineWidth=2;
@@ -2286,8 +3269,6 @@ class Shockwave {
    PARTICLES
    ========================================================= */
 
-let particles=[];
-
 function updateParticles(dt) {
 
     for(
@@ -2296,38 +3277,51 @@ function updateParticles(dt) {
         i--
     ) {
 
-        const p=particles[i];
+        const p=
+            particles[i];
 
-        p.x+=p.vx*dt;
-        p.y+=p.vy*dt;
+        p.x +=
+            p.vx*dt;
 
-        p.vx*=
+        p.y +=
+            p.vy*dt;
+
+        p.vx *=
             Math.pow(.05,dt);
 
-        p.vy*=
+        p.vy *=
             Math.pow(.05,dt);
 
         p.life-=dt;
 
-        if(p.life<=0)
-            particles.splice(i,1);
+        if(p.life<=0) {
+
+            particles.splice(
+                i,
+                1
+            );
+        }
     }
 }
+
 
 function drawParticles() {
 
     for(const p of particles) {
 
-        const alpha=
+        const alpha =
             clamp(
-                p.life/p.maxLife,
+                p.life/
+                p.maxLife,
                 0,
                 1
             );
 
-        ctx.globalAlpha=alpha;
+        ctx.globalAlpha=
+            alpha;
 
-        ctx.fillStyle=p.color;
+        ctx.fillStyle=
+            p.color;
 
         ctx.beginPath();
 
@@ -2357,70 +3351,51 @@ function floatingText(
     color="#fff"
 ) {
 
-    const div=
-        document.createElement("div");
+    const div =
+        document.createElement(
+            "div"
+        );
 
-    div.style.position="absolute";
-    div.style.zIndex="20";
-    div.style.pointerEvents="none";
-    div.style.fontWeight="900";
-    div.style.fontSize="20px";
-    div.style.textShadow=
-        "0 0 12px #53d9ff";
+    div.className=
+        "floating-text";
 
-    div.textContent=text;
+    div.textContent=
+        text;
 
-    div.style.left=x+"px";
-    div.style.top=y+"px";
-    div.style.color=color;
+    div.style.left=
+        x+"px";
 
-    div.animate(
-        [
-            {
-                transform:
-                    "translate(-50%,0) scale(.7)",
-                opacity:0
-            },
-            {
-                transform:
-                    "translate(-50%,-8px) scale(1.1)",
-                opacity:1
-            },
-            {
-                transform:
-                    "translate(-50%,-60px) scale(1)",
-                opacity:0
-            }
-        ],
-        {
-            duration:700,
-            easing:"ease-out"
-        }
+    div.style.top=
+        y+"px";
+
+    div.style.color=
+        color;
+
+    document.body.appendChild(
+        div
     );
 
-    document.body.appendChild(div);
-
     setTimeout(
-        ()=>div.remove(),
-        750
+        ()=>{
+            div.remove();
+        },
+        700
     );
 }
 
 
 /* =========================================================
-   ASTEROID SPAWNING
+   SPAWNING
    ========================================================= */
-
-let asteroids=[];
 
 function spawnAsteroid() {
 
-    const pos=
+    const pos =
         edgeSpawn();
 
     let size=1;
 
-    const roll=
+    const roll =
         Math.random();
 
     if(
@@ -2447,12 +3422,15 @@ function spawnAsteroid() {
     );
 }
 
+
 function spawnWaveBurst() {
 
-    const amount=
+    const amount =
         Math.min(
             4+
-            Math.floor(wave*.7),
+            Math.floor(
+                wave*.7
+            ),
             13
         );
 
@@ -2469,7 +3447,7 @@ function spawnWaveBurst() {
                     running &&
                     !paused &&
                     !gameOver &&
-                    phase==="asteroid"
+                    gamePhase===PHASE_FIELD
                 ) {
 
                     spawnAsteroid();
@@ -2483,653 +3461,7 @@ function spawnWaveBurst() {
 
 
 /* =========================================================
-   DESTINATION PLANETS
-   ========================================================= */
-
-function availableDestinations() {
-
-    const current=
-        getPlanet(
-            currentPlanetId
-        );
-
-    if(!current)
-        return [];
-
-    const targetTier=
-        current.tier+1;
-
-    let list=
-        planets.filter(
-            p=>
-                p.tier===targetTier &&
-                planetUnlocked(p)
-        );
-
-    /*
-     * If there are no planets in the next tier,
-     * allow lower-tier unlocked planets as a fallback.
-     */
-
-    if(!list.length) {
-
-        list=
-            planets.filter(
-                p=>
-                    p.id!==current.id &&
-                    Math.abs(
-                        p.tier-current.tier
-                    )<=1 &&
-                    planetUnlocked(p)
-            );
-    }
-
-    return list;
-}
-
-
-/* =========================================================
-   DESTINATION UI
-   ========================================================= */
-
-function clearPhaseUI() {
-
-    destinationUI.innerHTML="";
-    phaseUI.innerHTML="";
-
-    destinationShown=false;
-    landShown=false;
-}
-
-function showDestinationChoices() {
-
-    if(
-        phase!=="interplanetary" ||
-        destinationShown
-    )
-        return;
-
-    destinationShown=true;
-
-    destinationUI.innerHTML="";
-
-    const list=
-        availableDestinations();
-
-    if(!list.length) {
-
-        phaseUI.innerHTML=
-            `<div class="phase-message">
-                Deep space • continuing flight
-            </div>`;
-
-        return;
-    }
-
-    phaseUI.innerHTML=
-        `<div class="phase-message">
-            Select your next asteroid field
-        </div>`;
-
-    list.forEach(
-        (planet,index)=>{
-
-            const bubble=
-                document.createElement("button");
-
-            bubble.className=
-                "destination-bubble";
-
-            const angle=
-                -Math.PI/2+
-                index*
-                (
-                    Math.PI*2/
-                    Math.max(list.length,1)
-                );
-
-            const radius=
-                Math.min(
-                    W,
-                    H
-                )*.32;
-
-            const x=
-                W/2+
-                Math.cos(angle)*radius;
-
-            const y=
-                H/2+
-                Math.sin(angle)*radius;
-
-            bubble.style.left=
-                clamp(
-                    x-38,
-                    5,
-                    W-81
-                )+"px";
-
-            bubble.style.top=
-                clamp(
-                    y-38,
-                    70,
-                    H-165
-                )+"px";
-
-            bubble.innerHTML=
-                `<strong>
-                    ${planet.emoji}
-                    ${planet.name}
-                </strong>
-                <small>
-                    ${planet.required.toLocaleString()}+
-                </small>`;
-
-            bubble.addEventListener(
-                "click",
-                e=>{
-
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    chooseDestination(
-                        planet.id
-                    );
-                }
-            );
-
-            destinationUI.appendChild(
-                bubble
-            );
-        }
-    );
-}
-
-
-/* =========================================================
-   CHOOSE DESTINATION
-   ========================================================= */
-
-function chooseDestination(id) {
-
-    if(
-        phase!=="interplanetary"
-    )
-        return;
-
-    const planet=
-        getPlanet(id);
-
-    if(!planet)
-        return;
-
-    destinationPlanetId=id;
-
-    destinationShown=false;
-
-    destinationUI.innerHTML="";
-
-    phaseUI.innerHTML=
-        `<div class="phase-message">
-            Travelling to ${planet.name}...
-        </div>`;
-
-    transitionTimer=
-        interplanetaryDuration;
-
-    sound("travel");
-
-    floatingText(
-        "COURSE LOCKED",
-        W/2,
-        H*.38,
-        "#66e5ff"
-    );
-}
-
-
-/* =========================================================
-   LANDING UI
-   ========================================================= */
-
-function showLandingChoice() {
-
-    if(
-        phase!=="planet" ||
-        landShown
-    )
-        return;
-
-    landShown=true;
-
-    destinationUI.innerHTML="";
-
-    phaseUI.innerHTML=
-        `<div class="phase-message">
-            ${getPlanet(currentPlanetId).name}
-            • Planetary Orbit
-        </div>`;
-
-    const button=
-        document.createElement("button");
-
-    button.className="land-bubble";
-
-    button.style.left=
-        "calc(50% - 41px)";
-
-    button.style.bottom=
-        "125px";
-
-    button.innerHTML=
-        `<strong>LAND</strong>
-         <small>Save Ship</small>`;
-
-    button.addEventListener(
-        "click",
-        e=>{
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            landAtCurrentPlanet();
-        }
-    );
-
-    destinationUI.appendChild(
-        button
-    );
-}
-
-
-/* =========================================================
-   LAND
-   ========================================================= */
-
-function landAtCurrentPlanet() {
-
-    if(
-        phase!=="planet"
-    )
-        return;
-
-    const id=
-        currentPlanetId;
-
-    if(id==="earth") {
-
-        /*
-         * Earth has infinite ships.
-         * We don't need to physically store one.
-         */
-
-    } else {
-
-        if(!ships[id])
-            ships[id]=[];
-
-        ships[id].push({
-            score:Math.floor(score)
-        });
-
-        saveShips();
-    }
-
-    floatingText(
-        "SHIP STORED",
-        W/2,
-        H*.42,
-        "#ffe06a"
-    );
-
-    /*
-     * Returning to menu ends the current run.
-     */
-
-    running=false;
-
-    setHighestScore(score);
-
-    setTimeout(
-        ()=>{
-            clearPhaseUI();
-
-            gameOverScreen.classList.add(
-                "hidden"
-            );
-
-            pauseScreen.classList.add(
-                "hidden"
-            );
-
-            startScreen.classList.remove(
-                "hidden"
-            );
-
-            renderPlanetMap();
-        },
-        650
-    );
-}
-
-
-/* =========================================================
-   ENTER PLANET
-   ========================================================= */
-
-function enterPlanet(id) {
-
-    const planet=
-        getPlanet(id);
-
-    if(!planet)
-        return;
-
-    currentPlanetId=id;
-
-    destinationPlanetId=null;
-
-    phase="planet";
-
-    transitionTimer=
-        planetPhaseDuration;
-
-    asteroids.length=0;
-
-    clearPhaseUI();
-
-    sound("travel");
-
-    floatingText(
-        planet.name.toUpperCase(),
-        W/2,
-        H*.32,
-        "#ffe06a"
-    );
-
-    setTimeout(
-        ()=>{
-            if(
-                running &&
-                !gameOver &&
-                phase==="planet"
-            ) {
-
-                showLandingChoice();
-            }
-        },
-        250
-    );
-}
-
-
-/* =========================================================
-   ENTER ASTEROID FIELD
-   ========================================================= */
-
-function enterAsteroidField() {
-
-    phase="asteroid";
-
-    transitionTimer=0;
-
-    clearPhaseUI();
-
-    asteroids.length=0;
-
-    spawnWaveBurst();
-
-    floatingText(
-        getPlanet(currentPlanetId).name+
-        " ASTEROID FIELD",
-        W/2,
-        H*.28,
-        "#67ddff"
-    );
-}
-
-
-/* =========================================================
-   ENTER INTERPLANETARY
-   ========================================================= */
-
-function enterInterplanetary() {
-
-    phase="interplanetary";
-
-    transitionTimer=
-        interplanetaryDuration;
-
-    asteroids.length=0;
-
-    clearPhaseUI();
-
-    phaseUI.innerHTML=
-        `<div class="phase-message">
-            Interplanetary space
-        </div>`;
-
-    /*
-     * Give the player a short clean transition
-     * before destination bubbles appear.
-     */
-
-    setTimeout(
-        ()=>{
-            if(
-                running &&
-                !gameOver &&
-                phase==="interplanetary"
-            ) {
-
-                showDestinationChoices();
-            }
-        },
-        600
-    );
-
-    /*
-     * Automatic destination if the player
-     * doesn't choose.
-     */
-
-    setTimeout(
-        ()=>{
-            if(
-                running &&
-                !gameOver &&
-                phase==="interplanetary" &&
-                !destinationPlanetId
-            ) {
-
-                const list=
-                    availableDestinations();
-
-                if(list.length) {
-
-                    const randomPlanet=
-                        list[
-                            Math.floor(
-                                Math.random()*
-                                list.length
-                            )
-                        ];
-
-                    chooseDestination(
-                        randomPlanet.id
-                    );
-                }
-            }
-        },
-        6500
-    );
-}
-
-
-/* =========================================================
-   PHASE UPDATE
-   ========================================================= */
-
-function updatePhase(dt) {
-
-    if(
-        phase==="asteroid"
-    ) {
-
-        return;
-    }
-
-    if(
-        phase==="planet"
-    ) {
-
-        transitionTimer-=dt;
-
-        /*
-         * Planet phase lasts long enough to give
-         * the player a chance to land.
-         *
-         * If they don't land, depart automatically.
-         */
-
-        if(
-            transitionTimer<=0
-        ) {
-
-            enterAsteroidField();
-        }
-
-        return;
-    }
-
-    if(
-        phase==="interplanetary"
-    ) {
-
-        /*
-         * Once a destination is selected,
-         * the countdown becomes the actual
-         * travel countdown.
-         */
-
-        if(destinationPlanetId) {
-
-            transitionTimer-=dt;
-
-            if(
-                transitionTimer<=0
-            ) {
-
-                enterAsteroidFieldForDestination();
-            }
-        }
-
-        return;
-    }
-}
-
-
-/* =========================================================
-   DESTINATION ARRIVAL
-   ========================================================= */
-
-function enterAsteroidFieldForDestination() {
-
-    if(!destinationPlanetId)
-        return;
-
-    const destination=
-        destinationPlanetId;
-
-    destinationPlanetId=null;
-
-    currentPlanetId=
-        destination;
-
-    phase="asteroid";
-
-    transitionTimer=0;
-
-    clearPhaseUI();
-
-    asteroids.length=0;
-
-    wave++;
-
-    spawnWaveBurst();
-
-    floatingText(
-        getPlanet(currentPlanetId).name+
-        " FIELD",
-        W/2,
-        H*.28,
-        "#67ddff"
-    );
-
-    /*
-     * The planet will be reached after the
-     * asteroid field has been survived long enough.
-     */
-}
-
-
-/* =========================================================
-   SCORE THRESHOLDS
-   ========================================================= */
-
-let nextPlanetThreshold=10000;
-
-function updatePlanetProgression() {
-
-    /*
-     * Each asteroid field can eventually lead
-     * into interplanetary space.
-     *
-     * Thresholds are tied to total score.
-     */
-
-    const thresholds=[
-        10000,
-        50000,
-        100000,
-        250000
-    ];
-
-    const reached=
-        thresholds.some(
-            threshold=>
-                score>=threshold
-        );
-
-    if(
-        reached &&
-        phase==="asteroid"
-    ) {
-
-        /*
-         * Do not constantly trigger the transition.
-         * Only trigger when enough additional points
-         * have been gained beyond the previous threshold.
-         */
-
-        if(
-            score>=nextPlanetThreshold
-        ) {
-
-            nextPlanetThreshold=
-                thresholds.find(
-                    t=>t>score
-                ) ||
-                Infinity;
-
-            enterInterplanetary();
-        }
-    }
-}
-
-
-/* =========================================================
-   DETONATE ASTEROID
+   ASTEROID DETONATION
    ========================================================= */
 
 function detonateAsteroid(
@@ -3137,10 +3469,15 @@ function detonateAsteroid(
     chain=false
 ) {
 
+    if(
+        gamePhase!==PHASE_FIELD
+    )
+        return;
+
     if(!asteroids[index])
         return;
 
-    const asteroid=
+    const asteroid =
         asteroids[index];
 
     asteroids.splice(
@@ -3150,14 +3487,14 @@ function detonateAsteroid(
 
     destroyed++;
 
-    const basePoints=
+    const basePoints =
         asteroid.size===3
         ? 100
         : asteroid.size===2
         ? 50
         : 20;
 
-    const earned=
+    const earned =
         Math.round(
             basePoints*
             combo
@@ -3166,41 +3503,30 @@ function detonateAsteroid(
     score+=earned;
 
     /*
-     * =====================================================
-     * FIXED EMP CHARGE
-     * =====================================================
-     *
-     * Every asteroid destroyed now gives charge.
-     *
-     * Small  = 7%
-     * Medium = 14%
-     * Large  = 21%
-     *
-     * Chain reactions receive the same charge because
-     * they also pass through this function.
+     * IMPORTANT FIX:
+     * EMP charge is updated every time an asteroid dies.
      */
 
-    const empGain=
-        asteroid.size*7;
-
-    addEMPCharge(
-        empGain
-    );
-
-    setHighestScore(score);
+    empCharge =
+        clamp(
+            empCharge+
+            asteroid.size*7,
+            0,
+            EMP_MAX
+        );
 
     comboTimer=1.15;
 
     if(chain) {
 
-        combo=
+        combo =
             Math.min(
                 combo+.35,
                 12
             );
     }
 
-    const power=
+    const power =
         asteroid.size===3
         ? 1.8
         : asteroid.size===2
@@ -3215,22 +3541,22 @@ function detonateAsteroid(
         )
     );
 
-    const radius=
+    const radius =
         110*power;
 
     for(
         const other of asteroids
     ) {
 
-        const dx=
+        const dx =
             other.x-
             asteroid.x;
 
-        const dy=
+        const dy =
             other.y-
             asteroid.y;
 
-        const dist=
+        const dist =
             Math.hypot(
                 dx,
                 dy
@@ -3241,33 +3567,44 @@ function detonateAsteroid(
             dist>1
         ) {
 
-            const strength=
-                (1-dist/radius)*
+            const strength =
+                (
+                    1-
+                    dist/radius
+                )*
                 220*
                 power;
 
-            const nx=dx/dist;
-            const ny=dy/dist;
+            const nx=
+                dx/dist;
 
-            other.vx+=
-                nx*strength;
+            const ny=
+                dy/dist;
 
-            other.vy+=
-                ny*strength;
+            other.vx +=
+                nx*
+                strength;
 
-            other.vx+=
+            other.vy +=
+                ny*
+                strength;
+
+            other.vx +=
                 -ny*
                 strength*.35;
 
-            other.vy+=
+            other.vy +=
                 nx*
                 strength*.35;
 
             other.hitFlash=.18;
 
-            const chance=
+            const chance =
                 .025+
-                (1-dist/radius)*.12+
+                (
+                    1-
+                    dist/radius
+                )*.12+
                 combo*.008;
 
             if(
@@ -3280,7 +3617,7 @@ function detonateAsteroid(
                 setTimeout(
                     ()=>{
 
-                        const current=
+                        const current =
                             asteroids.indexOf(
                                 other
                             );
@@ -3303,9 +3640,11 @@ function detonateAsteroid(
         }
     }
 
-    if(asteroid.size>1) {
+    if(
+        asteroid.size>1
+    ) {
 
-        const pieces=
+        const pieces =
             asteroid.size===3
             ? 3
             : 2;
@@ -3316,11 +3655,11 @@ function detonateAsteroid(
             i++
         ) {
 
-            const angle=
+            const angle =
                 Math.PI*2/pieces*i+
                 random(-.4,.4);
 
-            const child=
+            const child =
                 new Asteroid(
                     asteroid.x+
                     Math.cos(angle)*15,
@@ -3331,19 +3670,21 @@ function detonateAsteroid(
                     asteroid.size-1
                 );
 
-            child.vx=
+            child.vx =
                 Math.cos(angle)*
                 random(50,120);
 
-            child.vy=
+            child.vy =
                 Math.sin(angle)*
                 random(50,120);
 
-            asteroids.push(child);
+            asteroids.push(
+                child
+            );
         }
     }
 
-    shake=
+    shake =
         Math.max(
             shake,
             4*power
@@ -3357,12 +3698,7 @@ function detonateAsteroid(
 
     floatingText(
         "+"+
-        earned+
-        (
-            empCharge>=EMP_MAX
-            ? " ⚡"
-            : ""
-        ),
+        earned,
         asteroid.x,
         asteroid.y,
         combo>=4
@@ -3371,8 +3707,6 @@ function detonateAsteroid(
     );
 
     updateHUD();
-
-    updatePlanetProgression();
 }
 
 
@@ -3394,15 +3728,22 @@ function checkPlayerCollisions() {
         i--
     ) {
 
-        const a=asteroids[i];
+        const a=
+            asteroids[i];
 
         if(
-            distance(player,a)<
+            distance(
+                player,
+                a
+            )<
             a.radius+
             player.radius
         ) {
 
-            asteroids.splice(i,1);
+            asteroids.splice(
+                i,
+                1
+            );
 
             explosions.push(
                 new Explosion(
@@ -3443,10 +3784,14 @@ function drawPlayer() {
     const x=W/2;
     const y=H/2;
 
-    const glow=
+    const glow =
         ctx.createRadialGradient(
-            x,y,5,
-            x,y,55
+            x,
+            y,
+            5,
+            x,
+            y,
+            55
         );
 
     glow.addColorStop(
@@ -3459,7 +3804,8 @@ function drawPlayer() {
         "rgba(80,220,255,0)"
     );
 
-    ctx.fillStyle=glow;
+    ctx.fillStyle=
+        glow;
 
     ctx.beginPath();
 
@@ -3475,9 +3821,12 @@ function drawPlayer() {
 
     ctx.save();
 
-    ctx.translate(x,y);
+    ctx.translate(
+        x,
+        y
+    );
 
-    const pulse=
+    const pulse =
         Math.sin(
             performance.now()*.006
         )*2;
@@ -3495,33 +3844,51 @@ function drawPlayer() {
 
     ctx.closePath();
 
-    ctx.fillStyle="#071522";
+    ctx.fillStyle=
+        "#071522";
 
     ctx.shadowBlur=18;
-    ctx.shadowColor="#5ce4ff";
+
+    ctx.shadowColor=
+        "#5ce4ff";
 
     ctx.fill();
 
     ctx.shadowBlur=0;
 
     ctx.lineWidth=2;
-    ctx.strokeStyle="#6ce8ff";
+
+    ctx.strokeStyle=
+        "#6ce8ff";
 
     ctx.stroke();
 
     ctx.beginPath();
 
-    ctx.moveTo(-6,17);
-    ctx.lineTo(0,28+random(0,5));
-    ctx.lineTo(6,17);
+    ctx.moveTo(
+        -6,
+        17
+    );
 
-    ctx.fillStyle="#4de0ff";
+    ctx.lineTo(
+        0,
+        28+
+        random(0,5)
+    );
+
+    ctx.lineTo(
+        6,
+        17
+    );
+
+    ctx.fillStyle=
+        "#4de0ff";
 
     ctx.fill();
 
     ctx.restore();
 
-    const shieldAlpha=
+    const shieldAlpha =
         .15+
         Math.sin(
             performance.now()*.003
@@ -3537,7 +3904,7 @@ function drawPlayer() {
         Math.PI*2
     );
 
-    ctx.strokeStyle=
+    ctx.strokeStyle =
         `rgba(75,205,255,${shieldAlpha})`;
 
     ctx.lineWidth=1;
@@ -3547,101 +3914,1430 @@ function drawPlayer() {
 
 
 /* =========================================================
-   PLANET BACKGROUND
+   PLANET VISUAL
    ========================================================= */
 
-function drawPlanetBackground() {
+function updatePlanetVisual() {
 
-    if(phase!=="planet")
-        return;
-
-    const planet=
-        getPlanet(
-            currentPlanetId
+    const planet =
+        planets.find(
+            p=>p.id===currentPlanetId
         );
 
     if(!planet)
         return;
 
-    const x=W*.5;
+    planetHorizon.className =
+        "planet-horizon "+
+        planet.type;
 
-    const progress=
-        clamp(
-            1-
-            transitionTimer/
-            planetPhaseDuration,
-            0,
-            1
+    if(
+        gamePhase===
+        PHASE_PLANET
+    ) {
+
+        planetPhaseIndicator.classList.add(
+            "active"
         );
 
-    const y=
-        H*.15+
-        progress*
-        H*.45;
+    } else {
 
-    const radius=
-        Math.min(W,H)*
-        .23;
+        planetPhaseIndicator.classList.remove(
+            "active"
+        );
+    }
+}
 
-    const gradient=
-        ctx.createRadialGradient(
-            x-radius*.3,
-            y-radius*.3,
-            radius*.05,
-            x,
-            y,
-            radius
+
+/* =========================================================
+   ENTER PLANET PHASE
+   ========================================================= */
+
+function enterPlanetPhase() {
+
+    gamePhase =
+        PHASE_PLANET;
+
+    phaseTimer=0;
+
+    planetPhaseTimer =
+        PLANET_PHASE_DURATION;
+
+    asteroids=[];
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.add(
+        "active"
+    );
+
+    updatePlanetVisual();
+
+    showPlanetOptions();
+
+    floatingText(
+        planets.find(
+            p=>p.id===currentPlanetId
+        )?.name ||
+        "PLANET",
+        W/2,
+        H*.35,
+        "#8ee8ff"
+    );
+}
+
+
+/* =========================================================
+   PLANET OPTIONS
+   ========================================================= */
+
+function showPlanetOptions() {
+
+    transitionUI.classList.remove(
+        "hidden"
+    );
+
+    transitionTitle.textContent =
+        "PLANET APPROACH";
+
+    /*
+     * Remove previous bubbles.
+     */
+
+    transitionUI
+        .querySelectorAll(
+            ".land-bubble,.depart-bubble"
+        )
+        .forEach(
+            e=>e.remove()
+        );
+
+    const planet =
+        planets.find(
+            p=>p.id===currentPlanetId
+        );
+
+    if(!planet)
+        return;
+
+    /*
+     * LAND
+     */
+
+    const land =
+        document.createElement(
+            "button"
+        );
+
+    land.className=
+        "land-bubble";
+
+    land.style.left="50%";
+    land.style.top="66%";
+
+    land.innerHTML =
+        `<strong>LAND</strong>
+         <small>SAVE SHIP</small>`;
+
+    land.addEventListener(
+        "click",
+        e=>{
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            landAtCurrentPlanet();
+
+        }
+    );
+
+    transitionUI.appendChild(
+        land
+    );
+
+
+    /*
+     * DEPART
+     */
+
+    const depart =
+        document.createElement(
+            "button"
+        );
+
+    depart.className=
+        "depart-bubble";
+
+    depart.style.left="78%";
+    depart.style.top="72%";
+
+    depart.innerHTML =
+        `<strong>DEPART</strong>
+         <small>KEEP FLYING</small>`;
+
+    depart.addEventListener(
+        "click",
+        e=>{
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            departPlanet();
+
+        }
+    );
+
+    transitionUI.appendChild(
+        depart
+    );
+}
+
+
+/* =========================================================
+   LAND
+   ========================================================= */
+
+function landAtCurrentPlanet() {
+
+    if(
+        gamePhase!==PHASE_PLANET
+    )
+        return;
+
+    /*
+     * THIS is the only place a new saved ship is created.
+     */
+
+    landShipAtPlanet(
+        currentPlanetId,
+        score
+    );
+
+    floatingText(
+        "SHIP LANDED",
+        W/2,
+        H*.45,
+        "#ffe36b"
+    );
+
+    /*
+     * Return to menu after a deliberate landing.
+     */
+
+    running=false;
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    startScreen.classList.remove(
+        "hidden"
+    );
+
+    selectedStartPlanet =
+        currentPlanetId;
+
+    renderPlanetMap();
+}
+
+
+/* =========================================================
+   DEPART PLANET
+   ========================================================= */
+
+function departPlanet() {
+
+    if(
+        gamePhase!==PHASE_PLANET
+    )
+        return;
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    gamePhase =
+        PHASE_FIELD;
+
+    phaseTimer=0;
+
+    planetPhaseTimer=0;
+
+    asteroids=[];
+
+    /*
+     * Small clear period before the field resumes.
+     */
+
+    setTimeout(
+        ()=>{
+
+            if(
+                running &&
+                !gameOver
+            ) {
+
+                spawnWaveBurst();
+
+            }
+
+        },
+        1200
+    );
+}
+
+
+/* =========================================================
+   ENTER INTERPLANETARY SPACE
+   ========================================================= */
+
+function enterInterplanetary() {
+
+    gamePhase =
+        PHASE_INTERPLANETARY;
+
+    phaseTimer=0;
+
+    asteroids=[];
+
+    transitionUI.classList.remove(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    transitionTitle.textContent =
+        "INTERPLANETARY SPACE";
+
+    createDestinationBubbles();
+
+    destinationDeadline =
+        performance.now()+
+        INTERPLANETARY_DURATION*
+        1000;
+}
+
+
+/* =========================================================
+   DESTINATION PLANETS
+   ========================================================= */
+
+function availableDestinations() {
+
+    const current =
+        planets.find(
+            p=>p.id===currentPlanetId
+        );
+
+    if(!current)
+        return [];
+
+    /*
+     * From a planet, destinations are normally the next tier.
+     */
+
+    const nextTier =
+        current.tier+1;
+
+    const candidates =
+        planets.filter(
+            p=>
+                p.tier===nextTier &&
+                score>=p.threshold
+        );
+
+    return candidates;
+}
+
+
+function createDestinationBubbles() {
+
+    transitionUI
+        .querySelectorAll(
+            ".destination-bubble"
+        )
+        .forEach(
+            e=>e.remove()
+        );
+
+    let destinations =
+        availableDestinations();
+
+    /*
+     * If the player's score has unlocked the next tier,
+     * show those planets.
+     */
+
+    if(!destinations.length) {
+
+        /*
+         * This can happen when a player has reached the
+         * current planet but hasn't reached the next
+         * threshold yet.
+         *
+         * In that case the destination UI explains
+         * the requirement instead of breaking the game.
+         */
+
+        transitionTitle.textContent =
+            "TRAVELING — "+
+            Math.max(
+                0,
+                (
+                    planets
+                    .filter(
+                        p=>
+                            p.tier===
+                            (
+                                planets.find(
+                                    q=>
+                                        q.id===
+                                        currentPlanetId
+                                )?.tier+1
+                            )
+                    )
+                    .map(
+                        p=>p.threshold
+                    )
+                    .sort(
+                        (a,b)=>a-b
+                    )[0] ||
+                    0
+                )-
+                score
+            ).toLocaleString()+
+            " PTS TO NEXT TIER";
+
+        /*
+         * Automatically return to field after a moment.
+         */
+
+        setTimeout(
+            ()=>{
+
+                if(
+                    running &&
+                    gamePhase===
+                    PHASE_INTERPLANETARY
+                ) {
+
+                    returnToFieldWithoutDestination();
+
+                }
+
+            },
+            3500
+        );
+
+        return;
+    }
+
+    transitionTitle.textContent =
+        "CHOOSE NEXT DESTINATION";
+
+
+    const positions = [
+
+        [22,42],
+        [50,30],
+        [78,45],
+        [50,65]
+
+    ];
+
+    destinations.forEach(
+        (planet,index)=>{
+
+            const bubble =
+                document.createElement(
+                    "button"
+                );
+
+            bubble.className=
+                "destination-bubble";
+
+            const pos =
+                positions[
+                    index%
+                    positions.length
+                ];
+
+            bubble.style.left=
+                pos[0]+"%";
+
+            bubble.style.top=
+                pos[1]+"%";
+
+            bubble.innerHTML =
+                `<strong>
+                    ${planet.emoji} ${planet.name}
+                 </strong>
+                 <small>
+                    ${planet.threshold.toLocaleString()} PTS
+                 </small>`;
+
+            bubble.addEventListener(
+                "click",
+                e=>{
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    selectDestination(
+                        planet.id
+                    );
+
+                }
+            );
+
+            transitionUI.appendChild(
+                bubble
+            );
+        }
+    );
+}
+
+
+/* =========================================================
+   SELECT DESTINATION
+   ========================================================= */
+
+function selectDestination(
+    planetId
+) {
+
+    if(
+        gamePhase!==PHASE_INTERPLANETARY
+    )
+        return;
+
+    const planet =
+        planets.find(
+            p=>p.id===planetId
+        );
+
+    if(!planet)
+        return;
+
+    if(
+        score<
+        planet.threshold
+    )
+        return;
+
+    destinationPlanetId =
+        planetId;
+
+    transitionUI
+        .querySelectorAll(
+            ".destination-bubble"
+        )
+        .forEach(
+            e=>e.remove()
+        );
+
+    transitionTitle.textContent =
+        "FLIGHT TO "+
+        planet.name.toUpperCase();
+
+    phaseTimer=0;
+
+    /*
+     * Smooth transition.
+     */
+
+    transitionFlightToPlanet();
+}
+
+
+/* =========================================================
+   FLIGHT TRANSITION
+   ========================================================= */
+
+function transitionFlightToPlanet() {
+
+    let elapsed=0;
+
+    const duration=3.0;
+
+    const startingPlanet =
+        currentPlanetId;
+
+    const targetPlanet =
+        destinationPlanetId;
+
+    const interval =
+        setInterval(
+            ()=>{
+
+                if(
+                    !running ||
+                    gameOver
+                ) {
+
+                    clearInterval(
+                        interval
+                    );
+
+                    return;
+                }
+
+                elapsed += .05;
+
+                const progress =
+                    clamp(
+                        elapsed/duration,
+                        0,
+                        1
+                    );
+
+                /*
+                 * Stars accelerate during the journey.
+                 */
+
+                for(
+                    const s of stars
+                ) {
+
+                    s.y +=
+                        1.5*
+                        progress;
+                }
+
+                if(
+                    progress>=1
+                ) {
+
+                    clearInterval(
+                        interval
+                    );
+
+                    currentPlanetId =
+                        targetPlanet;
+
+                    destinationPlanetId=
+                        null;
+
+                    /*
+                     * IMPORTANT:
+                     * Arriving at the new planet means
+                     * entering its surrounding asteroid
+                     * field FIRST.
+                     */
+
+                    gamePhase=
+                        PHASE_FIELD;
+
+                    phaseTimer=0;
+
+                    asteroids=[];
+
+                    transitionUI.classList.add(
+                        "hidden"
+                    );
+
+                    planetPhaseIndicator.classList.remove(
+                        "active"
+                    );
+
+                    updatePlanetVisual();
+
+                    /*
+                     * Give the player a clear moment before
+                     * asteroids begin.
+                     */
+
+                    setTimeout(
+                        ()=>{
+
+                            if(
+                                running &&
+                                !gameOver &&
+                                gamePhase===
+                                PHASE_FIELD
+                            ) {
+
+                                spawnWaveBurst();
+
+                            }
+
+                        },
+                        1000
+                    );
+
+                    floatingText(
+                        "ARRIVED",
+                        W/2,
+                        H*.3,
+                        "#72eaff"
+                    );
+
+                }
+
+            },
+            50
+        );
+}
+
+
+/* =========================================================
+   RETURN TO FIELD
+   ========================================================= */
+
+function returnToFieldWithoutDestination() {
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    gamePhase=
+        PHASE_FIELD;
+
+    phaseTimer=0;
+
+    spawnWaveBurst();
+}
+
+
+/* =========================================================
+   FIELD → PLANET
+   ========================================================= */
+
+/*
+ * Each planet has its own asteroid field.
+ *
+ * The player must reach the planet's threshold from
+ * the current journey before the field opens the planet
+ * phase.
+ */
+
+function checkPlanetArrival() {
+
+    const planet =
+        planets.find(
+            p=>p.id===currentPlanetId
+        );
+
+    if(!planet)
+        return;
+
+    /*
+     * Earth is the starting field and does not need an
+     * arrival trigger immediately.
+     *
+     * For other planets, the player's score must reach
+     * that planet's threshold.
+     */
+
+    if(
+        planet.id==="earth"
+    )
+        return;
+
+    if(
+        score>=planet.threshold &&
+        destroyed>0
+    ) {
+
+        /*
+         * Prevent repeated triggering.
+         */
+
+        if(
+            gamePhase===
+            PHASE_FIELD &&
+            phaseTimer>3
+        ) {
+
+            enterPlanetPhase();
+        }
+    }
+}
+
+
+/* =========================================================
+   GAME OVER
+   ========================================================= */
+
+function endGame() {
+
+    if(gameOver)
+        return;
+
+    running=false;
+    gameOver=true;
+
+    /*
+     * If this was a ship launched from another planet,
+     * it is destroyed NOW.
+     *
+     * It was NOT removed earlier and it was NOT saved
+     * simply by travelling through space.
+     */
+
+    if(
+        currentShipOrigin &&
+        currentShipOrigin!=="earth"
+    ) {
+
+        destroySavedShip(
+            currentShipOrigin,
+            currentShipSavedScore
+        );
+    }
+
+    const highScore =
+        Number(
+            localStorage.getItem(
+                "asteroidImpactHighScore"
+            ) || 0
+        );
+
+    const isNewRecord =
+        score>highScore;
+
+    if(isNewRecord) {
+
+        localStorage.setItem(
+            "asteroidImpactHighScore",
+            String(score)
+        );
+    }
+
+    finalScoreEl.textContent =
+        score.toLocaleString();
+
+    bestScoreEl.textContent =
+        Math.max(
+            score,
+            highScore
+        ).toLocaleString();
+
+    newRecordEl.classList.toggle(
+        "show",
+        isNewRecord
+    );
+
+    playerNameInput.value =
+        localStorage.getItem(
+            "asteroidImpactPlayerName"
+        ) || "";
+
+    submitScoreButton.disabled=
+        false;
+
+    leaderboardStatus.textContent="";
+
+    transitionUI.classList.add(
+        "hidden"
+    );
+
+    planetPhaseIndicator.classList.remove(
+        "active"
+    );
+
+    gameOverScreen.classList.remove(
+        "hidden"
+    );
+
+    loadLeaderboard(
+        leaderboardEl,
+        leaderboardStatus
+    );
+
+    renderPlanetMap();
+}
+
+
+/* =========================================================
+   DIFFICULTY
+   ========================================================= */
+
+function updateDifficulty(dt) {
+
+    difficultyTimer+=dt;
+
+    const calculatedWave =
+        1+
+        Math.floor(
+            difficultyTimer/25
+        )+
+        Math.floor(
+            destroyed/20
+        );
+
+    if(
+        calculatedWave>wave
+    ) {
+
+        wave=
+            calculatedWave;
+
+        spawnWaveBurst();
+
+        floatingText(
+            "WAVE "+
+            wave,
+            W/2,
+            H*.25,
+            "#b38cff"
+        );
+
+        updateHUD();
+    }
+}
+
+
+/* =========================================================
+   UPDATE
+   ========================================================= */
+
+function update(dt) {
+
+    if(
+        !running ||
+        paused ||
+        gameOver
+    )
+        return;
+
+    dt=
+        Math.min(
+            dt,
+            .033
+        );
+
+    /*
+     * EMP cooldown.
+     */
+
+    if(
+        empCooldown>0
+    ) {
+
+        empCooldown=
+            Math.max(
+                0,
+                empCooldown-dt
+            );
+    }
+
+    updateStars(dt);
+
+    /*
+     * Planet phase has no asteroids.
+     */
+
+    if(
+        gamePhase===
+        PHASE_PLANET
+    ) {
+
+        planetPhaseTimer -= dt;
+
+        if(
+            planetPhaseTimer<=0
+        ) {
+
+            departPlanet();
+        }
+
+        updateHUD();
+
+        return;
+    }
+
+    /*
+     * Interplanetary space has no asteroids.
+     */
+
+    if(
+        gamePhase===
+        PHASE_INTERPLANETARY
+    ) {
+
+        phaseTimer+=dt;
+
+        updateHUD();
+
+        return;
+    }
+
+    /*
+     * Normal asteroid field.
+     */
+
+    phaseTimer+=dt;
+
+    updateDifficulty(dt);
+
+    if(comboTimer>0) {
+
+        comboTimer-=dt;
+
+    } else {
+
+        combo +=
+            (1-combo)*
+            dt*
+            1.8;
+
+        if(combo<1.02)
+            combo=1;
+    }
+
+    spawnTimer-=dt;
+
+    const spawnInterval =
+        Math.max(
+            .32,
+            1.25-
+            wave*.055
+        );
+
+    if(
+        spawnTimer<=0
+    ) {
+
+        spawnTimer=
+            spawnInterval;
+
+        spawnAsteroid();
+
+        if(
+            wave>4 &&
+            Math.random()<
+            Math.min(
+                .45,
+                wave*.025
+            )
+        ) {
+
+            spawnAsteroid();
+        }
+    }
+
+    for(
+        const asteroid of asteroids
+    ) {
+
+        asteroid.update(dt);
+    }
+
+    checkPlayerCollisions();
+
+    /*
+     * Check whether this planet's score threshold
+     * has been reached.
+     */
+
+    if(
+        currentPlanetId!=="earth"
+    ) {
+
+        checkPlanetArrival();
+    }
+
+    /*
+     * At sufficient progress, Earth also eventually
+     * enters interplanetary travel.
+     */
+
+    if(
+        currentPlanetId==="earth" &&
+        score>=10000 &&
+        phaseTimer>8 &&
+        gamePhase===PHASE_FIELD
+    ) {
+
+        enterInterplanetary();
+    }
+
+    /*
+     * For other planets, once the player has visited the
+     * planet and departed, reaching the next tier threshold
+     * opens interplanetary travel.
+     */
+
+    if(
+        currentPlanetId!=="earth" &&
+        gamePhase===PHASE_FIELD &&
+        phaseTimer>8
+    ) {
+
+        const planet =
+            planets.find(
+                p=>p.id===currentPlanetId
+            );
+
+        if(
+            planet &&
+            score>=
+            (
+                planet.threshold+
+                getNextTravelRequirement(
+                    planet
+                )
+            )
+        ) {
+
+            enterInterplanetary();
+        }
+    }
+
+    /*
+     * Explosions.
+     */
+
+    for(
+        let i=explosions.length-1;
+        i>=0;
+        i--
+    ) {
+
+        if(
+            !explosions[i].update(dt)
+        ) {
+
+            explosions.splice(
+                i,
+                1
+            );
+        }
+    }
+
+    /*
+     * Shockwaves.
+     */
+
+    for(
+        let i=shockwaves.length-1;
+        i>=0;
+        i--
+    ) {
+
+        if(
+            !shockwaves[i].update(dt)
+        ) {
+
+            shockwaves.splice(
+                i,
+                1
+            );
+        }
+    }
+
+    updateParticles(dt);
+
+    shake *=
+        Math.pow(
+            .015,
+            dt
+        );
+
+    if(shake<.1)
+        shake=0;
+
+    updateHUD();
+}
+
+
+/* =========================================================
+   NEXT TRAVEL REQUIREMENT
+   ========================================================= */
+
+function getNextTravelRequirement(
+    planet
+) {
+
+    const next =
+        planets
+        .filter(
+            p=>
+                p.tier===
+                planet.tier+1
+        )
+        .sort(
+            (a,b)=>
+                a.threshold-
+                b.threshold
+        )[0];
+
+    if(!next)
+        return 0;
+
+    return Math.max(
+        0,
+        next.threshold-
+        planet.threshold
+    );
+}
+
+
+/* =========================================================
+   DRAW BACKGROUND
+   ========================================================= */
+
+function drawBackground() {
+
+    const gradient =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            H
         );
 
     gradient.addColorStop(
         0,
-        "rgba(120,220,255,.65)"
+        "#020511"
     );
 
     gradient.addColorStop(
-        .35,
-        "rgba(40,100,180,.55)"
+        .5,
+        "#040817"
     );
 
     gradient.addColorStop(
         1,
-        "rgba(0,0,0,.1)"
+        "#02030b"
     );
 
-    ctx.fillStyle=gradient;
+    ctx.fillStyle=
+        gradient;
 
-    ctx.beginPath();
-
-    ctx.arc(
-        x,
-        y,
-        radius,
+    ctx.fillRect(
         0,
-        Math.PI*2
+        0,
+        W,
+        H
     );
 
-    ctx.fill();
+    const nebula =
+        ctx.createRadialGradient(
+            W*.5,
+            H*.45,
+            0,
+            W*.5,
+            H*.45,
+            Math.max(W,H)*.7
+        );
 
-    ctx.globalAlpha=.5;
-
-    ctx.strokeStyle=
-        "#78dfff";
-
-    ctx.lineWidth=2;
-
-    ctx.beginPath();
-
-    ctx.arc(
-        x,
-        y,
-        radius*1.12,
-        -.3,
-        Math.PI+.4
+    nebula.addColorStop(
+        0,
+        "rgba(30,50,110,.13)"
     );
 
-    ctx.stroke();
+    nebula.addColorStop(
+        .5,
+        "rgba(20,20,80,.05)"
+    );
 
-    ctx.globalAlpha=1;
+    nebula.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+    );
+
+    ctx.fillStyle=
+        nebula;
+
+    ctx.fillRect(
+        0,
+        0,
+        W,
+        H
+    );
+}
+
+
+/* =========================================================
+   DRAW
+   ========================================================= */
+
+function draw() {
+
+    ctx.save();
+
+    drawBackground();
+
+    drawStars();
+
+    if(shake>0) {
+
+        ctx.translate(
+            random(-shake,shake),
+            random(-shake,shake)
+        );
+    }
+
+    /*
+     * Asteroid trails.
+     */
+
+    for(
+        const a of asteroids
+    ) {
+
+        const speed =
+            Math.hypot(
+                a.vx,
+                a.vy
+            );
+
+        if(speed>90) {
+
+            const length =
+                clamp(
+                    speed*.12,
+                    4,
+                    20
+                );
+
+            const v=speed;
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                a.x,
+                a.y
+            );
+
+            ctx.lineTo(
+                a.x-
+                a.vx/v*
+                length,
+
+                a.y-
+                a.vy/v*
+                length
+            );
+
+            ctx.strokeStyle=
+                a.color+
+                "55";
+
+            ctx.lineWidth=2;
+
+            ctx.stroke();
+        }
+    }
+
+    for(
+        const s of shockwaves
+    ) {
+
+        s.draw();
+    }
+
+    for(
+        const a of asteroids
+    ) {
+
+        a.draw();
+    }
+
+    /*
+     * The ship remains visible during planet phases too.
+     */
+
+    drawPlayer();
+
+    for(
+        const e of explosions
+    ) {
+
+        e.draw();
+    }
+
+    drawParticles();
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   HUD
+   ========================================================= */
+
+function updateHUD() {
+
+    scoreEl.textContent =
+        score.toLocaleString();
+
+    comboEl.textContent =
+        "x"+
+        (
+            combo<1.05
+            ? "1"
+            : combo.toFixed(1)
+        );
+
+    comboEl.classList.toggle(
+        "hot",
+        combo>=3
+    );
+
+    levelEl.textContent=
+        wave;
+
+    livesEl.textContent =
+        "♥".repeat(
+            Math.max(
+                0,
+                lives
+            )
+        )+
+        "♡".repeat(
+            Math.max(
+                0,
+                3-lives
+            )
+        );
+
+    const ready =
+        empCharge>=EMP_MAX &&
+        empCooldown<=0;
+
+    empButton.classList.toggle(
+        "ready",
+        ready
+    );
+
+    if(empCooldown>0) {
+
+        empButton.innerHTML =
+            "⚡<small>"+
+            Math.ceil(
+                empCooldown
+            )+
+            "s</small>";
+
+    } else if(ready) {
+
+        empButton.innerHTML =
+            "⚡<small>READY</small>";
+
+    } else {
+
+        empButton.innerHTML =
+            "⚡<small>"+
+            Math.floor(
+                empCharge
+            )+
+            "%</small>";
+    }
 }
 
 
@@ -3656,6 +5352,7 @@ function activateEMP() {
         !running ||
         paused ||
         gameOver ||
+        gamePhase!==PHASE_FIELD ||
         empCooldown>0
     ) {
 
@@ -3678,7 +5375,7 @@ function activateEMP() {
         const asteroid of targets
     ) {
 
-        const index=
+        const index =
             asteroids.indexOf(
                 asteroid
             );
@@ -3706,7 +5403,7 @@ function activateEMP() {
         i++
     ) {
 
-        const angle=
+        const angle =
             random(
                 0,
                 Math.PI*2
@@ -3770,12 +5467,12 @@ function activateEMP() {
 
 
 /* =========================================================
-   INPUT
+   GAME INPUT
    ========================================================= */
 
 function pointerPosition(event) {
 
-    const rect=
+    const rect =
         canvas.getBoundingClientRect();
 
     return {
@@ -3790,17 +5487,22 @@ function pointerPosition(event) {
     };
 }
 
+
 function handlePointer(event) {
 
     if(
         !running ||
         paused ||
         gameOver ||
-        phase!=="asteroid"
+        gamePhase!==PHASE_FIELD
     ) {
 
         return;
     }
+
+    /*
+     * Only canvas clicks reach this handler.
+     */
 
     if(
         event.target!==canvas
@@ -3813,13 +5515,13 @@ function handlePointer(event) {
 
     initAudio();
 
-    const p=
-        pointerPosition(event);
+    const p =
+        pointerPosition(
+            event
+        );
 
     let best=-1;
-
-    let bestDistance=
-        Infinity;
+    let bestDistance=Infinity;
 
     for(
         let i=0;
@@ -3830,7 +5532,7 @@ function handlePointer(event) {
         const a=
             asteroids[i];
 
-        const d=
+        const d =
             Math.hypot(
                 a.x-p.x,
                 a.y-p.y
@@ -3842,6 +5544,7 @@ function handlePointer(event) {
         ) {
 
             best=i;
+
             bestDistance=d;
         }
     }
@@ -3857,34 +5560,65 @@ function handlePointer(event) {
     }
 }
 
+
 canvas.addEventListener(
     "pointerdown",
     handlePointer,
-    {passive:false}
-);
-
-empButton.addEventListener(
-    "pointerdown",
-    e=>{
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        initAudio();
-
-        activateEMP();
+    {
+        passive:false
     }
 );
+
+
+/* =========================================================
+   BUTTON EVENT HELPER
+   ========================================================= */
+
+/*
+ * All UI buttons use click events.
+ *
+ * This deliberately avoids putting global touch handlers
+ * on document/body that could steal taps from the start menu.
+ */
+
+function onClick(
+    id,
+    callback
+) {
+
+    const element =
+        document.getElementById(id);
+
+    if(!element)
+        return;
+
+    element.addEventListener(
+        "click",
+        function(e) {
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            callback(e);
+        }
+    );
+}
 
 
 /* =========================================================
    BUTTONS
    ========================================================= */
 
-document
-.getElementById("pauseButton")
-.addEventListener(
-    "click",
+onClick(
+    "startButton",
+    ()=>{
+        startGame();
+    }
+);
+
+
+onClick(
+    "pauseButton",
     ()=>{
 
         if(
@@ -3900,10 +5634,106 @@ document
     }
 );
 
-document
-.getElementById("startButton")
-.addEventListener(
-    "click",
+
+onClick(
+    "resumeButton",
+    ()=>{
+        resumeGame();
+    }
+);
+
+
+onClick(
+    "pauseRestart",
+    ()=>{
+        startGame();
+    }
+);
+
+
+onClick(
+    "pauseMenu",
+    ()=>{
+        returnToMenu();
+    }
+);
+
+
+onClick(
+    "restartButton",
+    ()=>{
+        startGame();
+    }
+);
+
+
+onClick(
+    "menuButton",
+    ()=>{
+        returnToMenu();
+    }
+);
+
+
+onClick(
+    "startLeaderboardButton",
+    ()=>{
+
+        startScreen.classList.add(
+            "hidden"
+        );
+
+        leaderboardScreen.classList.remove(
+            "hidden"
+        );
+
+        loadLeaderboard(
+            mainLeaderboard,
+            mainLeaderboardStatus
+        );
+    }
+);
+
+
+onClick(
+    "closeLeaderboardButton",
+    ()=>{
+
+        leaderboardScreen.classList.add(
+            "hidden"
+        );
+
+        startScreen.classList.remove(
+            "hidden"
+        );
+
+        renderPlanetMap();
+    }
+);
+
+
+onClick(
+    "refreshLeaderboardButton",
+    ()=>{
+
+        loadLeaderboard(
+            leaderboardEl,
+            leaderboardStatus
+        );
+    }
+);
+
+
+onClick(
+    "submitScoreButton",
+    ()=>{
+        submitScore();
+    }
+);
+
+
+empButton.addEventListener(
+    "pointerdown",
     e=>{
 
         e.preventDefault();
@@ -3911,740 +5741,12 @@ document
 
         initAudio();
 
-        startGame();
+        activateEMP();
+    },
+    {
+        passive:false
     }
 );
-
-document
-.getElementById("resumeButton")
-.addEventListener(
-    "click",
-    resumeGame
-);
-
-document
-.getElementById("pauseRestart")
-.addEventListener(
-    "click",
-    startGame
-);
-
-document
-.getElementById("restartButton")
-.addEventListener(
-    "click",
-    ()=>{
-
-        initAudio();
-
-        startGame();
-    }
-);
-
-document
-.getElementById("menuButton")
-.addEventListener(
-    "click",
-    ()=>{
-
-        running=false;
-
-        gameOverScreen
-        .classList
-        .add("hidden");
-
-        startScreen
-        .classList
-        .remove("hidden");
-
-        renderPlanetMap();
-    }
-);
-
-
-/* =========================================================
-   GAME START
-   ========================================================= */
-
-function startGame() {
-
-    initAudio();
-
-    const selected=
-        getPlanet(
-            selectedStartPlanet
-        );
-
-    if(!selected)
-        return;
-
-    if(
-        selected.id!=="earth" &&
-        shipCount(selected.id)<=0
-    ) {
-
-        selectedStartPlanet="earth";
-
-        renderPlanetMap();
-
-        return;
-    }
-
-    running=true;
-    paused=false;
-    gameOver=false;
-
-    score=0;
-
-    combo=1;
-    comboTimer=0;
-
-    lives=3;
-
-    wave=1;
-    destroyed=0;
-
-    spawnTimer=0;
-    difficultyTimer=0;
-
-    /*
-     * EMP ALWAYS STARTS EMPTY.
-     */
-
-    empCharge=0;
-    empCooldown=0;
-    empUses=0;
-
-    currentPlanetId=
-        selected.id;
-
-    destinationPlanetId=null;
-
-    phase="asteroid";
-
-    /*
-     * A ship that begins from a planet is consumed
-     * immediately, because it is now flying.
-     *
-     * Earth has infinite ships.
-     */
-
-    if(
-        selected.id!=="earth"
-    ) {
-
-        const list=
-            ships[selected.id];
-
-        if(
-            list &&
-            list.length
-        ) {
-
-            /*
-             * The newest/largest-progress ship
-             * is used first.
-             *
-             * Its stored score becomes the
-             * starting score.
-             */
-
-            const ship=
-                list.pop();
-
-            score=
-                Number(ship.score)||0;
-
-            saveShips();
-        }
-    }
-
-    /*
-     * Score remains from the ship when launching
-     * from an established planet.
-     */
-
-    nextPlanetThreshold=
-        [10000,50000,100000,250000]
-        .find(
-            t=>t>score
-        ) ||
-        Infinity;
-
-    shake=0;
-
-    asteroids=[];
-    explosions=[];
-    particles=[];
-    shockwaves=[];
-
-    clearPhaseUI();
-
-    startScreen
-    .classList
-    .add("hidden");
-
-    pauseScreen
-    .classList
-    .add("hidden");
-
-    gameOverScreen
-    .classList
-    .add("hidden");
-
-    spawnWaveBurst();
-
-    updateHUD();
-
-    lastTime=
-        performance.now();
-}
-
-
-/* =========================================================
-   PAUSE
-   ========================================================= */
-
-function pauseGame() {
-
-    paused=true;
-
-    pauseScreen
-    .classList
-    .remove("hidden");
-}
-
-function resumeGame() {
-
-    paused=false;
-
-    pauseScreen
-    .classList
-    .add("hidden");
-
-    lastTime=
-        performance.now();
-}
-
-
-/* =========================================================
-   GAME OVER
-   ========================================================= */
-
-function endGame() {
-
-    running=false;
-    gameOver=true;
-
-    /*
-     * IMPORTANT:
-     *
-     * The ship is NOT saved when it dies.
-     *
-     * If it came from another planet,
-     * that ship has now been lost.
-     */
-
-    setHighestScore(score);
-
-    const isNewRecord=
-        score>highScore;
-
-    if(isNewRecord) {
-
-        highScore=score;
-
-        localStorage.setItem(
-            "asteroidImpactHighScore",
-            String(highScore)
-        );
-    }
-
-    finalScoreEl.textContent=
-        score.toLocaleString();
-
-    bestScoreEl.textContent=
-        highScore.toLocaleString();
-
-    newRecordEl.classList.toggle(
-        "show",
-        isNewRecord
-    );
-
-    playerNameInput.value=
-        localStorage.getItem(
-            "asteroidImpactPlayerName"
-        )||"";
-
-    submitScoreButton.disabled=false;
-
-    leaderboardStatus.textContent="";
-
-    clearPhaseUI();
-
-    gameOverScreen
-    .classList
-    .remove("hidden");
-
-    loadLeaderboard(
-        leaderboardEl,
-        leaderboardStatus
-    );
-}
-
-
-/* =========================================================
-   DIFFICULTY
-   ========================================================= */
-
-function updateDifficulty(dt) {
-
-    difficultyTimer+=dt;
-
-    const calculatedWave=
-        1+
-        Math.floor(
-            difficultyTimer/25
-        )+
-        Math.floor(
-            destroyed/20
-        );
-
-    if(
-        calculatedWave>wave
-    ) {
-
-        wave=
-            calculatedWave;
-
-        /*
-         * Only asteroid fields spawn waves.
-         */
-
-        if(
-            phase==="asteroid"
-        ) {
-
-            spawnWaveBurst();
-        }
-
-        floatingText(
-            "WAVE "+wave,
-            W/2,
-            H*.25,
-            "#b38cff"
-        );
-
-        updateHUD();
-    }
-}
-
-
-/* =========================================================
-   UPDATE
-   ========================================================= */
-
-function update(dt) {
-
-    if(
-        !running ||
-        paused ||
-        gameOver
-    )
-        return;
-
-    dt=
-        Math.min(
-            dt,
-            .033
-        );
-
-    if(empCooldown>0) {
-
-        empCooldown=
-            Math.max(
-                0,
-                empCooldown-dt
-            );
-
-        if(
-            empCooldown===0
-        ) {
-
-            empCharge=0;
-
-            floatingText(
-                "EMP ONLINE",
-                W/2,
-                H*.4,
-                "#65eaff"
-            );
-        }
-    }
-
-    updateStars(dt);
-
-    /*
-     * Planet and interplanetary space
-     * deliberately contain no asteroids.
-     */
-
-    updatePhase(dt);
-
-    if(
-        phase==="asteroid"
-    ) {
-
-        updateDifficulty(dt);
-
-        if(comboTimer>0) {
-
-            comboTimer-=dt;
-
-        } else {
-
-            combo+=
-                (1-combo)*
-                dt*
-                1.8;
-
-            if(combo<1.02)
-                combo=1;
-        }
-
-        spawnTimer-=dt;
-
-        const spawnInterval=
-            Math.max(
-                .32,
-                1.25-wave*.055
-            );
-
-        if(
-            spawnTimer<=0
-        ) {
-
-            spawnTimer=
-                spawnInterval;
-
-            spawnAsteroid();
-
-            if(
-                wave>4 &&
-                Math.random()<
-                Math.min(
-                    .45,
-                    wave*.025
-                )
-            ) {
-
-                spawnAsteroid();
-            }
-        }
-
-        for(
-            const asteroid of asteroids
-        ) {
-
-            asteroid.update(dt);
-        }
-
-        checkPlayerCollisions();
-    }
-
-    for(
-        let i=explosions.length-1;
-        i>=0;
-        i--
-    ) {
-
-        if(
-            !explosions[i]
-            .update(dt)
-        ) {
-
-            explosions.splice(i,1);
-        }
-    }
-
-    for(
-        let i=shockwaves.length-1;
-        i>=0;
-        i--
-    ) {
-
-        if(
-            !shockwaves[i]
-            .update(dt)
-        ) {
-
-            shockwaves.splice(i,1);
-        }
-    }
-
-    updateParticles(dt);
-
-    shake*=
-        Math.pow(
-            .015,
-            dt
-        );
-
-    if(shake<.1)
-        shake=0;
-
-    updateHUD();
-}
-
-
-/* =========================================================
-   BACKGROUND
-   ========================================================= */
-
-function drawBackground() {
-
-    const gradient=
-        ctx.createLinearGradient(
-            0,0,
-            0,H
-        );
-
-    gradient.addColorStop(
-        0,
-        "#020511"
-    );
-
-    gradient.addColorStop(
-        .5,
-        "#040817"
-    );
-
-    gradient.addColorStop(
-        1,
-        "#02030b"
-    );
-
-    ctx.fillStyle=gradient;
-
-    ctx.fillRect(
-        0,0,W,H
-    );
-
-    const nebula=
-        ctx.createRadialGradient(
-            W*.5,
-            H*.45,
-            0,
-            W*.5,
-            H*.45,
-            Math.max(W,H)*.7
-        );
-
-    nebula.addColorStop(
-        0,
-        "rgba(30,50,110,.13)"
-    );
-
-    nebula.addColorStop(
-        .5,
-        "rgba(20,20,80,.05)"
-    );
-
-    nebula.addColorStop(
-        1,
-        "rgba(0,0,0,0)"
-    );
-
-    ctx.fillStyle=nebula;
-
-    ctx.fillRect(
-        0,0,W,H
-    );
-}
-
-
-/* =========================================================
-   DRAW
-   ========================================================= */
-
-function draw() {
-
-    ctx.save();
-
-    drawBackground();
-
-    drawStars();
-
-    /*
-     * Planet is drawn before ship/particles.
-     */
-
-    drawPlanetBackground();
-
-    if(shake>0) {
-
-        ctx.translate(
-            random(-shake,shake),
-            random(-shake,shake)
-        );
-    }
-
-    /*
-     * Asteroid trails.
-     */
-
-    if(
-        phase==="asteroid"
-    ) {
-
-        for(
-            const a of asteroids
-        ) {
-
-            const speed=
-                Math.hypot(
-                    a.vx,
-                    a.vy
-                );
-
-            if(speed>90) {
-
-                const length=
-                    clamp(
-                        speed*.12,
-                        4,
-                        20
-                    );
-
-                const v=speed;
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    a.x,
-                    a.y
-                );
-
-                ctx.lineTo(
-                    a.x-
-                    a.vx/v*
-                    length,
-
-                    a.y-
-                    a.vy/v*
-                    length
-                );
-
-                ctx.strokeStyle=
-                    a.color+"55";
-
-                ctx.lineWidth=2;
-
-                ctx.stroke();
-            }
-        }
-
-        for(
-            const a of asteroids
-        ) {
-
-            a.draw();
-        }
-    }
-
-    for(
-        const s of shockwaves
-    ) {
-
-        s.draw();
-    }
-
-    drawPlayer();
-
-    for(
-        const e of explosions
-    ) {
-
-        e.draw();
-    }
-
-    drawParticles();
-
-    ctx.restore();
-}
-
-
-/* =========================================================
-   HUD
-   ========================================================= */
-
-function updateHUD() {
-
-    scoreEl.textContent=
-        score.toLocaleString();
-
-    comboEl.textContent=
-        "x"+
-        (
-            combo<1.05
-            ? "1"
-            : combo.toFixed(1)
-        );
-
-    comboEl.classList.toggle(
-        "hot",
-        combo>=3
-    );
-
-    levelEl.textContent=
-        wave;
-
-    livesEl.textContent=
-        "♥".repeat(
-            Math.max(0,lives)
-        )+
-        "♡".repeat(
-            Math.max(0,3-lives)
-        );
-
-    /*
-     * =====================================================
-     * EMP DISPLAY FIX
-     * =====================================================
-     */
-
-    const coolingDown=
-        empCooldown>0;
-
-    const ready=
-        empCharge>=EMP_MAX &&
-        !coolingDown;
-
-    empButton.classList.toggle(
-        "ready",
-        ready
-    );
-
-    if(coolingDown) {
-
-        empButton.innerHTML=
-            "⚡<small>"+
-            Math.ceil(empCooldown)+
-            "s</small>";
-
-    } else if(ready) {
-
-        empButton.innerHTML=
-            "⚡<small>READY</small>";
-
-    } else {
-
-        empButton.innerHTML=
-            "⚡<small>"+
-            Math.floor(empCharge)+
-            "%</small>";
-    }
-}
 
 
 /* =========================================================
@@ -4653,9 +5755,11 @@ function updateHUD() {
 
 async function fetchLeaderboard() {
 
-    const response=
+    const response =
         await fetch(
-            LEADERBOARD_URL,
+            LEADERBOARD_URL+
+            "?t="+
+            Date.now(),
             {
                 method:"GET",
                 cache:"no-store"
@@ -4669,7 +5773,7 @@ async function fetchLeaderboard() {
         );
     }
 
-    const data=
+    const data =
         await response.json();
 
     if(!Array.isArray(data)) {
@@ -4682,15 +5786,32 @@ async function fetchLeaderboard() {
     return data;
 }
 
+
 function escapeHTML(value) {
 
     return String(value)
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
+
 
 function renderLeaderboard(
     element,
@@ -4699,7 +5820,7 @@ function renderLeaderboard(
 
     if(!data.length) {
 
-        element.innerHTML=
+        element.innerHTML =
             `<div class="leaderboard-row">
                 <div class="leaderboard-name">
                     No scores yet!
@@ -4709,11 +5830,11 @@ function renderLeaderboard(
         return;
     }
 
-    element.innerHTML=
+    element.innerHTML =
         data.map(
             (entry,index)=>{
 
-                const rank=
+                const rank =
                     index+1;
 
                 let medal="";
@@ -4728,40 +5849,34 @@ function renderLeaderboard(
                     medal="🥉";
 
                 return `
-                    <div class="leaderboard-row ${
-                        rank<=3
-                        ? "top"
-                        : ""
-                    }">
+                    <div class="leaderboard-row ${rank<=3 ? "top":""}">
 
                         <div class="leaderboard-rank">
-                            ${medal||rank}
+                            ${medal || rank}
                         </div>
 
                         <div class="leaderboard-name">
-                            ${escapeHTML(
-                                entry.player
-                            )}
+                            ${escapeHTML(entry.player)}
                         </div>
 
                         <div class="leaderboard-score">
-                            ${Number(
-                                entry.score
-                            ).toLocaleString()}
+                            ${Number(entry.score).toLocaleString()}
                         </div>
 
                     </div>
                 `;
             }
-        ).join("");
+        )
+        .join("");
 }
+
 
 async function loadLeaderboard(
     element,
     statusElement
 ) {
 
-    element.innerHTML=
+    element.innerHTML =
         `<div class="leaderboard-row">
             <div class="leaderboard-name">
                 Loading...
@@ -4772,7 +5887,7 @@ async function loadLeaderboard(
 
     try {
 
-        const data=
+        const data =
             await fetchLeaderboard();
 
         renderLeaderboard(
@@ -4784,34 +5899,28 @@ async function loadLeaderboard(
 
         console.error(error);
 
-        element.innerHTML=
+        element.innerHTML =
             `<div class="leaderboard-row">
                 <div class="leaderboard-name">
                     Leaderboard unavailable.
                 </div>
             </div>`;
 
-        statusElement.textContent=
+        statusElement.textContent =
             "Check your internet connection.";
     }
 }
 
 
-/* =========================================================
-   SUBMIT SCORE
-   ========================================================= */
-
 async function submitScore() {
 
-    let player=
-        playerNameInput
-        .value
-        .trim();
+    let player =
+        playerNameInput.value.trim();
 
     if(!player)
         player="Anonymous";
 
-    player=
+    player =
         player.substring(
             0,
             20
@@ -4822,30 +5931,35 @@ async function submitScore() {
         player
     );
 
-    submitScoreButton.disabled=true;
+    submitScoreButton.disabled=
+        true;
 
-    leaderboardStatus.textContent=
+    leaderboardStatus.textContent =
         "Submitting score...";
 
     const payload={
 
         player:player,
 
-        score:Math.floor(score),
+        score:
+            Math.floor(score),
 
-        wave:Math.floor(wave),
+        wave:
+            Math.floor(wave),
 
-        combo:Number(
-            combo.toFixed(1)
-        )
+        combo:
+            Number(
+                combo.toFixed(1)
+            )
     };
 
     try {
 
-        const response=
+        const response =
             await fetch(
                 LEADERBOARD_URL,
                 {
+
                     method:"POST",
 
                     headers:{
@@ -4860,18 +5974,18 @@ async function submitScore() {
                 }
             );
 
-        const result=
+        const result =
             await response.json();
 
         if(!result.success) {
 
             throw new Error(
-                result.error||
+                result.error ||
                 "Score rejected"
             );
         }
 
-        leaderboardStatus.textContent=
+        leaderboardStatus.textContent =
             "✓ Score submitted!";
 
         await loadLeaderboard(
@@ -4883,106 +5997,13 @@ async function submitScore() {
 
         console.error(error);
 
-        leaderboardStatus.textContent=
+        leaderboardStatus.textContent =
             "Could not submit score. Try again.";
 
-        submitScoreButton.disabled=false;
+        submitScoreButton.disabled=
+            false;
     }
 }
-
-
-/* =========================================================
-   LEADERBOARD BUTTONS
-   ========================================================= */
-
-submitScoreButton
-.addEventListener(
-    "click",
-    submitScore
-);
-
-document
-.getElementById(
-    "refreshLeaderboardButton"
-)
-.addEventListener(
-    "click",
-    ()=>{
-        loadLeaderboard(
-            leaderboardEl,
-            leaderboardStatus
-        );
-    }
-);
-
-document
-.getElementById(
-    "startLeaderboardButton"
-)
-.addEventListener(
-    "click",
-    ()=>{
-
-        startScreen
-        .classList
-        .add("hidden");
-
-        leaderboardScreen
-        .classList
-        .remove("hidden");
-
-        loadLeaderboard(
-            mainLeaderboard,
-            mainLeaderboardStatus
-        );
-    }
-);
-
-document
-.getElementById(
-    "closeLeaderboardButton"
-)
-.addEventListener(
-    "click",
-    ()=>{
-
-        leaderboardScreen
-        .classList
-        .add("hidden");
-
-        startScreen
-        .classList
-        .remove("hidden");
-
-        renderPlanetMap();
-    }
-);
-
-
-/* =========================================================
-   GAME LOOP
-   ========================================================= */
-
-let lastTime=0;
-let shake=0;
-
-function loop(time) {
-
-    const dt=
-        lastTime
-        ? (time-lastTime)/1000
-        : 0;
-
-    lastTime=time;
-
-    update(dt);
-
-    draw();
-
-    requestAnimationFrame(loop);
-}
-
-requestAnimationFrame(loop);
 
 
 /* =========================================================
@@ -4996,7 +6017,8 @@ document.addEventListener(
         if(
             document.hidden &&
             running &&
-            !gameOver
+            !gameOver &&
+            !paused
         ) {
 
             pauseGame();
@@ -5006,15 +6028,50 @@ document.addEventListener(
 
 
 /* =========================================================
-   INITIAL UI
+   GAME LOOP
    ========================================================= */
 
-bestScoreEl.textContent=
-    highScore.toLocaleString();
+function loop(time) {
+
+    const dt =
+        lastTime
+        ? (time-lastTime)/1000
+        : 0;
+
+    lastTime=time;
+
+    update(dt);
+
+    draw();
+
+    requestAnimationFrame(
+        loop
+    );
+}
+
+
+/* =========================================================
+   INITIALISE
+   ========================================================= */
+
+loadFleet();
+
+selectedStartPlanet="earth";
 
 renderPlanetMap();
 
+bestScoreEl.textContent =
+    Number(
+        localStorage.getItem(
+            "asteroidImpactHighScore"
+        ) || 0
+    ).toLocaleString();
+
 updateHUD();
+
+requestAnimationFrame(
+    loop
+);
 
 </script>
 
