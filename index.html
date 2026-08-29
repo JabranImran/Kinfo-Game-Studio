@@ -1957,6 +1957,15 @@ and (max-height:500px){
 
         </div>
 
+        <div
+            class="high-score"
+            id="aiDifficultyReadout">
+
+            ADAPTIVE FIELD:
+            <span id="aiDifficultyValue">1.00×</span>
+
+        </div>
+
         <div class="leaderboard-title">
 
             Submit Global Score
@@ -2113,7 +2122,7 @@ const PLANETS = [
         id:"mars",
         name:"Mars",
         tier:1,
-        requirement:10000,
+        requirement:3500,
         icon:"🔴",
         x:20,
         y:63,
@@ -2124,7 +2133,7 @@ const PLANETS = [
         id:"europa",
         name:"Europa",
         tier:1,
-        requirement:10000,
+        requirement:3500,
         icon:"🌕",
         x:50,
         y:57,
@@ -2135,7 +2144,7 @@ const PLANETS = [
         id:"titan",
         name:"Titan",
         tier:1,
-        requirement:10000,
+        requirement:3500,
         icon:"🟠",
         x:80,
         y:63,
@@ -2146,7 +2155,7 @@ const PLANETS = [
         id:"neptune",
         name:"Neptune",
         tier:2,
-        requirement:50000,
+        requirement:10500,
         icon:"🔵",
         x:18,
         y:38,
@@ -2157,7 +2166,7 @@ const PLANETS = [
         id:"kepler",
         name:"Kepler",
         tier:2,
-        requirement:50000,
+        requirement:10500,
         icon:"🪐",
         x:50,
         y:32,
@@ -2168,7 +2177,7 @@ const PLANETS = [
         id:"aurora",
         name:"Aurora",
         tier:2,
-        requirement:50000,
+        requirement:10500,
         icon:"🟣",
         x:82,
         y:38,
@@ -2179,7 +2188,7 @@ const PLANETS = [
         id:"helios",
         name:"Helios",
         tier:3,
-        requirement:100000,
+        requirement:23000,
         icon:"☀️",
         x:30,
         y:16,
@@ -2190,7 +2199,7 @@ const PLANETS = [
         id:"nova",
         name:"Nova",
         tier:3,
-        requirement:100000,
+        requirement:23000,
         icon:"💠",
         x:70,
         y:16,
@@ -2201,7 +2210,7 @@ const PLANETS = [
         id:"zenith",
         name:"Zenith",
         tier:4,
-        requirement:250000,
+        requirement:47000,
         icon:"⭐",
         x:50,
         y:5,
@@ -2304,6 +2313,9 @@ document.getElementById("finalScore");
 
 const bestScoreEl =
 document.getElementById("bestScore");
+
+const aiDifficultyValueEl =
+document.getElementById("aiDifficultyValue");
 
 const newRecordEl =
 document.getElementById("newRecord");
@@ -2445,7 +2457,7 @@ let shockwaves=[];
 
 const FIELD_MIN_TIME=12;
 
-const PLANET_APPROACH_POINTS=10000;
+const PLANET_APPROACH_POINTS=3500;
 
 
 /* =========================================================
@@ -3489,8 +3501,15 @@ class Asteroid{
             :random(45,70);
 
         const difficultyBoost=
-            1+
-            wave*.055;
+            (
+                1+
+                wave*.055
+            )*
+            clamp(
+                aiModel.difficulty,
+                .85,
+                1.2
+            );
 
         this.vx=
             dx/length*
@@ -4188,16 +4207,20 @@ function spawnAsteroid(){
     const roll=
         Math.random();
 
+    /*
+     * Big rocks eased in later and a little
+     * rarer, so early waves stay approachable.
+     */
     if(
-        wave>=3 &&
-        roll<.17
+        wave>=4 &&
+        roll<.13
     ){
 
         size=3;
 
     }else if(
         wave>=2 &&
-        roll<.42
+        roll<.36
     ){
 
         size=2;
@@ -4218,13 +4241,19 @@ function spawnAsteroid(){
 
 function spawnWaveBurst(){
 
+    /*
+     * Gentler wave-start burst: fewer extra
+     * asteroids, lower cap, spaced further
+     * apart so a fresh wave doesn't dump a
+     * wall of rocks on the player at once.
+     */
     const amount=
         Math.min(
-            4+
+            2+
             Math.floor(
-                wave*.7
+                wave*.4
             ),
-            13
+            6
         );
 
     for(
@@ -4248,7 +4277,7 @@ function spawnWaveBurst(){
                 }
 
             },
-            i*130
+            i*220
         );
 
     }
@@ -4262,7 +4291,8 @@ function spawnWaveBurst(){
 
 function detonateAsteroid(
     index,
-    chain=false
+    chain=false,
+    isEMP=false
 ){
 
     if(
@@ -4278,7 +4308,20 @@ function detonateAsteroid(
         1
     );
 
-    destroyed++;
+    /*
+     * EMP kills are excluded from the
+     * "destroyed" wave-escalation counter.
+     * Otherwise, panic-clearing the field
+     * would immediately spike the wave
+     * (and spawn rate) right after — the
+     * opposite of what an emergency button
+     * should do.
+     */
+    if(!isEMP){
+
+        destroyed++;
+
+    }
 
     const basePoints=
         asteroid.size===3
@@ -4287,28 +4330,67 @@ function detonateAsteroid(
         ?50
         :20;
 
-    const earned=
-        Math.round(
-            basePoints*
-            combo*
-            asteroid.type.multiplier
-        );
+    /*
+     * EMP is a panic "clear the field" button, not a scoring
+     * tool: each asteroid it clears is worth a small flat
+     * amount (no size/type multiplier, no combo), and the
+     * whole activation shares one small point budget — so
+     * clearing 20 asteroids at once earns barely more than
+     * clearing 3. Skilled chaining is always the better payout.
+     */
+    let earned;
+
+    if(isEMP){
+
+        earned=
+            Math.min(
+                6,
+                empBurstRemaining
+            );
+
+        empBurstRemaining-=
+            earned;
+
+    }else{
+
+        earned=
+            Math.round(
+                basePoints*
+                combo*
+                asteroid.type.multiplier
+            );
+
+    }
 
     score+=
         earned;
 
-    empCharge=
-        clamp(
-            empCharge+
-            asteroid.size*7,
-            0,
-            EMP_MAX
-        );
+    if(!isEMP){
 
-    comboTimer=
-        1.15;
+        empCharge=
+            clamp(
+                empCharge+
+                asteroid.size*5,
+                0,
+                EMP_MAX
+            );
 
-    if(chain){
+        comboTimer=
+            1.15;
+
+        aiWindow.kills++;
+
+        aiWindow.comboSum+=
+            combo;
+
+        aiWindow.comboSamples++;
+
+    }
+
+    if(
+        chain &&
+        !isEMP
+    ){
 
         combo=
             Math.min(
@@ -4696,6 +4778,8 @@ function checkPlayerCollisions(){
             comboTimer=0;
 
             shake=16;
+
+            aiWindow.deaths++;
 
             sound(
                 "damage"
@@ -6256,9 +6340,342 @@ let empCharge=0;
 let empCooldown=0;
 let empUses=0;
 
-const EMP_MAX=100;
-const EMP_COOLDOWN=3;
-const EMP_USES_BEFORE_COOLDOWN=3;
+/*
+ * Rebalanced: EMP now costs more to charge, fires fewer times
+ * before a real cooldown, and — most importantly — its payout
+ * is capped in detonateAsteroid() so it can never out-score
+ * skilled dodging/chaining. It's a panic button, not a farm.
+ */
+const EMP_MAX=140;
+const EMP_COOLDOWN=7;
+const EMP_USES_BEFORE_COOLDOWN=2;
+
+/*
+ * Total points a single EMP activation can ever award, no
+ * matter how many asteroids are on screen when it fires.
+ */
+const EMP_BURST_POINT_CAP=90;
+
+let empBurstRemaining=0;
+
+
+/* =========================================================
+   ADAPTIVE DIFFICULTY (LIGHTWEIGHT ONLINE-LEARNING AI)
+========================================================= */
+
+/*
+ * A small linear model — five weights and a bias, nothing
+ * more — that keeps tuning itself in-browser, live, with no
+ * server and no external library. Every few seconds it looks
+ * at how the player has just been doing (kill rate, whether
+ * they died, how healthy their combo is, whether they went
+ * quiet, how hard they leaned on the EMP) and nudges a
+ * difficulty multiplier up or down. It then scores that nudge
+ * against what actually happened next and takes a small
+ * gradient step on its own weights — the same core update
+ * rule as a classic perceptron. The learned weights persist
+ * in localStorage, so the model keeps adapting to this
+ * player's pace across sessions, not just within one run.
+ */
+
+const AI_MODEL_KEY=
+    "asteroidImpactAIModel";
+
+const AI_FEATURE_COUNT=5;
+const AI_INTERVAL=5;
+const AI_LEARNING_RATE=.06;
+
+function defaultAIModel(){
+
+    return{
+
+        w:[0,0,0,0,0],
+        b:0,
+        difficulty:1
+
+    };
+
+}
+
+function loadAIModel(){
+
+    try{
+
+        const raw=
+            localStorage.getItem(
+                AI_MODEL_KEY
+            );
+
+        if(raw){
+
+            const parsed=
+                JSON.parse(raw);
+
+            if(
+                Array.isArray(parsed.w) &&
+                parsed.w.length===
+                AI_FEATURE_COUNT
+            ){
+
+                parsed.difficulty=
+                    clamp(
+                        Number(
+                            parsed.difficulty
+                        ) || 1,
+                        .7,
+                        1.4
+                    );
+
+                return parsed;
+
+            }
+
+        }
+
+    }catch(error){
+
+        console.warn(
+            "Could not load AI difficulty model",
+            error
+        );
+
+    }
+
+    return defaultAIModel();
+
+}
+
+function saveAIModel(){
+
+    try{
+
+        localStorage.setItem(
+            AI_MODEL_KEY,
+            JSON.stringify(aiModel)
+        );
+
+    }catch(error){}
+
+}
+
+let aiModel=
+    loadAIModel();
+
+/*
+ * Rolling counters for the window currently being observed.
+ * Reset every AI_INTERVAL seconds once folded into a model
+ * update.
+ */
+let aiWindow={
+
+    kills:0,
+    deaths:0,
+    comboSum:0,
+    comboSamples:0,
+    empUses:0
+
+};
+
+let aiTimer=0;
+
+
+function updateAIDifficulty(dt){
+
+    aiTimer+=dt;
+
+    if(
+        aiTimer<
+        AI_INTERVAL
+    ){
+
+        return;
+
+    }
+
+    const windowSeconds=
+        aiTimer;
+
+    aiTimer=0;
+
+    /*
+     * Feature vector, each roughly normalized to 0..1:
+     *   0. kill rate this window (skill kills per second)
+     *   1. whether the player died this window
+     *   2. how healthy their average combo was
+     *   3. idleness — no kills at all this window (could
+     *      mean it's too easy/boring, or too overwhelming
+     *      to land a hit — reward/punish below tells them apart)
+     *   4. how much they leaned on the EMP
+     */
+    const killRate=
+        clamp(
+            aiWindow.kills/
+            windowSeconds/
+            2,
+            0,
+            1
+        );
+
+    const deathOccurred=
+        aiWindow.deaths>0
+        ?1
+        :0;
+
+    const comboHealth=
+        aiWindow.comboSamples
+        ?clamp(
+            (
+                (
+                    aiWindow.comboSum/
+                    aiWindow.comboSamples
+                )-1
+            )/
+            4,
+            0,
+            1
+        )
+        :0;
+
+    const idleness=
+        aiWindow.kills===0
+        ?1
+        :0;
+
+    const empPressure=
+        clamp(
+            aiWindow.empUses/
+            2,
+            0,
+            1
+        );
+
+    const x=[
+        killRate,
+        deathOccurred,
+        comboHealth,
+        idleness,
+        empPressure
+    ];
+
+    /*
+     * Forward pass: predict a -1..1 nudge to difficulty.
+     */
+    let z=
+        aiModel.b;
+
+    for(
+        let i=0;
+        i<AI_FEATURE_COUNT;
+        i++
+    ){
+
+        z+=
+            aiModel.w[i]*
+            x[i];
+
+    }
+
+    const nudge=
+        Math.tanh(z);
+
+    const previousDifficulty=
+        aiModel.difficulty;
+
+    aiModel.difficulty=
+        clamp(
+            aiModel.difficulty+
+            nudge*.1,
+            .7,
+            1.4
+        );
+
+    /*
+     * Reward the nudge in hindsight: reward pulling difficulty
+     * UP when the player was cruising (killing steadily,
+     * healthy combo, no deaths, no EMP crutch); reward pulling
+     * it DOWN when they just died or leaned on the EMP a lot.
+     * A dead-quiet window (idle, no deaths) is read as "too
+     * easy" and nudges up gently; that only over-corrects if
+     * the player is also dying, which the death term already
+     * outweighs.
+     */
+    let reward=
+        killRate*.5+
+        comboHealth*.4+
+        idleness*.15-
+        deathOccurred*1.2-
+        empPressure*.4;
+
+    reward=
+        clamp(
+            reward,
+            -1,
+            1
+        );
+
+    for(
+        let i=0;
+        i<AI_FEATURE_COUNT;
+        i++
+    ){
+
+        aiModel.w[i]=
+            clamp(
+                aiModel.w[i]+
+                AI_LEARNING_RATE*
+                reward*
+                x[i],
+                -2,
+                2
+            );
+
+    }
+
+    aiModel.b=
+        clamp(
+            aiModel.b+
+            AI_LEARNING_RATE*
+            reward*.5,
+            -2,
+            2
+        );
+
+    saveAIModel();
+
+    /*
+     * Only surface it to the player when the shift is big
+     * enough to actually matter, so this reads as the game
+     * responding to them rather than a noisy debug readout.
+     */
+    if(
+        Math.abs(
+            aiModel.difficulty-
+            previousDifficulty
+        )>.06
+    ){
+
+        floatingText(
+            aiModel.difficulty>
+            previousDifficulty
+            ?"FIELD INTENSIFYING"
+            :"FIELD EASING",
+            W/2,
+            H*.2,
+            aiModel.difficulty>
+            previousDifficulty
+            ?"#ff9d7a"
+            :"#7affc4"
+        );
+
+    }
+
+    aiWindow.kills=0;
+    aiWindow.deaths=0;
+    aiWindow.comboSum=0;
+    aiWindow.comboSamples=0;
+    aiWindow.empUses=0;
+
+}
 
 
 function activateEMP(){
@@ -6281,6 +6698,11 @@ function activateEMP(){
 
     empUses++;
 
+    empBurstRemaining=
+        EMP_BURST_POINT_CAP;
+
+    aiWindow.empUses++;
+
     sound("emp");
 
     shake=12;
@@ -6302,6 +6724,7 @@ function activateEMP(){
 
             detonateAsteroid(
                 index,
+                true,
                 true
             );
 
@@ -7013,13 +7436,23 @@ function updateDifficulty(dt){
 
     difficultyTimer+=dt;
 
+    /*
+     * Wave escalation was previously fed by
+     * both elapsed time AND kill count, which
+     * let skilled/fast players spiral into an
+     * ever-faster spawn rate ("kill more ->
+     * waves rise faster -> more spawns -> kill
+     * more..."). Slowing both contributions
+     * keeps difficulty ramping steadily instead
+     * of snowballing.
+     */
     const calculatedWave=
         1+
         Math.floor(
-            difficultyTimer/25
+            difficultyTimer/45
         )+
         Math.floor(
-            destroyed/20
+            destroyed/45
         );
 
     if(
@@ -7117,6 +7550,8 @@ function update(dt){
 
         updateDifficulty(dt);
 
+        updateAIDifficulty(dt);
+
 
         if(
             comboTimer>0
@@ -7149,11 +7584,29 @@ function update(dt){
             spawnTimer<=0
         ){
 
-            const spawnInterval=
+            /*
+             * Higher floor and gentler ramp than
+             * before, so the ambient spawn rate
+             * never accelerates into a bullet-hell
+             * pace even at high waves. The AI
+             * difficulty multiplier (see ADAPTIVE
+             * DIFFICULTY below) then nudges this
+             * pace up or down based on how the
+             * player is actually doing right now.
+             */
+            const baseSpawnInterval=
                 Math.max(
-                    .32,
-                    1.25-
-                    wave*.055
+                    .65,
+                    1.6-
+                    wave*.035
+                );
+
+            const spawnInterval=
+                clamp(
+                    baseSpawnInterval/
+                    aiModel.difficulty,
+                    .5,
+                    2.2
                 );
 
             spawnTimer=
@@ -7162,12 +7615,13 @@ function update(dt){
             spawnAsteroid();
 
             if(
-                wave>4 &&
+                wave>8 &&
                 Math.random()<
                 Math.min(
-                    .45,
-                    wave*.025
-                )
+                    .18,
+                    wave*.01
+                )*
+                aiModel.difficulty
             ){
 
                 spawnAsteroid();
@@ -7770,6 +8224,16 @@ function endGame(){
     bestScoreEl.textContent=
         highScore.toLocaleString();
 
+    if(
+        aiDifficultyValueEl
+    ){
+
+        aiDifficultyValueEl.textContent=
+            aiModel.difficulty.toFixed(2)+
+            "×";
+
+    }
+
     newRecordEl.classList.toggle(
         "show",
         isNewRecord
@@ -7910,6 +8374,28 @@ function startGame(){
     empCooldown=0;
 
     empUses=0;
+
+    empBurstRemaining=0;
+
+    /*
+     * Keep what the model has learned (its weights), but pull
+     * the live difficulty dial gently back toward neutral so a
+     * previous white-knuckle run doesn't dump the player
+     * straight into a hard field on a fresh start.
+     */
+    aiModel.difficulty=
+        1+
+        (
+            aiModel.difficulty-1
+        )*.5;
+
+    aiTimer=0;
+
+    aiWindow.kills=0;
+    aiWindow.deaths=0;
+    aiWindow.comboSum=0;
+    aiWindow.comboSamples=0;
+    aiWindow.empUses=0;
 
     shake=0;
 
