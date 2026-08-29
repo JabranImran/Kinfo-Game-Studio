@@ -4497,7 +4497,7 @@ function detonateAsteroid(
         ?100
         :asteroid.size===2
         ?50
-        :20;
+        :24;
 
     /*
      * EMP is a panic "clear the field" button, not a scoring
@@ -4545,7 +4545,7 @@ function detonateAsteroid(
             );
 
         comboTimer=
-            1.15;
+            1.3;
 
         aiWindow.kills++;
 
@@ -4556,14 +4556,21 @@ function detonateAsteroid(
 
     }
 
-    if(
-        chain &&
-        !isEMP
-    ){
+    /*
+     * Bug fix: this used to require chain===true, which only
+     * ever happened on explosion-triggered chain reactions —
+     * meaning direct taps (the entire core loop) never grew
+     * the combo at all, no matter how fast or accurately you
+     * played. comboTimer already enforces "keep landing hits
+     * within the window or it decays," so that's the intended
+     * pacing constraint; gating growth on top of it too was
+     * the actual reason scoring felt so slow.
+     */
+    if(!isEMP){
 
         combo=
             Math.min(
-                combo+.35,
+                combo+.4,
                 12
             );
 
@@ -6550,7 +6557,7 @@ let empBurstRemaining=0;
 const AI_MODEL_KEY=
     "asteroidImpactAIModel";
 
-const AI_FEATURE_COUNT=6;
+const AI_FEATURE_COUNT=8;
 const AI_INTERVAL=5;
 const AI_LEARNING_RATE=.06;
 
@@ -6568,9 +6575,10 @@ function defaultAIModel(){
 
     return{
 
-        w:[0,0,0,0,0,0],
+        w:[0,0,0,0,0,0,0,0],
         b:0,
-        difficulty:1
+        difficulty:1,
+        rewardHistory:[]
 
     };
 
@@ -6624,6 +6632,16 @@ function loadAIModel(){
                         1.4
                     );
 
+                if(
+                    !Array.isArray(
+                        parsed.rewardHistory
+                    )
+                ){
+
+                    parsed.rewardHistory=[];
+
+                }
+
                 return parsed;
 
             }
@@ -6670,7 +6688,8 @@ let aiWindow={
     deaths:0,
     comboSum:0,
     comboSamples:0,
-    empUses:0
+    empUses:0,
+    taps:0
 
 };
 
@@ -6731,6 +6750,14 @@ function updateAIDifficulty(dt){
      *      so a small screen is inherently a bit harder even
      *      at identical settings. Read fresh each window in
      *      case the player resizes or rotates mid-run.
+     *   6. tap rate — every tap, hit or miss. This is distinct
+     *      from kill rate: someone tapping quickly but missing
+     *      a lot (because the field is too sparse to keep up
+     *      with) is exactly the "make it more active" signal.
+     *   7. predicted return likelihood, borrowed live from the
+     *      retention model below. This is the requested link
+     *      between the two models — see the caveat in the
+     *      reward comment just below.
      */
     const killRate=
         clamp(
@@ -6777,13 +6804,29 @@ function updateAIDifficulty(dt){
     const screenScale=
         screenScaleFeature();
 
+    const tapRate=
+        clamp(
+            aiWindow.taps/
+            windowSeconds/
+            2.5,
+            0,
+            1
+        );
+
+    const retentionEstimate=
+        predictRetention(
+            buildRetentionFeatures()
+        );
+
     const x=[
         killRate,
         deathOccurred,
         comboHealth,
         idleness,
         empPressure,
-        screenScale
+        screenScale,
+        tapRate,
+        retentionEstimate
     ];
 
     /*
@@ -6821,21 +6864,35 @@ function updateAIDifficulty(dt){
     /*
      * Reward the nudge in hindsight: reward pulling difficulty
      * UP when the player was cruising (killing steadily,
-     * healthy combo, no deaths, no EMP crutch); reward pulling
-     * it DOWN when they just died or leaned on the EMP a lot.
-     * A dead-quiet window (idle, no deaths) is read as "too
-     * easy" and nudges up gently; that only over-corrects if
-     * the player is also dying, which the death term already
-     * outweighs. Screen scale isn't rewarded/punished directly
-     * — it has no "good" or "bad" value of its own — it only
-     * earns a weight through how it correlates with the other
-     * terms above over time (e.g. if small-screen windows keep
-     * coinciding with deaths, its weight will drift negative).
+     * healthy combo, no deaths, no EMP crutch, tapping fast);
+     * reward pulling it DOWN when they just died or leaned on
+     * the EMP a lot. A dead-quiet window (idle, no deaths) is
+     * read as "too easy" and nudges up gently; that only
+     * over-corrects if the player is also dying, which the
+     * death term already outweighs. Screen scale and tap rate
+     * aren't rewarded/punished directly — they have no "good"
+     * or "bad" value of their own — they only earn a weight
+     * through how they correlate with the terms above over
+     * time (e.g. if fast-tapping windows keep coinciding with
+     * healthy combos rather than deaths, tap rate's weight
+     * will drift positive, meaning "an active player here is
+     * a cruising player, give them more to shoot").
+     *
+     * The requested link to the retention model: predicted
+     * return likelihood gets a direct, small reward weight of
+     * its own too. Worth being honest about the risk this
+     * carries — it's a real feedback loop, since the retention
+     * model's own inputs (session length, wave reached) are
+     * themselves shaped by what this model just did. Left
+     * unchecked that's how proxy metrics get "gamed" instead
+     * of genuinely improved, which is why its weight here is
+     * kept small relative to the direct, observed signals above.
      */
     let reward=
         killRate*.5+
         comboHealth*.4+
-        idleness*.15-
+        idleness*.15+
+        retentionEstimate*.2-
         deathOccurred*1.2-
         empPressure*.4;
 
@@ -6844,6 +6901,44 @@ function updateAIDifficulty(dt){
             reward,
             -1,
             1
+        );
+
+    /*
+     * Calibration-informed learning rate: keep a short rolling
+     * history of how large the reward correction had to be.
+     * Big, frequent corrections mean the model is still poorly
+     * matched to this player, so learn faster; small, settled
+     * corrections mean it's already roughly right, so slow
+     * down rather than keep chasing noise. There's no ground
+     * truth "correct difficulty" to check against, so this is
+     * a proxy for accuracy, not a measured one — flagged as
+     * such in the metrics tab.
+     */
+    const rewardHistory=
+        aiModel.rewardHistory ||
+        (aiModel.rewardHistory=[]);
+
+    const avgAbsReward=
+        rewardHistory.length
+        ?rewardHistory.reduce(
+            (a,b)=>a+Math.abs(b),
+            0
+        )/rewardHistory.length
+        :Math.abs(reward);
+
+    const calibration=
+        clamp(
+            1-avgAbsReward,
+            0,
+            1
+        );
+
+    const effectiveLearningRate=
+        AI_LEARNING_RATE*
+        clamp(
+            1.5-calibration,
+            .4,
+            1.5
         );
 
     for(
@@ -6855,7 +6950,7 @@ function updateAIDifficulty(dt){
         aiModel.w[i]=
             clamp(
                 aiModel.w[i]+
-                AI_LEARNING_RATE*
+                effectiveLearningRate*
                 reward*
                 x[i],
                 -2,
@@ -6867,11 +6962,23 @@ function updateAIDifficulty(dt){
     aiModel.b=
         clamp(
             aiModel.b+
-            AI_LEARNING_RATE*
+            effectiveLearningRate*
             reward*.5,
             -2,
             2
         );
+
+    rewardHistory.push(
+        reward
+    );
+
+    if(
+        rewardHistory.length>12
+    ){
+
+        rewardHistory.shift();
+
+    }
 
     saveAIModel();
 
@@ -6883,6 +6990,8 @@ function updateAIDifficulty(dt){
         windowSeconds,
         previousDifficulty,
         newDifficulty:aiModel.difficulty,
+        calibration,
+        effectiveLearningRate,
         screenW:W,
         screenH:H,
         timestamp:Date.now()
@@ -6920,6 +7029,7 @@ function updateAIDifficulty(dt){
     aiWindow.comboSum=0;
     aiWindow.comboSamples=0;
     aiWindow.empUses=0;
+    aiWindow.taps=0;
 
 }
 
@@ -6951,10 +7061,11 @@ const RETENTION_MODEL_KEY=
 const SESSION_LOG_KEY=
     "asteroidImpactSessionLog";
 
-const RETENTION_FEATURE_COUNT=5;
+const RETENTION_FEATURE_COUNT=6;
 const RETENTION_LEARNING_RATE=.15;
 const RETENTION_WINDOW_DAYS=7;
 const SESSION_LOG_LIMIT=20;
+const RETENTION_ACCURACY_HISTORY_LIMIT=15;
 
 function sigmoid(z){
 
@@ -6966,10 +7077,11 @@ function defaultRetentionModel(){
 
     return{
 
-        w:[0,0,0,0,0],
+        w:[0,0,0,0,0,0],
         b:0,
         pending:null,
-        lastLabel:null
+        lastLabel:null,
+        history:[]
 
     };
 
@@ -7007,6 +7119,16 @@ function loadRetentionModel(){
                         0,
                         RETENTION_FEATURE_COUNT
                     );
+
+                if(
+                    !Array.isArray(
+                        parsed.history
+                    )
+                ){
+
+                    parsed.history=[];
+
+                }
 
                 return parsed;
 
@@ -7089,6 +7211,7 @@ let sessionLog=
     loadSessionLog();
 
 let sessionStartTime=0;
+let sessionTapCount=0;
 
 
 /*
@@ -7100,6 +7223,11 @@ let sessionStartTime=0;
  *   2. session length so far, normalized against 5 minutes
  *   3. waves survived, normalized against wave 15
  *   4. field intensity (adaptive difficulty) at this point
+ *   5. engagement — taps per second this session. A player
+ *      mashing away is a plausible sign of a session they're
+ *      enjoying enough to keep coming back to; a long, quiet
+ *      session with few taps might mean they walked away from
+ *      the tab, or that the pace didn't hold their attention.
  */
 function buildRetentionFeatures(){
 
@@ -7148,12 +7276,26 @@ function buildRetentionFeatures(){
             1
         );
 
+    const engagementNorm=
+        sessionSeconds>1
+        ?clamp(
+            (
+                sessionTapCount/
+                sessionSeconds
+            )/
+            2.5,
+            0,
+            1
+        )
+        :0;
+
     return[
         scoreRelative,
         isNewHigh,
         sessionLengthNorm,
         waveNorm,
-        difficultyNorm
+        difficultyNorm,
+        engagementNorm
     ];
 
 }
@@ -7176,6 +7318,46 @@ function predictRetention(x){
     }
 
     return sigmoid(z);
+
+}
+
+
+/*
+ * Rolling accuracy proxy for the retention model: since real
+ * labels do arrive here (unlike the difficulty model), this is
+ * a genuine accuracy measure — 1 minus the mean squared error
+ * (Brier score) between what it predicted and what actually
+ * happened, over its most recent graded predictions. Returns
+ * null until there's at least one graded prediction to judge.
+ */
+function retentionAccuracy(){
+
+    if(
+        !retentionModel.history ||
+        !retentionModel.history.length
+    ){
+
+        return null;
+
+    }
+
+    const brier=
+        retentionModel.history.reduce(
+            (sum,entry)=>
+                sum+
+                (
+                    entry.predicted-
+                    entry.actual
+                )**2,
+            0
+        )/
+        retentionModel.history.length;
+
+    return clamp(
+        1-brier,
+        0,
+        1
+    );
 
 }
 
@@ -7211,6 +7393,25 @@ function processPendingRetentionLabel(){
     const error=
         label-p;
 
+    /*
+     * Calibration-informed learning rate, using accuracy over
+     * the track record BEFORE this new sample: badly-calibrated
+     * so far -> learn faster from this new evidence; already
+     * accurate -> take a smaller, more cautious step.
+     */
+    const priorAccuracy=
+        retentionAccuracy();
+
+    const effectiveLearningRate=
+        priorAccuracy===null
+        ?RETENTION_LEARNING_RATE
+        :RETENTION_LEARNING_RATE*
+        clamp(
+            1.5-priorAccuracy,
+            .4,
+            1.5
+        );
+
     for(
         let i=0;
         i<RETENTION_FEATURE_COUNT;
@@ -7218,20 +7419,42 @@ function processPendingRetentionLabel(){
     ){
 
         retentionModel.w[i]+=
-            RETENTION_LEARNING_RATE*
+            effectiveLearningRate*
             error*
             x[i];
 
     }
 
     retentionModel.b+=
-        RETENTION_LEARNING_RATE*
+        effectiveLearningRate*
         error*.5;
+
+    if(!retentionModel.history){
+
+        retentionModel.history=[];
+
+    }
+
+    retentionModel.history.push({
+        predicted:p,
+        actual:label
+    });
+
+    if(
+        retentionModel.history.length>
+        RETENTION_ACCURACY_HISTORY_LIMIT
+    ){
+
+        retentionModel.history.shift();
+
+    }
 
     retentionModel.lastLabel={
         label,
         predicted:p,
         gapDays,
+        priorAccuracy,
+        effectiveLearningRate,
         appliedAt:Date.now()
     };
 
@@ -9004,9 +9227,12 @@ function startGame(){
     aiWindow.comboSum=0;
     aiWindow.comboSamples=0;
     aiWindow.empUses=0;
+    aiWindow.taps=0;
 
     sessionStartTime=
         Date.now();
+
+    sessionTapCount=0;
 
     shake=0;
 
@@ -9173,6 +9399,17 @@ function handlePointer(event){
     event.preventDefault();
 
     initAudio();
+
+    /*
+     * Counted whether this tap lands a hit or not — this is
+     * the player's raw input/action rate, distinct from kill
+     * rate. Someone tapping fast but missing (because the
+     * field is too sparse) is exactly the signal the adaptive
+     * model needs to know the pace should pick up.
+     */
+    aiWindow.taps++;
+
+    sessionTapCount++;
 
     const p=
         pointerPosition(
@@ -9549,7 +9786,9 @@ const AI_FEATURE_LABELS=[
     "Combo health",
     "Idle window",
     "EMP reliance",
-    "Screen scale"
+    "Screen scale",
+    "Tap rate",
+    "Return likelihood"
 ];
 
 const RETENTION_FEATURE_LABELS=[
@@ -9557,7 +9796,8 @@ const RETENTION_FEATURE_LABELS=[
     "New high score",
     "Session length",
     "Wave progress",
-    "Field intensity"
+    "Field intensity",
+    "Engagement (taps/sec)"
 ];
 
 function formatSessionTime(t){
@@ -9611,11 +9851,14 @@ function renderAIMetrics(){
         '<div class="metric-callout">'+
         'Currently running the field at <b>'+
         aiModel.difficulty.toFixed(2)+'×</b>. '+
-        'A tiny linear model (6 inputs, 1 output, no library, '+
-        'runs entirely in your browser) re-checks every 5 '+
-        'seconds during a flight and nudges this number, then '+
+        'A tiny linear model ('+AI_FEATURE_COUNT+' inputs, 1 output, '+
+        'no library, runs entirely in your browser) re-checks every '+
+        '5 seconds during a flight and nudges this number, then '+
         'grades its own nudge afterwards and adjusts its weights — '+
-        'the same core update rule as a classic perceptron.'+
+        'the same core update rule as a classic perceptron. Two of '+
+        'its inputs are new: tap rate (are you trying to act faster '+
+        'than the field allows?) and the return-likelihood model\'s '+
+        'own live estimate, just below.'+
         '</div>';
 
     if(aiLastWindow){
@@ -9698,13 +9941,36 @@ function renderAIMetrics(){
             )+
             aiLastWindow.reward.toFixed(2)+
             ' (positive = "push harder was right", negative = '+
-            '"should have eased off") and fed back into the '+
-            'weights above at a '+AI_LEARNING_RATE+' learning rate. '+
-            'Screen was '+aiLastWindow.screenW.toFixed(0)+
+            '"should have eased off"). Screen was '+
+            aiLastWindow.screenW.toFixed(0)+
             '×'+aiLastWindow.screenH.toFixed(0)+
             'px for that reading — smaller screens read as less '+
             'reaction space, and the weight above shows whether '+
             'that has actually correlated with more deaths for you.'+
+            '</div>'+
+            '<div class="metric-group-title">Calibration</div>'+
+            metricRow(
+                "Stability (recent)",
+                aiLastWindow.calibration,
+                (
+                    aiLastWindow.calibration*100
+                ).toFixed(0)+"%"
+            )+
+            metricRow(
+                "Learning rate used",
+                aiLastWindow.effectiveLearningRate,
+                aiLastWindow.effectiveLearningRate.toFixed(3)+
+                " (base "+AI_LEARNING_RATE+")",
+                {min:0,max:AI_LEARNING_RATE*1.5}
+            )+
+            '<div class="metric-note">'+
+            'There\'s no ground truth for "the correct difficulty," '+
+            'so this stability score is a proxy, not a measured '+
+            'accuracy: it\'s how small the recent reward corrections '+
+            'have been. Frequent big corrections push the learning '+
+            'rate up (adapt faster to a player it doesn\'t understand '+
+            'yet); a settled, low-correction stretch pulls it back '+
+            'down (stop chasing noise once it\'s roughly right).'+
             '</div>';
 
     }else{
@@ -9740,7 +10006,9 @@ function renderAIMetrics(){
         'on how this run is going, it estimates <b>'+
         (liveP*100).toFixed(0)+'%</b>. It only finds out if it was '+
         'right the next time this page loads (whenever that is), '+
-        'so every prediction is honest but slow to grade.'+
+        'so every prediction is honest but slow to grade. Its '+
+        'estimate is also fed back into the difficulty model above '+
+        'as one of its inputs — the requested link between the two.'+
         '</div>';
 
     html+=
@@ -9807,6 +10075,40 @@ function renderAIMetrics(){
             'can only ever be inferred, never directly observed.'+
             '</div>';
 
+        const accuracy=
+            retentionAccuracy();
+
+        if(accuracy!==null){
+
+            html+=
+                '<div class="metric-group-title">Accuracy</div>'+
+                metricRow(
+                    "Accuracy (last "+
+                    retentionModel.history.length+
+                    " graded)",
+                    accuracy,
+                    (accuracy*100).toFixed(0)+"%"
+                )+
+                metricRow(
+                    "Learning rate used",
+                    retentionModel.lastLabel.effectiveLearningRate,
+                    retentionModel.lastLabel.effectiveLearningRate.toFixed(3)+
+                    " (base "+RETENTION_LEARNING_RATE+")",
+                    {min:0,max:RETENTION_LEARNING_RATE*1.5}
+                )+
+                '<div class="metric-note">'+
+                'This one is a real accuracy measure, not a proxy — '+
+                'it\'s graded against actual observed return gaps. '+
+                'Low accuracy raises the learning rate so the model '+
+                'corrects faster; once it\'s reliably right, the rate '+
+                'drops so a few noisy sessions can\'t swing it around. '+
+                'With only '+retentionModel.history.length+
+                ' graded session(s) so far this is a small sample — '+
+                'treat it as a direction, not a verdict.'+
+                '</div>';
+
+        }
+
     }else{
 
         html+=
@@ -9816,6 +10118,17 @@ function renderAIMetrics(){
             '</div>';
 
     }
+
+    html+=
+        '<div class="metric-note">'+
+        'Worth flagging: feeding this model\'s output into the '+
+        'difficulty model creates a real feedback loop, since some '+
+        'of what predicts retention (session length, wave reached) '+
+        'is itself shaped by what the difficulty model just did. '+
+        'That\'s a classic proxy-metric risk — worth watching for '+
+        'whether it starts optimizing for the number rather than '+
+        'genuinely better sessions.'+
+        '</div>';
 
     html+=
         '</div>';
