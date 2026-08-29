@@ -2291,7 +2291,7 @@ const PLANETS = [
         id:"mars",
         name:"Mars",
         tier:1,
-        requirement:3500,
+        requirement:7000,
         icon:"🔴",
         x:20,
         y:63,
@@ -2302,7 +2302,7 @@ const PLANETS = [
         id:"europa",
         name:"Europa",
         tier:1,
-        requirement:3500,
+        requirement:7000,
         icon:"🌕",
         x:50,
         y:57,
@@ -2313,7 +2313,7 @@ const PLANETS = [
         id:"titan",
         name:"Titan",
         tier:1,
-        requirement:3500,
+        requirement:7000,
         icon:"🟠",
         x:80,
         y:63,
@@ -2324,7 +2324,7 @@ const PLANETS = [
         id:"neptune",
         name:"Neptune",
         tier:2,
-        requirement:10500,
+        requirement:21000,
         icon:"🔵",
         x:18,
         y:38,
@@ -2335,7 +2335,7 @@ const PLANETS = [
         id:"kepler",
         name:"Kepler",
         tier:2,
-        requirement:10500,
+        requirement:21000,
         icon:"🪐",
         x:50,
         y:32,
@@ -2346,7 +2346,7 @@ const PLANETS = [
         id:"aurora",
         name:"Aurora",
         tier:2,
-        requirement:10500,
+        requirement:21000,
         icon:"🟣",
         x:82,
         y:38,
@@ -2357,7 +2357,7 @@ const PLANETS = [
         id:"helios",
         name:"Helios",
         tier:3,
-        requirement:23000,
+        requirement:46000,
         icon:"☀️",
         x:30,
         y:16,
@@ -2368,7 +2368,7 @@ const PLANETS = [
         id:"nova",
         name:"Nova",
         tier:3,
-        requirement:23000,
+        requirement:46000,
         icon:"💠",
         x:70,
         y:16,
@@ -2379,7 +2379,7 @@ const PLANETS = [
         id:"zenith",
         name:"Zenith",
         tier:4,
-        requirement:47000,
+        requirement:94000,
         icon:"⭐",
         x:50,
         y:5,
@@ -2626,7 +2626,72 @@ let shockwaves=[];
 
 const FIELD_MIN_TIME=12;
 
-const PLANET_APPROACH_POINTS=3500;
+/*
+ * Doubled per feedback — reaching each planet should take
+ * meaningfully longer now that scoring paces faster.
+ */
+const PLANET_APPROACH_POINTS=7000;
+
+/*
+ * A queued transition out of the current field (either "arrive
+ * at the planet" or "head to interplanetary space"). Rather
+ * than cutting the field the instant a score threshold is
+ * crossed, we stop spawning and wait for it to end on a clean
+ * beat — either the player finishes clearing it, or a short
+ * safety timeout does a visible sweep so a stalled field can
+ * never soft-lock progress.
+ */
+let pendingFieldExit=null;
+let pendingFieldExitTimer=0;
+const PENDING_FIELD_EXIT_TIMEOUT=12;
+
+function requestFieldExit(fn){
+
+    if(pendingFieldExit)
+        return;
+
+    pendingFieldExit=fn;
+
+    pendingFieldExitTimer=0;
+
+    /*
+     * Infinity rather than a flag: the existing ambient-spawn
+     * check already reads "spawnTimer<=0", so this alone stops
+     * new asteroids without touching that logic at all. The
+     * next field resets it normally via enterAsteroidField().
+     */
+    spawnTimer=Infinity;
+
+    floatingText(
+        "FIELD CLEARING",
+        W/2,
+        H*.3,
+        "#8de7ff"
+    );
+
+}
+
+function sweepRemainingAsteroids(){
+
+    empBurstRemaining=
+        Math.min(
+            40,
+            asteroids.length*4
+        );
+
+    while(
+        asteroids.length>0
+    ){
+
+        detonateAsteroid(
+            asteroids.length-1,
+            false,
+            true
+        );
+
+    }
+
+}
 
 
 /* =========================================================
@@ -3669,16 +3734,47 @@ class Asteroid{
             ?random(28,45)
             :random(45,70);
 
-        const difficultyBoost=
-            (
+        /*
+         * Speed scaling, reworked so it can't run away:
+         *   - wave's own contribution is now small and capped
+         *     (1.5x max on its own), rather than compounding
+         *     unbounded with everything else;
+         *   - the AI's learned difficulty dial is the primary
+         *     authority over pace, exactly as requested — it's
+         *     already tuned from this player's actual death
+         *     rate and combo health, so it's a far better judge
+         *     of "how fast is too fast" than a flat wave count;
+         *   - screen size is normalized in directly: the same
+         *     px/sec value crosses a small screen much quicker
+         *     than a large one, which is very likely why
+         *     wrapped asteroids felt unreasonably fast on
+         *     smaller displays. This keeps crossing time
+         *     roughly consistent across screen sizes.
+         */
+        const waveSpeedFactor=
+            clamp(
                 1+
-                wave*.055
-            )*
+                wave*.025,
+                1,
+                1.5
+            );
+
+        const screenSpeedFactor=
+            clamp(
+                Math.hypot(W,H)/
+                AI_REFERENCE_DIAGONAL,
+                .55,
+                1.15
+            );
+
+        const difficultyBoost=
+            waveSpeedFactor*
             clamp(
                 aiModel.difficulty,
-                .85,
-                1.2
-            );
+                .8,
+                1.25
+            )*
+            screenSpeedFactor;
 
         this.vx=
             dx/length*
@@ -4366,35 +4462,76 @@ function getAsteroidType(){
 }
 
 
+/*
+ * Size mix is now governed by the same learned difficulty
+ * dial as pace and speed, rather than fixed thresholds. As
+ * the AI's adaptive intensity rises, the mix shifts away from
+ * a swarm of small fodder asteroids toward fewer, more
+ * meaningful medium/large ones — small rocks stop dominating
+ * the field once the model judges the player ready for more.
+ */
+function rollAsteroidSize(){
+
+    const intensity=
+        clamp(
+            (
+                aiModel.difficulty-.7
+            )/
+            (1.4-.7),
+            0,
+            1
+        );
+
+    const size3Chance=
+        (
+            wave>=4
+            ?.10
+            :0
+        )+
+        intensity*.12;
+
+    const size2Chance=
+        (
+            wave>=2
+            ?.28
+            :.12
+        )+
+        intensity*.18;
+
+    const roll=
+        Math.random();
+
+    if(
+        wave>=4 &&
+        roll<size3Chance
+    ){
+
+        return 3;
+
+    }
+
+    if(
+        roll<
+        size3Chance+
+        size2Chance
+    ){
+
+        return 2;
+
+    }
+
+    return 1;
+
+}
+
+
 function spawnAsteroid(){
 
     const pos=
         edgeSpawn();
 
-    let size=1;
-
-    const roll=
-        Math.random();
-
-    /*
-     * Big rocks eased in later and a little
-     * rarer, so early waves stay approachable.
-     */
-    if(
-        wave>=4 &&
-        roll<.13
-    ){
-
-        size=3;
-
-    }else if(
-        wave>=2 &&
-        roll<.36
-    ){
-
-        size=2;
-
-    }
+    const size=
+        rollAsteroidSize();
 
     asteroids.push(
         new Asteroid(
@@ -4438,7 +4575,8 @@ function spawnWaveBurst(){
                     running &&
                     worldState==="field" &&
                     !paused &&
-                    !gameOver
+                    !gameOver &&
+                    !pendingFieldExit
                 ){
 
                     spawnAsteroid();
@@ -6578,7 +6716,9 @@ function defaultAIModel(){
         w:[0,0,0,0,0,0,0,0],
         b:0,
         difficulty:1,
-        rewardHistory:[]
+        rewardHistory:[],
+        skillEstimate:0,
+        skillSamples:0
 
     };
 
@@ -6639,6 +6779,24 @@ function loadAIModel(){
                 ){
 
                     parsed.rewardHistory=[];
+
+                }
+
+                if(
+                    typeof parsed.skillEstimate!==
+                    "number"
+                ){
+
+                    parsed.skillEstimate=0;
+
+                }
+
+                if(
+                    typeof parsed.skillSamples!==
+                    "number"
+                ){
+
+                    parsed.skillSamples=0;
 
                 }
 
@@ -6853,12 +7011,76 @@ function updateAIDifficulty(dt){
     const previousDifficulty=
         aiModel.difficulty;
 
+    /*
+     * Skill trend: an exponentially-weighted rolling estimate
+     * of THIS player's own typical performance (kill rate +
+     * combo health), built up across windows and persisted
+     * across sessions. Comparing the current window against
+     * their own baseline — rather than some fixed universal
+     * bar — is what lets the model push a genuinely improving
+     * player harder while it eases off a struggling one,
+     * without ever assuming a beginner's normal pace is "bad"
+     * just because it's lower than a veteran's would be.
+     */
+    const currentPerformance=
+        clamp(
+            killRate*.6+
+            comboHealth*.4,
+            0,
+            1
+        );
+
+    const warmedUp=
+        aiModel.skillSamples>=6;
+
+    if(!warmedUp){
+
+        aiModel.skillEstimate=
+            aiModel.skillSamples===0
+            ?currentPerformance
+            :(
+                aiModel.skillEstimate*
+                aiModel.skillSamples+
+                currentPerformance
+            )/
+            (aiModel.skillSamples+1);
+
+        aiModel.skillSamples++;
+
+    }else{
+
+        aiModel.skillEstimate=
+            aiModel.skillEstimate*.9+
+            currentPerformance*.1;
+
+    }
+
+    const skillDelta=
+        clamp(
+            currentPerformance-
+            aiModel.skillEstimate,
+            -1,
+            1
+        );
+
+    /*
+     * A brand-new/unproven player (still warming up the
+     * baseline above) gets a much lower difficulty ceiling —
+     * the model simply doesn't have enough of a read on them
+     * yet to justify pushing hard, so it plays it safe until
+     * it does.
+     */
+    const difficultyCeiling=
+        warmedUp
+        ?1.4
+        :1.15;
+
     aiModel.difficulty=
         clamp(
             aiModel.difficulty+
             nudge*.1,
             .7,
-            1.4
+            difficultyCeiling
         );
 
     /*
@@ -6878,6 +7100,15 @@ function updateAIDifficulty(dt){
      * will drift positive, meaning "an active player here is
      * a cruising player, give them more to shoot").
      *
+     * The skill-trend term is the direct implementation of
+     * "push to improve skill without over-challenging developing
+     * players": it rewards pushing difficulty specifically when
+     * the player is outperforming their OWN recent normal
+     * (skillDelta positive — they're in the zone, growing),
+     * and punishes it when they're underperforming their own
+     * normal (skillDelta negative — struggling relative to
+     * themselves specifically, not some universal bar).
+     *
      * The requested link to the retention model: predicted
      * return likelihood gets a direct, small reward weight of
      * its own too. Worth being honest about the risk this
@@ -6892,7 +7123,8 @@ function updateAIDifficulty(dt){
         killRate*.5+
         comboHealth*.4+
         idleness*.15+
-        retentionEstimate*.2-
+        retentionEstimate*.2+
+        skillDelta*.35-
         deathOccurred*1.2-
         empPressure*.4;
 
@@ -6992,6 +7224,11 @@ function updateAIDifficulty(dt){
         newDifficulty:aiModel.difficulty,
         calibration,
         effectiveLearningRate,
+        skillEstimate:aiModel.skillEstimate,
+        currentPerformance,
+        skillDelta,
+        warmedUp,
+        difficultyCeiling,
         screenW:W,
         screenH:H,
         timestamp:Date.now()
@@ -7061,7 +7298,7 @@ const RETENTION_MODEL_KEY=
 const SESSION_LOG_KEY=
     "asteroidImpactSessionLog";
 
-const RETENTION_FEATURE_COUNT=6;
+const RETENTION_FEATURE_COUNT=7;
 const RETENTION_LEARNING_RATE=.15;
 const RETENTION_WINDOW_DAYS=7;
 const SESSION_LOG_LIMIT=20;
@@ -7073,15 +7310,24 @@ function sigmoid(z){
 
 }
 
+function todayKey(){
+
+    return new Date().toISOString().slice(0,10);
+
+}
+
 function defaultRetentionModel(){
 
     return{
 
-        w:[0,0,0,0,0,0],
+        w:[0,0,0,0,0,0,0],
         b:0,
         pending:null,
         lastLabel:null,
-        history:[]
+        history:[],
+        lastVisitDate:null,
+        visitsToday:0,
+        visitsTodayDate:null
 
     };
 
@@ -7127,6 +7373,33 @@ function loadRetentionModel(){
                 ){
 
                     parsed.history=[];
+
+                }
+
+                if(
+                    parsed.lastVisitDate===
+                    undefined
+                ){
+
+                    parsed.lastVisitDate=null;
+
+                }
+
+                if(
+                    typeof parsed.visitsToday!==
+                    "number"
+                ){
+
+                    parsed.visitsToday=0;
+
+                }
+
+                if(
+                    parsed.visitsTodayDate===
+                    undefined
+                ){
+
+                    parsed.visitsTodayDate=null;
 
                 }
 
@@ -7212,6 +7485,8 @@ let sessionLog=
 
 let sessionStartTime=0;
 let sessionTapCount=0;
+let sessionTryAgains=0;
+let hasStartedOnce=false;
 
 
 /*
@@ -7228,6 +7503,10 @@ let sessionTapCount=0;
  *      enjoying enough to keep coming back to; a long, quiet
  *      session with few taps might mean they walked away from
  *      the tab, or that the pace didn't hold their attention.
+ *   6. try-agains already this sitting — hitting "play again"
+ *      repeatedly, right now, is the single fastest and most
+ *      direct enjoyment signal available: no multi-day wait
+ *      needed to know they wanted more.
  */
 function buildRetentionFeatures(){
 
@@ -7289,13 +7568,21 @@ function buildRetentionFeatures(){
         )
         :0;
 
+    const tryAgainNorm=
+        clamp(
+            sessionTryAgains/3,
+            0,
+            1
+        );
+
     return[
         scoreRelative,
         isNewHigh,
         sessionLengthNorm,
         waveNorm,
         difficultyNorm,
-        engagementNorm
+        engagementNorm,
+        tryAgainNorm
     ];
 
 }
@@ -7367,25 +7654,14 @@ function retentionAccuracy(){
  * pending prediction, we now know how long it's actually
  * been, so we can finally give the model real feedback on it.
  */
-function processPendingRetentionLabel(){
-
-    if(!retentionModel.pending)
-        return;
-
-    const gapMs=
-        Date.now()-
-        retentionModel.pending.timestamp;
-
-    const gapDays=
-        gapMs/86400000;
-
-    const label=
-        gapDays<=RETENTION_WINDOW_DAYS
-        ?1
-        :0;
-
-    const x=
-        retentionModel.pending.features;
+/*
+ * Shared weight-update step used by every path that grades a
+ * pending prediction — immediate same-sitting retries, and
+ * the delayed next-page-load path below. label is continuous
+ * (0..1), not strictly binary, so "sort of came back" can be
+ * represented honestly rather than forced into a yes/no.
+ */
+function applyRetentionLabel(x,label,meta){
 
     const p=
         predictRetention(x);
@@ -7452,7 +7728,12 @@ function processPendingRetentionLabel(){
     retentionModel.lastLabel={
         label,
         predicted:p,
-        gapDays,
+        gapDays:
+            meta.gapDays!==undefined
+            ?meta.gapDays
+            :0,
+        sameDay:!!meta.sameDay,
+        immediate:!!meta.immediate,
         priorAccuracy,
         effectiveLearningRate,
         appliedAt:Date.now()
@@ -7461,6 +7742,141 @@ function processPendingRetentionLabel(){
     retentionModel.pending=null;
 
     saveRetentionModel();
+
+}
+
+
+/*
+ * Fires the moment the player hits "play again" in the same
+ * sitting as the run that was just predicted for. This is the
+ * fastest, highest-confidence positive signal available — no
+ * need to wait days to find out they wanted more.
+ */
+function gradeImmediateRetry(){
+
+    if(!retentionModel.pending)
+        return;
+
+    applyRetentionLabel(
+        retentionModel.pending.features,
+        1,
+        {
+            gapDays:0,
+            sameDay:true,
+            immediate:true
+        }
+    );
+
+}
+
+
+/*
+ * Runs once per page load: rolls the daily visit counter
+ * (reset when the calendar date changes), used both to detect
+ * a same-day return and to give a small bonus for multiple
+ * visits in one day — real, if modest, evidence of enjoyment
+ * that a single 7-day yes/no could never capture.
+ */
+function trackDailyVisit(){
+
+    const key=
+        todayKey();
+
+    if(
+        retentionModel.visitsTodayDate!==
+        key
+    ){
+
+        retentionModel.visitsTodayDate=
+            key;
+
+        retentionModel.visitsToday=0;
+
+    }
+
+    retentionModel.visitsToday++;
+
+    retentionModel.lastVisitDate=
+        key;
+
+    saveRetentionModel();
+
+}
+
+trackDailyVisit();
+
+
+/*
+ * Runs once on page load: if a previous session left a
+ * pending prediction, we now know how long it's actually
+ * been, so we can finally give the model real feedback on it.
+ * Label is continuous rather than a strict 7-day yes/no: a
+ * same-day return is the strongest evidence, a multi-day
+ * return within the window still counts but less, and today's
+ * visit frequency adds a small bonus on top.
+ */
+function processPendingRetentionLabel(){
+
+    if(!retentionModel.pending)
+        return;
+
+    const gapMs=
+        Date.now()-
+        retentionModel.pending.timestamp;
+
+    const gapDays=
+        gapMs/86400000;
+
+    const sameDay=
+        todayKey()===
+        new Date(
+            retentionModel.pending.timestamp
+        ).toISOString().slice(0,10);
+
+    let label;
+
+    if(
+        gapDays>RETENTION_WINDOW_DAYS
+    ){
+
+        label=0;
+
+    }else if(sameDay){
+
+        label=1;
+
+    }else if(
+        gapDays<=2
+    ){
+
+        label=.75;
+
+    }else{
+
+        label=.5;
+
+    }
+
+    label=
+        clamp(
+            label+
+            Math.max(
+                0,
+                retentionModel.visitsToday-1
+            )*.05,
+            0,
+            1
+        );
+
+    applyRetentionLabel(
+        retentionModel.pending.features,
+        label,
+        {
+            gapDays,
+            sameDay,
+            immediate:false
+        }
+    );
 
 }
 
@@ -8471,12 +8887,54 @@ function update(dt){
 
 
         /*
+         * Resolve a queued exit once the field has actually
+         * emptied out (or, failing that, once the safety
+         * timeout sweeps the last few stragglers) — this is
+         * what makes the transition land on a clean beat
+         * instead of cutting through live asteroids.
+         */
+        if(pendingFieldExit){
+
+            pendingFieldExitTimer+=dt;
+
+            if(
+                asteroids.length===0
+            ){
+
+                const fn=
+                    pendingFieldExit;
+
+                pendingFieldExit=null;
+
+                fn();
+
+            }else if(
+                pendingFieldExitTimer>
+                PENDING_FIELD_EXIT_TIMEOUT
+            ){
+
+                sweepRemainingAsteroids();
+
+                const fn=
+                    pendingFieldExit;
+
+                pendingFieldExit=null;
+
+                fn();
+
+            }
+
+        }
+
+
+        /*
          * Destination field -> planet.
          */
 
         if(
             running &&
             !gameOver &&
+            !pendingFieldExit &&
             planetPhasePending &&
             !planetPhaseCompleted
         ){
@@ -8492,7 +8950,9 @@ function update(dt){
                 FIELD_MIN_TIME
             ){
 
-                enterPlanetPhase();
+                requestFieldExit(
+                    enterPlanetPhase
+                );
 
             }
 
@@ -8506,6 +8966,7 @@ function update(dt){
         if(
             running &&
             !gameOver &&
+            !pendingFieldExit &&
             worldState==="field" &&
             !planetPhasePending
         ){
@@ -8541,7 +9002,9 @@ function update(dt){
                     FIELD_MIN_TIME
                 ){
 
-                    enterInterplanetary();
+                    requestFieldExit(
+                        enterInterplanetary
+                    );
 
                 }
 
@@ -9001,7 +9464,9 @@ function updateHUD(){
         empButton.innerHTML=
             "⚡<small>"+
             Math.floor(
-                empCharge
+                empCharge/
+                EMP_MAX*
+                100
             )+
             "%</small>";
 
@@ -9102,6 +9567,27 @@ let currentShipId=null;
 
 
 function startGame(){
+
+    /*
+     * Every call after the very first one this page load is a
+     * "try again" — the fastest, most direct enjoyment signal
+     * there is. If a prediction from the run that just ended
+     * is still waiting to be graded, grade it right now as a
+     * strong positive rather than waiting on a future reload.
+     */
+    if(hasStartedOnce){
+
+        sessionTryAgains++;
+
+        if(retentionModel.pending){
+
+            gradeImmediateRetry();
+
+        }
+
+    }
+
+    hasStartedOnce=true;
 
     initAudio();
 
@@ -9233,6 +9719,10 @@ function startGame(){
         Date.now();
 
     sessionTapCount=0;
+
+    pendingFieldExit=null;
+
+    pendingFieldExitTimer=0;
 
     shake=0;
 
@@ -9858,7 +10348,10 @@ function renderAIMetrics(){
         'the same core update rule as a classic perceptron. Two of '+
         'its inputs are new: tap rate (are you trying to act faster '+
         'than the field allows?) and the return-likelihood model\'s '+
-        'own live estimate, just below.'+
+        'own live estimate, just below. It also now tracks a '+
+        'rolling skill baseline for you specifically — see "Skill '+
+        'Trend" further down — so pushing harder is rewarded when '+
+        'you\'re outgrowing your own normal, not some fixed bar.'+
         '</div>';
 
     if(aiLastWindow){
@@ -9971,6 +10464,59 @@ function renderAIMetrics(){
             'rate up (adapt faster to a player it doesn\'t understand '+
             'yet); a settled, low-correction stretch pulls it back '+
             'down (stop chasing noise once it\'s roughly right).'+
+            '</div>'+
+            '<div class="metric-group-title">Skill Trend</div>'+
+            metricRow(
+                "This window's performance",
+                aiLastWindow.currentPerformance,
+                (
+                    aiLastWindow.currentPerformance*100
+                ).toFixed(0)+"%"
+            )+
+            metricRow(
+                "Your rolling baseline",
+                aiLastWindow.skillEstimate,
+                (
+                    aiLastWindow.skillEstimate*100
+                ).toFixed(0)+"%"
+            )+
+            metricRow(
+                "Vs your own baseline",
+                aiLastWindow.skillDelta,
+                (
+                    aiLastWindow.skillDelta>=0
+                    ?"+"
+                    :""
+                )+
+                (
+                    aiLastWindow.skillDelta*100
+                ).toFixed(0)+"%",
+                {min:-1,max:1}
+            )+
+            metricRow(
+                "Difficulty ceiling",
+                aiLastWindow.difficultyCeiling,
+                aiLastWindow.difficultyCeiling.toFixed(2)+
+                "× ("+
+                (
+                    aiLastWindow.warmedUp
+                    ?"warmed up"
+                    :"still learning you"
+                )+
+                ")",
+                {min:.7,max:1.4}
+            )+
+            '<div class="metric-note">'+
+            'This is the actual answer to "push players to get '+
+            'better without over-challenging developing ones": '+
+            'difficulty gets rewarded for rising specifically when '+
+            'you\'re outperforming your OWN rolling baseline above, '+
+            'not some universal bar — a beginner\'s normal pace is '+
+            'never treated as "bad" just because it\'s lower than a '+
+            'veteran\'s would be. And until it has seen at least 6 '+
+            'windows from you, the difficulty ceiling is capped at '+
+            '1.15× rather than the usual 1.4× — it won\'t push a '+
+            'player it doesn\'t understand yet into anything harsh.'+
             '</div>';
 
     }else{
@@ -10002,13 +10548,38 @@ function renderAIMetrics(){
         '<div class="metric-group-title">Return Likelihood</div>'+
         '<div class="metric-callout">'+
         'A second, separate model — logistic regression — predicts '+
-        'the chance you play again within 7 days. Right now, based '+
-        'on how this run is going, it estimates <b>'+
-        (liveP*100).toFixed(0)+'%</b>. It only finds out if it was '+
-        'right the next time this page loads (whenever that is), '+
-        'so every prediction is honest but slow to grade. Its '+
-        'estimate is also fed back into the difficulty model above '+
-        'as one of its inputs — the requested link between the two.'+
+        'how much you\'re enjoying this, using return behaviour as '+
+        'the proxy. It\'s no longer just a 7-day yes/no: a same-day '+
+        'return, today\'s visit count, and hitting "play again" '+
+        'right now in this same sitting all count as enjoyment '+
+        'evidence, graded at different strengths and speeds. Right '+
+        'now, based on how this run is going, it estimates <b>'+
+        (liveP*100).toFixed(0)+'%</b>. Its estimate is also fed '+
+        'back into the difficulty model above as one of its inputs '+
+        '— the requested link between the two.'+
+        '</div>'+
+        '<div class="metric-group-title">This sitting</div>'+
+        metricRow(
+            "Try-agains so far",
+            clamp(sessionTryAgains/3,0,1),
+            sessionTryAgains
+        )+
+        metricRow(
+            "Visits today",
+            clamp(
+                (retentionModel.visitsToday||1)/5,
+                0,
+                1
+            ),
+            retentionModel.visitsToday||1
+        )+
+        '<div class="metric-note">'+
+        'Try-agains are graded the fastest of all: the moment you '+
+        'hit play again, the PREVIOUS run\'s prediction is scored '+
+        'as a full positive immediately — no waiting on a future '+
+        'page load. Everything else (same-day return, multi-day '+
+        'return, visit frequency) is graded the next time this page '+
+        'loads, whenever that turns out to be.'+
         '</div>';
 
     html+=
@@ -10060,19 +10631,28 @@ function renderAIMetrics(){
             'Last graded prediction: guessed <b>'+
             (
                 retentionModel.lastLabel.predicted*100
-            ).toFixed(0)+'%</b>, actual gap before you came '+
-            'back was <b>'+
-            retentionModel.lastLabel.gapDays.toFixed(1)+
-            ' day(s)</b> — counted as a '+
+            ).toFixed(0)+'%</b>, graded as <b>'+
             (
-                retentionModel.lastLabel.label
-                ?"return"
-                :"miss"
+                retentionModel.lastLabel.label*100
+            ).toFixed(0)+'%</b> enjoyment — '+
+            (
+                retentionModel.lastLabel.immediate
+                ?"an immediate same-sitting retry (the strongest signal available)."
+                :retentionModel.lastLabel.sameDay
+                ?"a same-day return."
+                :retentionModel.lastLabel.gapDays<=RETENTION_WINDOW_DAYS
+                ?"a return after "+
+                retentionModel.lastLabel.gapDays.toFixed(1)+
+                " day(s), within the "+RETENTION_WINDOW_DAYS+"-day window."
+                :"a gap of "+
+                retentionModel.lastLabel.gapDays.toFixed(1)+
+                " day(s) — outside the "+RETENTION_WINDOW_DAYS+
+                "-day window, counted as a miss."
             )+
-            ' against the '+RETENTION_WINDOW_DAYS+'-day window. '+
-            'Known bias: a long gap gets labelled a "miss" even '+
-            'though you did eventually come back, since a "no" '+
-            'can only ever be inferred, never directly observed.'+
+            ' Known bias: a long gap still gets counted as a low '+
+            'score even though you did eventually come back, since '+
+            'a "no" can only ever be inferred, never directly '+
+            'observed.'+
             '</div>';
 
         const accuracy=
