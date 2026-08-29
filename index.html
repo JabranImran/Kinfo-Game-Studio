@@ -1541,6 +1541,141 @@ and (max-height:500px){
     transform:translateX(-50%) translateY(0);
 }
 
+
+/* =========================================================
+   PAUSE MENU — AI METRICS TAB
+========================================================= */
+
+.pause-tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:18px;
+}
+
+.pause-tab{
+    flex:1;
+    padding:10px 6px;
+    border:1px solid rgba(100,190,255,.22);
+    border-radius:11px;
+    background:rgba(255,255,255,.035);
+    color:#8fa7c7;
+    font-size:10.5px;
+    font-weight:800;
+    letter-spacing:.5px;
+    cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.pause-tab.active{
+    background:rgba(100,190,255,.18);
+    border-color:rgba(120,200,255,.55);
+    color:#bcecff;
+}
+
+.metric-group{
+    margin-bottom:18px;
+}
+
+.metric-group-title{
+    color:#70ddff;
+    font-size:10px;
+    font-weight:900;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    margin-bottom:9px;
+}
+
+.metric-callout{
+    background:rgba(100,190,255,.08);
+    border:1px solid rgba(100,190,255,.2);
+    border-radius:11px;
+    padding:11px 13px;
+    margin-bottom:12px;
+    font-size:11px;
+    color:#a9d4f0;
+    line-height:1.6;
+}
+
+.metric-callout b{
+    color:#8de7ff;
+}
+
+.metric-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:5px 0;
+    border-bottom:1px solid rgba(100,190,255,.08);
+    font-size:10px;
+}
+
+.metric-row:last-child{
+    border-bottom:none;
+}
+
+.metric-name{
+    color:#8fa7c7;
+    min-width:92px;
+    flex-shrink:0;
+}
+
+.metric-bar-track{
+    flex:1;
+    height:5px;
+    border-radius:3px;
+    background:rgba(100,190,255,.12);
+    overflow:hidden;
+}
+
+.metric-bar-fill{
+    height:100%;
+    background:linear-gradient(90deg,#63e6ff,#8de7ff);
+    border-radius:3px;
+}
+
+.metric-bar-fill.negative{
+    background:linear-gradient(90deg,#ff9d7a,#ff6b6b);
+}
+
+.metric-val{
+    color:#bcecff;
+    font-weight:800;
+    font-variant-numeric:tabular-nums;
+    min-width:70px;
+    text-align:right;
+    flex-shrink:0;
+    font-size:9.5px;
+}
+
+.metric-note{
+    font-size:9px;
+    color:#5c7ba0;
+    line-height:1.6;
+    margin-top:8px;
+}
+
+.metric-session-list{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    margin-top:8px;
+}
+
+.metric-session-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:9.5px;
+    color:#8fa7c7;
+    background:rgba(255,255,255,.03);
+    border-radius:7px;
+    padding:6px 9px;
+}
+
+.metric-session-row span:last-child{
+    color:#bcecff;
+    font-weight:700;
+}
+
 </style>
 
 </head>
@@ -1883,35 +2018,69 @@ and (max-height:500px){
 
     <div class="card">
 
-        <div class="game-over-title">
+        <div class="pause-tabs">
 
-            Mission Paused
+            <button
+                class="pause-tab active"
+                id="pauseTabBtnMenu"
+                type="button">
+
+                Menu
+
+            </button>
+
+            <button
+                class="pause-tab"
+                id="pauseTabBtnMetrics"
+                type="button">
+
+                🧠 AI Metrics
+
+            </button>
+
+        </div>
+
+        <div id="pauseTabMenu">
+
+            <div class="game-over-title">
+
+                Mission Paused
+
+            </div>
+
+            <div
+                class="logo"
+                style="font-size:40px">
+
+                PAUSED
+
+            </div>
+
+            <button
+                class="big-button"
+                id="resumeButton">
+
+                Resume
+
+            </button>
+
+            <button
+                class="big-button secondary-button"
+                id="pauseRestart">
+
+                Restart
+
+            </button>
 
         </div>
 
         <div
-            class="logo"
-            style="font-size:40px">
+            id="pauseTabMetrics"
+            class="hidden">
 
-            PAUSED
+            <div id="aiMetricsContent"></div>
 
         </div>
-
-        <button
-            class="big-button"
-            id="resumeButton">
-
-            Resume
-
-        </button>
-
-        <button
-            class="big-button secondary-button"
-            id="pauseRestart">
-
-            Restart
-
-        </button>
 
     </div>
 
@@ -6381,15 +6550,25 @@ let empBurstRemaining=0;
 const AI_MODEL_KEY=
     "asteroidImpactAIModel";
 
-const AI_FEATURE_COUNT=5;
+const AI_FEATURE_COUNT=6;
 const AI_INTERVAL=5;
 const AI_LEARNING_RATE=.06;
+
+/*
+ * Reference screen diagonal (px) used to normalize the
+ * "screen scale" feature below — chosen as a rough mid-point
+ * between a phone in portrait (~700-800px diagonal canvas)
+ * and a laptop window (~1300-1600px), so both ends of the
+ * range land in a sensible 0..1 band rather than one extreme
+ * always reading as 0 or 1.
+ */
+const AI_REFERENCE_DIAGONAL=1100;
 
 function defaultAIModel(){
 
     return{
 
-        w:[0,0,0,0,0],
+        w:[0,0,0,0,0,0],
         b:0,
         difficulty:1
 
@@ -6412,10 +6591,29 @@ function loadAIModel(){
                 JSON.parse(raw);
 
             if(
-                Array.isArray(parsed.w) &&
-                parsed.w.length===
-                AI_FEATURE_COUNT
+                Array.isArray(parsed.w)
             ){
+
+                /*
+                 * Migrate older saves (from before the screen
+                 * -size feature existed) by padding with a
+                 * neutral 0 weight rather than discarding
+                 * everything the model had already learned.
+                 */
+                while(
+                    parsed.w.length<
+                    AI_FEATURE_COUNT
+                ){
+
+                    parsed.w.push(0);
+
+                }
+
+                parsed.w=
+                    parsed.w.slice(
+                        0,
+                        AI_FEATURE_COUNT
+                    );
 
                 parsed.difficulty=
                     clamp(
@@ -6478,6 +6676,28 @@ let aiWindow={
 
 let aiTimer=0;
 
+/*
+ * Snapshot of the most recently completed learning window,
+ * kept purely for the AI Metrics tab in the pause menu — the
+ * model itself doesn't read this back.
+ */
+let aiLastWindow=null;
+
+
+function screenScaleFeature(){
+
+    const diagonal=
+        Math.hypot(W,H);
+
+    return clamp(
+        diagonal/
+        AI_REFERENCE_DIAGONAL,
+        0,
+        1
+    );
+
+}
+
 
 function updateAIDifficulty(dt){
 
@@ -6506,6 +6726,11 @@ function updateAIDifficulty(dt){
      *      mean it's too easy/boring, or too overwhelming
      *      to land a hit — reward/punish below tells them apart)
      *   4. how much they leaned on the EMP
+     *   5. screen scale — smaller play areas give less warning
+     *      distance/reaction time for the same asteroid speed,
+     *      so a small screen is inherently a bit harder even
+     *      at identical settings. Read fresh each window in
+     *      case the player resizes or rotates mid-run.
      */
     const killRate=
         clamp(
@@ -6549,12 +6774,16 @@ function updateAIDifficulty(dt){
             1
         );
 
+    const screenScale=
+        screenScaleFeature();
+
     const x=[
         killRate,
         deathOccurred,
         comboHealth,
         idleness,
-        empPressure
+        empPressure,
+        screenScale
     ];
 
     /*
@@ -6597,7 +6826,11 @@ function updateAIDifficulty(dt){
      * A dead-quiet window (idle, no deaths) is read as "too
      * easy" and nudges up gently; that only over-corrects if
      * the player is also dying, which the death term already
-     * outweighs.
+     * outweighs. Screen scale isn't rewarded/punished directly
+     * — it has no "good" or "bad" value of its own — it only
+     * earns a weight through how it correlates with the other
+     * terms above over time (e.g. if small-screen windows keep
+     * coinciding with deaths, its weight will drift negative).
      */
     let reward=
         killRate*.5+
@@ -6642,6 +6875,19 @@ function updateAIDifficulty(dt){
 
     saveAIModel();
 
+    aiLastWindow={
+        x,
+        z,
+        nudge,
+        reward,
+        windowSeconds,
+        previousDifficulty,
+        newDifficulty:aiModel.difficulty,
+        screenW:W,
+        screenH:H,
+        timestamp:Date.now()
+    };
+
     /*
      * Only surface it to the player when the shift is big
      * enough to actually matter, so this reads as the game
@@ -6674,6 +6920,364 @@ function updateAIDifficulty(dt){
     aiWindow.comboSum=0;
     aiWindow.comboSamples=0;
     aiWindow.empUses=0;
+
+}
+
+
+/* =========================================================
+   RETENTION MODEL (WILL THEY PLAY AGAIN?)
+========================================================= */
+
+/*
+ * A second, separate tiny model — logistic regression this
+ * time, since it's predicting a yes/no outcome rather than a
+ * continuous nudge. At the end of every session it looks at
+ * how that session went and predicts the probability the
+ * player comes back within a week. The honest part: we can
+ * only ever confirm a "yes" by directly observing them return
+ * — we can't observe a "no" except by inference (a long gap
+ * before they do eventually come back). So every prediction
+ * is stashed as "pending," and the NEXT time the game loads,
+ * we check how long it's been and use that gap as the label:
+ * <= 7 days counts as a return, longer counts as a miss. That
+ * label trains the model with a real (if delayed and slightly
+ * biased — see the note in the metrics tab) gradient step,
+ * the same idea as the difficulty model above.
+ */
+
+const RETENTION_MODEL_KEY=
+    "asteroidImpactRetentionModel";
+
+const SESSION_LOG_KEY=
+    "asteroidImpactSessionLog";
+
+const RETENTION_FEATURE_COUNT=5;
+const RETENTION_LEARNING_RATE=.15;
+const RETENTION_WINDOW_DAYS=7;
+const SESSION_LOG_LIMIT=20;
+
+function sigmoid(z){
+
+    return 1/(1+Math.exp(-z));
+
+}
+
+function defaultRetentionModel(){
+
+    return{
+
+        w:[0,0,0,0,0],
+        b:0,
+        pending:null,
+        lastLabel:null
+
+    };
+
+}
+
+function loadRetentionModel(){
+
+    try{
+
+        const raw=
+            localStorage.getItem(
+                RETENTION_MODEL_KEY
+            );
+
+        if(raw){
+
+            const parsed=
+                JSON.parse(raw);
+
+            if(
+                Array.isArray(parsed.w)
+            ){
+
+                while(
+                    parsed.w.length<
+                    RETENTION_FEATURE_COUNT
+                ){
+
+                    parsed.w.push(0);
+
+                }
+
+                parsed.w=
+                    parsed.w.slice(
+                        0,
+                        RETENTION_FEATURE_COUNT
+                    );
+
+                return parsed;
+
+            }
+
+        }
+
+    }catch(error){
+
+        console.warn(
+            "Could not load retention model",
+            error
+        );
+
+    }
+
+    return defaultRetentionModel();
+
+}
+
+function saveRetentionModel(){
+
+    try{
+
+        localStorage.setItem(
+            RETENTION_MODEL_KEY,
+            JSON.stringify(retentionModel)
+        );
+
+    }catch(error){}
+
+}
+
+function loadSessionLog(){
+
+    try{
+
+        const raw=
+            localStorage.getItem(
+                SESSION_LOG_KEY
+            );
+
+        if(raw){
+
+            const parsed=
+                JSON.parse(raw);
+
+            if(Array.isArray(parsed))
+                return parsed;
+
+        }
+
+    }catch(error){}
+
+    return[];
+
+}
+
+function saveSessionLog(){
+
+    try{
+
+        localStorage.setItem(
+            SESSION_LOG_KEY,
+            JSON.stringify(
+                sessionLog.slice(
+                    -SESSION_LOG_LIMIT
+                )
+            )
+        );
+
+    }catch(error){}
+
+}
+
+let retentionModel=
+    loadRetentionModel();
+
+let sessionLog=
+    loadSessionLog();
+
+let sessionStartTime=0;
+
+
+/*
+ * Builds the retention feature vector, normalized to 0..1.
+ * Callable both mid-run (for a live "if I quit now" reading
+ * in the metrics tab) and at the real end of a session.
+ *   0. score relative to personal best
+ *   1. whether this run set a new high score
+ *   2. session length so far, normalized against 5 minutes
+ *   3. waves survived, normalized against wave 15
+ *   4. field intensity (adaptive difficulty) at this point
+ */
+function buildRetentionFeatures(){
+
+    const scoreRelative=
+        clamp(
+            score/
+            Math.max(highScore,1),
+            0,
+            1
+        );
+
+    const isNewHigh=
+        score>highScore
+        ?1
+        :0;
+
+    const sessionSeconds=
+        sessionStartTime
+        ?(
+            Date.now()-
+            sessionStartTime
+        )/1000
+        :0;
+
+    const sessionLengthNorm=
+        clamp(
+            sessionSeconds/300,
+            0,
+            1
+        );
+
+    const waveNorm=
+        clamp(
+            wave/15,
+            0,
+            1
+        );
+
+    const difficultyNorm=
+        clamp(
+            (
+                aiModel.difficulty-.7
+            )/
+            (1.4-.7),
+            0,
+            1
+        );
+
+    return[
+        scoreRelative,
+        isNewHigh,
+        sessionLengthNorm,
+        waveNorm,
+        difficultyNorm
+    ];
+
+}
+
+function predictRetention(x){
+
+    let z=
+        retentionModel.b;
+
+    for(
+        let i=0;
+        i<RETENTION_FEATURE_COUNT;
+        i++
+    ){
+
+        z+=
+            retentionModel.w[i]*
+            x[i];
+
+    }
+
+    return sigmoid(z);
+
+}
+
+
+/*
+ * Runs once on page load: if a previous session left a
+ * pending prediction, we now know how long it's actually
+ * been, so we can finally give the model real feedback on it.
+ */
+function processPendingRetentionLabel(){
+
+    if(!retentionModel.pending)
+        return;
+
+    const gapMs=
+        Date.now()-
+        retentionModel.pending.timestamp;
+
+    const gapDays=
+        gapMs/86400000;
+
+    const label=
+        gapDays<=RETENTION_WINDOW_DAYS
+        ?1
+        :0;
+
+    const x=
+        retentionModel.pending.features;
+
+    const p=
+        predictRetention(x);
+
+    const error=
+        label-p;
+
+    for(
+        let i=0;
+        i<RETENTION_FEATURE_COUNT;
+        i++
+    ){
+
+        retentionModel.w[i]+=
+            RETENTION_LEARNING_RATE*
+            error*
+            x[i];
+
+    }
+
+    retentionModel.b+=
+        RETENTION_LEARNING_RATE*
+        error*.5;
+
+    retentionModel.lastLabel={
+        label,
+        predicted:p,
+        gapDays,
+        appliedAt:Date.now()
+    };
+
+    retentionModel.pending=null;
+
+    saveRetentionModel();
+
+}
+
+processPendingRetentionLabel();
+
+
+/*
+ * Called at the real end of a session: predicts P(return),
+ * stashes it as pending for next load to grade, and logs the
+ * session for the trend view in the metrics tab.
+ */
+function recordSessionOutcome(isNewRecord){
+
+    const x=
+        buildRetentionFeatures();
+
+    const predicted=
+        predictRetention(x);
+
+    retentionModel.pending={
+
+        timestamp:Date.now(),
+        features:x,
+        predicted
+
+    };
+
+    saveRetentionModel();
+
+    sessionLog.push({
+
+        t:Date.now(),
+        score,
+        wave,
+        newHigh:isNewRecord?1:0,
+        predicted
+
+    });
+
+    saveSessionLog();
 
 }
 
@@ -8239,6 +8843,10 @@ function endGame(){
         isNewRecord
     );
 
+    recordSessionOutcome(
+        isNewRecord
+    );
+
     playerNameInput.value=
         localStorage.getItem(
             "asteroidImpactPlayerName"
@@ -8397,6 +9005,9 @@ function startGame(){
     aiWindow.comboSamples=0;
     aiWindow.empUses=0;
 
+    sessionStartTime=
+        Date.now();
+
     shake=0;
 
     asteroids=[];
@@ -8487,6 +9098,11 @@ function pauseGame(){
         return;
 
     paused=true;
+
+    switchPauseTab(
+        "menu",
+        true
+    );
 
     pauseScreen.classList.remove(
         "hidden"
@@ -8797,6 +9413,523 @@ document
         passive:false
     }
 );
+
+
+/* =========================================================
+   AI METRICS TAB
+========================================================= */
+
+function switchPauseTab(tab, silent){
+
+    if(!silent){
+
+        sound("click");
+
+    }
+
+    document.getElementById(
+        "pauseTabBtnMenu"
+    ).classList.toggle(
+        "active",
+        tab==="menu"
+    );
+
+    document.getElementById(
+        "pauseTabBtnMetrics"
+    ).classList.toggle(
+        "active",
+        tab==="metrics"
+    );
+
+    document.getElementById(
+        "pauseTabMenu"
+    ).classList.toggle(
+        "hidden",
+        tab!=="menu"
+    );
+
+    document.getElementById(
+        "pauseTabMetrics"
+    ).classList.toggle(
+        "hidden",
+        tab!=="metrics"
+    );
+
+    if(tab==="metrics"){
+
+        renderAIMetrics();
+
+    }
+
+}
+
+document
+.getElementById(
+    "pauseTabBtnMenu"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        switchPauseTab("menu");
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "pauseTabBtnMetrics"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        switchPauseTab("metrics");
+
+    },
+    {passive:false}
+);
+
+
+/*
+ * One row: a label, a 0..1 (or -1..1 for weights) bar, and a
+ * numeric readout. Shared by every metrics section so the
+ * whole tab reads consistently.
+ */
+function metricRow(name, value, displayValue, options){
+
+    options=
+        options || {};
+
+    const min=
+        options.min!==undefined
+        ?options.min
+        :0;
+
+    const max=
+        options.max!==undefined
+        ?options.max
+        :1;
+
+    const fraction=
+        clamp(
+            (value-min)/
+            (max-min),
+            0,
+            1
+        );
+
+    const negative=
+        value<0;
+
+    return(
+        '<div class="metric-row">'+
+            '<div class="metric-name">'+name+'</div>'+
+            '<div class="metric-bar-track">'+
+                '<div class="metric-bar-fill'+
+                (negative ? ' negative' : '')+
+                '" style="width:'+(fraction*100).toFixed(0)+'%"></div>'+
+            '</div>'+
+            '<div class="metric-val">'+displayValue+'</div>'+
+        '</div>'
+    );
+
+}
+
+const AI_FEATURE_LABELS=[
+    "Kill rate",
+    "Just died",
+    "Combo health",
+    "Idle window",
+    "EMP reliance",
+    "Screen scale"
+];
+
+const RETENTION_FEATURE_LABELS=[
+    "Score vs best",
+    "New high score",
+    "Session length",
+    "Wave progress",
+    "Field intensity"
+];
+
+function formatSessionTime(t){
+
+    const d=
+        new Date(t);
+
+    const now=
+        Date.now();
+
+    const diffHours=
+        (now-t)/3600000;
+
+    if(diffHours<24){
+
+        return d.toLocaleTimeString(
+            [],
+            {
+                hour:"2-digit",
+                minute:"2-digit"
+            }
+        );
+
+    }
+
+    return d.toLocaleDateString(
+        [],
+        {
+            month:"short",
+            day:"numeric"
+        }
+    );
+
+}
+
+function renderAIMetrics(){
+
+    const container=
+        document.getElementById(
+            "aiMetricsContent"
+        );
+
+    let html="";
+
+
+    /* -------- Adaptive difficulty model -------- */
+
+    html+=
+        '<div class="metric-group">'+
+        '<div class="metric-group-title">Adaptive Difficulty</div>'+
+        '<div class="metric-callout">'+
+        'Currently running the field at <b>'+
+        aiModel.difficulty.toFixed(2)+'×</b>. '+
+        'A tiny linear model (6 inputs, 1 output, no library, '+
+        'runs entirely in your browser) re-checks every 5 '+
+        'seconds during a flight and nudges this number, then '+
+        'grades its own nudge afterwards and adjusts its weights — '+
+        'the same core update rule as a classic perceptron.'+
+        '</div>';
+
+    if(aiLastWindow){
+
+        html+=
+            '<div class="metric-group-title">Last window\'s inputs</div>';
+
+        for(
+            let i=0;
+            i<AI_FEATURE_COUNT;
+            i++
+        ){
+
+            html+=
+                metricRow(
+                    AI_FEATURE_LABELS[i],
+                    aiLastWindow.x[i],
+                    aiLastWindow.x[i].toFixed(2)
+                );
+
+        }
+
+        html+=
+            '<div class="metric-group-title">What it has learned (weights)</div>';
+
+        for(
+            let i=0;
+            i<AI_FEATURE_COUNT;
+            i++
+        ){
+
+            html+=
+                metricRow(
+                    AI_FEATURE_LABELS[i],
+                    aiModel.w[i],
+                    (
+                        aiModel.w[i]>=0
+                        ?"+"
+                        :""
+                    )+
+                    aiModel.w[i].toFixed(2),
+                    {min:-2,max:2}
+                );
+
+        }
+
+        html+=
+            metricRow(
+                "Bias",
+                aiModel.b,
+                (
+                    aiModel.b>=0
+                    ?"+"
+                    :""
+                )+
+                aiModel.b.toFixed(2),
+                {min:-2,max:2}
+            );
+
+        html+=
+            '<div class="metric-note">'+
+            'Comparison: weighted sum '+
+            aiLastWindow.z.toFixed(2)+
+            ' → tanh → nudge '+
+            (
+                aiLastWindow.nudge>=0
+                ?"+"
+                :""
+            )+
+            aiLastWindow.nudge.toFixed(2)+
+            ', moved difficulty from '+
+            aiLastWindow.previousDifficulty.toFixed(2)+
+            '× to '+
+            aiLastWindow.newDifficulty.toFixed(2)+
+            '×. That nudge was then scored '+
+            (
+                aiLastWindow.reward>=0
+                ?"+"
+                :""
+            )+
+            aiLastWindow.reward.toFixed(2)+
+            ' (positive = "push harder was right", negative = '+
+            '"should have eased off") and fed back into the '+
+            'weights above at a '+AI_LEARNING_RATE+' learning rate. '+
+            'Screen was '+aiLastWindow.screenW.toFixed(0)+
+            '×'+aiLastWindow.screenH.toFixed(0)+
+            'px for that reading — smaller screens read as less '+
+            'reaction space, and the weight above shows whether '+
+            'that has actually correlated with more deaths for you.'+
+            '</div>';
+
+    }else{
+
+        html+=
+            '<div class="metric-note">'+
+            'No completed learning window yet this run — play for '+
+            'at least 5 seconds in a field to see live numbers here.'+
+            '</div>';
+
+    }
+
+    html+=
+        '</div>';
+
+
+    /* -------- Retention / return-likelihood model -------- */
+
+    const liveFeatures=
+        buildRetentionFeatures();
+
+    const liveP=
+        predictRetention(
+            liveFeatures
+        );
+
+    html+=
+        '<div class="metric-group">'+
+        '<div class="metric-group-title">Return Likelihood</div>'+
+        '<div class="metric-callout">'+
+        'A second, separate model — logistic regression — predicts '+
+        'the chance you play again within 7 days. Right now, based '+
+        'on how this run is going, it estimates <b>'+
+        (liveP*100).toFixed(0)+'%</b>. It only finds out if it was '+
+        'right the next time this page loads (whenever that is), '+
+        'so every prediction is honest but slow to grade.'+
+        '</div>';
+
+    html+=
+        '<div class="metric-group-title">Live inputs (this run)</div>';
+
+    for(
+        let i=0;
+        i<RETENTION_FEATURE_COUNT;
+        i++
+    ){
+
+        html+=
+            metricRow(
+                RETENTION_FEATURE_LABELS[i],
+                liveFeatures[i],
+                liveFeatures[i].toFixed(2)
+            );
+
+    }
+
+    html+=
+        '<div class="metric-group-title">What it has learned (weights)</div>';
+
+    for(
+        let i=0;
+        i<RETENTION_FEATURE_COUNT;
+        i++
+    ){
+
+        html+=
+            metricRow(
+                RETENTION_FEATURE_LABELS[i],
+                retentionModel.w[i],
+                (
+                    retentionModel.w[i]>=0
+                    ?"+"
+                    :""
+                )+
+                retentionModel.w[i].toFixed(2),
+                {min:-2,max:2}
+            );
+
+    }
+
+    if(retentionModel.lastLabel){
+
+        html+=
+            '<div class="metric-note">'+
+            'Last graded prediction: guessed <b>'+
+            (
+                retentionModel.lastLabel.predicted*100
+            ).toFixed(0)+'%</b>, actual gap before you came '+
+            'back was <b>'+
+            retentionModel.lastLabel.gapDays.toFixed(1)+
+            ' day(s)</b> — counted as a '+
+            (
+                retentionModel.lastLabel.label
+                ?"return"
+                :"miss"
+            )+
+            ' against the '+RETENTION_WINDOW_DAYS+'-day window. '+
+            'Known bias: a long gap gets labelled a "miss" even '+
+            'though you did eventually come back, since a "no" '+
+            'can only ever be inferred, never directly observed.'+
+            '</div>';
+
+    }else{
+
+        html+=
+            '<div class="metric-note">'+
+            'No graded prediction yet — this fills in once you '+
+            'return for a second session after finishing a run.'+
+            '</div>';
+
+    }
+
+    html+=
+        '</div>';
+
+
+    /* -------- Session history / improvement trend -------- */
+
+    html+=
+        '<div class="metric-group">'+
+        '<div class="metric-group-title">Session History</div>';
+
+    if(sessionLog.length){
+
+        const scores=
+            sessionLog.map(
+                s=>s.score
+            );
+
+        const half=
+            Math.max(
+                1,
+                Math.floor(
+                    scores.length/2
+                )
+            );
+
+        const olderAvg=
+            scores.slice(
+                0,
+                half
+            ).reduce(
+                (a,b)=>a+b,
+                0
+            )/half;
+
+        const recentAvg=
+            scores.slice(
+                -half
+            ).reduce(
+                (a,b)=>a+b,
+                0
+            )/half;
+
+        const change=
+            olderAvg>0
+            ?(
+                (recentAvg-olderAvg)/
+                olderAvg
+            )*100
+            :0;
+
+        if(scores.length>=2){
+
+            html+=
+                '<div class="metric-callout">'+
+                'Average score over your last '+half+
+                ' run(s) vs the '+half+' before that: <b>'+
+                (
+                    change>=0
+                    ?"+"
+                    :""
+                )+
+                change.toFixed(0)+'%</b>'+
+                (
+                    change>=0
+                    ?" — trending up."
+                    :" — trending down."
+                )+
+                '</div>';
+
+        }
+
+        html+=
+            '<div class="metric-session-list">';
+
+        sessionLog.slice(
+            -8
+        ).reverse().forEach(
+            s=>{
+
+                html+=
+                    '<div class="metric-session-row">'+
+                    '<span>'+
+                    formatSessionTime(s.t)+
+                    (s.newHigh ? " ★" : "")+
+                    '</span>'+
+                    '<span>'+
+                    s.score.toLocaleString()+
+                    ' pts · wave '+s.wave+
+                    '</span>'+
+                    '</div>';
+
+            }
+        );
+
+        html+=
+            '</div>';
+
+    }else{
+
+        html+=
+            '<div class="metric-note">'+
+            'No completed runs logged yet this session.'+
+            '</div>';
+
+    }
+
+    html+=
+        '</div>';
+
+    container.innerHTML=
+        html;
+
+}
 
 
 document
