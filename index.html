@@ -3746,10 +3746,10 @@ class Asteroid{
          *     of "how fast is too fast" than a flat wave count;
          *   - screen size is normalized in directly: the same
          *     px/sec value crosses a small screen much quicker
-         *     than a large one, which is very likely why
-         *     wrapped asteroids felt unreasonably fast on
-         *     smaller displays. This keeps crossing time
-         *     roughly consistent across screen sizes.
+         *     than a large one, so this keeps crossing time
+         *     roughly consistent across screen sizes (also
+         *     helps now that asteroids exit and get replaced
+         *     instead of wrapping — see update() below).
          */
         const waveSpeedFactor=
             clamp(
@@ -3824,6 +3824,8 @@ class Asteroid{
 
         this.chainQueued=false;
 
+        this.exited=false;
+
     }
 
 
@@ -3848,36 +3850,24 @@ class Asteroid{
 
         }
 
+        /*
+         * Screen-wrap removed: it made fast rocks teleport to
+         * the opposite edge mid-flight, which both looked like
+         * they'd sped up and made clicks miss (you'd tap where
+         * it just was, an instant before it jumped). Asteroids
+         * that leave the field now simply exit — the spawner
+         * replaces them one-for-one so wave counts stay intact
+         * without ever punishing you for something that was
+         * never actually there to hit.
+         */
         const margin=
             this.radius+80;
 
-        if(
-            this.x<-
-            margin
-        )
-            this.x=
-                W+margin;
-
-        if(
-            this.x>
-            W+margin
-        )
-            this.x=
-                -margin;
-
-        if(
-            this.y<-
-            margin
-        )
-            this.y=
-                H+margin;
-
-        if(
-            this.y>
-            H+margin
-        )
-            this.y=
-                -margin;
+        this.exited=
+            this.x<-margin ||
+            this.x>W+margin ||
+            this.y<-margin ||
+            this.y>H+margin;
 
     }
 
@@ -8883,6 +8873,43 @@ function update(dt){
         }
 
 
+        /*
+         * Remove anything that just left the field, then spawn
+         * a one-for-one replacement so a wave's asteroid count
+         * doesn't quietly drain just because rocks are exiting
+         * — except while a field is deliberately being allowed
+         * to clear out for a transition, where letting the
+         * count actually drop to zero is the entire point.
+         */
+        const exitedCount=
+            asteroids.filter(
+                a=>a.exited
+            ).length;
+
+        if(exitedCount>0){
+
+            asteroids=
+                asteroids.filter(
+                    a=>!a.exited
+                );
+
+            if(!pendingFieldExit){
+
+                for(
+                    let i=0;
+                    i<exitedCount;
+                    i++
+                ){
+
+                    spawnAsteroid();
+
+                }
+
+            }
+
+        }
+
+
         checkPlayerCollisions();
 
 
@@ -9926,9 +9953,29 @@ function handlePointer(event){
                 a.y-p.y
             );
 
+        /*
+         * A fast asteroid can cover real distance between the
+         * frame you aimed at and the instant this event is
+         * actually processed (input latency, frame timing),
+         * so a fixed hit radius quietly punishes exactly the
+         * asteroids that most need forgiveness. Give faster
+         * rocks a bit more tolerance, capped so it never turns
+         * into a free hit.
+         */
+        const speedTolerance=
+            clamp(
+                Math.hypot(
+                    a.vx,
+                    a.vy
+                )*.06,
+                0,
+                20
+            );
+
         if(
             d<=
-            a.radius+18 &&
+            a.radius+18+
+            speedTolerance &&
             d<
             bestDistance
         ){
