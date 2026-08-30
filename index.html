@@ -3735,46 +3735,16 @@ class Asteroid{
             :random(45,70);
 
         /*
-         * Speed scaling, reworked so it can't run away:
-         *   - wave's own contribution is now small and capped
-         *     (1.5x max on its own), rather than compounding
-         *     unbounded with everything else;
-         *   - the AI's learned difficulty dial is the primary
-         *     authority over pace, exactly as requested — it's
-         *     already tuned from this player's actual death
-         *     rate and combo health, so it's a far better judge
-         *     of "how fast is too fast" than a flat wave count;
-         *   - screen size is normalized in directly: the same
-         *     px/sec value crosses a small screen much quicker
-         *     than a large one, so this keeps crossing time
-         *     roughly consistent across screen sizes (also
-         *     helps now that asteroids exit and get replaced
-         *     instead of wrapping — see update() below).
+         * Speed scaling, reworked so it can't run away: wave's
+         * own contribution is small and capped, the learned
+         * difficulty dial is the primary authority, and screen
+         * size is normalized in so crossing time stays roughly
+         * consistent across devices. See computeSpeedMultiplier()
+         * — shared with the metrics tab so the displayed number
+         * is always exactly what's actually applied.
          */
-        const waveSpeedFactor=
-            clamp(
-                1+
-                wave*.025,
-                1,
-                1.5
-            );
-
-        const screenSpeedFactor=
-            clamp(
-                Math.hypot(W,H)/
-                AI_REFERENCE_DIAGONAL,
-                .55,
-                1.15
-            );
-
         const difficultyBoost=
-            waveSpeedFactor*
-            clamp(
-                aiModel.difficulty,
-                .8,
-                1.25
-            )*
-            screenSpeedFactor;
+            computeSpeedMultiplier();
 
         this.vx=
             dx/length*
@@ -4462,38 +4432,15 @@ function getAsteroidType(){
  */
 function rollAsteroidSize(){
 
-    const intensity=
-        clamp(
-            (
-                aiModel.difficulty-.7
-            )/
-            (1.4-.7),
-            0,
-            1
-        );
-
-    const size3Chance=
-        (
-            wave>=4
-            ?.10
-            :0
-        )+
-        intensity*.12;
-
-    const size2Chance=
-        (
-            wave>=2
-            ?.28
-            :.12
-        )+
-        intensity*.18;
+    const mix=
+        computeSizeMix();
 
     const roll=
         Math.random();
 
     if(
         wave>=4 &&
-        roll<size3Chance
+        roll<mix.size3
     ){
 
         return 3;
@@ -4502,8 +4449,8 @@ function rollAsteroidSize(){
 
     if(
         roll<
-        size3Chance+
-        size2Chance
+        mix.size3+
+        mix.size2
     ){
 
         return 2;
@@ -4542,15 +4489,11 @@ function spawnWaveBurst(){
      * asteroids, lower cap, spaced further
      * apart so a fresh wave doesn't dump a
      * wall of rocks on the player at once.
+     * Amount is ML-controlled — see
+     * computeWaveBurstAmount().
      */
     const amount=
-        Math.min(
-            2+
-            Math.floor(
-                wave*.4
-            ),
-            6
-        );
+        computeWaveBurstAmount();
 
     for(
         let i=0;
@@ -4667,7 +4610,8 @@ function detonateAsteroid(
         empCharge=
             clamp(
                 empCharge+
-                asteroid.size*5,
+                asteroid.size*
+                computeEmpChargeRate(),
                 0,
                 EMP_MAX
             );
@@ -6708,7 +6652,8 @@ function defaultAIModel(){
         difficulty:1,
         rewardHistory:[],
         skillEstimate:0,
-        skillSamples:0
+        skillSamples:0,
+        experimentCooldown:0
 
     };
 
@@ -6790,6 +6735,15 @@ function loadAIModel(){
 
                 }
 
+                if(
+                    typeof parsed.experimentCooldown!==
+                    "number"
+                ){
+
+                    parsed.experimentCooldown=0;
+
+                }
+
                 return parsed;
 
             }
@@ -6861,6 +6815,203 @@ function screenScaleFeature(){
         AI_REFERENCE_DIAGONAL,
         0,
         1
+    );
+
+}
+
+
+/*
+ * How far into its safe range the learned difficulty dial
+ * currently sits, 0..1. Used both to derive several of the
+ * gameplay outputs below and to compute the objective,
+ * difficulty-adjusted skill signal.
+ */
+function difficultyIntensity(){
+
+    return clamp(
+        (
+            aiModel.difficulty-.7
+        )/
+        (1.4-.7),
+        0,
+        1
+    );
+
+}
+
+
+/* =========================================================
+   ML-CONTROLLED GAMEPLAY OUTPUTS
+   Every knob the adaptive model actually turns, pulled into
+   one place so gameplay code and the metrics tab read the
+   exact same numbers — nothing shown in the tab is a
+   separate approximation of what's really happening.
+========================================================= */
+
+/*
+ * Ambient spawn interval, seconds between ambient asteroid
+ * spawns. Lower = more asteroids on screen.
+ */
+function computeSpawnInterval(){
+
+    const baseSpawnInterval=
+        Math.max(
+            .65,
+            1.6-
+            wave*.035
+        );
+
+    return clamp(
+        baseSpawnInterval/
+        aiModel.difficulty,
+        .5,
+        2.2
+    );
+
+}
+
+
+/*
+ * Asteroid speed multiplier applied on top of each rock's own
+ * random base speed. Wave contributes a small capped amount;
+ * the learned difficulty dial is the dominant, primary term;
+ * screen size normalizes crossing time across devices.
+ */
+function computeSpeedMultiplier(){
+
+    const waveSpeedFactor=
+        clamp(
+            1+
+            wave*.025,
+            1,
+            1.5
+        );
+
+    const screenSpeedFactor=
+        clamp(
+            Math.hypot(W,H)/
+            AI_REFERENCE_DIAGONAL,
+            .55,
+            1.15
+        );
+
+    return waveSpeedFactor*
+        clamp(
+            aiModel.difficulty,
+            .8,
+            1.25
+        )*
+        screenSpeedFactor;
+
+}
+
+
+/*
+ * Size mix: chance of rolling a large/medium rock, remainder
+ * is small. As intensity climbs, the mix shifts away from a
+ * swarm of small fodder toward fewer, more meaningful rocks.
+ */
+function computeSizeMix(){
+
+    const intensity=
+        difficultyIntensity();
+
+    const size3Chance=
+        (
+            wave>=4
+            ?.10
+            :0
+        )+
+        intensity*.12;
+
+    const size2Chance=
+        (
+            wave>=2
+            ?.28
+            :.12
+        )+
+        intensity*.18;
+
+    return{
+        size3:size3Chance,
+        size2:size2Chance,
+        size1:clamp(
+            1-size3Chance-size2Chance,
+            0,
+            1
+        )
+    };
+
+}
+
+
+/*
+ * EMP charge gained per kill (before multiplying by the
+ * asteroid's own size). A thriving, high-difficulty player
+ * gets a slightly slower charge rate — less of a crutch when
+ * they least need one — while a struggling, low-difficulty
+ * player charges a little faster, as a safety net rather than
+ * a scoring tool (EMP payout is still capped regardless, see
+ * detonateAsteroid).
+ */
+function computeEmpChargeRate(){
+
+    return clamp(
+        6.5-
+        difficultyIntensity()*3,
+        3.5,
+        6.5
+    );
+
+}
+
+
+/*
+ * Wave-start burst size. Scales gently with the same intensity
+ * signal as everything else here, capped well below anything
+ * that could dump a wall of rocks at once.
+ */
+function computeWaveBurstAmount(){
+
+    return Math.min(
+        2+
+        Math.floor(
+            wave*.4
+        )+
+        Math.round(
+            difficultyIntensity()*2
+        ),
+        8
+    );
+
+}
+
+
+/*
+ * Tap hit-tolerance in pixels, on top of an asteroid's own
+ * radius. Driven by the OBJECTIVE (difficulty-adjusted) skill
+ * signal rather than raw performance, so it can't be fooled by
+ * "doing well because it's currently easy": a player who is
+ * objectively still developing gets a more forgiving hitbox; a
+ * demonstrably sharp player gets a tighter, more skill-testing
+ * one. This is exactly the kind of accessibility-flavoured
+ * lever that helps developing players get better instead of
+ * just getting frustrated.
+ */
+function computeHitTolerance(){
+
+    const skill=
+        clamp(
+            aiModel.skillEstimate,
+            0,
+            1
+        );
+
+    return clamp(
+        28-
+        skill*14,
+        14,
+        28
     );
 
 }
@@ -7003,19 +7154,32 @@ function updateAIDifficulty(dt){
 
     /*
      * Skill trend: an exponentially-weighted rolling estimate
-     * of THIS player's own typical performance (kill rate +
-     * combo health), built up across windows and persisted
-     * across sessions. Comparing the current window against
-     * their own baseline — rather than some fixed universal
-     * bar — is what lets the model push a genuinely improving
-     * player harder while it eases off a struggling one,
-     * without ever assuming a beginner's normal pace is "bad"
-     * just because it's lower than a veteran's would be.
+     * of THIS player's own typical performance, built up
+     * across windows and persisted across sessions. Critically,
+     * what feeds the baseline is DIFFICULTY-ADJUSTED, not raw
+     * performance — raw kill rate/combo naturally rises just
+     * because the field got easier, which would otherwise let
+     * the model mistake "the game got easier" for "the player
+     * got better". Multiplying by the difficulty the player
+     * was actually facing corrects for that: doing well at
+     * high difficulty counts fully; doing equally well at low
+     * difficulty is credited less, because some of that
+     * performance is simply the game being gentler right now.
      */
-    const currentPerformance=
+    const rawPerformance=
         clamp(
             killRate*.6+
             comboHealth*.4,
+            0,
+            1
+        );
+
+    const currentPerformance=
+        clamp(
+            (
+                rawPerformance*
+                aiModel.difficulty
+            )/1.4,
             0,
             1
         );
@@ -7065,10 +7229,55 @@ function updateAIDifficulty(dt){
         ?1.4
         :1.15;
 
+    /*
+     * Experimentation: when this player is very likely to
+     * return anyway (see retentionEstimate above), it's a
+     * reasonably safe moment to take a bigger, more informative
+     * step than usual — a bored/frustrated player who might
+     * churn never gets experimented on, only a robustly
+     * engaged one. It's strictly a single amplified step, not
+     * a standing mode: the very next window is back to normal
+     * strength, and a cooldown stops it from firing every
+     * window even while retention stays high.
+     */
+    if(
+        aiModel.experimentCooldown===
+        undefined
+    ){
+
+        aiModel.experimentCooldown=0;
+
+    }
+
+    if(
+        aiModel.experimentCooldown>0
+    ){
+
+        aiModel.experimentCooldown--;
+
+    }
+
+    const isExperimentWindow=
+        warmedUp &&
+        retentionEstimate>=.72 &&
+        aiModel.experimentCooldown<=0;
+
+    if(isExperimentWindow){
+
+        aiModel.experimentCooldown=3;
+
+    }
+
+    const nudgeMultiplier=
+        isExperimentWindow
+        ?1.8
+        :1;
+
     aiModel.difficulty=
         clamp(
             aiModel.difficulty+
-            nudge*.1,
+            nudge*.1*
+            nudgeMultiplier,
             .7,
             difficultyCeiling
         );
@@ -7215,10 +7424,13 @@ function updateAIDifficulty(dt){
         calibration,
         effectiveLearningRate,
         skillEstimate:aiModel.skillEstimate,
+        rawPerformance,
         currentPerformance,
         skillDelta,
         warmedUp,
         difficultyCeiling,
+        isExperimentWindow,
+        nudgeMultiplier,
         screenW:W,
         screenH:H,
         timestamp:Date.now()
@@ -8827,23 +9039,8 @@ function update(dt){
              * pace up or down based on how the
              * player is actually doing right now.
              */
-            const baseSpawnInterval=
-                Math.max(
-                    .65,
-                    1.6-
-                    wave*.035
-                );
-
-            const spawnInterval=
-                clamp(
-                    baseSpawnInterval/
-                    aiModel.difficulty,
-                    .5,
-                    2.2
-                );
-
             spawnTimer=
-                spawnInterval;
+                computeSpawnInterval();
 
             spawnAsteroid();
 
@@ -9974,7 +10171,8 @@ function handlePointer(event){
 
         if(
             d<=
-            a.radius+18+
+            computeHitTolerance()+
+            a.radius+
             speedTolerance &&
             d<
             bestDistance
@@ -10401,6 +10599,83 @@ function renderAIMetrics(){
         'you\'re outgrowing your own normal, not some fixed bar.'+
         '</div>';
 
+    const outMix=
+        computeSizeMix();
+
+    html+=
+        '<div class="metric-group-title">Live outputs — what it\'s actually controlling right now</div>'+
+        metricRow(
+            "Spawn interval",
+            clamp(
+                (2.2-computeSpawnInterval())/
+                (2.2-.5),
+                0,
+                1
+            ),
+            computeSpawnInterval().toFixed(2)+"s/rock"
+        )+
+        metricRow(
+            "Speed multiplier",
+            clamp(
+                (computeSpeedMultiplier()-.5)/
+                1.5,
+                0,
+                1
+            ),
+            computeSpeedMultiplier().toFixed(2)+"×"
+        )+
+        metricRow(
+            "Size mix — large",
+            outMix.size3,
+            (outMix.size3*100).toFixed(0)+"%"
+        )+
+        metricRow(
+            "Size mix — medium",
+            outMix.size2,
+            (outMix.size2*100).toFixed(0)+"%"
+        )+
+        metricRow(
+            "Size mix — small",
+            outMix.size1,
+            (outMix.size1*100).toFixed(0)+"%"
+        )+
+        metricRow(
+            "EMP charge rate",
+            clamp(
+                (computeEmpChargeRate()-3.5)/
+                3,
+                0,
+                1
+            ),
+            computeEmpChargeRate().toFixed(1)+"/kill-size"
+        )+
+        metricRow(
+            "Wave burst size",
+            clamp(
+                computeWaveBurstAmount()/8,
+                0,
+                1
+            ),
+            computeWaveBurstAmount()+" rocks"
+        )+
+        metricRow(
+            "Tap hit tolerance",
+            clamp(
+                (computeHitTolerance()-14)/
+                14,
+                0,
+                1
+            ),
+            computeHitTolerance().toFixed(0)+"px"
+        )+
+        '<div class="metric-note">'+
+        'Every knob the model actually turns, computed live with '+
+        'the exact same formulas gameplay uses — nothing here is a '+
+        'separate approximation. Spawn interval and hit tolerance '+
+        'read as "easier" toward the left of their bar; everything '+
+        'else reads as "more intense" toward the right.'+
+        '</div>';
+
     if(aiLastWindow){
 
         html+=
@@ -10512,9 +10787,16 @@ function renderAIMetrics(){
             'yet); a settled, low-correction stretch pulls it back '+
             'down (stop chasing noise once it\'s roughly right).'+
             '</div>'+
-            '<div class="metric-group-title">Skill Trend</div>'+
+            '<div class="metric-group-title">Skill Trend — objective, difficulty-adjusted</div>'+
             metricRow(
-                "This window's performance",
+                "Raw performance this window",
+                aiLastWindow.rawPerformance,
+                (
+                    aiLastWindow.rawPerformance*100
+                ).toFixed(0)+"%"
+            )+
+            metricRow(
+                "Difficulty-adjusted (\"objective\")",
                 aiLastWindow.currentPerformance,
                 (
                     aiLastWindow.currentPerformance*100
@@ -10554,16 +10836,51 @@ function renderAIMetrics(){
                 {min:.7,max:1.4}
             )+
             '<div class="metric-note">'+
-            'This is the actual answer to "push players to get '+
-            'better without over-challenging developing ones": '+
-            'difficulty gets rewarded for rising specifically when '+
-            'you\'re outperforming your OWN rolling baseline above, '+
-            'not some universal bar — a beginner\'s normal pace is '+
-            'never treated as "bad" just because it\'s lower than a '+
-            'veteran\'s would be. And until it has seen at least 6 '+
-            'windows from you, the difficulty ceiling is capped at '+
-            '1.15× rather than the usual 1.4× — it won\'t push a '+
-            'player it doesn\'t understand yet into anything harsh.'+
+            'Raw performance rises just because the field got '+
+            'easier — that\'s the exact trap you flagged. The '+
+            '"objective" row corrects for it: it\'s raw performance '+
+            'multiplied by the difficulty you were actually facing, '+
+            'so doing well at 1.4× counts in full, but doing '+
+            'equally well at 0.7× is credited at roughly half — '+
+            'some of that result is simply the game being gentler, '+
+            'not you getting better. The rolling baseline (and '+
+            'everything gating difficulty growth) is built from '+
+            'this corrected number, not the raw one, specifically '+
+            'so the model can\'t mistake "easier" for "improving."'+
+            '</div>'+
+            '<div class="metric-note">'+
+            'Difficulty gets rewarded for rising specifically when '+
+            'you\'re outperforming your OWN rolling baseline, not '+
+            'some universal bar — a beginner\'s normal pace is never '+
+            'treated as "bad" just because it\'s lower than a '+
+            'veteran\'s would be. Until it has seen at least 6 '+
+            'windows from you, the ceiling is capped at 1.15× '+
+            'rather than the usual 1.4× — it won\'t push a player '+
+            'it doesn\'t understand yet into anything harsh.'+
+            '</div>'+
+            '<div class="metric-group-title">Experimentation</div>'+
+            '<div class="metric-note">'+
+            (
+                aiLastWindow.isExperimentWindow
+                ?'<b>This window was an experiment</b> — return '+
+                'likelihood was high enough ('+
+                (
+                    aiLastWindow.x[7]*100
+                ).toFixed(0)+'%) that the nudge was amplified '+
+                (aiLastWindow.nudgeMultiplier)+
+                '× to gather a clearer signal, since a robustly '+
+                'engaged player can absorb a slightly rougher '+
+                'field without real risk of losing them. It\'s a '+
+                'single amplified step, not a mode — next window '+
+                'is back to normal strength, and there\'s a '+
+                '3-window cooldown before it can happen again.'
+                :'Not experimenting this window (needs a warmed-up '+
+                'model, return likelihood ≥72%, and no active '+
+                'cooldown from a recent experiment). When those '+
+                'line up, one nudge gets amplified '+
+                '1.8× to learn faster from a player unlikely to '+
+                'be lost by it, then immediately reverts to normal.'
+            )+
             '</div>';
 
     }else{
