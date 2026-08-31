@@ -2792,7 +2792,18 @@ function defaultPlanetSave(){
          * docked ship. Buying adds a unit; equipping consumes
          * one; unequipping (or swapping) returns one.
          */
-        shopStock:{}
+        shopStock:{},
+
+        /*
+         * Lifetime play-pattern data — landings and which
+         * planet each flight launched from. Purely descriptive
+         * for now (not fed into any model), but exactly the
+         * kind of longitudinal data that's worth keeping around
+         * for whenever it's worth digging into.
+         */
+        landingsCount:0,
+
+        launchesByPlanet:{}
 
     };
 
@@ -2990,6 +3001,21 @@ function loadPlanetSave(){
                         saved.nextShipId
                     ) || 1;
 
+                saved.landingsCount=
+                    Number(
+                        saved.landingsCount
+                    ) || 0;
+
+                if(
+                    !saved.launchesByPlanet ||
+                    typeof saved.launchesByPlanet!==
+                    "object"
+                ){
+
+                    saved.launchesByPlanet={};
+
+                }
+
                 return saved;
 
             }
@@ -3184,7 +3210,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:18,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3196,7 +3222,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:20,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3209,12 +3235,12 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:15,
+        cost:25,
         description:
-            "If your ship is lost, a capsule automatically "+
-            "carries most of its coins safely back to the planet "+
-            "you launched from — insurance against the run "+
-            "ending badly."
+            "If your ship is lost, it ejects a capsule carrying "+
+            "its coins. Get it clear of the wreckage and it "+
+            "rockets home safely — but an asteroid can still "+
+            "destroy it before it's away."
     }
 
 };
@@ -3240,6 +3266,13 @@ function getShopItemForPlanet(planetId){
  * that into real insurance rather than removing the stakes
  * entirely — most of the coins make it home, not all of them.
  */
+/*
+ * Called when a ship is lost WITHOUT a live capsule sequence —
+ * either no Return Capsule equipped, or it was equipped but
+ * there were no coins worth ejecting for. The physical capsule
+ * flight itself (when there's actually something to protect)
+ * is handled separately by launchCapsule()/resolveCapsuleOutcome().
+ */
 function resolveRunEndCoins(){
 
     if(
@@ -3252,50 +3285,18 @@ function resolveRunEndCoins(){
 
     }
 
-    if(
-        currentShipEquipment===
-        "return-capsule"
-    ){
+    aiWindow.coinsLost+=
+        runCoins;
 
-        const saved=
-            Math.round(
-                runCoins*.7
-            );
+    runCoinsLostTotal+=
+        runCoins;
 
-        const lost=
-            runCoins-saved;
-
-        addToBank(
-            fieldStartPlanetId,
-            saved
-        );
-
-        aiWindow.coinsCollected+=0;
-
-        aiWindow.coinsLost+=
-            lost;
-
-        floatingText(
-            "CAPSULE SAVED "+
-            saved+" 🪙",
-            W/2,
-            H*.42,
-            "#8de7ff"
-        );
-
-    }else{
-
-        aiWindow.coinsLost+=
-            runCoins;
-
-        floatingText(
-            "LOST "+runCoins+" 🪙",
-            W/2,
-            H*.42,
-            "#ff8d8d"
-        );
-
-    }
+    floatingText(
+        "LOST "+runCoins+" 🪙",
+        W/2,
+        H*.42,
+        "#ff8d8d"
+    );
 
     runCoins=0;
 
@@ -3338,7 +3339,7 @@ function depositShipCoins(planetId,shipId){
 
 }
 
-function withdrawToShip(planetId,shipId){
+function withdrawToShip(planetId,shipId,amount){
 
     const ship=
         (
@@ -3352,18 +3353,30 @@ function withdrawToShip(planetId,shipId){
     const bank=
         getBank(planetId);
 
+    const clean=
+        Math.max(
+            0,
+            Math.min(
+                Math.floor(
+                    Number(amount) ||
+                    0
+                ),
+                bank
+            )
+        );
+
     if(
         !ship ||
-        bank<=0
+        clean<=0
     )
         return;
 
     ship.coins+=
-        bank;
+        clean;
 
     addToBank(
         planetId,
-        -bank
+        -clean
     );
 
     savePlanetProgress();
@@ -4121,14 +4134,25 @@ function renderPlanetDetail(id){
                     ship.coins.toLocaleString()+
                     ' carried</span>'+
                     '</div>'+
-                    '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
                     '<button class="control-btn" data-action="deposit" data-ship="'+
-                    ship.id+'" style="width:auto;padding:7px 10px;">'+
-                    'Deposit</button>'+
-                    '<button class="control-btn" data-action="withdraw" data-ship="'+
-                    ship.id+'" style="width:auto;padding:7px 10px;">'+
-                    'Withdraw</button>'+
-                    '</div>'+
+                    ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
+                    'Deposit all to bank</button>'+
+                    (
+                        bank>0
+                        ?'<div class="slider-group" style="margin-bottom:0;">'+
+                        '<label class="slider-label">Withdraw</label>'+
+                        '<input type="range" class="slider-input" '+
+                        'min="0" max="'+bank+'" value="0" step="1" '+
+                        'data-action="withdraw-slider" data-ship="'+
+                        ship.id+'">'+
+                        '<span class="slider-value" data-withdraw-readout="'+
+                        ship.id+'">0</span>'+
+                        '</div>'+
+                        '<button class="control-btn" data-action="withdraw" data-ship="'+
+                        ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
+                        'Confirm withdrawal</button>'
+                        :''
+                    )+
                     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#8fa7c7;">'+
                     '<span>Equipped: '+equipped+'</span>'+
                     (
@@ -4162,6 +4186,42 @@ document
     "planetDetailContent"
 )
 .addEventListener(
+    "input",
+    event=>{
+
+        if(
+            !event.target.matches(
+                'input[data-action="withdraw-slider"]'
+            )
+        )
+            return;
+
+        const shipId=
+            event.target.getAttribute(
+                "data-ship"
+            );
+
+        const readout=
+            document.querySelector(
+                '[data-withdraw-readout="'+
+                shipId+'"]'
+            );
+
+        if(readout){
+
+            readout.textContent=
+                event.target.value;
+
+        }
+
+    }
+);
+
+document
+.getElementById(
+    "planetDetailContent"
+)
+.addEventListener(
     "pointerdown",
     event=>{
 
@@ -4173,7 +4233,9 @@ document
         if(
             !target ||
             target.disabled ||
-            !planetDetailId
+            !planetDetailId ||
+            target.tagName===
+            "INPUT"
         )
             return;
 
@@ -4203,9 +4265,18 @@ document
             action==="withdraw"
         ){
 
+            const slider=
+                document.querySelector(
+                    'input[data-action="withdraw-slider"][data-ship="'+
+                    shipId+'"]'
+                );
+
             withdrawToShip(
                 planetDetailId,
-                shipId
+                shipId,
+                slider
+                ?slider.value
+                :0
             );
 
         }else if(
@@ -5025,7 +5096,7 @@ class CoinPickup{
 function rollCoinDrop(asteroid){
 
     const dropChance=
-        .08+
+        computeCoinDropRate()+
         asteroid.size*.015;
 
     if(
@@ -5051,6 +5122,194 @@ function rollCoinDrop(asteroid){
             value
         )
     );
+
+}
+
+
+/*
+ * A Return Capsule ejected on death. It flies outward from the
+ * wreck and only counts as "safe" once it's traveled far
+ * enough — a distance scaled to the actual screen size, so it
+ * always reaches safety while still clearly on-screen rather
+ * than needing to fly past the edge (where the player couldn't
+ * watch it happen) or being declared safe while still uncomfortably
+ * close to where it started.
+ */
+class Capsule{
+
+    constructor(){
+
+        this.x=W/2;
+        this.y=H/2;
+
+        const angle=
+            random(0,Math.PI*2);
+
+        this.speed=100;
+
+        this.vx=
+            Math.cos(angle)*
+            this.speed;
+
+        this.vy=
+            Math.sin(angle)*
+            this.speed;
+
+        this.traveled=0;
+
+        this.radius=16;
+
+        this.spin=0;
+
+        this.safe=false;
+
+        this.safeTimer=0;
+
+        /*
+         * Reaches safety comfortably inside the visible field —
+         * about a third of the way from center to the nearest
+         * edge — never requiring it to travel off-screen to
+         * become safe, and never declaring it safe while still
+         * hugging the ship's wreckage either.
+         */
+        this.safeDistance=
+            Math.min(W,H)*.34;
+
+    }
+
+    update(dt){
+
+        this.x+=
+            this.vx*dt;
+
+        this.y+=
+            this.vy*dt;
+
+        this.traveled+=
+            Math.hypot(
+                this.vx*dt,
+                this.vy*dt
+            );
+
+        this.spin+=
+            dt*3;
+
+        if(
+            !this.safe &&
+            this.traveled>=
+            this.safeDistance
+        ){
+
+            this.safe=true;
+
+            /*
+             * Visually "shoots off" once safe — a clear burst
+             * of speed rather than just quietly continuing.
+             */
+            const boost=2.6;
+
+            this.vx*=boost;
+            this.vy*=boost;
+
+            floatingText(
+                "CAPSULE CLEAR",
+                this.x,
+                this.y,
+                "#8de7ff"
+            );
+
+        }
+
+        if(this.safe){
+
+            this.safeTimer+=dt;
+
+        }
+
+    }
+
+}
+
+
+function launchCapsule(){
+
+    capsule=
+        new Capsule();
+
+    capsuleActive=true;
+
+    pendingFieldExit=
+        null;
+
+    floatingText(
+        "CAPSULE EJECTED",
+        W/2,
+        H/2,
+        "#ffd76b"
+    );
+
+    sound("click");
+
+    updateHUD();
+
+}
+
+
+function resolveCapsuleOutcome(wasSafe){
+
+    capsuleActive=false;
+
+    capsule=null;
+
+    if(wasSafe){
+
+        const saved=
+            Math.round(
+                runCoins*.7
+            );
+
+        const lost=
+            runCoins-saved;
+
+        addToBank(
+            fieldStartPlanetId,
+            saved
+        );
+
+        aiWindow.coinsLost+=
+            lost;
+
+        runCoinsLostTotal+=
+            lost;
+
+        floatingText(
+            "CAPSULE SAVED "+
+            saved+" 🪙",
+            W/2,
+            H*.42,
+            "#8de7ff"
+        );
+
+    }else{
+
+        aiWindow.coinsLost+=
+            runCoins;
+
+        runCoinsLostTotal+=
+            runCoins;
+
+        floatingText(
+            "CAPSULE DESTROYED",
+            W/2,
+            H*.42,
+            "#ff8d8d"
+        );
+
+    }
+
+    runCoins=0;
+
+    endGame();
 
 }
 
@@ -6166,6 +6425,11 @@ function updateCurrentShipCoins(){
 
 function checkPlayerCollisions(){
 
+    if(
+        capsuleActive
+    )
+        return;
+
     const player={
 
         x:W/2,
@@ -6222,6 +6486,18 @@ function checkPlayerCollisions(){
             if(
                 lives<=0
             ){
+
+                if(
+                    currentShipEquipment===
+                    "return-capsule" &&
+                    runCoins>0
+                ){
+
+                    launchCapsule();
+
+                    return;
+
+                }
 
                 resolveRunEndCoins();
 
@@ -7817,7 +8093,7 @@ let empBurstRemaining=0;
 const AI_MODEL_KEY=
     "asteroidImpactAIModel";
 
-const AI_FEATURE_COUNT=8;
+const AI_FEATURE_COUNT=9;
 const AI_INTERVAL=5;
 const AI_LEARNING_RATE=.06;
 
@@ -7835,7 +8111,7 @@ function defaultAIModel(){
 
     return{
 
-        w:[0,0,0,0,0,0,0,0],
+        w:[0,0,0,0,0,0,0,0,0],
         b:0,
         difficulty:1,
         rewardHistory:[],
@@ -8145,13 +8421,78 @@ function computeSizeMix(){
  * a scoring tool (EMP payout is still capped regardless, see
  * detonateAsteroid).
  */
+/*
+ * Charge/recharge rate for whichever active ability is
+ * currently equipped. EMP and the Incinerator Beam both use
+ * the shared charge-bar mechanic, but at their own ML-tuned
+ * pace; Regen Coil doesn't use a charge bar at all — see
+ * computeRegenInterval() instead.
+ */
 function computeEmpChargeRate(){
+
+    if(
+        currentShipEquipment===
+        "incinerator-beam"
+    ){
+
+        /*
+         * A precision line-clear is worth less per kill than
+         * a full-field EMP burst would be, so it's allowed to
+         * charge a little faster to compensate — still
+         * governed by the same intensity dial.
+         */
+        return clamp(
+            7.5-
+            difficultyIntensity()*3,
+            4,
+            7.5
+        );
+
+    }
 
     return clamp(
         6.5-
         difficultyIntensity()*3,
         3.5,
         6.5
+    );
+
+}
+
+
+/*
+ * Regen Coil's heal interval, in seconds between hull repairs.
+ * A thriving (high-difficulty) player gets a slower trickle —
+ * they're managing fine without it — while a struggling player
+ * gets it a bit faster, as an actual safety net.
+ */
+function computeRegenInterval(){
+
+    return clamp(
+        24-
+        (
+            1-difficultyIntensity()
+        )*10,
+        14,
+        24
+    );
+
+}
+
+
+/*
+ * Coin drop chance per skill kill, plus a flat per-size bonus.
+ * The model can widen or narrow the economy's tap without
+ * touching scoring at all — a separate lever from everything
+ * else it controls.
+ */
+function computeCoinDropRate(){
+
+    return clamp(
+        .06+
+        difficultyIntensity()*.05,
+        .06,
+        .11
     );
 
 }
@@ -8308,6 +8649,22 @@ function updateAIDifficulty(dt){
             buildRetentionFeatures()
         );
 
+    /*
+     * Coin engagement this window — are they actually going
+     * for the coins, or ignoring them entirely? Distinct from
+     * every combat signal above; lets the model learn whether
+     * economically-engaged windows correlate with the same
+     * "cruising" pattern combat does, or something different.
+     */
+    const coinEngagement=
+        clamp(
+            aiWindow.coinsCollected/
+            windowSeconds/
+            .6,
+            0,
+            1
+        );
+
     const x=[
         killRate,
         deathOccurred,
@@ -8316,7 +8673,8 @@ function updateAIDifficulty(dt){
         empPressure,
         screenScale,
         tapRate,
-        retentionEstimate
+        retentionEstimate,
+        coinEngagement
     ];
 
     /*
@@ -8660,6 +9018,7 @@ function updateAIDifficulty(dt){
     aiWindow.comboSamples=0;
     aiWindow.empUses=0;
     aiWindow.taps=0;
+    aiWindow.coinsCollected=0;
 
 }
 
@@ -8879,6 +9238,17 @@ let sessionLog=
 let sessionStartTime=0;
 let sessionTapCount=0;
 let sessionTryAgains=0;
+
+/*
+ * Whole-run cumulative totals — distinct from the aiWindow
+ * versions of these, which reset every 5-second learning
+ * window. These are purely for display (metrics tab, session
+ * log), never fed into the model directly.
+ */
+let runCoinsCollectedTotal=0;
+let runCoinsLostTotal=0;
+let runItemUsesTotal=0;
+let runLandingsCount=0;
 let hasStartedOnce=false;
 
 
@@ -9466,6 +9836,8 @@ function fireIncineratorBeam(targetX,targetY){
     empUses++;
 
     aiWindow.itemUses++;
+
+    runItemUsesTotal++;
 
     const originX=W/2;
     const originY=H/2;
@@ -10158,6 +10530,9 @@ function landAtCurrentPlanet(){
 
     runCoins=0;
 
+    planetSave.landingsCount++;
+
+    runLandingsCount++;
 
     savePlanetProgress();
 
@@ -10372,13 +10747,18 @@ function update(dt){
             regenCoilTimer+=dt;
 
             if(
-                regenCoilTimer>=18 &&
+                regenCoilTimer>=
+                computeRegenInterval() &&
                 lives<3
             ){
 
                 regenCoilTimer=0;
 
                 lives++;
+
+                aiWindow.itemUses++;
+
+                runItemUsesTotal++;
 
                 floatingText(
                     "HULL REPAIRED",
@@ -10426,7 +10806,8 @@ function update(dt){
 
         if(
             worldTimer>3 &&
-            spawnTimer<=0
+            spawnTimer<=0 &&
+            !capsuleActive
         ){
 
             /*
@@ -10510,6 +10891,69 @@ function update(dt){
         checkPlayerCollisions();
 
 
+        if(
+            capsuleActive &&
+            capsule
+        ){
+
+            capsule.update(dt);
+
+            let capsuleHit=
+                false;
+
+            if(!capsule.safe){
+
+                for(
+                    const a of asteroids
+                ){
+
+                    if(
+                        Math.hypot(
+                            a.x-capsule.x,
+                            a.y-capsule.y
+                        )<=
+                        a.radius+
+                        capsule.radius
+                    ){
+
+                        capsuleHit=true;
+
+                        break;
+
+                    }
+
+                }
+
+            }
+
+            if(capsuleHit){
+
+                explosions.push(
+                    new Explosion(
+                        capsule.x,
+                        capsule.y,
+                        1.1
+                    )
+                );
+
+                resolveCapsuleOutcome(
+                    false
+                );
+
+            }else if(
+                capsule.safe &&
+                capsule.safeTimer>.5
+            ){
+
+                resolveCapsuleOutcome(
+                    true
+                );
+
+            }
+
+        }
+
+
         /*
          * Resolve a queued exit once the field has actually
          * emptied out (or, failing that, once the safety
@@ -10559,6 +11003,7 @@ function update(dt){
             running &&
             !gameOver &&
             !pendingFieldExit &&
+            !capsuleActive &&
             planetPhasePending &&
             !planetPhaseCompleted
         ){
@@ -10591,6 +11036,7 @@ function update(dt){
             running &&
             !gameOver &&
             !pendingFieldExit &&
+            !capsuleActive &&
             worldState==="field" &&
             !planetPhasePending
         ){
@@ -10728,6 +11174,47 @@ function update(dt){
                 i,
                 1
             );
+
+            continue;
+
+        }
+
+        /*
+         * Destroyed by direct contact with a live asteroid —
+         * not by nearby explosions, just actually touched.
+         * Coins sitting in a busy field are genuinely at risk,
+         * not a free pickup whenever convenient.
+         */
+        for(
+            const a of asteroids
+        ){
+
+            if(
+                Math.hypot(
+                    a.x-
+                    coinPickups[i].x,
+                    a.y-
+                    coinPickups[i].y
+                )<=
+                a.radius+
+                coinPickups[i].radius
+            ){
+
+                floatingText(
+                    "COIN LOST",
+                    coinPickups[i].x,
+                    coinPickups[i].y,
+                    "#ff8d8d"
+                );
+
+                coinPickups.splice(
+                    i,
+                    1
+                );
+
+                break;
+
+            }
 
         }
 
@@ -10961,10 +11448,68 @@ function draw(){
 
 
     if(
-        worldState!=="planet"
+        worldState!=="planet" &&
+        !capsuleActive
     ){
 
         drawPlayer();
+
+    }
+
+
+    if(
+        capsuleActive &&
+        capsule
+    ){
+
+        ctx.save();
+
+        ctx.translate(
+            capsule.x,
+            capsule.y
+        );
+
+        ctx.rotate(
+            capsule.spin
+        );
+
+        ctx.shadowBlur=
+            capsule.safe
+            ?24
+            :14;
+
+        ctx.shadowColor=
+            capsule.safe
+            ?"#8de7ff"
+            :"#ffd76b";
+
+        ctx.fillStyle=
+            "#1a2c4a";
+
+        ctx.strokeStyle=
+            capsule.safe
+            ?"#8de7ff"
+            :"#ffd76b";
+
+        ctx.lineWidth=2.5;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            0,
+            0,
+            capsule.radius,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+        ctx.stroke();
+
+        ctx.shadowBlur=0;
+
+        ctx.restore();
 
     }
 
@@ -11261,6 +11806,15 @@ let currentShipId=null;
 let currentShipEquipment="emp";
 let beamArmed=false;
 
+/*
+ * A physical Return Capsule ejected on death instead of an
+ * instant, automatic save. It has to actually get clear of the
+ * wreckage — an asteroid can still destroy it — before its
+ * coins are genuinely safe.
+ */
+let capsule=null;
+let capsuleActive=false;
+
 
 function startGame(){
 
@@ -11372,6 +11926,17 @@ function startGame(){
     currentPlanetId=
         chosen.id;
 
+    planetSave.launchesByPlanet[
+        chosen.id
+    ]=
+        (
+            planetSave.launchesByPlanet[
+                chosen.id
+            ] || 0
+        )+1;
+
+    savePlanetProgress();
+
     destinationPlanetId=
         null;
 
@@ -11441,6 +12006,12 @@ function startGame(){
 
     sessionTapCount=0;
 
+    runCoinsCollectedTotal=0;
+
+    runCoinsLostTotal=0;
+
+    runItemUsesTotal=0;
+
     pendingFieldExit=null;
 
     pendingFieldExitTimer=0;
@@ -11452,6 +12023,10 @@ function startGame(){
     coinPickups=[];
 
     beamArmed=false;
+
+    capsuleActive=false;
+
+    capsule=null;
 
     explosions=[];
 
@@ -11672,6 +12247,9 @@ function handlePointer(event){
                 c.value;
 
             aiWindow.coinsCollected+=
+                c.value;
+
+            runCoinsCollectedTotal+=
                 c.value;
 
             coinPickups.splice(
@@ -12243,14 +12821,39 @@ function renderAIMetrics(){
             (outMix.size1*100).toFixed(0)+"%"
         )+
         metricRow(
-            "EMP charge rate",
+            (
+                currentShipEquipment===
+                "incinerator-beam"
+                ?"Beam charge rate"
+                :"EMP charge rate"
+            ),
             clamp(
                 (computeEmpChargeRate()-3.5)/
-                3,
+                4,
                 0,
                 1
             ),
             computeEmpChargeRate().toFixed(1)+"/kill-size"
+        )+
+        metricRow(
+            "Regen Coil interval",
+            clamp(
+                (24-computeRegenInterval())/
+                10,
+                0,
+                1
+            ),
+            computeRegenInterval().toFixed(0)+"s"
+        )+
+        metricRow(
+            "Coin drop rate",
+            clamp(
+                (computeCoinDropRate()-.06)/
+                .05,
+                0,
+                1
+            ),
+            (computeCoinDropRate()*100).toFixed(1)+"%/kill"
         )+
         metricRow(
             "Wave burst size",
@@ -12277,6 +12880,83 @@ function renderAIMetrics(){
         'separate approximation. Spawn interval and hit tolerance '+
         'read as "easier" toward the left of their bar; everything '+
         'else reads as "more intense" toward the right.'+
+        '</div>';
+
+    const topLaunchPlanets=
+        Object.entries(
+            planetSave.launchesByPlanet ||
+            {}
+        ).sort(
+            (a,b) => b[1]-a[1]
+        ).slice(0,4);
+
+    html+=
+        '<div class="metric-group-title">Economy &amp; Play Patterns</div>'+
+        metricRow(
+            "Coins collected this run",
+            clamp(
+                runCoinsCollectedTotal/40,
+                0,
+                1
+            ),
+            runCoinsCollectedTotal
+        )+
+        metricRow(
+            "Coins lost this run",
+            clamp(
+                runCoinsLostTotal/40,
+                0,
+                1
+            ),
+            runCoinsLostTotal
+        )+
+        metricRow(
+            "Items used this run",
+            clamp(
+                runItemUsesTotal/10,
+                0,
+                1
+            ),
+            runItemUsesTotal
+        )+
+        metricRow(
+            "Landings this sitting",
+            clamp(
+                runLandingsCount/10,
+                0,
+                1
+            ),
+            runLandingsCount
+        )+
+        metricRow(
+            "Landings, all-time",
+            clamp(
+                (planetSave.landingsCount||0)/40,
+                0,
+                1
+            ),
+            planetSave.landingsCount || 0
+        )+
+        '<div class="metric-note">'+
+        (
+            topLaunchPlanets.length
+            ?'Most-launched-from planets: '+
+              topLaunchPlanets.map(
+                  ([id,count])=>{
+                      const p=getPlanet(id);
+                      return(
+                          (p ? p.name : id)+
+                          " ("+count+")"
+                      );
+                  }
+              ).join(", ")+
+              '.'
+            :'No launches recorded yet.'
+        )+
+        ' None of this feeds the model yet — it\'s tracked and '+
+        'shown here as exactly the kind of longitudinal data '+
+        'worth having on hand before deciding what, if anything, '+
+        'should actually be learned from it.'+
         '</div>';
 
     if(aiLastWindow){
