@@ -1911,6 +1911,13 @@ and (max-height:500px){
 
         </div>
 
+        <div
+            class="metric-callout"
+            id="launchPreview"
+            style="text-align:left;margin-bottom:14px;">
+
+        </div>
+
         <button
             class="big-button"
             id="startButton">
@@ -2653,7 +2660,6 @@ let combo=1;
 let comboTimer=0;
 
 let lives=3;
-let regenCoilTimer=0;
 
 let wave=1;
 let destroyed=0;
@@ -2682,6 +2688,7 @@ let particles=[];
 let stars=[];
 let shockwaves=[];
 let coinPickups=[];
+let beamEffects=[];
 
 
 /* =========================================================
@@ -3102,7 +3109,10 @@ function ensurePlanetArray(
 function createShip(
     planetId,
     score,
-    coins=0
+    coins=0,
+    equipment="emp",
+    wave=1,
+    lives=3
 ){
 
     ensurePlanetArray(
@@ -3129,7 +3139,22 @@ function createShip(
             ),
 
         equipment:
-            "emp"
+            equipment || "emp",
+
+        wave:
+            Math.max(
+                1,
+                Math.floor(wave)
+            ),
+
+        lives:
+            Math.max(
+                1,
+                Math.min(
+                    3,
+                    Math.floor(lives)
+                )
+            )
 
     };
 
@@ -3899,6 +3924,106 @@ function renderPlanetMap(){
         );
 
     }
+
+    renderLaunchPreview();
+
+}
+
+
+/*
+ * Shows exactly which ship LAUNCH will actually use, and its
+ * full state — score, coins, equipped item, wave, lives —
+ * before the player commits. Mirrors the real selection rule
+ * in startGame() (highest-score docked ship) exactly, so this
+ * is never a guess about what's about to happen.
+ */
+function renderLaunchPreview(){
+
+    const el=
+        document.getElementById(
+            "launchPreview"
+        );
+
+    if(!el)
+        return;
+
+    if(
+        selectedStartPlanet===
+        "earth"
+    ){
+
+        el.innerHTML=
+            "🚀 <b>Fresh ship</b> — Earth launches always "+
+            "start clean, no prior score, coins, or equipment.";
+
+        return;
+
+    }
+
+    const ships=
+        getShips(
+            selectedStartPlanet
+        ) || [];
+
+    if(!ships.length){
+
+        el.innerHTML=
+            "No ship available here.";
+
+        return;
+
+    }
+
+    const best=
+        [...ships].sort(
+            (a,b) =>
+                b.score-a.score
+        )[0];
+
+    const equipped=
+        best.equipment==="emp" ||
+        !best.equipment
+        ?"⚡ EMP"
+        :SHOP_ITEMS[best.equipment]
+        ?SHOP_ITEMS[best.equipment].icon+
+          " "+
+          SHOP_ITEMS[best.equipment].name
+        :"⚡ EMP";
+
+    const hearts=
+        "❤".repeat(
+            clamp(
+                Number(best.lives) || 3,
+                1,
+                3
+            )
+        )+
+        "🖤".repeat(
+            3-
+            clamp(
+                Number(best.lives) || 3,
+                1,
+                3
+            )
+        );
+
+    el.innerHTML=
+        "🚀 Launching <b>"+
+        best.score.toLocaleString()+
+        " pt ship</b> — "+
+        "🪙"+
+        (best.coins || 0).toLocaleString()+
+        " · "+equipped+" · Wave "+
+        (best.wave || 1)+" · "+hearts+
+        (
+            ships.length>1
+            ?"<br><span style=\"opacity:.7;font-size:9px;\">"+
+              (ships.length-1)+
+              " other ship(s) also docked here — the "+
+              "highest-scoring one always launches first."+
+              "</span>"
+            :""
+        );
 
 }
 
@@ -6419,6 +6544,67 @@ function updateCurrentShipCoins(){
 }
 
 
+/*
+ * Mirrors the above for equipment and flight-state — this is
+ * the fix for equipment silently reverting to EMP on landing:
+ * previously nothing ever wrote currentShipEquipment back into
+ * the docked ship record, and createShip() hardcoded "emp" for
+ * every newly-created record regardless of what was actually
+ * equipped in flight.
+ */
+function syncCurrentShipFlightState(){
+
+    if(
+        currentPlanetId==="earth"
+    )
+        return;
+
+    if(
+        !currentShipId
+    )
+        return;
+
+    ensurePlanetArray(
+        currentPlanetId
+    );
+
+    const ship=
+        planetSave.ships[
+            currentPlanetId
+        ].find(
+            s =>
+                s.id===
+                currentShipId
+        );
+
+    if(ship){
+
+        ship.equipment=
+            currentShipEquipment ||
+            "emp";
+
+        ship.wave=
+            Math.max(
+                1,
+                Math.floor(wave)
+            );
+
+        ship.lives=
+            Math.max(
+                1,
+                Math.min(
+                    3,
+                    Math.floor(lives)
+                )
+            );
+
+        savePlanetProgress();
+
+    }
+
+}
+
+
 /* =========================================================
    COLLISION
 ========================================================= */
@@ -6486,6 +6672,8 @@ function checkPlayerCollisions(){
             if(
                 lives<=0
             ){
+
+                recordDeathCharge();
 
                 if(
                     currentShipEquipment===
@@ -8117,7 +8305,27 @@ function defaultAIModel(){
         rewardHistory:[],
         skillEstimate:0,
         skillSamples:0,
-        experimentCooldown:0
+        experimentCooldown:0,
+
+        /*
+         * Charge percentage (0..1) each equipped ability was
+         * sitting at the moment a ship died, kept per-item since
+         * EMP/Beam/Regen all charge at different rates. Directly
+         * answers "is this charge rate fair" — dying with it
+         * consistently near-empty means it's charging too slowly
+         * to ever matter; dying with it consistently maxed and
+         * unused suggests the opposite.
+         */
+        deathChargeHistory:{},
+
+        /*
+         * A small persisted correction multiplier per item,
+         * nudged by recordDeathCharge() below and applied on
+         * top of the normal difficulty-based charge rate — the
+         * actual "offer correction to the parameters" the
+         * metric is supposed to enable, not just a display stat.
+         */
+        chargeRateCorrection:{}
 
     };
 
@@ -8205,6 +8413,26 @@ function loadAIModel(){
                 ){
 
                     parsed.experimentCooldown=0;
+
+                }
+
+                if(
+                    !parsed.deathChargeHistory ||
+                    typeof parsed.deathChargeHistory!==
+                    "object"
+                ){
+
+                    parsed.deathChargeHistory={};
+
+                }
+
+                if(
+                    !parsed.chargeRateCorrection ||
+                    typeof parsed.chargeRateCorrection!==
+                    "object"
+                ){
+
+                    parsed.chargeRateCorrection={};
 
                 }
 
@@ -8420,18 +8648,21 @@ function computeSizeMix(){
  * player charges a little faster, as a safety net rather than
  * a scoring tool (EMP payout is still capped regardless, see
  * detonateAsteroid).
- */
-/*
- * Charge/recharge rate for whichever active ability is
- * currently equipped. EMP and the Incinerator Beam both use
- * the shared charge-bar mechanic, but at their own ML-tuned
- * pace; Regen Coil doesn't use a charge bar at all — see
- * computeRegenInterval() instead.
+ *
+ * All three equippable abilities — EMP, Incinerator Beam, and
+ * Regen Coil — now share this same charge-bar mechanic, each
+ * at its own ML-tuned pace.
  */
 function computeEmpChargeRate(){
 
+    const key=
+        currentShipEquipment ||
+        "emp";
+
+    let base;
+
     if(
-        currentShipEquipment===
+        key===
         "incinerator-beam"
     ){
 
@@ -8441,41 +8672,148 @@ function computeEmpChargeRate(){
          * charge a little faster to compensate — still
          * governed by the same intensity dial.
          */
-        return clamp(
-            7.5-
-            difficultyIntensity()*3,
-            4,
-            7.5
-        );
+        base=
+            clamp(
+                7.5-
+                difficultyIntensity()*3,
+                4,
+                7.5
+            );
+
+    }else if(
+        key===
+        "regen-coil"
+    ){
+
+        /*
+         * A struggling (low-difficulty) player charges their
+         * one spare heart faster — an actual safety net —
+         * while a thriving player charges it slower, since
+         * they're managing fine without it.
+         */
+        base=
+            clamp(
+                5-
+                (
+                    1-difficultyIntensity()
+                )*2.2,
+                2.8,
+                5
+            );
+
+    }else{
+
+        base=
+            clamp(
+                6.5-
+                difficultyIntensity()*3,
+                3.5,
+                6.5
+            );
 
     }
 
-    return clamp(
-        6.5-
-        difficultyIntensity()*3,
-        3.5,
-        6.5
-    );
+    /*
+     * Correction learned from recordDeathCharge(): if players
+     * have consistently been dying with this ability sitting
+     * near-empty, that's direct evidence the rate is too slow
+     * to ever matter, so this nudges it up over time (and back
+     * down if it's consistently maxed-and-unused at death).
+     */
+    const correction=
+        (
+            aiModel.chargeRateCorrection &&
+            aiModel.chargeRateCorrection[key]
+        ) || 1;
+
+    return base*correction;
 
 }
 
 
 /*
- * Regen Coil's heal interval, in seconds between hull repairs.
- * A thriving (high-difficulty) player gets a slower trickle —
- * they're managing fine without it — while a struggling player
- * gets it a bit faster, as an actual safety net.
+ * Called once, right at the moment of death: logs what
+ * percentage the equipped ability's charge bar was at, and
+ * nudges that item's correction multiplier if the rolling
+ * average is consistently too low (charging too slowly to
+ * ever get used) or consistently too high (maxed out and
+ * still unused, meaning it charges faster than it needs to).
+ * A small, bounded, explainable correction — not a full
+ * relearn — same philosophy as the rest of this system.
  */
-function computeRegenInterval(){
+function recordDeathCharge(){
 
-    return clamp(
-        24-
-        (
-            1-difficultyIntensity()
-        )*10,
-        14,
-        24
+    const key=
+        currentShipEquipment ||
+        "emp";
+
+    const pct=
+        clamp(
+            empCharge/EMP_MAX,
+            0,
+            1
+        );
+
+    if(
+        !aiModel.deathChargeHistory[key]
+    ){
+
+        aiModel.deathChargeHistory[key]=[];
+
+    }
+
+    aiModel.deathChargeHistory[key].push(
+        pct
     );
+
+    if(
+        aiModel.deathChargeHistory[key].length>12
+    ){
+
+        aiModel.deathChargeHistory[key].shift();
+
+    }
+
+    const history=
+        aiModel.deathChargeHistory[key];
+
+    const avg=
+        history.reduce(
+            (a,b)=>a+b,
+            0
+        )/history.length;
+
+    if(
+        !aiModel.chargeRateCorrection[key]
+    ){
+
+        aiModel.chargeRateCorrection[key]=1;
+
+    }
+
+    if(avg<.35){
+
+        aiModel.chargeRateCorrection[key]=
+            clamp(
+                aiModel.chargeRateCorrection[key]+
+                .04,
+                .7,
+                1.6
+            );
+
+    }else if(avg>.85){
+
+        aiModel.chargeRateCorrection[key]=
+            clamp(
+                aiModel.chargeRateCorrection[key]-
+                .02,
+                .7,
+                1.6
+            );
+
+    }
+
+    saveAIModel();
 
 }
 
@@ -9821,6 +10159,66 @@ function activateEMP(){
 
 
 /*
+ * Regen Coil: charges the same shared bar as EMP/Beam, but
+ * activating it heals one lost heart instead of touching the
+ * field at all. Does nothing (and doesn't consume the charge)
+ * if the hull is already full — there's nothing to spend it on.
+ */
+function activateRegenCoil(){
+
+    if(
+        empCharge<EMP_MAX ||
+        !running ||
+        paused ||
+        gameOver ||
+        worldState!=="field" ||
+        empCooldown>0 ||
+        lives>=3
+    ){
+
+        return;
+
+    }
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    lives++;
+
+    floatingText(
+        "HULL REPAIRED",
+        W/2,
+        H*.3,
+        "#8dffb0"
+    );
+
+    sound(
+        "arrival"
+    );
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
  * Incinerator Beam: an equipped alternative to EMP that trades
  * "clear the whole field" for "precisely clear a line toward
  * wherever you aim". Pressing the ability button while charged
@@ -9858,6 +10256,27 @@ function fireIncineratorBeam(targetX,targetY){
         Math.hypot(W,H);
 
     const beamWidth=34;
+
+    /*
+     * The actual visible beam: a glowing line from the ship
+     * out to the edge of the field along the fired direction,
+     * fading out quickly. Pushed before the detonation loop so
+     * it renders under this frame's explosions.
+     */
+    beamEffects.push({
+
+        x1:originX,
+        y1:originY,
+        x2:
+            originX+
+            ux*beamReach,
+        y2:
+            originY+
+            uy*beamReach,
+        life:0,
+        maxLife:.35
+
+    });
 
     empBurstRemaining=
         Math.min(
@@ -9963,6 +10382,8 @@ function enterPlanetPhase(){
 
     coinPickups=[];
 
+    beamEffects=[];
+
     beamArmed=false;
 
     destinationLayer.classList.remove(
@@ -10032,6 +10453,8 @@ function enterAsteroidField(
 
     coinPickups=[];
 
+    beamEffects=[];
+
     beamArmed=false;
 
     spawnTimer=3;
@@ -10094,6 +10517,8 @@ function enterInterplanetary(){
     asteroids=[];
 
     coinPickups=[];
+
+    beamEffects=[];
 
     beamArmed=false;
 
@@ -10514,7 +10939,10 @@ function landAtCurrentPlanet(){
             createShip(
                 currentPlanetId,
                 score,
-                runCoins
+                runCoins,
+                currentShipEquipment,
+                wave,
+                lives
             );
 
         currentShipId=
@@ -10525,6 +10953,8 @@ function landAtCurrentPlanet(){
         updateCurrentShipScore();
 
         updateCurrentShipCoins();
+
+        syncCurrentShipFlightState();
 
     }
 
@@ -10732,50 +11162,6 @@ function update(dt){
         updateDifficulty(dt);
 
         updateAIDifficulty(dt);
-
-
-        /*
-         * Regen Coil: a slow passive trickle instead of a
-         * panic button — meaningfully different from EMP/
-         * Incinerator rather than just "EMP but healing".
-         */
-        if(
-            currentShipEquipment===
-            "regen-coil"
-        ){
-
-            regenCoilTimer+=dt;
-
-            if(
-                regenCoilTimer>=
-                computeRegenInterval() &&
-                lives<3
-            ){
-
-                regenCoilTimer=0;
-
-                lives++;
-
-                aiWindow.itemUses++;
-
-                runItemUsesTotal++;
-
-                floatingText(
-                    "HULL REPAIRED",
-                    W/2,
-                    H*.3,
-                    "#8dffb0"
-                );
-
-                sound(
-                    "arrival"
-                );
-
-                updateHUD();
-
-            }
-
-        }
 
 
         if(
@@ -11221,6 +11607,29 @@ function update(dt){
     }
 
 
+    for(
+        let i=beamEffects.length-1;
+        i>=0;
+        i--
+    ){
+
+        beamEffects[i].life+=dt;
+
+        if(
+            beamEffects[i].life>=
+            beamEffects[i].maxLife
+        ){
+
+            beamEffects.splice(
+                i,
+                1
+            );
+
+        }
+
+    }
+
+
     updateParticles(dt);
 
 
@@ -11447,6 +11856,70 @@ function draw(){
     }
 
 
+    for(
+        const beam of beamEffects
+    ){
+
+        const fade=
+            clamp(
+                1-
+                beam.life/
+                beam.maxLife,
+                0,
+                1
+            );
+
+        ctx.save();
+
+        ctx.globalAlpha=
+            fade;
+
+        ctx.lineCap=
+            "round";
+
+        ctx.shadowBlur=25;
+
+        ctx.shadowColor=
+            "#ff9d5c";
+
+        ctx.strokeStyle=
+            "#fff3e0";
+
+        ctx.lineWidth=
+            10*fade+2;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            beam.x1,
+            beam.y1
+        );
+
+        ctx.lineTo(
+            beam.x2,
+            beam.y2
+        );
+
+        ctx.stroke();
+
+        ctx.strokeStyle=
+            "#ff7a3d";
+
+        ctx.lineWidth=
+            26*fade+4;
+
+        ctx.globalAlpha=
+            fade*.35;
+
+        ctx.stroke();
+
+        ctx.shadowBlur=0;
+
+        ctx.restore();
+
+    }
+
+
     if(
         worldState!=="planet" &&
         !capsuleActive
@@ -11630,15 +12103,15 @@ function updateHUD(){
         );
 
 
-    const usingActiveCharge=
-        currentShipEquipment!==
-        "regen-coil";
-
     const ready=
-        usingActiveCharge &&
         empCharge>=EMP_MAX &&
         empCooldown<=0 &&
-        worldState==="field";
+        worldState==="field" &&
+        (
+            currentShipEquipment!==
+            "regen-coil" ||
+            lives<3
+        );
 
     empButton.classList.toggle(
         "ready",
@@ -11656,12 +12129,14 @@ function updateHUD(){
 
     if(
         currentShipEquipment===
-        "regen-coil"
+        "regen-coil" &&
+        lives>=3 &&
+        empCharge>=EMP_MAX
     ){
 
         empButton.innerHTML=
             abilityIcon+
-            "<small>PASSIVE</small>";
+            "<small>FULL HULL</small>";
 
     }else if(
         beamArmed
@@ -11864,6 +12339,10 @@ function startGame(){
     let launchEquipment=
         "emp";
 
+    let launchWave=1;
+
+    let launchLives=3;
+
     if(
         chosen.id==="earth"
     ){
@@ -11883,6 +12362,28 @@ function startGame(){
             !ships ||
             !ships.length
         ){
+
+            /*
+             * No ships left at the selected planet (the usual
+             * cause: the last one just died, and this is a
+             * "try again" tap). Earth always has infinite
+             * ships, so that's the only sane fallback rather
+             * than silently doing nothing.
+             */
+
+            if(
+                selectedStartPlanet!==
+                "earth"
+            ){
+
+                selectedStartPlanet=
+                    "earth";
+
+                renderPlanetMap();
+
+                startGame();
+
+            }
 
             return;
 
@@ -11917,6 +12418,20 @@ function startGame(){
         launchEquipment=
             ship.equipment ||
             "emp";
+
+        launchWave=
+            Number(
+                ship.wave
+            ) || 1;
+
+        launchLives=
+            clamp(
+                Number(
+                    ship.lives
+                ) || 3,
+                1,
+                3
+            );
 
         savePlanetProgress();
 
@@ -11953,11 +12468,11 @@ function startGame(){
 
     comboTimer=0;
 
-    lives=3;
+    lives=
+        launchLives;
 
-    regenCoilTimer=0;
-
-    wave=1;
+    wave=
+        launchWave;
 
     destroyed=0;
 
@@ -12021,6 +12536,8 @@ function startGame(){
     asteroids=[];
 
     coinPickups=[];
+
+    beamEffects=[];
 
     beamArmed=false;
 
@@ -12459,9 +12976,7 @@ empButton.addEventListener(
             "regen-coil"
         ){
 
-            /*
-             * Passive-only — nothing to activate.
-             */
+            activateRegenCoil();
 
             return;
 
@@ -12825,25 +13340,18 @@ function renderAIMetrics(){
                 currentShipEquipment===
                 "incinerator-beam"
                 ?"Beam charge rate"
+                :currentShipEquipment===
+                "regen-coil"
+                ?"Regen Coil charge rate"
                 :"EMP charge rate"
             ),
             clamp(
-                (computeEmpChargeRate()-3.5)/
-                4,
+                (computeEmpChargeRate()-2.8)/
+                4.7,
                 0,
                 1
             ),
             computeEmpChargeRate().toFixed(1)+"/kill-size"
-        )+
-        metricRow(
-            "Regen Coil interval",
-            clamp(
-                (24-computeRegenInterval())/
-                10,
-                0,
-                1
-            ),
-            computeRegenInterval().toFixed(0)+"s"
         )+
         metricRow(
             "Coin drop rate",
@@ -12881,6 +13389,96 @@ function renderAIMetrics(){
         'read as "easier" toward the left of their bar; everything '+
         'else reads as "more intense" toward the right.'+
         '</div>';
+
+    const chargeLabels={
+        emp:"⚡ EMP",
+        "incinerator-beam":"🔥 Incinerator Beam",
+        "regen-coil":"❤ Regen Coil"
+    };
+
+    const chargeKeysWithData=
+        Object.keys(
+            aiModel.deathChargeHistory ||
+            {}
+        ).filter(
+            k =>
+                aiModel.deathChargeHistory[k] &&
+                aiModel.deathChargeHistory[k].length
+        );
+
+    html+=
+        '<div class="metric-group-title">Charge Fairness</div>'+
+        '<div class="metric-callout">'+
+        'Every death logs what percentage the equipped ability\'s '+
+        'charge bar was sitting at. Dying with it consistently '+
+        'near-empty means the charge rate is too slow to ever '+
+        'actually matter; dying with it consistently maxed and '+
+        'unused suggests the opposite. This directly corrects the '+
+        'charge rate over time — not just displaying the problem, '+
+        'actually adjusting for it.'+
+        '</div>';
+
+    if(!chargeKeysWithData.length){
+
+        html+=
+            '<div class="metric-note">'+
+            'No deaths recorded yet — this fills in the first '+
+            'time a run ends.'+
+            '</div>';
+
+    }else{
+
+        chargeKeysWithData.forEach(
+            key=>{
+
+                const history=
+                    aiModel.deathChargeHistory[key];
+
+                const avg=
+                    history.reduce(
+                        (a,b)=>a+b,
+                        0
+                    )/history.length;
+
+                const correction=
+                    (
+                        aiModel.chargeRateCorrection &&
+                        aiModel.chargeRateCorrection[key]
+                    ) || 1;
+
+                html+=
+                    metricRow(
+                        (
+                            chargeLabels[key] ||
+                            key
+                        )+
+                        " ("+history.length+" deaths)",
+                        avg,
+                        (avg*100).toFixed(0)+"% at death"
+                    )+
+                    metricRow(
+                        "→ correction applied",
+                        clamp(
+                            (correction-.7)/
+                            .9,
+                            0,
+                            1
+                        ),
+                        (
+                            correction>=1
+                            ?"+"
+                            :""
+                        )+
+                        (
+                            (correction-1)*100
+                        ).toFixed(0)+
+                        "% charge speed"
+                    );
+
+            }
+        );
+
+    }
 
     const topLaunchPlanets=
         Object.entries(
