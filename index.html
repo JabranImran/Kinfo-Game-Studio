@@ -2794,12 +2794,14 @@ function defaultPlanetSave(){
         banks:{},
 
         /*
-         * How many units of each planet's unique shop item are
-         * currently in stock there, available to equip onto a
-         * docked ship. Buying adds a unit; equipping consumes
-         * one; unequipping (or swapping) returns one.
+         * How many units of each item are in stock at each
+         * planet — planetSave.itemStock[planetId][itemId].
+         * Buying from a planet's own shop adds a unit of its
+         * item there; equipping/unequipping/selling any item
+         * (including EMP) moves or removes units locally,
+         * wherever the ship happens to be docked.
          */
-        shopStock:{},
+        itemStock:{},
 
         /*
          * Lifetime play-pattern data — landings and which
@@ -2955,12 +2957,12 @@ function loadPlanetSave(){
                 }
 
                 if(
-                    !saved.shopStock ||
-                    typeof saved.shopStock!==
+                    !saved.itemStock ||
+                    typeof saved.itemStock!==
                     "object"
                 ){
 
-                    saved.shopStock={};
+                    saved.itemStock={};
 
                 }
 
@@ -2981,16 +2983,87 @@ function loadPlanetSave(){
                     }
 
                     if(
-                        typeof saved.shopStock[
+                        !saved.itemStock[
                             planet.id
-                        ]!=="number"
+                        ] ||
+                        typeof saved.itemStock[
+                            planet.id
+                        ]!=="object"
                     ){
 
-                        saved.shopStock[
+                        saved.itemStock[
                             planet.id
-                        ]=0;
+                        ]={};
 
                     }
+
+                }
+
+                /*
+                 * Migrate the old single-item-per-planet stock
+                 * count (from before multi-item stock existed)
+                 * into the new per-item structure, crediting it
+                 * to that planet's own shop item.
+                 */
+                if(
+                    saved.shopStock &&
+                    typeof saved.shopStock===
+                    "object"
+                ){
+
+                    for(
+                        const planetId in
+                        saved.shopStock
+                    ){
+
+                        const legacyCount=
+                            Number(
+                                saved.shopStock[
+                                    planetId
+                                ]
+                            ) || 0;
+
+                        const legacyItem=
+                            getShopItemForPlanet(
+                                planetId
+                            );
+
+                        if(
+                            legacyCount>0 &&
+                            legacyItem
+                        ){
+
+                            if(
+                                !saved.itemStock[
+                                    planetId
+                                ]
+                            ){
+
+                                saved.itemStock[
+                                    planetId
+                                ]={};
+
+                            }
+
+                            saved.itemStock[
+                                planetId
+                            ][
+                                legacyItem.id
+                            ]=
+                                (
+                                    saved.itemStock[
+                                        planetId
+                                    ][
+                                        legacyItem.id
+                                    ] || 0
+                                )+
+                                legacyCount;
+
+                        }
+
+                    }
+
+                    delete saved.shopStock;
 
                 }
 
@@ -3198,26 +3271,97 @@ function addToBank(planetId,amount){
 
 }
 
-function getShopStock(planetId){
+function getItemStock(planetId,itemId){
 
-    return planetSave.shopStock[
-        planetId
-    ] || 0;
+    return(
+        (
+            planetSave.itemStock[
+                planetId
+            ] || {}
+        )[itemId] || 0
+    );
 
 }
 
-function addShopStock(planetId,amount){
+function addItemStock(planetId,itemId,amount){
 
-    planetSave.shopStock[
+    if(
+        !planetSave.itemStock[
+            planetId
+        ]
+    ){
+
+        planetSave.itemStock[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.itemStock[
         planetId
-    ]=
+    ][itemId]=
         Math.max(
             0,
-            getShopStock(planetId)+
-            amount
+            getItemStock(
+                planetId,
+                itemId
+            )+amount
         );
 
     savePlanetProgress();
+
+}
+
+/*
+ * Sell price for offloading a stocked item, scaled by how far
+ * out the planet is (its tier) — closer worlds barely value
+ * spare gear, Zenith pays the most for it.
+ */
+function computeSellPrice(planetId){
+
+    const planet=
+        getPlanet(planetId);
+
+    if(!planet)
+        return 1;
+
+    return 1+
+        Math.max(
+            0,
+            planet.tier-1
+        )*2;
+
+}
+
+
+/*
+ * A stand-in catalog entry so EMP can be listed, equipped, and
+ * stocked through the exact same generic code path as every
+ * purchased item — it's just never required to be in stock to
+ * equip, so a ship can never be stranded with nothing to fit.
+ */
+const EMP_ITEM={
+    id:"emp",
+    name:"EMP",
+    icon:"⚡",
+    description:
+        "The reliable default — a capped, modest-reward field "+
+        "clear. Always available to equip regardless of stock."
+};
+
+function getItemInfo(itemId){
+
+    if(
+        itemId==="emp" ||
+        !itemId
+    ){
+
+        return EMP_ITEM;
+
+    }
+
+    return SHOP_ITEMS[itemId] ||
+        EMP_ITEM;
 
 }
 
@@ -3433,8 +3577,9 @@ function buyShopItem(planetId){
         -item.cost
     );
 
-    addShopStock(
+    addItemStock(
         planetId,
+        item.id,
         1
     );
 
@@ -3449,44 +3594,39 @@ function buyShopItem(planetId){
 }
 
 /*
- * Un-equipping is always allowed wherever the ship is docked —
- * returning the item to ITS OWN home planet's stock, not
- * necessarily the one you're currently viewing.
+ * Sells one unit of a stocked item at the planet you're
+ * currently viewing, for that planet's own distance-scaled
+ * price. Works for anything in stock, EMP included.
  */
-function unequipToEMP(planetId,shipId){
-
-    const ship=
-        (
-            planetSave.ships[
-                planetId
-            ] || []
-        ).find(
-            s => s.id===shipId
-        );
+function sellItemStock(planetId,itemId){
 
     if(
-        !ship ||
-        ship.equipment==="emp"
+        getItemStock(
+            planetId,
+            itemId
+        )<=0
     )
         return;
 
-    const oldItem=
-        SHOP_ITEMS[
-            ship.equipment
-        ];
+    addItemStock(
+        planetId,
+        itemId,
+        -1
+    );
 
-    if(oldItem){
-
-        addShopStock(
-            oldItem.planetId,
-            1
+    const price=
+        computeSellPrice(
+            planetId
         );
 
-    }
+    addToBank(
+        planetId,
+        price
+    );
 
-    ship.equipment="emp";
-
-    savePlanetProgress();
+    showShipToast(
+        "Sold for "+price+" 🪙"
+    );
 
     renderPlanetDetail(
         planetId
@@ -3495,12 +3635,14 @@ function unequipToEMP(planetId,shipId){
 }
 
 /*
- * Equipping a purchased item only happens at that item's own
- * home planet — the shop is "unique to that planet", so
- * fitting one of its items only makes sense while docked
- * there, same as buying it does.
+ * Equips ANY item currently in stock at the planet you're
+ * docked at (or EMP, which needs no stock at all) onto a
+ * ship. Whatever it's replacing is stored right here as local
+ * stock — including EMP itself — rather than being sent back
+ * to wherever it was originally bought. Stock naturally
+ * spreads across planets as players swap gear on their travels.
  */
-function equipShopItem(planetId,shipId){
+function equipItemAt(planetId,shipId,itemId){
 
     const ship=
         (
@@ -3511,41 +3653,48 @@ function equipShopItem(planetId,shipId){
             s => s.id===shipId
         );
 
-    const item=
-        getShopItemForPlanet(
-            planetId
-        );
-
     if(
         !ship ||
-        !item ||
-        ship.equipment===
-        item.id ||
-        getShopStock(planetId)<=0
+        ship.equipment===itemId
     )
         return;
 
     if(
-        ship.equipment!==
-        "emp"
-    ){
-
-        unequipToEMP(
+        itemId!=="emp" &&
+        getItemStock(
             planetId,
-            shipId
+            itemId
+        )<=0
+    )
+        return;
+
+    addItemStock(
+        planetId,
+        ship.equipment ||
+        "emp",
+        1
+    );
+
+    if(itemId!=="emp"){
+
+        addItemStock(
+            planetId,
+            itemId,
+            -1
         );
 
     }
 
-    addShopStock(
-        planetId,
-        -1
-    );
+    ship.equipment=itemId;
 
-    ship.equipment=
-        item.id;
+    expandedEquipShipId=null;
 
     savePlanetProgress();
+
+    showShipToast(
+        "Equipped "+
+        getItemInfo(itemId).name
+    );
 
     renderPlanetDetail(
         planetId
@@ -4066,6 +4215,13 @@ function selectStartPlanet(id){
 
 let planetDetailId=null;
 
+/*
+ * Which docked ship (if any) currently has its equip picker
+ * expanded in the Planet Detail overlay. Only one at a time,
+ * and it collapses automatically after an equip/close.
+ */
+let expandedEquipShipId=null;
+
 function openPlanetDetail(id){
 
     initAudio();
@@ -4093,6 +4249,8 @@ function closePlanetDetail(){
     );
 
     planetDetailId=null;
+
+    expandedEquipShipId=null;
 
 }
 
@@ -4124,7 +4282,12 @@ function renderPlanetDetail(id){
         getShopItemForPlanet(id);
 
     const stock=
-        getShopStock(id);
+        shopItem
+        ?getItemStock(
+            id,
+            shopItem.id
+        )
+        :0;
 
     let html=
         '<div class="customizer-title">'+
@@ -4240,14 +4403,56 @@ function renderPlanetDetail(id){
         ships.forEach(
             ship=>{
 
-                const equipped=
-                    ship.equipment==="emp"
-                    ?"⚡ EMP"
-                    :SHOP_ITEMS[ship.equipment]
-                    ?SHOP_ITEMS[ship.equipment].icon+
-                      " "+
-                      SHOP_ITEMS[ship.equipment].name
-                    :"⚡ EMP";
+                const equippedInfo=
+                    getItemInfo(
+                        ship.equipment
+                    );
+
+                const sellPrice=
+                    computeSellPrice(id);
+
+                /*
+                 * Everything currently equippable at this
+                 * planet, other than what's already fitted:
+                 * EMP is always offered (never needs stock),
+                 * plus anything else sitting in local stock.
+                 */
+                const options=
+                    [
+                        EMP_ITEM,
+                        ...Object.keys(
+                            (
+                                planetSave.itemStock[
+                                    id
+                                ] || {}
+                            )
+                        ).map(
+                            itemId =>
+                                getItemInfo(
+                                    itemId
+                                )
+                        )
+                    ].filter(
+                        (item,index,arr) =>
+                            arr.findIndex(
+                                other =>
+                                    other.id===
+                                    item.id
+                            )===index &&
+                            item.id!==
+                            ship.equipment &&
+                            (
+                                item.id==="emp" ||
+                                getItemStock(
+                                    id,
+                                    item.id
+                                )>0
+                            )
+                    );
+
+                const expanded=
+                    expandedEquipShipId===
+                    ship.id;
 
                 html+=
                     '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
@@ -4278,19 +4483,103 @@ function renderPlanetDetail(id){
                         'Confirm withdrawal</button>'
                         :''
                     )+
-                    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#8fa7c7;">'+
-                    '<span>Equipped: '+equipped+'</span>'+
+                    '<button class="control-btn" data-action="toggle-equip" data-ship="'+
+                    ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
+                    'display:flex;align-items:center;gap:6px;">'+
+                    '<span>Equipped: '+equippedInfo.icon+' '+
+                    equippedInfo.name+'</span>'+
+                    '<span style="opacity:.6;">'+
+                    (expanded ? "▲" : "▼")+
+                    '</span>'+
+                    '</button>'+
                     (
-                        ship.equipment!=="emp"
-                        ?'<button class="remove-btn" data-action="unequip" data-ship="'+
-                          ship.id+'">Unequip</button>'
-                        :shopItem &&
-                        stock>0
-                        ?'<button class="remove-btn" data-action="equip" data-ship="'+
-                          ship.id+'">Equip '+shopItem.name+'</button>'
+                        expanded
+                        ?'<div style="display:flex;flex-direction:column;gap:6px;'+
+                        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                        (
+                            options.length
+                            ?options.map(
+                                item =>
+                                    '<button class="shape-btn" style="width:100%;'+
+                                    'display:flex;align-items:center;justify-content:space-between;'+
+                                    'padding:8px 10px;font-size:11px;" '+
+                                    'data-action="equip-item" data-ship="'+
+                                    ship.id+'" data-item="'+item.id+'">'+
+                                    '<span>'+item.icon+' '+item.name+'</span>'+
+                                    (
+                                        item.id!=="emp"
+                                        ?'<span style="opacity:.6;font-size:9px;">'+
+                                          getItemStock(id,item.id)+
+                                          ' in stock</span>'
+                                        :''
+                                    )+
+                                    '</button>'
+                            ).join("")
+                            :'<span style="font-size:10px;color:#5c7ba0;">'+
+                              'Nothing else in stock here — buy from the '+
+                              'shop above, or bring something from '+
+                              'another planet.</span>'
+                        )+
+                        '</div>'
                         :''
                     )+
-                    '</div>'+
+                    '</div>';
+
+            }
+        );
+
+    }
+
+    html+=
+        '</div>';
+
+
+    /* -------- Planet stock (sellable) -------- */
+
+    const stockEntries=
+        Object.entries(
+            planetSave.itemStock[
+                id
+            ] || {}
+        ).filter(
+            ([,count]) => count>0
+        );
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        'Planet Stock'+
+        '</div>'+
+        '<div class="metric-callout">'+
+        'Anything swapped off a ship here stays here. Sell price '+
+        'scales with distance — '+
+        computeSellPrice(id)+
+        ' 🪙 each at '+planet.name+'.'+
+        '</div>';
+
+    if(!stockEntries.length){
+
+        html+=
+            '<div class="metric-note">'+
+            'Nothing in local stock.'+
+            '</div>';
+
+    }else{
+
+        stockEntries.forEach(
+            ([itemId,count])=>{
+
+                const info=
+                    getItemInfo(itemId);
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>'+info.icon+' '+info.name+
+                    ' <span style="opacity:.6;font-size:9px;">×'+
+                    count+'</span></span>'+
+                    '<button class="remove-btn" data-action="sell-item" '+
+                    'data-item="'+itemId+'">Sell '+
+                    computeSellPrice(id)+' 🪙</button>'+
                     '</div>';
 
             }
@@ -4413,21 +4702,46 @@ document
             );
 
         }else if(
-            action==="equip"
+            action==="toggle-equip"
         ){
 
-            equipShopItem(
-                planetDetailId,
+            expandedEquipShipId=
+                expandedEquipShipId===
                 shipId
+                ?null
+                :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
             );
 
         }else if(
-            action==="unequip"
+            action==="equip-item"
         ){
 
-            unequipToEMP(
+            const itemId=
+                target.getAttribute(
+                    "data-item"
+                );
+
+            equipItemAt(
                 planetDetailId,
-                shipId
+                shipId,
+                itemId
+            );
+
+        }else if(
+            action==="sell-item"
+        ){
+
+            const itemId=
+                target.getAttribute(
+                    "data-item"
+                );
+
+            sellItemStock(
+                planetDetailId,
+                itemId
             );
 
         }
