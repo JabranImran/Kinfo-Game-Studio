@@ -3379,7 +3379,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3391,7 +3391,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3406,10 +3406,46 @@ const SHOP_ITEMS={
         icon:"📦",
         cost:25,
         description:
-            "If your ship is lost, it ejects a capsule carrying "+
-            "its coins. Get it clear of the wreckage and it "+
-            "rockets home safely — but an asteroid can still "+
-            "destroy it before it's away."
+            "Ejects automatically if your ship is lost, or fire "+
+            "it yourself once charged to bank your coins early. "+
+            "Either way it has to actually get clear of danger — "+
+            "an asteroid can still destroy it before it's away."
+    },
+
+    "ghost-shield":{
+        id:"ghost-shield",
+        planetId:"neptune",
+        name:"Ghost Shield",
+        icon:"👻",
+        cost:35,
+        description:
+            "Turns your hull intangible for a few seconds — "+
+            "asteroids pass straight through without dealing "+
+            "damage. Doesn't stop you tapping them back."
+    },
+
+    "chrono-field":{
+        id:"chrono-field",
+        planetId:"kepler",
+        name:"Chrono Field",
+        icon:"🌀",
+        cost:35,
+        description:
+            "Slows every asteroid in the field, including "+
+            "anything spawned while it's active, giving you a "+
+            "genuine breather rather than clearing anything."
+    },
+
+    "ricochet-orb":{
+        id:"ricochet-orb",
+        planetId:"aurora",
+        name:"Ricochet Orb",
+        icon:"🔵",
+        cost:35,
+        description:
+            "Fires toward wherever you tap and bounces off each "+
+            "asteroid it destroys, carving through the field "+
+            "until it finally flies off-screen."
     }
 
 };
@@ -5574,9 +5610,149 @@ function rollCoinDrop(asteroid){
  * watch it happen) or being declared safe while still uncomfortably
  * close to where it started.
  */
+/*
+ * Ricochet Orb: travels toward wherever it was fired, destroys
+ * (and reflects off) the first asteroid it touches, and keeps
+ * going until it either exits the field or times out — the
+ * timeout is a pure safety valve, actual runs almost always end
+ * by flying off-screen instead.
+ */
+class RicochetBall{
+
+    constructor(targetX,targetY){
+
+        this.x=W/2;
+        this.y=H/2;
+
+        const dx=
+            targetX-this.x;
+
+        const dy=
+            targetY-this.y;
+
+        const length=
+            Math.hypot(dx,dy) || 1;
+
+        this.speed=260;
+
+        this.vx=
+            dx/length*
+            this.speed;
+
+        this.vy=
+            dy/length*
+            this.speed;
+
+        this.radius=10;
+
+        this.life=0;
+
+        this.maxLife=8;
+
+        this.trail=[];
+
+    }
+
+    update(dt){
+
+        this.x+=
+            this.vx*dt;
+
+        this.y+=
+            this.vy*dt;
+
+        this.life+=dt;
+
+        this.trail.push({
+            x:this.x,
+            y:this.y
+        });
+
+        if(
+            this.trail.length>10
+        ){
+
+            this.trail.shift();
+
+        }
+
+    }
+
+    get offscreen(){
+
+        const margin=
+            this.radius+20;
+
+        return(
+            this.x<-margin ||
+            this.x>W+margin ||
+            this.y<-margin ||
+            this.y>H+margin
+        );
+
+    }
+
+    get expired(){
+
+        return(
+            this.life>=
+            this.maxLife
+        );
+
+    }
+
+    /*
+     * Standard reflection off the surface normal between the
+     * ball and whatever it just hit.
+     */
+    bounceOff(hitX,hitY){
+
+        const nx0=
+            this.x-hitX;
+
+        const ny0=
+            this.y-hitY;
+
+        const length=
+            Math.hypot(nx0,ny0) || 1;
+
+        const nx=
+            nx0/length;
+
+        const ny=
+            ny0/length;
+
+        const dot=
+            this.vx*nx+
+            this.vy*ny;
+
+        this.vx=
+            this.vx-
+            2*dot*nx;
+
+        this.vy=
+            this.vy-
+            2*dot*ny;
+
+        /*
+         * Nudge clear of the point it just bounced off so it
+         * can't immediately re-collide with the same spot next
+         * frame before it's actually moved away.
+         */
+        this.x+=
+            this.vx*.03;
+
+        this.y+=
+            this.vy*.03;
+
+    }
+
+}
+
+
 class Capsule{
 
-    constructor(){
+    constructor(coins,mode){
 
         this.x=W/2;
         this.y=H/2;
@@ -5603,6 +5779,17 @@ class Capsule{
         this.safe=false;
 
         this.safeTimer=0;
+
+        /*
+         * Captured at ejection rather than read later — an
+         * active (button-pressed) eject zeroes runCoins right
+         * away so the ship can keep flying without those coins
+         * being at risk twice, so resolveCapsuleOutcome can't
+         * rely on runCoins still holding the right amount.
+         */
+        this.coins=coins;
+
+        this.mode=mode;
 
         /*
          * Reaches safety comfortably inside the visible field —
@@ -5670,15 +5857,57 @@ class Capsule{
 }
 
 
-function launchCapsule(){
+/*
+ * mode "death": the automatic eject when a ship is destroyed —
+ * blocks further play until the capsule's fate is resolved,
+ * same as before.
+ * mode "active": a deliberate button-press eject while still
+ * flying — the ship keeps playing normally alongside it, and
+ * the coins it's carrying leave with the capsule immediately
+ * rather than staying at risk on the ship too.
+ */
+function launchCapsule(mode){
 
     capsule=
-        new Capsule();
+        new Capsule(
+            runCoins,
+            mode
+        );
 
     capsuleActive=true;
 
-    pendingFieldExit=
-        null;
+    capsuleMode=mode;
+
+    if(mode==="active"){
+
+        runCoins=0;
+
+        empCharge=0;
+
+        empUses++;
+
+        aiWindow.itemUses++;
+
+        runItemUsesTotal++;
+
+        if(
+            empUses>=
+            EMP_USES_BEFORE_COOLDOWN
+        ){
+
+            empCooldown=
+                EMP_COOLDOWN;
+
+            empUses=0;
+
+        }
+
+    }else{
+
+        pendingFieldExit=
+            null;
+
+    }
 
     floatingText(
         "CAPSULE EJECTED",
@@ -5698,17 +5927,27 @@ function resolveCapsuleOutcome(wasSafe){
 
     capsuleActive=false;
 
+    const mode=
+        capsuleMode;
+
+    const capsuleCoins=
+        capsule
+        ?capsule.coins
+        :0;
+
     capsule=null;
+
+    capsuleMode=null;
 
     if(wasSafe){
 
         const saved=
             Math.round(
-                runCoins*.7
+                capsuleCoins*.7
             );
 
         const lost=
-            runCoins-saved;
+            capsuleCoins-saved;
 
         addToBank(
             fieldStartPlanetId,
@@ -5732,10 +5971,10 @@ function resolveCapsuleOutcome(wasSafe){
     }else{
 
         aiWindow.coinsLost+=
-            runCoins;
+            capsuleCoins;
 
         runCoinsLostTotal+=
-            runCoins;
+            capsuleCoins;
 
         floatingText(
             "CAPSULE DESTROYED",
@@ -5746,9 +5985,13 @@ function resolveCapsuleOutcome(wasSafe){
 
     }
 
-    runCoins=0;
+    if(mode==="death"){
 
-    endGame();
+        runCoins=0;
+
+        endGame();
+
+    }
 
 }
 
@@ -6440,11 +6683,22 @@ function detonateAsteroid(
 
     if(!isEMP){
 
+        /*
+         * Chain-reaction kills (an explosion setting off nearby
+         * asteroids in a cascade) charge faster than a lone
+         * direct hit — genuinely rewarding "destruction that
+         * spreads" with more charge, not just more points, and
+         * gives skilled splash play its own real payoff.
+         */
+        const chargeMultiplier=
+            chain ? 1.6 : 1;
+
         empCharge=
             clamp(
                 empCharge+
                 asteroid.size*
-                computeEmpChargeRate(),
+                computeEmpChargeRate()*
+                chargeMultiplier,
                 0,
                 EMP_MAX
             );
@@ -6926,7 +7180,8 @@ function syncCurrentShipFlightState(){
 function checkPlayerCollisions(){
 
     if(
-        capsuleActive
+        capsuleMode===
+        "death"
     )
         return;
 
@@ -6955,6 +7210,18 @@ function checkPlayerCollisions(){
             a.radius+
             player.radius
         ){
+
+            if(ghostActive){
+
+                /*
+                 * Genuinely passes through — the asteroid isn't
+                 * destroyed, isn't affected at all, just doesn't
+                 * register as a hit. It keeps moving normally
+                 * and exits the far side on its own.
+                 */
+                continue;
+
+            }
 
             asteroids.splice(
                 i,
@@ -6995,7 +7262,9 @@ function checkPlayerCollisions(){
                     runCoins>0
                 ){
 
-                    launchCapsule();
+                    launchCapsule(
+                        "death"
+                    );
 
                     return;
 
@@ -7132,6 +7401,11 @@ function drawPlayer(){
             performance.now()*.006
         )*2;
 
+    ctx.globalAlpha=
+        ghostActive
+        ?.35
+        :1;
+
     if(hasCustomShip()){
 
         drawCustomShipShapes(
@@ -7185,6 +7459,8 @@ function drawPlayer(){
 
     }
 
+    ctx.globalAlpha=1;
+
     ctx.restore();
 
     ctx.beginPath();
@@ -7203,6 +7479,56 @@ function drawPlayer(){
     ctx.lineWidth=1;
 
     ctx.stroke();
+
+    if(ghostActive){
+
+        const shieldPulse=
+            1+
+            Math.sin(
+                performance.now()*.01
+            )*.08;
+
+        ctx.save();
+
+        ctx.globalAlpha=
+            clamp(
+                ghostTimer/1,
+                .3,
+                .85
+            );
+
+        ctx.shadowBlur=20;
+
+        ctx.shadowColor=
+            "#c9a8ff";
+
+        ctx.strokeStyle=
+            "#c9a8ff";
+
+        ctx.lineWidth=2.5;
+
+        ctx.setLineDash([
+            6,5
+        ]);
+
+        ctx.lineDashOffset=
+            -performance.now()*.05;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            42*shieldPulse,
+            0,
+            Math.PI*2
+        );
+
+        ctx.stroke();
+
+        ctx.restore();
+
+    }
 
 }
 
@@ -8555,14 +8881,17 @@ let empCooldown=0;
 let empUses=0;
 
 /*
- * Rebalanced: EMP now costs more to charge, fires fewer times
- * before a real cooldown, and — most importantly — its payout
+ * Rebalanced: EMP costs a real amount to charge and its payout
  * is capped in detonateAsteroid() so it can never out-score
- * skilled dodging/chaining. It's a panic button, not a farm.
+ * skilled dodging/chaining — it's a panic button, not a farm.
+ * Uses-before-cooldown raised to 3: with only 2, a genuinely
+ * dense field needed more than the ability could deliver
+ * before locking out, making it feel punishing rather than
+ * helpful right when it mattered most.
  */
 const EMP_MAX=140;
 const EMP_COOLDOWN=7;
-const EMP_USES_BEFORE_COOLDOWN=2;
+const EMP_USES_BEFORE_COOLDOWN=3;
 
 /*
  * Total points a single EMP activation can ever award, no
@@ -9015,6 +9344,56 @@ function computeEmpChargeRate(){
                 5
             );
 
+    }else if(
+        key===
+        "return-capsule"
+    ){
+
+        base=
+            clamp(
+                6-
+                difficultyIntensity()*2.5,
+                3.5,
+                6
+            );
+
+    }else if(
+        key===
+        "ghost-shield" ||
+        key===
+        "chrono-field"
+    ){
+
+        /*
+         * Both are pure defensive breathing-room, not scoring
+         * or clearing tools, so they're allowed to charge a
+         * little faster than EMP baseline — struggling players
+         * especially need them to actually come around often
+         * enough to matter.
+         */
+        base=
+            clamp(
+                6-
+                (
+                    1-difficultyIntensity()
+                )*2.5,
+                3.5,
+                6
+            );
+
+    }else if(
+        key===
+        "ricochet-orb"
+    ){
+
+        base=
+            clamp(
+                6.5-
+                difficultyIntensity()*3,
+                3.5,
+                6.5
+            );
+
     }else{
 
         base=
@@ -9196,6 +9575,53 @@ function computeHitTolerance(){
         skill*14,
         14,
         28
+    );
+
+}
+
+
+/*
+ * Ghost Shield duration, seconds. A struggling player gets a
+ * longer mercy window; a thriving one gets a shorter, more
+ * situational one.
+ */
+function computeGhostDuration(){
+
+    return clamp(
+        6-
+        difficultyIntensity()*2.5,
+        3.5,
+        6
+    );
+
+}
+
+
+/*
+ * Chrono Field duration and slow factor. Duration follows the
+ * same struggling-gets-more pattern as everything else; the
+ * slow factor (multiplied into asteroid dt while active) stays
+ * meaningful even for a thriving player rather than being
+ * tuned away to nothing.
+ */
+function computeChronoDuration(){
+
+    return clamp(
+        7-
+        difficultyIntensity()*2,
+        5,
+        7
+    );
+
+}
+
+function computeChronoSlowFactor(){
+
+    return clamp(
+        .35+
+        difficultyIntensity()*.25,
+        .35,
+        .6
     );
 
 }
@@ -10533,6 +10959,181 @@ function activateRegenCoil(){
 
 
 /*
+ * Ghost Shield: makes the ship immune to asteroid contact for
+ * a duration — see checkPlayerCollisions(), which just skips
+ * the damage check entirely while ghostActive is true. Tapping
+ * still destroys asteroids normally the whole time.
+ */
+function activateGhostShield(){
+
+    if(
+        empCharge<EMP_MAX ||
+        !running ||
+        paused ||
+        gameOver ||
+        worldState!=="field" ||
+        empCooldown>0 ||
+        ghostActive
+    ){
+
+        return;
+
+    }
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    ghostActive=true;
+
+    ghostTimer=
+        computeGhostDuration();
+
+    floatingText(
+        "PHASED OUT",
+        W/2,
+        H*.3,
+        "#c9a8ff"
+    );
+
+    sound("click");
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
+ * Chrono Field: scales down asteroid dt (not the player's, not
+ * anything else) for a duration — see the field update loop,
+ * which multiplies dt by computeChronoSlowFactor() specifically
+ * before calling asteroid.update().
+ */
+function activateChronoField(){
+
+    if(
+        empCharge<EMP_MAX ||
+        !running ||
+        paused ||
+        gameOver ||
+        worldState!=="field" ||
+        empCooldown>0 ||
+        timeSlowActive
+    ){
+
+        return;
+
+    }
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    timeSlowActive=true;
+
+    timeSlowTimer=
+        computeChronoDuration();
+
+    floatingText(
+        "TIME DILATED",
+        W/2,
+        H*.3,
+        "#8de7ff"
+    );
+
+    sound("click");
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
+ * Ricochet Orb: arms like the Incinerator Beam — the actual
+ * launch happens on the next field tap, in handlePointer.
+ */
+function fireRicochetOrb(targetX,targetY){
+
+    ricochetArmed=false;
+
+    ricochetBall=
+        new RicochetBall(
+            targetX,
+            targetY
+        );
+
+    /*
+     * Same capped-payout pattern as EMP/Beam: however many
+     * asteroids it ends up bouncing through, the total it can
+     * ever earn is limited, so it stays a utility tool rather
+     * than a new scoring loop.
+     */
+    empBurstRemaining=
+        Math.min(
+            90,
+            asteroids.length*8
+        );
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    sound("click");
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
  * Incinerator Beam: an equipped alternative to EMP that trades
  * "clear the whole field" for "precisely clear a line toward
  * wherever you aim". Pressing the ability button while charged
@@ -10700,6 +11301,18 @@ function enterPlanetPhase(){
 
     beamArmed=false;
 
+    ghostActive=false;
+
+    ghostTimer=0;
+
+    timeSlowActive=false;
+
+    timeSlowTimer=0;
+
+    ricochetArmed=false;
+
+    ricochetBall=null;
+
     destinationLayer.classList.remove(
         "show"
     );
@@ -10771,6 +11384,18 @@ function enterAsteroidField(
 
     beamArmed=false;
 
+    ghostActive=false;
+
+    ghostTimer=0;
+
+    timeSlowActive=false;
+
+    timeSlowTimer=0;
+
+    ricochetArmed=false;
+
+    ricochetBall=null;
+
     spawnTimer=3;
 
     wave++;
@@ -10835,6 +11460,18 @@ function enterInterplanetary(){
     beamEffects=[];
 
     beamArmed=false;
+
+    ghostActive=false;
+
+    ghostTimer=0;
+
+    timeSlowActive=false;
+
+    timeSlowTimer=0;
+
+    ricochetArmed=false;
+
+    ricochetBall=null;
 
     worldTimer=0;
 
@@ -11478,6 +12115,121 @@ function update(dt){
         updateAIDifficulty(dt);
 
 
+        if(ghostActive){
+
+            ghostTimer-=dt;
+
+            if(ghostTimer<=0){
+
+                ghostActive=false;
+
+                floatingText(
+                    "SHIELD FADED",
+                    W/2,
+                    H*.3,
+                    "#c9a8ff"
+                );
+
+                updateHUD();
+
+            }
+
+        }
+
+        if(timeSlowActive){
+
+            timeSlowTimer-=dt;
+
+            if(timeSlowTimer<=0){
+
+                timeSlowActive=false;
+
+                floatingText(
+                    "TIME NORMAL",
+                    W/2,
+                    H*.3,
+                    "#8de7ff"
+                );
+
+                updateHUD();
+
+            }
+
+        }
+
+        if(ricochetBall){
+
+            ricochetBall.update(dt);
+
+            let hitIndex=-1;
+
+            for(
+                let i=0;
+                i<asteroids.length;
+                i++
+            ){
+
+                const a=
+                    asteroids[i];
+
+                if(
+                    Math.hypot(
+                        a.x-
+                        ricochetBall.x,
+                        a.y-
+                        ricochetBall.y
+                    )<=
+                    a.radius+
+                    ricochetBall.radius
+                ){
+
+                    hitIndex=i;
+
+                    break;
+
+                }
+
+            }
+
+            if(hitIndex!==-1){
+
+                const hitX=
+                    asteroids[
+                        hitIndex
+                    ].x;
+
+                const hitY=
+                    asteroids[
+                        hitIndex
+                    ].y;
+
+                detonateAsteroid(
+                    hitIndex,
+                    false,
+                    true
+                );
+
+                ricochetBall.bounceOff(
+                    hitX,
+                    hitY
+                );
+
+                sound("click");
+
+            }
+
+            if(
+                ricochetBall.offscreen ||
+                ricochetBall.expired
+            ){
+
+                ricochetBall=null;
+
+            }
+
+        }
+
+
         if(
             comboTimer>0
         ){
@@ -11507,7 +12259,8 @@ function update(dt){
         if(
             worldTimer>3 &&
             spawnTimer<=0 &&
-            !capsuleActive
+            capsuleMode!==
+            "death"
         ){
 
             /*
@@ -11542,11 +12295,18 @@ function update(dt){
         }
 
 
+        const asteroidDt=
+            timeSlowActive
+            ?dt*computeChronoSlowFactor()
+            :dt;
+
         for(
             const asteroid of asteroids
         ){
 
-            asteroid.update(dt);
+            asteroid.update(
+                asteroidDt
+            );
 
         }
 
@@ -11703,7 +12463,7 @@ function update(dt){
             running &&
             !gameOver &&
             !pendingFieldExit &&
-            !capsuleActive &&
+            capsuleMode!=="death" &&
             planetPhasePending &&
             !planetPhaseCompleted
         ){
@@ -11736,7 +12496,7 @@ function update(dt){
             running &&
             !gameOver &&
             !pendingFieldExit &&
-            !capsuleActive &&
+            capsuleMode!=="death" &&
             worldState==="field" &&
             !planetPhasePending
         ){
@@ -12170,6 +12930,78 @@ function draw(){
     }
 
 
+    if(ricochetBall){
+
+        ctx.save();
+
+        for(
+            let i=0;
+            i<ricochetBall.trail.length;
+            i++
+        ){
+
+            const point=
+                ricochetBall.trail[i];
+
+            ctx.globalAlpha=
+                (
+                    i/
+                    ricochetBall.trail.length
+                )*.4;
+
+            ctx.fillStyle=
+                "#5cc8ff";
+
+            ctx.beginPath();
+
+            ctx.arc(
+                point.x,
+                point.y,
+                ricochetBall.radius*.6,
+                0,
+                Math.PI*2
+            );
+
+            ctx.fill();
+
+        }
+
+        ctx.globalAlpha=1;
+
+        ctx.shadowBlur=18;
+
+        ctx.shadowColor=
+            "#5cc8ff";
+
+        ctx.fillStyle=
+            "#d6f4ff";
+
+        ctx.strokeStyle=
+            "#5cc8ff";
+
+        ctx.lineWidth=2;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            ricochetBall.x,
+            ricochetBall.y,
+            ricochetBall.radius,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+        ctx.stroke();
+
+        ctx.shadowBlur=0;
+
+        ctx.restore();
+
+    }
+
+
     for(
         const beam of beamEffects
     ){
@@ -12236,7 +13068,8 @@ function draw(){
 
     if(
         worldState!=="planet" &&
-        !capsuleActive
+        capsuleMode!==
+        "death"
     ){
 
         drawPlayer();
@@ -12311,6 +13144,32 @@ function draw(){
 
 
     drawParticles();
+
+
+    if(timeSlowActive){
+
+        ctx.save();
+
+        ctx.globalAlpha=
+            clamp(
+                timeSlowTimer/1.2,
+                0,
+                .16
+            );
+
+        ctx.fillStyle=
+            "#3fa8ff";
+
+        ctx.fillRect(
+            0,
+            0,
+            W,
+            H
+        );
+
+        ctx.restore();
+
+    }
 
 
     /*
@@ -12425,6 +13284,29 @@ function updateHUD(){
             currentShipEquipment!==
             "regen-coil" ||
             lives<3
+        ) &&
+        (
+            currentShipEquipment!==
+            "return-capsule" ||
+            (
+                !capsuleActive &&
+                runCoins>0
+            )
+        ) &&
+        (
+            currentShipEquipment!==
+            "ghost-shield" ||
+            !ghostActive
+        ) &&
+        (
+            currentShipEquipment!==
+            "chrono-field" ||
+            !timeSlowActive
+        ) &&
+        (
+            currentShipEquipment!==
+            "ricochet-orb" ||
+            !ricochetBall
         );
 
     empButton.classList.toggle(
@@ -12439,6 +13321,18 @@ function updateHUD(){
         :currentShipEquipment===
         "regen-coil"
         ?"❤"
+        :currentShipEquipment===
+        "return-capsule"
+        ?"📦"
+        :currentShipEquipment===
+        "ghost-shield"
+        ?"👻"
+        :currentShipEquipment===
+        "chrono-field"
+        ?"🌀"
+        :currentShipEquipment===
+        "ricochet-orb"
+        ?"🔵"
         :"⚡";
 
     if(
@@ -12453,7 +13347,59 @@ function updateHUD(){
             "<small>FULL HULL</small>";
 
     }else if(
-        beamArmed
+        currentShipEquipment===
+        "return-capsule" &&
+        capsuleActive
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>IN FLIGHT</small>";
+
+    }else if(
+        currentShipEquipment===
+        "return-capsule" &&
+        runCoins<=0 &&
+        empCharge>=EMP_MAX
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>NO CARGO</small>";
+
+    }else if(
+        currentShipEquipment===
+        "ghost-shield" &&
+        ghostActive
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>PHASED</small>";
+
+    }else if(
+        currentShipEquipment===
+        "chrono-field" &&
+        timeSlowActive
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>ACTIVE</small>";
+
+    }else if(
+        currentShipEquipment===
+        "ricochet-orb" &&
+        ricochetBall
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>IN FLIGHT</small>";
+
+    }else if(
+        beamArmed ||
+        ricochetArmed
     ){
 
         empButton.innerHTML=
@@ -12596,13 +13542,39 @@ let currentShipEquipment="emp";
 let beamArmed=false;
 
 /*
- * A physical Return Capsule ejected on death instead of an
- * instant, automatic save. It has to actually get clear of the
- * wreckage — an asteroid can still destroy it — before its
- * coins are genuinely safe.
+ * A physical Return Capsule, ejected either automatically on
+ * death or proactively via the ability button. capsuleActive
+ * just means "one exists and needs updating/drawing";
+ * capsuleMode ("death" vs "active") controls whether it also
+ * blocks normal play — an active eject keeps the ship flying
+ * completely normally alongside it.
  */
 let capsule=null;
 let capsuleActive=false;
+let capsuleMode=null;
+
+/*
+ * Ghost Shield: while active, the player takes no damage from
+ * asteroid contact at all — see checkPlayerCollisions().
+ */
+let ghostActive=false;
+let ghostTimer=0;
+
+/*
+ * Chrono Field: while active, every asteroid update (including
+ * ones spawned mid-effect) runs on a scaled-down dt — see the
+ * asteroid update loop.
+ */
+let timeSlowActive=false;
+let timeSlowTimer=0;
+
+/*
+ * Ricochet Orb: armed like the Incinerator Beam (next field tap
+ * fires it), then travels and bounces on its own each frame
+ * until it exits the field.
+ */
+let ricochetArmed=false;
+let ricochetBall=null;
 
 
 function startGame(){
@@ -12855,9 +13827,23 @@ function startGame(){
 
     beamArmed=false;
 
+    ghostActive=false;
+
+    ghostTimer=0;
+
+    timeSlowActive=false;
+
+    timeSlowTimer=0;
+
+    ricochetArmed=false;
+
+    ricochetBall=null;
+
     capsuleActive=false;
 
     capsule=null;
+
+    capsuleMode=null;
 
     explosions=[];
 
@@ -13042,6 +14028,19 @@ function handlePointer(event){
     ){
 
         fireIncineratorBeam(
+            p.x,
+            p.y
+        );
+
+        return;
+
+    }
+
+    if(
+        ricochetArmed
+    ){
+
+        fireRicochetOrb(
             p.x,
             p.y
         );
@@ -13315,6 +14314,83 @@ empButton.addEventListener(
             }
 
             beamArmed=true;
+
+            updateHUD();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "return-capsule"
+        ){
+
+            if(
+                empCharge<EMP_MAX ||
+                !running ||
+                paused ||
+                gameOver ||
+                worldState!=="field" ||
+                empCooldown>0 ||
+                capsuleActive ||
+                runCoins<=0
+            ){
+
+                return;
+
+            }
+
+            launchCapsule(
+                "active"
+            );
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "ghost-shield"
+        ){
+
+            activateGhostShield();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "chrono-field"
+        ){
+
+            activateChronoField();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "ricochet-orb"
+        ){
+
+            if(
+                empCharge<EMP_MAX ||
+                !running ||
+                paused ||
+                gameOver ||
+                worldState!=="field" ||
+                empCooldown>0 ||
+                ricochetBall
+            ){
+
+                return;
+
+            }
+
+            ricochetArmed=true;
 
             updateHUD();
 
