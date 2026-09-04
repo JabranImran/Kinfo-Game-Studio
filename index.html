@@ -3417,7 +3417,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3429,7 +3429,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3441,11 +3441,49 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
             "until it finally flies off-screen."
+    },
+
+    "solar-blade":{
+        id:"solar-blade",
+        planetId:"helios",
+        name:"Solar Blade",
+        icon:"☄",
+        cost:45,
+        description:
+            "Arms a glowing blade at your fingertip — drag across "+
+            "the field and anything the trail crosses is cut "+
+            "down. Stays active for as long as you hold, and ends "+
+            "the instant you lift off."
+    },
+
+    "nova-burst":{
+        id:"nova-burst",
+        planetId:"nova",
+        name:"Nova Burst",
+        icon:"✨",
+        cost:45,
+        description:
+            "An instant flash that sweeps in every coin currently "+
+            "on the field at once, with a bonus on top — pure "+
+            "economy, no combat effect at all."
+    },
+
+    "singularity":{
+        id:"singularity",
+        planetId:"zenith",
+        name:"Singularity",
+        icon:"🌌",
+        cost:60,
+        description:
+            "Tap to collapse a point in space — nearby asteroids "+
+            "get dragged in and destroyed as they reach the "+
+            "centre. The most expensive item in the game for a "+
+            "reason."
     }
 
 };
@@ -9394,6 +9432,55 @@ function computeEmpChargeRate(){
                 6.5
             );
 
+    }else if(
+        key===
+        "solar-blade"
+    ){
+
+        /*
+         * A continuous, skill-based sweep is worth less per
+         * kill than a discrete burst, so it charges a bit
+         * faster to compensate — same intensity dial as beam.
+         */
+        base=
+            clamp(
+                7-
+                difficultyIntensity()*2.8,
+                4,
+                7
+            );
+
+    }else if(
+        key===
+        "nova-burst"
+    ){
+
+        base=
+            clamp(
+                6-
+                difficultyIntensity()*2.5,
+                3.5,
+                6
+            );
+
+    }else if(
+        key===
+        "singularity"
+    ){
+
+        /*
+         * The most powerful item charges the slowest of all —
+         * it's a genuine "ultimate," not something to lean on
+         * every field.
+         */
+        base=
+            clamp(
+                4.5-
+                difficultyIntensity()*2,
+                2.5,
+                4.5
+            );
+
     }else{
 
         base=
@@ -9622,6 +9709,78 @@ function computeChronoSlowFactor(){
         difficultyIntensity()*.25,
         .35,
         .6
+    );
+
+}
+
+
+/*
+ * Solar Blade's collision radius around the drag trail. Same
+ * pattern as tap hit tolerance: a demonstrably sharp player
+ * gets a thinner, more skill-testing blade; a developing one
+ * gets a wider, more forgiving one.
+ */
+function computeBladeWidth(){
+
+    const skill=
+        clamp(
+            aiModel.skillEstimate,
+            0,
+            1
+        );
+
+    return clamp(
+        26-
+        skill*10,
+        16,
+        26
+    );
+
+}
+
+
+/*
+ * Nova Burst's bonus multiplier on top of the coins it sweeps
+ * in. A struggling player gets a bigger bonus — genuine help
+ * rebuilding a bank after a rough stretch.
+ */
+function computeNovaBonus(){
+
+    return clamp(
+        1.8-
+        difficultyIntensity()*.5,
+        1.3,
+        1.8
+    );
+
+}
+
+
+/*
+ * Singularity's pull radius, pull strength, and how long it
+ * stays open before collapsing. All ease off slightly for a
+ * thriving player (it's a powerful effect — a struggling
+ * player gets a bit more out of it) without ever becoming
+ * either trivial or useless.
+ */
+function computeSingularityRadius(){
+
+    return clamp(
+        170-
+        difficultyIntensity()*30,
+        140,
+        170
+    );
+
+}
+
+function computeSingularityDuration(){
+
+    return clamp(
+        3-
+        difficultyIntensity()*.6,
+        2.4,
+        3
     );
 
 }
@@ -11134,6 +11293,329 @@ function fireRicochetOrb(targetX,targetY){
 
 
 /*
+ * Nova Burst: instant, no arming needed — collects every coin
+ * currently on the field the moment it's pressed, with a bonus
+ * multiplier on top. Pure economy, zero combat effect.
+ */
+function activateNovaBurst(){
+
+    if(
+        empCharge<EMP_MAX ||
+        !running ||
+        paused ||
+        gameOver ||
+        worldState!=="field" ||
+        empCooldown>0
+    ){
+
+        return;
+
+    }
+
+    const bonus=
+        computeNovaBonus();
+
+    let total=0;
+
+    for(
+        const c of coinPickups
+    ){
+
+        total+=
+            c.value;
+
+        explosions.push(
+            new Explosion(
+                c.x,
+                c.y,
+                .5
+            )
+        );
+
+    }
+
+    coinPickups=[];
+
+    if(total>0){
+
+        const awarded=
+            Math.round(
+                total*bonus
+            );
+
+        runCoins+=
+            awarded;
+
+        aiWindow.coinsCollected+=
+            awarded;
+
+        runCoinsCollectedTotal+=
+            awarded;
+
+        floatingText(
+            "NOVA BURST +"+
+            awarded+" 🪙",
+            W/2,
+            H*.3,
+            "#ffd76b"
+        );
+
+    }else{
+
+        floatingText(
+            "NOVA BURST",
+            W/2,
+            H*.3,
+            "#ffd76b"
+        );
+
+    }
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    sound("click");
+
+    shake=6;
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
+ * Solar Blade: arms on button press. The next pointerdown on
+ * the field begins the slice (see handlePointer); pointermove
+ * extends the trail and destroys anything it crosses;
+ * pointerup ends it immediately, whenever that happens to be —
+ * there's no timer at all.
+ */
+function beginSolarBlade(x,y){
+
+    bladeArmed=false;
+
+    bladeActive=true;
+
+    bladeTrail=[
+        {x,y}
+    ];
+
+    bladeLastPoint={x,y};
+
+    empBurstRemaining=
+        Math.min(
+            120,
+            asteroids.length*8
+        );
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    sound("click");
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+function endSolarBlade(){
+
+    if(!bladeActive)
+        return;
+
+    bladeActive=false;
+
+    updateHUD();
+
+}
+
+/*
+ * Extends the blade trail to a new point and destroys any
+ * asteroid whose distance to the SEGMENT between the last
+ * point and this one is within the blade's width — checking
+ * the segment rather than just the new point is what stops a
+ * fast swipe from skipping over asteroids between move events.
+ */
+function extendSolarBlade(x,y){
+
+    if(!bladeLastPoint)
+        return;
+
+    const width=
+        computeBladeWidth();
+
+    for(
+        let i=asteroids.length-1;
+        i>=0;
+        i--
+    ){
+
+        const a=
+            asteroids[i];
+
+        const d=
+            pointToSegmentDistance(
+                a.x,
+                a.y,
+                bladeLastPoint.x,
+                bladeLastPoint.y,
+                x,
+                y
+            );
+
+        if(
+            d<=
+            width+a.radius
+        ){
+
+            detonateAsteroid(
+                i,
+                false,
+                true
+            );
+
+        }
+
+    }
+
+    bladeTrail.push({x,y});
+
+    if(
+        bladeTrail.length>16
+    ){
+
+        bladeTrail.shift();
+
+    }
+
+    bladeLastPoint={x,y};
+
+}
+
+function pointToSegmentDistance(px,py,x1,y1,x2,y2){
+
+    const dx=
+        x2-x1;
+
+    const dy=
+        y2-y1;
+
+    const lengthSq=
+        dx*dx+dy*dy;
+
+    let t=
+        lengthSq>0
+        ?(
+            (px-x1)*dx+
+            (py-y1)*dy
+        )/lengthSq
+        :0;
+
+    t=
+        clamp(t,0,1);
+
+    const closestX=
+        x1+t*dx;
+
+    const closestY=
+        y1+t*dy;
+
+    return Math.hypot(
+        px-closestX,
+        py-closestY
+    );
+
+}
+
+
+/*
+ * Singularity: arms like the Beam/Orb — the next field tap
+ * places it. See the field update loop for the pull/collapse
+ * behaviour while it's open.
+ */
+function placeSingularity(x,y){
+
+    singularityArmed=false;
+
+    singularity={
+        x,
+        y,
+        life:0,
+        maxLife:
+            computeSingularityDuration(),
+        radius:
+            computeSingularityRadius()
+    };
+
+    empBurstRemaining=
+        Math.min(
+            130,
+            asteroids.length*8
+        );
+
+    empCharge=0;
+
+    empUses++;
+
+    aiWindow.itemUses++;
+
+    runItemUsesTotal++;
+
+    sound("click");
+
+    shake=8;
+
+    if(
+        empUses>=
+        EMP_USES_BEFORE_COOLDOWN
+    ){
+
+        empCooldown=
+            EMP_COOLDOWN;
+
+        empUses=0;
+
+    }
+
+    updateHUD();
+
+}
+
+
+/*
  * Incinerator Beam: an equipped alternative to EMP that trades
  * "clear the whole field" for "precisely clear a line toward
  * wherever you aim". Pressing the ability button while charged
@@ -11313,6 +11795,18 @@ function enterPlanetPhase(){
 
     ricochetBall=null;
 
+    bladeArmed=false;
+
+    bladeActive=false;
+
+    bladeTrail=[];
+
+    bladeLastPoint=null;
+
+    singularityArmed=false;
+
+    singularity=null;
+
     destinationLayer.classList.remove(
         "show"
     );
@@ -11396,6 +11890,18 @@ function enterAsteroidField(
 
     ricochetBall=null;
 
+    bladeArmed=false;
+
+    bladeActive=false;
+
+    bladeTrail=[];
+
+    bladeLastPoint=null;
+
+    singularityArmed=false;
+
+    singularity=null;
+
     spawnTimer=3;
 
     wave++;
@@ -11472,6 +11978,18 @@ function enterInterplanetary(){
     ricochetArmed=false;
 
     ricochetBall=null;
+
+    bladeArmed=false;
+
+    bladeActive=false;
+
+    bladeTrail=[];
+
+    bladeLastPoint=null;
+
+    singularityArmed=false;
+
+    singularity=null;
 
     worldTimer=0;
 
@@ -12224,6 +12742,85 @@ function update(dt){
             ){
 
                 ricochetBall=null;
+
+            }
+
+        }
+
+
+        if(singularity){
+
+            singularity.life+=dt;
+
+            const pullStrength=
+                260;
+
+            const collapseRadius=
+                26;
+
+            for(
+                let i=asteroids.length-1;
+                i>=0;
+                i--
+            ){
+
+                const a=
+                    asteroids[i];
+
+                const dx=
+                    singularity.x-a.x;
+
+                const dy=
+                    singularity.y-a.y;
+
+                const dist=
+                    Math.hypot(dx,dy);
+
+                if(
+                    dist<=
+                    collapseRadius
+                ){
+
+                    detonateAsteroid(
+                        i,
+                        false,
+                        true
+                    );
+
+                    continue;
+
+                }
+
+                if(
+                    dist<=
+                    singularity.radius &&
+                    dist>0
+                ){
+
+                    const pull=
+                        pullStrength*
+                        (
+                            1-
+                            dist/
+                            singularity.radius
+                        )*dt;
+
+                    a.x+=
+                        (dx/dist)*pull;
+
+                    a.y+=
+                        (dy/dist)*pull;
+
+                }
+
+            }
+
+            if(
+                singularity.life>=
+                singularity.maxLife
+            ){
+
+                singularity=null;
 
             }
 
@@ -13002,6 +13599,157 @@ function draw(){
     }
 
 
+    if(
+        bladeActive &&
+        bladeTrail.length>1
+    ){
+
+        ctx.save();
+
+        ctx.lineCap=
+            "round";
+
+        ctx.lineJoin=
+            "round";
+
+        ctx.shadowBlur=22;
+
+        ctx.shadowColor=
+            "#ffb347";
+
+        ctx.strokeStyle=
+            "#fff3d6";
+
+        ctx.lineWidth=5;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            bladeTrail[0].x,
+            bladeTrail[0].y
+        );
+
+        for(
+            let i=1;
+            i<bladeTrail.length;
+            i++
+        ){
+
+            ctx.lineTo(
+                bladeTrail[i].x,
+                bladeTrail[i].y
+            );
+
+        }
+
+        ctx.stroke();
+
+        ctx.strokeStyle=
+            "#ff8a3d";
+
+        ctx.lineWidth=
+            computeBladeWidth()*.7;
+
+        ctx.globalAlpha=.3;
+
+        ctx.stroke();
+
+        ctx.shadowBlur=0;
+
+        ctx.restore();
+
+    }
+
+
+    if(singularity){
+
+        const collapseFade=
+            clamp(
+                1-
+                singularity.life/
+                singularity.maxLife,
+                0,
+                1
+            );
+
+        ctx.save();
+
+        const swirl=
+            ctx.createRadialGradient(
+                singularity.x,
+                singularity.y,
+                4,
+                singularity.x,
+                singularity.y,
+                singularity.radius
+            );
+
+        swirl.addColorStop(
+            0,
+            "rgba(180,120,255,.55)"
+        );
+
+        swirl.addColorStop(
+            .3,
+            "rgba(120,80,220,.16)"
+        );
+
+        swirl.addColorStop(
+            1,
+            "rgba(0,0,0,0)"
+        );
+
+        ctx.fillStyle=
+            swirl;
+
+        ctx.globalAlpha=
+            .5+
+            collapseFade*.5;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            singularity.x,
+            singularity.y,
+            singularity.radius,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+        ctx.globalAlpha=1;
+
+        ctx.shadowBlur=26;
+
+        ctx.shadowColor=
+            "#c98bff";
+
+        ctx.fillStyle=
+            "#1a0a2e";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            singularity.x,
+            singularity.y,
+            10+
+            Math.sin(
+                performance.now()*.01
+            )*2,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+        ctx.shadowBlur=0;
+
+        ctx.restore();
+
+    }
+
+
     for(
         const beam of beamEffects
     ){
@@ -13307,6 +14055,16 @@ function updateHUD(){
             currentShipEquipment!==
             "ricochet-orb" ||
             !ricochetBall
+        ) &&
+        (
+            currentShipEquipment!==
+            "solar-blade" ||
+            !bladeActive
+        ) &&
+        (
+            currentShipEquipment!==
+            "singularity" ||
+            !singularity
         );
 
     empButton.classList.toggle(
@@ -13333,6 +14091,15 @@ function updateHUD(){
         :currentShipEquipment===
         "ricochet-orb"
         ?"🔵"
+        :currentShipEquipment===
+        "solar-blade"
+        ?"☄"
+        :currentShipEquipment===
+        "nova-burst"
+        ?"✨"
+        :currentShipEquipment===
+        "singularity"
+        ?"🌌"
         :"⚡";
 
     if(
@@ -13398,8 +14165,30 @@ function updateHUD(){
             "<small>IN FLIGHT</small>";
 
     }else if(
+        currentShipEquipment===
+        "solar-blade" &&
+        bladeActive
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>SLICING</small>";
+
+    }else if(
+        currentShipEquipment===
+        "singularity" &&
+        singularity
+    ){
+
+        empButton.innerHTML=
+            abilityIcon+
+            "<small>OPEN</small>";
+
+    }else if(
         beamArmed ||
-        ricochetArmed
+        ricochetArmed ||
+        bladeArmed ||
+        singularityArmed
     ){
 
         empButton.innerHTML=
@@ -13575,6 +14364,25 @@ let timeSlowTimer=0;
  */
 let ricochetArmed=false;
 let ricochetBall=null;
+
+/*
+ * Solar Blade: pressing the ability button arms it; the next
+ * pointerdown on the field actually starts the slice, tracked
+ * via pointermove while held, and ends the instant pointerup
+ * fires — no timer involved at all.
+ */
+let bladeArmed=false;
+let bladeActive=false;
+let bladeTrail=[];
+let bladeLastPoint=null;
+
+/*
+ * Singularity: arms like the Beam/Orb — the next field tap
+ * places it. While open it pulls nearby asteroids toward its
+ * centre and destroys anything that reaches it.
+ */
+let singularityArmed=false;
+let singularity=null;
 
 
 function startGame(){
@@ -13839,6 +14647,18 @@ function startGame(){
 
     ricochetBall=null;
 
+    bladeArmed=false;
+
+    bladeActive=false;
+
+    bladeTrail=[];
+
+    bladeLastPoint=null;
+
+    singularityArmed=false;
+
+    singularity=null;
+
     capsuleActive=false;
 
     capsule=null;
@@ -14049,6 +14869,32 @@ function handlePointer(event){
 
     }
 
+    if(
+        bladeArmed
+    ){
+
+        beginSolarBlade(
+            p.x,
+            p.y
+        );
+
+        return;
+
+    }
+
+    if(
+        singularityArmed
+    ){
+
+        placeSingularity(
+            p.x,
+            p.y
+        );
+
+        return;
+
+    }
+
     /*
      * Coin collection is checked independently of asteroid
      * hits — a tap can do both if a coin happens to be sitting
@@ -14181,6 +15027,58 @@ canvas.addEventListener(
     handlePointer,
     {
         passive:false
+    }
+);
+
+
+/*
+ * Solar Blade's drag: pointermove extends the trail (and cuts
+ * down anything it crosses) while active; pointerup ends the
+ * slice immediately, wherever that happens to be — there's no
+ * timer, exactly as requested. Listens on the document rather
+ * than just the canvas so lifting off (or dragging past the
+ * edge) still ends it cleanly.
+ */
+canvas.addEventListener(
+    "pointermove",
+    event=>{
+
+        if(!bladeActive)
+            return;
+
+        event.preventDefault();
+
+        const p=
+            pointerPosition(
+                event
+            );
+
+        extendSolarBlade(
+            p.x,
+            p.y
+        );
+
+    },
+    {
+        passive:false
+    }
+);
+
+document.addEventListener(
+    "pointerup",
+    ()=>{
+
+        endSolarBlade();
+
+    }
+);
+
+document.addEventListener(
+    "pointercancel",
+    ()=>{
+
+        endSolarBlade();
+
     }
 );
 
@@ -14391,6 +15289,71 @@ empButton.addEventListener(
             }
 
             ricochetArmed=true;
+
+            updateHUD();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "solar-blade"
+        ){
+
+            if(
+                empCharge<EMP_MAX ||
+                !running ||
+                paused ||
+                gameOver ||
+                worldState!=="field" ||
+                empCooldown>0 ||
+                bladeActive
+            ){
+
+                return;
+
+            }
+
+            bladeArmed=true;
+
+            updateHUD();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "nova-burst"
+        ){
+
+            activateNovaBurst();
+
+            return;
+
+        }
+
+        if(
+            currentShipEquipment===
+            "singularity"
+        ){
+
+            if(
+                empCharge<EMP_MAX ||
+                !running ||
+                paused ||
+                gameOver ||
+                worldState!=="field" ||
+                empCooldown>0 ||
+                singularity
+            ){
+
+                return;
+
+            }
+
+            singularityArmed=true;
 
             updateHUD();
 
