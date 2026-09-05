@@ -1,0 +1,2328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Rocket Impact — Multiplayer</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #03050b;
+    color: white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+    touch-action: none;
+}
+
+canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+#hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    padding: max(14px, env(safe-area-inset-top)) 14px 14px;
+}
+
+.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.box {
+    background: rgba(7,12,24,.82);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 14px;
+    padding: 9px 12px;
+    backdrop-filter: blur(10px);
+}
+
+#stats {
+    font-weight: 800;
+}
+
+#status {
+    font-size: 12px;
+    font-weight: 800;
+    text-align: right;
+}
+
+#statusDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #aaa;
+    margin-right: 5px;
+}
+
+#hint {
+    position: absolute;
+    left: 50%;
+    bottom: max(18px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 12px;
+    opacity: .72;
+}
+
+#menu,
+#gameOver {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background:
+        radial-gradient(
+            circle at center,
+            rgba(16,25,54,.38),
+            rgba(0,0,0,.78)
+        );
+}
+
+.card {
+    width: min(430px, 100%);
+    background: rgba(8,13,27,.94);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 24px;
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 18px 70px rgba(0,0,0,.5);
+}
+
+h1 {
+    margin: 0 0 8px;
+    font-size: 32px;
+}
+
+.sub {
+    margin: 0 0 22px;
+    color: #b8c0d8;
+    line-height: 1.5;
+}
+
+.rules {
+    text-align: left;
+    color: #cbd2e5;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 18px 0;
+}
+
+.rules b {
+    color: white;
+}
+
+button {
+    width: 100%;
+    border: 0;
+    border-radius: 15px;
+    padding: 15px 18px;
+    color: white;
+    background: #285cff;
+    font-size: 17px;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+button:active {
+    transform: scale(.98);
+}
+
+.secondary {
+    margin-top: 10px;
+    background: #171d31;
+    box-shadow: none;
+    font-size: 14px;
+}
+
+#gameOver {
+    display: none;
+}
+
+.score {
+    font-size: 25px;
+    font-weight: 900;
+    margin: 12px 0 20px;
+}
+
+.small {
+    font-size: 11px;
+    opacity: .55;
+    margin-top: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" style="display:none">
+
+    <div class="top">
+
+        <div class="box" id="stats">
+            ❤️ 3 &nbsp; ☄️ 0 &nbsp; 🏆 0
+        </div>
+
+        <div class="box" id="status">
+            <span id="statusDot"></span>
+            <span id="statusText">LOCAL</span>
+            <br>
+            <span id="playersText">Players: 1</span>
+        </div>
+
+    </div>
+
+    <div class="box" id="hint">
+        Move your finger/mouse to steer • tap an asteroid to blast it
+    </div>
+
+</div>
+
+
+<!-- MAIN MENU -->
+<div id="menu">
+
+    <div class="card">
+
+        <h1>🚀 Rocket Impact</h1>
+
+        <p class="sub">
+            Multiplayer asteroid survival.
+            Fly your rocket, blast asteroids and try to stay alive.
+        </p>
+
+        <div class="rules">
+
+            <b>How to play</b>
+            <br>
+
+            • Move your finger or mouse to control your rocket.
+            <br>
+
+            • Tap/click an asteroid to destroy it.
+            <br>
+
+            • Explosions deflect nearby asteroids.
+            <br>
+
+            • Bigger asteroids can split into smaller ones.
+            <br>
+
+            • If an asteroid hits your rocket, you lose a life.
+
+        </div>
+
+        <button id="playBtn">
+            ▶ PLAY
+        </button>
+
+        <button class="secondary" id="backBtn">
+            ← Back to main game
+        </button>
+
+        <div class="small">
+            Multiplayer connection will be enabled when the server is configured.
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- GAME OVER -->
+<div id="gameOver">
+
+    <div class="card">
+
+        <h1>💥 Ship Destroyed</h1>
+
+        <div class="score" id="finalScore">
+            Score: 0
+        </div>
+
+        <button id="againBtn">
+            ↻ PLAY AGAIN
+        </button>
+
+        <button class="secondary" id="menuBtn">
+            Main Menu
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+"use strict";
+
+
+/*
+============================================================
+ROCKET IMPACT — MULTIPLAYER
+============================================================
+
+This HTML file is hosted on GitHub Pages.
+
+Later, once we deploy the multiplayer server, change:
+
+const SERVER_URL = "";
+
+to something like:
+
+const SERVER_URL = "wss://your-server.onrender.com";
+
+============================================================
+*/
+
+const SERVER_URL = "";
+
+
+/* =========================================================
+   CANVAS
+========================================================= */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let W = innerWidth;
+let H = innerHeight;
+
+let dpr = Math.min(
+    devicePixelRatio || 1,
+    2
+);
+
+
+function resize() {
+
+    W = innerWidth;
+    H = innerHeight;
+
+    dpr = Math.min(
+        devicePixelRatio || 1,
+        2
+    );
+
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+
+    ctx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+    );
+}
+
+
+addEventListener(
+    "resize",
+    resize
+);
+
+resize();
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const TAU = Math.PI * 2;
+
+function clamp(v, a, b) {
+
+    return Math.max(
+        a,
+        Math.min(b, v)
+    );
+
+}
+
+
+function rand(a, b) {
+
+    return a + Math.random() * (b - a);
+
+}
+
+
+function distanceSquared(a, b) {
+
+    const x = a.x - b.x;
+    const y = a.y - b.y;
+
+    return x * x + y * y;
+
+}
+
+
+/* =========================================================
+   GAME STATE
+========================================================= */
+
+let running = false;
+
+let score = 0;
+
+let lives = 3;
+
+let nextAsteroidId = 1;
+
+let spawnTimer = 0;
+
+let blastCooldown = 0;
+
+let shake = 0;
+
+
+/* =========================================================
+   PLAYER
+========================================================= */
+
+const player = {
+
+    id: "local",
+
+    x: W / 2,
+    y: H / 2,
+
+    tx: W / 2,
+    ty: H / 2,
+
+    vx: 0,
+    vy: 0,
+
+    angle: -Math.PI / 2,
+
+    invuln: 0
+
+};
+
+
+/* =========================================================
+   OBJECTS
+========================================================= */
+
+const asteroids = [];
+
+const particles = [];
+
+const rings = [];
+
+const remotePlayers = new Map();
+
+
+/* =========================================================
+   STARS
+========================================================= */
+
+const stars = Array.from(
+    { length: 180 },
+    () => ({
+
+        x: Math.random(),
+        y: Math.random(),
+
+        r: rand(.4, 1.5),
+
+        a: rand(.25, .85),
+
+        s: rand(.1, .7)
+
+    })
+);
+
+
+/* =========================================================
+   UI
+========================================================= */
+
+const menu =
+    document.getElementById("menu");
+
+const gameOver =
+    document.getElementById("gameOver");
+
+const hud =
+    document.getElementById("hud");
+
+const playBtn =
+    document.getElementById("playBtn");
+
+const againBtn =
+    document.getElementById("againBtn");
+
+const menuBtn =
+    document.getElementById("menuBtn");
+
+const backBtn =
+    document.getElementById("backBtn");
+
+const stats =
+    document.getElementById("stats");
+
+const statusText =
+    document.getElementById("statusText");
+
+const statusDot =
+    document.getElementById("statusDot");
+
+const playersText =
+    document.getElementById("playersText");
+
+const finalScore =
+    document.getElementById("finalScore");
+
+
+function setStatus(text, online) {
+
+    statusText.textContent = text;
+
+    statusDot.style.background =
+        online
+            ? "#39e58c"
+            : "#aaa";
+
+}
+
+
+function updateHUD() {
+
+    stats.textContent =
+        `❤️ ${lives}   ☄️ ${asteroids.length}   🏆 ${score}`;
+
+    playersText.textContent =
+        `Players: ${1 + remotePlayers.size}`;
+
+}
+
+
+/* =========================================================
+   GAME RESET
+========================================================= */
+
+function resetGame() {
+
+    score = 0;
+
+    lives = 3;
+
+    nextAsteroidId = 1;
+
+    spawnTimer = 0;
+
+    blastCooldown = 0;
+
+    shake = 0;
+
+
+    player.x = W / 2;
+    player.y = H / 2;
+
+    player.tx = W / 2;
+    player.ty = H / 2;
+
+    player.vx = 0;
+    player.vy = 0;
+
+    player.invuln = 1.5;
+
+
+    asteroids.length = 0;
+
+    particles.length = 0;
+
+    rings.length = 0;
+
+    remotePlayers.clear();
+
+
+    for (let i = 0; i < 8; i++) {
+
+        spawnAsteroid(
+            rand(35, W - 35),
+            rand(70, H - 35),
+            rand(22, 42)
+        );
+
+    }
+
+
+    updateHUD();
+
+}
+
+
+/* =========================================================
+   START / END
+========================================================= */
+
+function startGame() {
+
+    menu.style.display = "none";
+
+    gameOver.style.display = "none";
+
+    hud.style.display = "block";
+
+    running = true;
+
+    resetGame();
+
+    connectMultiplayer();
+
+}
+
+
+function endGame() {
+
+    running = false;
+
+    finalScore.textContent =
+        `Score: ${score}`;
+
+    gameOver.style.display = "flex";
+
+}
+
+
+/* =========================================================
+   ASTEROIDS
+========================================================= */
+
+function spawnAsteroid(
+    x,
+    y,
+    size,
+    vx,
+    vy
+) {
+
+    const speed =
+        rand(20, 65) +
+        Math.max(0, 55 - size);
+
+    const angle =
+        rand(0, TAU);
+
+    const sides =
+        Math.floor(rand(8, 12));
+
+    const shape = [];
+
+
+    for (let i = 0; i < sides; i++) {
+
+        shape.push({
+
+            a: i / sides * TAU,
+
+            r: size * rand(.78, 1.08)
+
+        });
+
+    }
+
+
+    asteroids.push({
+
+        id: nextAsteroidId++,
+
+        x,
+        y,
+
+        vx:
+            vx ??
+            Math.cos(angle) * speed,
+
+        vy:
+            vy ??
+            Math.sin(angle) * speed,
+
+        size,
+
+        rot: rand(0, TAU),
+
+        spin: rand(-1.1, 1.1),
+
+        shape
+
+    });
+
+}
+
+
+/* =========================================================
+   ASTEROID EXPLOSION
+========================================================= */
+
+function explodeAsteroid(
+    index,
+    broadcast = true
+) {
+
+    const asteroid =
+        asteroids[index];
+
+    if (!asteroid) return;
+
+
+    const power =
+        clamp(
+            asteroid.size * 4.2,
+            80,
+            210
+        );
+
+
+    rings.push({
+
+        x: asteroid.x,
+        y: asteroid.y,
+
+        r: 4,
+
+        max: power,
+
+        life: .45
+
+    });
+
+
+    /* Particles */
+
+    for (
+        let i = 0;
+        i < Math.floor(asteroid.size * .55);
+        i++
+    ) {
+
+        const angle =
+            rand(0, TAU);
+
+        const speed =
+            rand(30, 190);
+
+
+        particles.push({
+
+            x: asteroid.x,
+            y: asteroid.y,
+
+            vx:
+                Math.cos(angle) * speed,
+
+            vy:
+                Math.sin(angle) * speed,
+
+            life:
+                rand(.25, .7),
+
+            max: .7,
+
+            r:
+                rand(1, 3)
+
+        });
+
+    }
+
+
+    /* Deflect nearby asteroids */
+
+    for (const other of asteroids) {
+
+        if (other === asteroid)
+            continue;
+
+
+        const dx =
+            other.x - asteroid.x;
+
+        const dy =
+            other.y - asteroid.y;
+
+        const distance =
+            Math.hypot(dx, dy);
+
+
+        if (
+            distance > 1 &&
+            distance < power
+        ) {
+
+            const force =
+                (1 - distance / power) * 240;
+
+
+            other.vx +=
+                dx / distance * force;
+
+            other.vy +=
+                dy / distance * force;
+
+        }
+
+    }
+
+
+    /* Split large asteroids */
+
+    if (asteroid.size > 34) {
+
+        for (let i = 0; i < 2; i++) {
+
+            const angle =
+                rand(0, TAU);
+
+
+            spawnAsteroid(
+
+                asteroid.x +
+                    Math.cos(angle) * 8,
+
+                asteroid.y +
+                    Math.sin(angle) * 8,
+
+                asteroid.size * .52,
+
+                asteroid.vx +
+                    Math.cos(angle) *
+                    rand(35, 80),
+
+                asteroid.vy +
+                    Math.sin(angle) *
+                    rand(35, 80)
+
+            );
+
+        }
+
+    }
+
+
+    asteroids.splice(index, 1);
+
+    score +=
+        Math.round(asteroid.size);
+
+
+    updateHUD();
+
+
+    if (broadcast) {
+
+        sendBlast(
+            asteroid.x,
+            asteroid.y,
+            asteroid.size
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   PLAYER BLAST
+========================================================= */
+
+function blastAt(x, y) {
+
+    if (!running)
+        return;
+
+    if (blastCooldown > 0)
+        return;
+
+
+    blastCooldown = .12;
+
+
+    let hit = -1;
+
+    let best = Infinity;
+
+
+    for (
+        let i = 0;
+        i < asteroids.length;
+        i++
+    ) {
+
+        const asteroid =
+            asteroids[i];
+
+        const distance =
+            distanceSquared(
+                { x, y },
+                asteroid
+            );
+
+        const reach =
+            asteroid.size + 18;
+
+
+        if (
+            distance < reach * reach &&
+            distance < best
+        ) {
+
+            best = distance;
+
+            hit = i;
+
+        }
+
+    }
+
+
+    if (hit >= 0) {
+
+        const asteroid =
+            asteroids[hit];
+
+        explodeAsteroid(
+            hit,
+            true
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   REMOTE BLAST
+========================================================= */
+
+function applyRemoteBlast(
+    x,
+    y,
+    size
+) {
+
+    const power =
+        clamp(
+            size * 4.2,
+            80,
+            210
+        );
+
+
+    rings.push({
+
+        x,
+        y,
+
+        r: 4,
+
+        max: power,
+
+        life: .45
+
+    });
+
+
+    for (const asteroid of asteroids) {
+
+        const dx =
+            asteroid.x - x;
+
+        const dy =
+            asteroid.y - y;
+
+        const distance =
+            Math.hypot(dx, dy);
+
+
+        if (
+            distance > 1 &&
+            distance < power
+        ) {
+
+            const force =
+                (1 - distance / power) * 240;
+
+
+            asteroid.vx +=
+                dx / distance * force;
+
+            asteroid.vy +=
+                dy / distance * force;
+
+        }
+
+    }
+
+}
+
+
+/* =========================================================
+   UPDATE
+========================================================= */
+
+function update(dt) {
+
+    if (!running)
+        return;
+
+
+    blastCooldown =
+        Math.max(
+            0,
+            blastCooldown - dt
+        );
+
+
+    player.invuln =
+        Math.max(
+            0,
+            player.invuln - dt
+        );
+
+
+    /* Rocket movement */
+
+    const dx =
+        player.tx - player.x;
+
+    const dy =
+        player.ty - player.y;
+
+
+    player.vx +=
+        dx * 8 * dt;
+
+    player.vy +=
+        dy * 8 * dt;
+
+
+    player.vx *=
+        Math.pow(.001, dt);
+
+    player.vy *=
+        Math.pow(.001, dt);
+
+
+    const maxSpeed = 720;
+
+
+    let speed =
+        Math.hypot(
+            player.vx,
+            player.vy
+        );
+
+
+    if (speed > maxSpeed) {
+
+        player.vx =
+            player.vx /
+            speed *
+            maxSpeed;
+
+        player.vy =
+            player.vy /
+            speed *
+            maxSpeed;
+
+    }
+
+
+    player.x +=
+        player.vx * dt;
+
+    player.y +=
+        player.vy * dt;
+
+
+    player.x =
+        clamp(
+            player.x,
+            25,
+            W - 25
+        );
+
+    player.y =
+        clamp(
+            player.y,
+            60,
+            H - 25
+        );
+
+
+    if (speed > 20) {
+
+        player.angle =
+            Math.atan2(
+                player.vy,
+                player.vx
+            );
+
+    }
+
+
+    /* Spawn asteroids */
+
+    spawnTimer -= dt;
+
+
+    const desired =
+        clamp(
+            8 + Math.floor(score / 120),
+            8,
+            15
+        );
+
+
+    if (
+        spawnTimer <= 0 &&
+        asteroids.length < desired
+    ) {
+
+        spawnTimer =
+            rand(.5, 1.4);
+
+
+        let x, y;
+
+
+        do {
+
+            x =
+                rand(25, W - 25);
+
+            y =
+                rand(65, H - 25);
+
+        } while (
+            distanceSquared(
+                { x, y },
+                player
+            ) < 160 * 160
+        );
+
+
+        spawnAsteroid(
+            x,
+            y,
+            rand(20, 44)
+        );
+
+    }
+
+
+    /* Asteroids */
+
+    for (const asteroid of asteroids) {
+
+        asteroid.x +=
+            asteroid.vx * dt;
+
+        asteroid.y +=
+            asteroid.vy * dt;
+
+        asteroid.rot +=
+            asteroid.spin * dt;
+
+
+        const margin =
+            asteroid.size;
+
+
+        if (
+            asteroid.x <
+            -margin
+        )
+            asteroid.x =
+                W + margin;
+
+
+        if (
+            asteroid.x >
+            W + margin
+        )
+            asteroid.x =
+                -margin;
+
+
+        if (
+            asteroid.y <
+            50 - margin
+        )
+            asteroid.y =
+                H + margin;
+
+
+        if (
+            asteroid.y >
+            H + margin
+        )
+            asteroid.y =
+                50 - margin;
+
+
+        asteroid.vx *=
+            Math.pow(.82, dt);
+
+        asteroid.vy *=
+            Math.pow(.82, dt);
+
+    }
+
+
+    /* Rocket collision */
+
+    if (player.invuln <= 0) {
+
+        for (const asteroid of asteroids) {
+
+            const radius =
+                asteroid.size + 12;
+
+
+            if (
+                distanceSquared(
+                    player,
+                    asteroid
+                ) < radius * radius
+            ) {
+
+                lives--;
+
+                player.invuln = 1.8;
+
+                shake = 12;
+
+
+                for (
+                    let i = 0;
+                    i < 25;
+                    i++
+                ) {
+
+                    const angle =
+                        rand(0, TAU);
+
+                    const speed =
+                        rand(50, 240);
+
+
+                    particles.push({
+
+                        x: player.x,
+                        y: player.y,
+
+                        vx:
+                            Math.cos(angle) *
+                            speed,
+
+                        vy:
+                            Math.sin(angle) *
+                            speed,
+
+                        life:
+                            rand(.3, .9),
+
+                        max: .9,
+
+                        r:
+                            rand(1, 3)
+
+                    });
+
+                }
+
+
+                updateHUD();
+
+
+                if (lives <= 0) {
+
+                    endGame();
+
+                }
+
+
+                break;
+
+            }
+
+        }
+
+    }
+
+
+    /* Particles */
+
+    for (
+        let i = particles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const particle =
+            particles[i];
+
+
+        particle.x +=
+            particle.vx * dt;
+
+        particle.y +=
+            particle.vy * dt;
+
+
+        particle.vx *=
+            Math.pow(.05, dt);
+
+        particle.vy *=
+            Math.pow(.05, dt);
+
+
+        particle.life -= dt;
+
+
+        if (
+            particle.life <= 0
+        ) {
+
+            particles.splice(
+                i,
+                1
+            );
+
+        }
+
+    }
+
+
+    /* Explosion rings */
+
+    for (
+        let i = rings.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const ring =
+            rings[i];
+
+
+        ring.r +=
+            ((ring.max - ring.r) * 8) *
+            dt;
+
+        ring.life -= dt;
+
+
+        if (ring.life <= 0) {
+
+            rings.splice(
+                i,
+                1
+            );
+
+        }
+
+    }
+
+
+    updateHUD();
+
+}
+
+
+/* =========================================================
+   DRAW BACKGROUND
+========================================================= */
+
+function drawBackground(t) {
+
+    ctx.fillStyle =
+        "#03050b";
+
+    ctx.fillRect(
+        0,
+        0,
+        W,
+        H
+    );
+
+
+    for (const star of stars) {
+
+        const x =
+            star.x * W;
+
+        const y =
+            55 +
+            star.y *
+            (H - 55);
+
+
+        const twinkle =
+            .65 +
+            .35 *
+            Math.sin(
+                t *
+                star.s *
+                2 +
+                star.x *
+                20
+            );
+
+
+        ctx.globalAlpha =
+            star.a *
+            twinkle;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            star.r,
+            0,
+            TAU
+        );
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.fill();
+
+    }
+
+
+    ctx.globalAlpha = 1;
+
+}
+
+
+/* =========================================================
+   DRAW ROCKET
+========================================================= */
+
+function drawRocket(
+    p,
+    remote = false
+) {
+
+    ctx.save();
+
+
+    ctx.translate(
+        p.x,
+        p.y
+    );
+
+
+    ctx.rotate(
+        p.angle ||
+        -Math.PI / 2
+    );
+
+
+    if (
+        !remote &&
+        p.invuln > 0 &&
+        Math.floor(
+            p.invuln * 12
+        ) % 2 === 0
+    ) {
+
+        ctx.globalAlpha =
+            .35;
+
+    }
+
+
+    /* Engine */
+
+    if (!remote) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            -17,
+            0
+        );
+
+        ctx.lineTo(
+            -31,
+            rand(-6, 6)
+        );
+
+        ctx.lineTo(
+            -18,
+            7
+        );
+
+        ctx.closePath();
+
+        ctx.fillStyle =
+            "#ff9d35";
+
+        ctx.fill();
+
+    }
+
+
+    /* Rocket body */
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        18,
+        0
+    );
+
+    ctx.lineTo(
+        -10,
+        -10
+    );
+
+    ctx.lineTo(
+        -5,
+        0
+    );
+
+    ctx.lineTo(
+        -10,
+        10
+    );
+
+    ctx.closePath();
+
+
+    ctx.fillStyle =
+        remote
+            ? "#8c9cff"
+            : "#e9efff";
+
+    ctx.fill();
+
+
+    /* Window */
+
+    ctx.beginPath();
+
+    ctx.arc(
+        4,
+        0,
+        4,
+        0,
+        TAU
+    );
+
+
+    ctx.fillStyle =
+        remote
+            ? "#202a55"
+            : "#38bdf8";
+
+    ctx.fill();
+
+
+    ctx.restore();
+
+}
+
+
+/* =========================================================
+   DRAW ASTEROID
+========================================================= */
+
+function drawAsteroid(
+    asteroid
+) {
+
+    ctx.save();
+
+
+    ctx.translate(
+        asteroid.x,
+        asteroid.y
+    );
+
+
+    ctx.rotate(
+        asteroid.rot
+    );
+
+
+    ctx.beginPath();
+
+
+    asteroid.shape.forEach(
+        (point, i) => {
+
+            const x =
+                Math.cos(point.a) *
+                point.r;
+
+            const y =
+                Math.sin(point.a) *
+                point.r;
+
+
+            if (i === 0) {
+
+                ctx.moveTo(
+                    x,
+                    y
+                );
+
+            } else {
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
+
+            }
+
+        }
+    );
+
+
+    ctx.closePath();
+
+
+    ctx.fillStyle =
+        "#737b8d";
+
+    ctx.fill();
+
+
+    ctx.strokeStyle =
+        "rgba(255,255,255,.22)";
+
+    ctx.lineWidth = 1.5;
+
+    ctx.stroke();
+
+
+    /* Craters */
+
+    ctx.fillStyle =
+        "rgba(30,35,48,.45)";
+
+
+    for (let i = 0; i < 3; i++) {
+
+        const angle =
+            i * 2.1 + .7;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+
+            Math.cos(angle) *
+                asteroid.size *
+                .35,
+
+            Math.sin(angle) *
+                asteroid.size *
+                .35,
+
+            asteroid.size *
+                .11,
+
+            0,
+            TAU
+
+        );
+
+        ctx.fill();
+
+    }
+
+
+    ctx.restore();
+
+}
+
+
+/* =========================================================
+   DRAW
+========================================================= */
+
+function draw(t) {
+
+    drawBackground(t);
+
+
+    ctx.save();
+
+
+    if (shake > 0) {
+
+        shake *= .86;
+
+        ctx.translate(
+            rand(-shake, shake),
+            rand(-shake, shake)
+        );
+
+    }
+
+
+    /* Explosion rings */
+
+    for (const ring of rings) {
+
+        ctx.globalAlpha =
+            clamp(
+                ring.life / .45,
+                0,
+                1
+            ) * .7;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            ring.x,
+            ring.y,
+            ring.r,
+            0,
+            TAU
+        );
+
+
+        ctx.strokeStyle =
+            "#8fb4ff";
+
+        ctx.lineWidth = 3;
+
+        ctx.stroke();
+
+    }
+
+
+    ctx.globalAlpha = 1;
+
+
+    /* Asteroids */
+
+    for (const asteroid of asteroids) {
+
+        drawAsteroid(
+            asteroid
+        );
+
+    }
+
+
+    /* Other players */
+
+    for (
+        const remote of
+        remotePlayers.values()
+    ) {
+
+        if (
+            remote.x != null
+        ) {
+
+            drawRocket(
+                remote,
+                true
+            );
+
+        }
+
+    }
+
+
+    /* Local player */
+
+    if (running) {
+
+        drawRocket(
+            player,
+            false
+        );
+
+    }
+
+
+    /* Particles */
+
+    for (const particle of particles) {
+
+        ctx.globalAlpha =
+            clamp(
+                particle.life /
+                particle.max,
+                0,
+                1
+            );
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            particle.x,
+            particle.y,
+            particle.r,
+            0,
+            TAU
+        );
+
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.fill();
+
+    }
+
+
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+
+}
+
+
+/* =========================================================
+   TOUCH / MOUSE
+========================================================= */
+
+function pointerMove(e) {
+
+    const p =
+        e.touches
+            ? e.touches[0]
+            : e;
+
+
+    if (!p)
+        return;
+
+
+    player.tx =
+        p.clientX;
+
+    player.ty =
+        p.clientY;
+
+}
+
+
+function pointerTap(e) {
+
+    const p =
+        e.changedTouches
+            ? e.changedTouches[0]
+            : e;
+
+
+    if (!p)
+        return;
+
+
+    blastAt(
+        p.clientX,
+        p.clientY
+    );
+
+}
+
+
+canvas.addEventListener(
+    "mousemove",
+    pointerMove,
+    { passive: true }
+);
+
+canvas.addEventListener(
+    "touchmove",
+    pointerMove,
+    { passive: true }
+);
+
+canvas.addEventListener(
+    "click",
+    pointerTap
+);
+
+canvas.addEventListener(
+    "touchend",
+    pointerTap,
+    { passive: true }
+);
+
+
+/* =========================================================
+   MULTIPLAYER
+========================================================= */
+
+let socket = null;
+
+let myServerId = null;
+
+let reconnectTimer = null;
+
+
+/*
+    This function currently sees SERVER_URL as "".
+
+    Therefore the game simply runs locally.
+
+    Once we deploy the server, changing SERVER_URL will
+    automatically enable the multiplayer connection.
+*/
+
+function connectMultiplayer() {
+
+    if (!SERVER_URL) {
+
+        setStatus(
+            "LOCAL",
+            false
+        );
+
+        return;
+
+    }
+
+
+    try {
+
+        setStatus(
+            "CONNECTING",
+            false
+        );
+
+
+        socket =
+            new WebSocket(
+                SERVER_URL
+            );
+
+
+        socket.addEventListener(
+            "open",
+            () => {
+
+                setStatus(
+                    "ONLINE",
+                    true
+                );
+
+
+                socket.send(
+                    JSON.stringify({
+
+                        type: "join",
+
+                        name: "Rocket"
+
+                    })
+                );
+
+            }
+        );
+
+
+        socket.addEventListener(
+            "message",
+            event => {
+
+                let message;
+
+
+                try {
+
+                    message =
+                        JSON.parse(
+                            event.data
+                        );
+
+                } catch {
+
+                    return;
+
+                }
+
+
+                /* Server assigned our ID */
+
+                if (
+                    message.type ===
+                    "welcome"
+                ) {
+
+                    myServerId =
+                        message.id;
+
+                    player.id =
+                        myServerId;
+
+                }
+
+
+                /* Other players */
+
+                else if (
+                    message.type ===
+                    "players"
+                ) {
+
+                    remotePlayers.clear();
+
+
+                    const list =
+                        Array.isArray(
+                            message.players
+                        )
+                            ? message.players
+                            : [];
+
+
+                    for (
+                        const p of list
+                    ) {
+
+                        if (
+                            p.id ===
+                            myServerId
+                        )
+                            continue;
+
+
+                        remotePlayers.set(
+                            p.id,
+                            {
+
+                                id: p.id,
+
+                                x: p.x,
+
+                                y: p.y,
+
+                                angle:
+                                    p.angle ||
+                                    -Math.PI / 2
+
+                            }
+                        );
+
+                    }
+
+
+                    updateHUD();
+
+                }
+
+
+                /* Another player exploded an asteroid */
+
+                else if (
+                    message.type ===
+                    "blast"
+                ) {
+
+                    if (
+                        message.id !==
+                        myServerId
+                    ) {
+
+                        applyRemoteBlast(
+
+                            message.x,
+
+                            message.y,
+
+                            message.size ||
+                            25
+
+                        );
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        socket.addEventListener(
+            "close",
+            () => {
+
+                setStatus(
+                    "OFFLINE",
+                    false
+                );
+
+
+                socket = null;
+
+
+                if (running) {
+
+                    clearTimeout(
+                        reconnectTimer
+                    );
+
+
+                    reconnectTimer =
+                        setTimeout(
+                            connectMultiplayer,
+                            3000
+                        );
+
+                }
+
+            }
+        );
+
+
+        socket.addEventListener(
+            "error",
+            () => {
+
+                setStatus(
+                    "OFFLINE",
+                    false
+                );
+
+            }
+        );
+
+
+    } catch {
+
+        setStatus(
+            "OFFLINE",
+            false
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   SEND PLAYER POSITION
+========================================================= */
+
+function sendState() {
+
+    if (
+        !socket ||
+        socket.readyState !==
+        WebSocket.OPEN
+    )
+        return;
+
+
+    socket.send(
+        JSON.stringify({
+
+            type: "state",
+
+            x: player.x,
+
+            y: player.y,
+
+            angle: player.angle
+
+        })
+    );
+
+}
+
+
+/* =========================================================
+   SEND BLAST
+========================================================= */
+
+function sendBlast(
+    x,
+    y,
+    size
+) {
+
+    if (
+        !socket ||
+        socket.readyState !==
+        WebSocket.OPEN
+    )
+        return;
+
+
+    socket.send(
+        JSON.stringify({
+
+            type: "blast",
+
+            x,
+
+            y,
+
+            size
+
+        })
+    );
+
+}
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+let networkTimer = 0;
+
+let last =
+    performance.now();
+
+
+function frame(now) {
+
+    const dt =
+        Math.min(
+            .033,
+            (now - last) / 1000
+        );
+
+
+    last = now;
+
+
+    networkTimer += dt;
+
+
+    update(dt);
+
+    draw(
+        now / 1000
+    );
+
+
+    /* Send player position ~20 times/sec */
+
+    if (
+        networkTimer > .05
+    ) {
+
+        networkTimer = 0;
+
+        sendState();
+
+    }
+
+
+    requestAnimationFrame(
+        frame
+    );
+
+}
+
+
+requestAnimationFrame(
+    frame
+);
+
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+playBtn.addEventListener(
+    "click",
+    startGame
+);
+
+
+againBtn.addEventListener(
+    "click",
+    startGame
+);
+
+
+menuBtn.addEventListener(
+    "click",
+    () => {
+
+        gameOver.style.display =
+            "none";
+
+        menu.style.display =
+            "flex";
+
+        hud.style.display =
+            "none";
+
+    }
+);
+
+
+backBtn.addEventListener(
+    "click",
+    () => {
+
+        location.href =
+            "index.html";
+
+    }
+);
+
+
+/* =========================================================
+   CLEAN DISCONNECT
+========================================================= */
+
+addEventListener(
+    "beforeunload",
+    () => {
+
+        if (socket) {
+
+            socket.close();
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+</html>
