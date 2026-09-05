@@ -1,28 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Rocket Impact — Multiplayer</title>
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<title>Rocket Impact Multiplayer</title>
 
 <style>
+
 * {
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html,
+body {
     margin: 0;
+    padding: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #03050b;
+    background: #02050d;
     color: white;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-body {
-    touch-action: none;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
 }
 
 canvas {
@@ -31,306 +40,410 @@ canvas {
     width: 100%;
     height: 100%;
     display: block;
+    touch-action: none;
 }
 
 #hud {
     position: fixed;
-    inset: 0;
-    pointer-events: none;
-    padding: max(14px, env(safe-area-inset-top)) 14px 14px;
-}
+    top: env(safe-area-inset-top, 12px);
+    left: 0;
+    width: 100%;
 
-.top {
+    padding:
+        12px
+        14px
+        0
+        14px;
+
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 10px;
+
+    pointer-events: none;
+
+    z-index: 5;
 }
 
-.box {
-    background: rgba(7,12,24,.82);
-    border: 1px solid rgba(255,255,255,.16);
+.hudBox {
+    background: rgba(5, 10, 25, 0.72);
+    border: 1px solid rgba(120, 180, 255, 0.25);
     border-radius: 14px;
-    padding: 9px 12px;
-    backdrop-filter: blur(10px);
+
+    padding: 8px 12px;
+
+    backdrop-filter: blur(8px);
+
+    font-size: 13px;
 }
 
-#stats {
-    font-weight: 800;
+.hudTitle {
+    font-size: 10px;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.hudValue {
+    font-size: 17px;
+    font-weight: 700;
 }
 
 #status {
-    font-size: 12px;
-    font-weight: 800;
-    text-align: right;
-}
+    position: fixed;
 
-#statusDot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #aaa;
-    margin-right: 5px;
-}
+    top:
+        calc(
+            env(safe-area-inset-top, 12px)
+            + 72px
+        );
 
-#hint {
-    position: absolute;
     left: 50%;
-    bottom: max(18px, env(safe-area-inset-bottom));
+
     transform: translateX(-50%);
-    white-space: nowrap;
+
+    padding: 7px 14px;
+
+    border-radius: 20px;
+
+    background: rgba(5, 10, 25, 0.7);
+
     font-size: 12px;
-    opacity: .72;
+
+    pointer-events: none;
+
+    z-index: 5;
 }
 
 #menu,
 #gameOver {
     position: fixed;
     inset: 0;
+
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 22px;
+
+    padding: 24px;
+
     background:
         radial-gradient(
             circle at center,
-            rgba(16,25,54,.38),
-            rgba(0,0,0,.78)
+            rgba(15, 45, 100, 0.3),
+            rgba(1, 3, 10, 0.96)
         );
+
+    z-index: 20;
 }
 
-.card {
-    width: min(430px, 100%);
-    background: rgba(8,13,27,.94);
-    border: 1px solid rgba(255,255,255,.16);
+.panel {
+    width: min(420px, 100%);
+
+    padding: 32px 24px;
+
     border-radius: 24px;
-    padding: 28px;
+
+    background:
+        rgba(5, 10, 24, 0.9);
+
+    border:
+        1px solid
+        rgba(130, 190, 255, 0.25);
+
+    box-shadow:
+        0 25px 80px
+        rgba(0, 0, 0, 0.6);
+
     text-align: center;
-    box-shadow: 0 18px 70px rgba(0,0,0,.5);
+}
+
+.logo {
+    font-size: 42px;
+    margin-bottom: 8px;
 }
 
 h1 {
-    margin: 0 0 8px;
-    font-size: 32px;
+    margin: 0;
+
+    font-size: 30px;
+    letter-spacing: 1px;
 }
 
-.sub {
-    margin: 0 0 22px;
-    color: #b8c0d8;
+.subtitle {
+    margin:
+        10px
+        0
+        28px;
+
+    opacity: 0.65;
+
     line-height: 1.5;
 }
 
-.rules {
-    text-align: left;
-    color: #cbd2e5;
-    font-size: 13px;
-    line-height: 1.55;
-    margin: 18px 0;
-}
-
-.rules b {
-    color: white;
-}
-
-button {
+.bigButton {
     width: 100%;
+
     border: 0;
-    border-radius: 15px;
-    padding: 15px 18px;
-    color: white;
-    background: #285cff;
+
+    border-radius: 16px;
+
+    padding: 17px;
+
+    margin-top: 12px;
+
     font-size: 17px;
-    font-weight: 850;
+    font-weight: 800;
+
+    color: white;
+
+    background:
+        linear-gradient(
+            135deg,
+            #1769ff,
+            #7c35ff
+        );
+
     cursor: pointer;
+
+    box-shadow:
+        0 8px 30px
+        rgba(30, 100, 255, 0.25);
 }
 
-button:active {
-    transform: scale(.98);
-}
+.secondaryButton {
+    background:
+        rgba(255,255,255,0.08);
 
-.secondary {
-    margin-top: 10px;
-    background: #171d31;
     box-shadow: none;
+
     font-size: 14px;
+}
+
+.bigButton:active {
+    transform: scale(0.98);
 }
 
 #gameOver {
     display: none;
 }
 
-.score {
-    font-size: 25px;
+.scoreBig {
+    font-size: 48px;
     font-weight: 900;
-    margin: 12px 0 20px;
+    margin: 15px 0;
 }
 
-.small {
-    font-size: 11px;
-    opacity: .55;
-    margin-top: 14px;
+#connectionDot {
+    display: inline-block;
+
+    width: 8px;
+    height: 8px;
+
+    border-radius: 50%;
+
+    background: #777;
+
+    margin-right: 5px;
 }
+
 </style>
+
 </head>
 
 <body>
 
 <canvas id="game"></canvas>
 
-<!-- HUD -->
-<div id="hud" style="display:none">
+<div id="hud">
 
-    <div class="top">
+    <div class="hudBox">
 
-        <div class="box" id="stats">
-            ❤️ 3 &nbsp; ☄️ 0 &nbsp; 🏆 0
+        <div class="hudTitle">
+            Lives
         </div>
 
-        <div class="box" id="status">
-            <span id="statusDot"></span>
-            <span id="statusText">LOCAL</span>
-            <br>
-            <span id="playersText">Players: 1</span>
+        <div
+            class="hudValue"
+            id="lives"
+        >
+            ❤️❤️❤️
         </div>
 
     </div>
 
-    <div class="box" id="hint">
-        Move your finger/mouse to steer • tap an asteroid to blast it
+    <div class="hudBox">
+
+        <div class="hudTitle">
+            Score
+        </div>
+
+        <div
+            class="hudValue"
+            id="score"
+        >
+            0
+        </div>
+
+    </div>
+
+    <div class="hudBox">
+
+        <div class="hudTitle">
+            Players
+        </div>
+
+        <div
+            class="hudValue"
+            id="players"
+        >
+            1
+        </div>
+
     </div>
 
 </div>
 
+<div id="status">
+    <span id="connectionDot"></span>
+    <span id="connectionText">
+        Connecting...
+    </span>
+</div>
 
-<!-- MAIN MENU -->
+<!-- MENU -->
+
 <div id="menu">
 
-    <div class="card">
+    <div class="panel">
 
-        <h1>🚀 Rocket Impact</h1>
-
-        <p class="sub">
-            Multiplayer asteroid survival.
-            Fly your rocket, blast asteroids and try to stay alive.
-        </p>
-
-        <div class="rules">
-
-            <b>How to play</b>
-            <br>
-
-            • Move your finger or mouse to control your rocket.
-            <br>
-
-            • Tap/click an asteroid to destroy it.
-            <br>
-
-            • Explosions deflect nearby asteroids.
-            <br>
-
-            • Bigger asteroids can split into smaller ones.
-            <br>
-
-            • If an asteroid hits your rocket, you lose a life.
-
+        <div class="logo">
+            🚀
         </div>
 
-        <button id="playBtn">
+        <h1>
+            ROCKET IMPACT
+        </h1>
+
+        <div class="subtitle">
+            Multiplayer asteroid survival.
+            <br>
+            Tap asteroids to destroy them.
+            <br>
+            Avoid the debris!
+        </div>
+
+        <button
+            class="bigButton"
+            id="playButton"
+        >
             ▶ PLAY
         </button>
 
-        <button class="secondary" id="backBtn">
-            ← Back to main game
+        <button
+            class="bigButton secondaryButton"
+            id="backButton"
+        >
+            ← BACK TO MAIN GAME
         </button>
-
-        <div class="small">
-            Multiplayer connection will be enabled when the server is configured.
-        </div>
 
     </div>
 
 </div>
-
 
 <!-- GAME OVER -->
+
 <div id="gameOver">
 
-    <div class="card">
+    <div class="panel">
 
-        <h1>💥 Ship Destroyed</h1>
-
-        <div class="score" id="finalScore">
-            Score: 0
+        <div class="logo">
+            💥
         </div>
 
-        <button id="againBtn">
-            ↻ PLAY AGAIN
+        <h1>
+            GAME OVER
+        </h1>
+
+        <div class="subtitle">
+            Your rocket was destroyed.
+        </div>
+
+        <div
+            class="scoreBig"
+            id="finalScore"
+        >
+            0
+        </div>
+
+        <div>
+            FINAL SCORE
+        </div>
+
+        <button
+            class="bigButton"
+            id="againButton"
+        >
+            🚀 PLAY AGAIN
         </button>
 
-        <button class="secondary" id="menuBtn">
-            Main Menu
+        <button
+            class="bigButton secondaryButton"
+            id="menuButton"
+        >
+            MENU
         </button>
 
     </div>
 
 </div>
-
 
 <script>
 
-"use strict";
+/* =========================================================
+   CONFIGURATION
+========================================================= */
 
-
-/*
-============================================================
-ROCKET IMPACT — MULTIPLAYER
-============================================================
-
-This HTML file is hosted on GitHub Pages.
-
-Later, once we deploy the multiplayer server, change:
-
-const SERVER_URL = "";
-
-to something like:
-
-const SERVER_URL = "wss://your-server.onrender.com";
-
-============================================================
-*/
-
-const SERVER_URL = "https://kinfo-game-studio.onrender.com/";
+const SERVER_URL =
+    "wss://kinfo-game-studio.onrender.com";
 
 
 /* =========================================================
    CANVAS
 ========================================================= */
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas =
+    document.getElementById("game");
 
-let W = innerWidth;
-let H = innerHeight;
+const ctx =
+    canvas.getContext("2d");
 
-let dpr = Math.min(
-    devicePixelRatio || 1,
-    2
-);
-
+let screenWidth = 0;
+let screenHeight = 0;
 
 function resize() {
 
-    W = innerWidth;
-    H = innerHeight;
+    const dpr =
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
 
-    dpr = Math.min(
-        devicePixelRatio || 1,
-        2
-    );
+    screenWidth =
+        window.innerWidth;
 
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
+    screenHeight =
+        window.innerHeight;
+
+    canvas.width =
+        screenWidth * dpr;
+
+    canvas.height =
+        screenHeight * dpr;
+
+    canvas.style.width =
+        screenWidth + "px";
+
+    canvas.style.height =
+        screenHeight + "px";
 
     ctx.setTransform(
         dpr,
@@ -342,8 +455,7 @@ function resize() {
     );
 }
 
-
-addEventListener(
+window.addEventListener(
     "resize",
     resize
 );
@@ -352,113 +464,83 @@ resize();
 
 
 /* =========================================================
-   HELPERS
-========================================================= */
-
-const TAU = Math.PI * 2;
-
-function clamp(v, a, b) {
-
-    return Math.max(
-        a,
-        Math.min(b, v)
-    );
-
-}
-
-
-function rand(a, b) {
-
-    return a + Math.random() * (b - a);
-
-}
-
-
-function distanceSquared(a, b) {
-
-    const x = a.x - b.x;
-    const y = a.y - b.y;
-
-    return x * x + y * y;
-
-}
-
-
-/* =========================================================
    GAME STATE
 ========================================================= */
 
-let running = false;
+let socket = null;
+
+let myId = null;
+
+let connected = false;
+
+let playing = false;
+
+let worldWidth = 1200;
+
+let worldHeight = 800;
+
+let cameraX = 0;
+let cameraY = 0;
+
+let players = new Map();
+
+let asteroids = new Map();
+
+let particles = [];
+
+let explosions = [];
+
+let stars = [];
 
 let score = 0;
 
 let lives = 3;
 
-let nextAsteroidId = 1;
+let reconnectTimer = null;
 
-let spawnTimer = 0;
-
-let blastCooldown = 0;
-
-let shake = 0;
+let lastStateSent = 0;
 
 
 /* =========================================================
-   PLAYER
+   LOCAL PLAYER
 ========================================================= */
 
-const player = {
+let me = {
 
-    id: "local",
+    x: worldWidth / 2,
 
-    x: W / 2,
-    y: H / 2,
-
-    tx: W / 2,
-    ty: H / 2,
-
-    vx: 0,
-    vy: 0,
+    y: worldHeight / 2,
 
     angle: -Math.PI / 2,
 
-    invuln: 0
+    alive: true
 
 };
-
-
-/* =========================================================
-   OBJECTS
-========================================================= */
-
-const asteroids = [];
-
-const particles = [];
-
-const rings = [];
-
-const remotePlayers = new Map();
 
 
 /* =========================================================
    STARS
 ========================================================= */
 
-const stars = Array.from(
-    { length: 180 },
-    () => ({
+for (
+    let i = 0;
+    i < 180;
+    i++
+) {
+
+    stars.push({
 
         x: Math.random(),
+
         y: Math.random(),
 
-        r: rand(.4, 1.5),
+        size:
+            Math.random() * 1.8 + 0.3,
 
-        a: rand(.25, .85),
-
-        s: rand(.1, .7)
-
-    })
-);
+        alpha:
+            Math.random() * 0.7 + 0.2
+    });
+}
 
 
 /* =========================================================
@@ -471,1670 +553,779 @@ const menu =
 const gameOver =
     document.getElementById("gameOver");
 
-const hud =
-    document.getElementById("hud");
+const livesElement =
+    document.getElementById("lives");
 
-const playBtn =
-    document.getElementById("playBtn");
+const scoreElement =
+    document.getElementById("score");
 
-const againBtn =
-    document.getElementById("againBtn");
+const playersElement =
+    document.getElementById("players");
 
-const menuBtn =
-    document.getElementById("menuBtn");
+const statusElement =
+    document.getElementById("connectionText");
 
-const backBtn =
-    document.getElementById("backBtn");
-
-const stats =
-    document.getElementById("stats");
-
-const statusText =
-    document.getElementById("statusText");
-
-const statusDot =
-    document.getElementById("statusDot");
-
-const playersText =
-    document.getElementById("playersText");
+const connectionDot =
+    document.getElementById("connectionDot");
 
 const finalScore =
     document.getElementById("finalScore");
 
 
-function setStatus(text, online) {
+function setStatus(
+    text,
+    online
+) {
 
-    statusText.textContent = text;
+    statusElement.textContent =
+        text;
 
-    statusDot.style.background =
+    connectionDot.style.background =
         online
-            ? "#39e58c"
-            : "#aaa";
-
+            ? "#35ff82"
+            : "#ff5252";
 }
 
 
 function updateHUD() {
 
-    stats.textContent =
-        `❤️ ${lives}   ☄️ ${asteroids.length}   🏆 ${score}`;
-
-    playersText.textContent =
-        `Players: ${1 + remotePlayers.size}`;
-
-}
-
-
-/* =========================================================
-   GAME RESET
-========================================================= */
-
-function resetGame() {
-
-    score = 0;
-
-    lives = 3;
-
-    nextAsteroidId = 1;
-
-    spawnTimer = 0;
-
-    blastCooldown = 0;
-
-    shake = 0;
-
-
-    player.x = W / 2;
-    player.y = H / 2;
-
-    player.tx = W / 2;
-    player.ty = H / 2;
-
-    player.vx = 0;
-    player.vy = 0;
-
-    player.invuln = 1.5;
-
-
-    asteroids.length = 0;
-
-    particles.length = 0;
-
-    rings.length = 0;
-
-    remotePlayers.clear();
-
-
-    for (let i = 0; i < 8; i++) {
-
-        spawnAsteroid(
-            rand(35, W - 35),
-            rand(70, H - 35),
-            rand(22, 42)
-        );
-
-    }
-
-
-    updateHUD();
-
-}
-
-
-/* =========================================================
-   START / END
-========================================================= */
-
-function startGame() {
-
-    menu.style.display = "none";
-
-    gameOver.style.display = "none";
-
-    hud.style.display = "block";
-
-    running = true;
-
-    resetGame();
-
-    connectMultiplayer();
-
-}
-
-
-function endGame() {
-
-    running = false;
-
-    finalScore.textContent =
-        `Score: ${score}`;
-
-    gameOver.style.display = "flex";
-
-}
-
-
-/* =========================================================
-   ASTEROIDS
-========================================================= */
-
-function spawnAsteroid(
-    x,
-    y,
-    size,
-    vx,
-    vy
-) {
-
-    const speed =
-        rand(20, 65) +
-        Math.max(0, 55 - size);
-
-    const angle =
-        rand(0, TAU);
-
-    const sides =
-        Math.floor(rand(8, 12));
-
-    const shape = [];
-
-
-    for (let i = 0; i < sides; i++) {
-
-        shape.push({
-
-            a: i / sides * TAU,
-
-            r: size * rand(.78, 1.08)
-
-        });
-
-    }
-
-
-    asteroids.push({
-
-        id: nextAsteroidId++,
-
-        x,
-        y,
-
-        vx:
-            vx ??
-            Math.cos(angle) * speed,
-
-        vy:
-            vy ??
-            Math.sin(angle) * speed,
-
-        size,
-
-        rot: rand(0, TAU),
-
-        spin: rand(-1.1, 1.1),
-
-        shape
-
-    });
-
-}
-
-
-/* =========================================================
-   ASTEROID EXPLOSION
-========================================================= */
-
-function explodeAsteroid(
-    index,
-    broadcast = true
-) {
-
-    const asteroid =
-        asteroids[index];
-
-    if (!asteroid) return;
-
-
-    const power =
-        clamp(
-            asteroid.size * 4.2,
-            80,
-            210
-        );
-
-
-    rings.push({
-
-        x: asteroid.x,
-        y: asteroid.y,
-
-        r: 4,
-
-        max: power,
-
-        life: .45
-
-    });
-
-
-    /* Particles */
+    let hearts = "";
 
     for (
         let i = 0;
-        i < Math.floor(asteroid.size * .55);
+        i < 3;
         i++
     ) {
 
-        const angle =
-            rand(0, TAU);
-
-        const speed =
-            rand(30, 190);
-
-
-        particles.push({
-
-            x: asteroid.x,
-            y: asteroid.y,
-
-            vx:
-                Math.cos(angle) * speed,
-
-            vy:
-                Math.sin(angle) * speed,
-
-            life:
-                rand(.25, .7),
-
-            max: .7,
-
-            r:
-                rand(1, 3)
-
-        });
-
+        hearts +=
+            i < lives
+                ? "❤️"
+                : "🖤";
     }
 
+    livesElement.textContent =
+        hearts;
 
-    /* Deflect nearby asteroids */
+    scoreElement.textContent =
+        score;
 
-    for (const other of asteroids) {
-
-        if (other === asteroid)
-            continue;
-
-
-        const dx =
-            other.x - asteroid.x;
-
-        const dy =
-            other.y - asteroid.y;
-
-        const distance =
-            Math.hypot(dx, dy);
-
-
-        if (
-            distance > 1 &&
-            distance < power
-        ) {
-
-            const force =
-                (1 - distance / power) * 240;
-
-
-            other.vx +=
-                dx / distance * force;
-
-            other.vy +=
-                dy / distance * force;
-
-        }
-
-    }
-
-
-    /* Split large asteroids */
-
-    if (asteroid.size > 34) {
-
-        for (let i = 0; i < 2; i++) {
-
-            const angle =
-                rand(0, TAU);
-
-
-            spawnAsteroid(
-
-                asteroid.x +
-                    Math.cos(angle) * 8,
-
-                asteroid.y +
-                    Math.sin(angle) * 8,
-
-                asteroid.size * .52,
-
-                asteroid.vx +
-                    Math.cos(angle) *
-                    rand(35, 80),
-
-                asteroid.vy +
-                    Math.sin(angle) *
-                    rand(35, 80)
-
-            );
-
-        }
-
-    }
-
-
-    asteroids.splice(index, 1);
-
-    score +=
-        Math.round(asteroid.size);
-
-
-    updateHUD();
-
-
-    if (broadcast) {
-
-        sendBlast(
-            asteroid.x,
-            asteroid.y,
-            asteroid.size
-        );
-
-    }
-
+    playersElement.textContent =
+        players.size;
 }
 
 
 /* =========================================================
-   PLAYER BLAST
+   WEBSOCKET
 ========================================================= */
 
-function blastAt(x, y) {
-
-    if (!running)
-        return;
-
-    if (blastCooldown > 0)
-        return;
-
-
-    blastCooldown = .12;
-
-
-    let hit = -1;
-
-    let best = Infinity;
-
-
-    for (
-        let i = 0;
-        i < asteroids.length;
-        i++
-    ) {
-
-        const asteroid =
-            asteroids[i];
-
-        const distance =
-            distanceSquared(
-                { x, y },
-                asteroid
-            );
-
-        const reach =
-            asteroid.size + 18;
-
-
-        if (
-            distance < reach * reach &&
-            distance < best
-        ) {
-
-            best = distance;
-
-            hit = i;
-
-        }
-
-    }
-
-
-    if (hit >= 0) {
-
-        const asteroid =
-            asteroids[hit];
-
-        explodeAsteroid(
-            hit,
-            true
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   REMOTE BLAST
-========================================================= */
-
-function applyRemoteBlast(
-    x,
-    y,
-    size
-) {
-
-    const power =
-        clamp(
-            size * 4.2,
-            80,
-            210
-        );
-
-
-    rings.push({
-
-        x,
-        y,
-
-        r: 4,
-
-        max: power,
-
-        life: .45
-
-    });
-
-
-    for (const asteroid of asteroids) {
-
-        const dx =
-            asteroid.x - x;
-
-        const dy =
-            asteroid.y - y;
-
-        const distance =
-            Math.hypot(dx, dy);
-
-
-        if (
-            distance > 1 &&
-            distance < power
-        ) {
-
-            const force =
-                (1 - distance / power) * 240;
-
-
-            asteroid.vx +=
-                dx / distance * force;
-
-            asteroid.vy +=
-                dy / distance * force;
-
-        }
-
-    }
-
-}
-
-
-/* =========================================================
-   UPDATE
-========================================================= */
-
-function update(dt) {
-
-    if (!running)
-        return;
-
-
-    blastCooldown =
-        Math.max(
-            0,
-            blastCooldown - dt
-        );
-
-
-    player.invuln =
-        Math.max(
-            0,
-            player.invuln - dt
-        );
-
-
-    /* Rocket movement */
-
-    const dx =
-        player.tx - player.x;
-
-    const dy =
-        player.ty - player.y;
-
-
-    player.vx +=
-        dx * 8 * dt;
-
-    player.vy +=
-        dy * 8 * dt;
-
-
-    player.vx *=
-        Math.pow(.001, dt);
-
-    player.vy *=
-        Math.pow(.001, dt);
-
-
-    const maxSpeed = 720;
-
-
-    let speed =
-        Math.hypot(
-            player.vx,
-            player.vy
-        );
-
-
-    if (speed > maxSpeed) {
-
-        player.vx =
-            player.vx /
-            speed *
-            maxSpeed;
-
-        player.vy =
-            player.vy /
-            speed *
-            maxSpeed;
-
-    }
-
-
-    player.x +=
-        player.vx * dt;
-
-    player.y +=
-        player.vy * dt;
-
-
-    player.x =
-        clamp(
-            player.x,
-            25,
-            W - 25
-        );
-
-    player.y =
-        clamp(
-            player.y,
-            60,
-            H - 25
-        );
-
-
-    if (speed > 20) {
-
-        player.angle =
-            Math.atan2(
-                player.vy,
-                player.vx
-            );
-
-    }
-
-
-    /* Spawn asteroids */
-
-    spawnTimer -= dt;
-
-
-    const desired =
-        clamp(
-            8 + Math.floor(score / 120),
-            8,
-            15
-        );
-
+function connect() {
 
     if (
-        spawnTimer <= 0 &&
-        asteroids.length < desired
-    ) {
+        socket &&
+        (
+            socket.readyState ===
+            WebSocket.OPEN ||
 
-        spawnTimer =
-            rand(.5, 1.4);
-
-
-        let x, y;
-
-
-        do {
-
-            x =
-                rand(25, W - 25);
-
-            y =
-                rand(65, H - 25);
-
-        } while (
-            distanceSquared(
-                { x, y },
-                player
-            ) < 160 * 160
-        );
-
-
-        spawnAsteroid(
-            x,
-            y,
-            rand(20, 44)
-        );
-
-    }
-
-
-    /* Asteroids */
-
-    for (const asteroid of asteroids) {
-
-        asteroid.x +=
-            asteroid.vx * dt;
-
-        asteroid.y +=
-            asteroid.vy * dt;
-
-        asteroid.rot +=
-            asteroid.spin * dt;
-
-
-        const margin =
-            asteroid.size;
-
-
-        if (
-            asteroid.x <
-            -margin
+            socket.readyState ===
+            WebSocket.CONNECTING
         )
-            asteroid.x =
-                W + margin;
-
-
-        if (
-            asteroid.x >
-            W + margin
-        )
-            asteroid.x =
-                -margin;
-
-
-        if (
-            asteroid.y <
-            50 - margin
-        )
-            asteroid.y =
-                H + margin;
-
-
-        if (
-            asteroid.y >
-            H + margin
-        )
-            asteroid.y =
-                50 - margin;
-
-
-        asteroid.vx *=
-            Math.pow(.82, dt);
-
-        asteroid.vy *=
-            Math.pow(.82, dt);
-
-    }
-
-
-    /* Rocket collision */
-
-    if (player.invuln <= 0) {
-
-        for (const asteroid of asteroids) {
-
-            const radius =
-                asteroid.size + 12;
-
-
-            if (
-                distanceSquared(
-                    player,
-                    asteroid
-                ) < radius * radius
-            ) {
-
-                lives--;
-
-                player.invuln = 1.8;
-
-                shake = 12;
-
-
-                for (
-                    let i = 0;
-                    i < 25;
-                    i++
-                ) {
-
-                    const angle =
-                        rand(0, TAU);
-
-                    const speed =
-                        rand(50, 240);
-
-
-                    particles.push({
-
-                        x: player.x,
-                        y: player.y,
-
-                        vx:
-                            Math.cos(angle) *
-                            speed,
-
-                        vy:
-                            Math.sin(angle) *
-                            speed,
-
-                        life:
-                            rand(.3, .9),
-
-                        max: .9,
-
-                        r:
-                            rand(1, 3)
-
-                    });
-
-                }
-
-
-                updateHUD();
-
-
-                if (lives <= 0) {
-
-                    endGame();
-
-                }
-
-
-                break;
-
-            }
-
-        }
-
-    }
-
-
-    /* Particles */
-
-    for (
-        let i = particles.length - 1;
-        i >= 0;
-        i--
     ) {
-
-        const particle =
-            particles[i];
-
-
-        particle.x +=
-            particle.vx * dt;
-
-        particle.y +=
-            particle.vy * dt;
-
-
-        particle.vx *=
-            Math.pow(.05, dt);
-
-        particle.vy *=
-            Math.pow(.05, dt);
-
-
-        particle.life -= dt;
-
-
-        if (
-            particle.life <= 0
-        ) {
-
-            particles.splice(
-                i,
-                1
-            );
-
-        }
-
-    }
-
-
-    /* Explosion rings */
-
-    for (
-        let i = rings.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        const ring =
-            rings[i];
-
-
-        ring.r +=
-            ((ring.max - ring.r) * 8) *
-            dt;
-
-        ring.life -= dt;
-
-
-        if (ring.life <= 0) {
-
-            rings.splice(
-                i,
-                1
-            );
-
-        }
-
-    }
-
-
-    updateHUD();
-
-}
-
-
-/* =========================================================
-   DRAW BACKGROUND
-========================================================= */
-
-function drawBackground(t) {
-
-    ctx.fillStyle =
-        "#03050b";
-
-    ctx.fillRect(
-        0,
-        0,
-        W,
-        H
-    );
-
-
-    for (const star of stars) {
-
-        const x =
-            star.x * W;
-
-        const y =
-            55 +
-            star.y *
-            (H - 55);
-
-
-        const twinkle =
-            .65 +
-            .35 *
-            Math.sin(
-                t *
-                star.s *
-                2 +
-                star.x *
-                20
-            );
-
-
-        ctx.globalAlpha =
-            star.a *
-            twinkle;
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x,
-            y,
-            star.r,
-            0,
-            TAU
-        );
-
-        ctx.fillStyle =
-            "#ffffff";
-
-        ctx.fill();
-
-    }
-
-
-    ctx.globalAlpha = 1;
-
-}
-
-
-/* =========================================================
-   DRAW ROCKET
-========================================================= */
-
-function drawRocket(
-    p,
-    remote = false
-) {
-
-    ctx.save();
-
-
-    ctx.translate(
-        p.x,
-        p.y
-    );
-
-
-    ctx.rotate(
-        p.angle ||
-        -Math.PI / 2
-    );
-
-
-    if (
-        !remote &&
-        p.invuln > 0 &&
-        Math.floor(
-            p.invuln * 12
-        ) % 2 === 0
-    ) {
-
-        ctx.globalAlpha =
-            .35;
-
-    }
-
-
-    /* Engine */
-
-    if (!remote) {
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            -17,
-            0
-        );
-
-        ctx.lineTo(
-            -31,
-            rand(-6, 6)
-        );
-
-        ctx.lineTo(
-            -18,
-            7
-        );
-
-        ctx.closePath();
-
-        ctx.fillStyle =
-            "#ff9d35";
-
-        ctx.fill();
-
-    }
-
-
-    /* Rocket body */
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        18,
-        0
-    );
-
-    ctx.lineTo(
-        -10,
-        -10
-    );
-
-    ctx.lineTo(
-        -5,
-        0
-    );
-
-    ctx.lineTo(
-        -10,
-        10
-    );
-
-    ctx.closePath();
-
-
-    ctx.fillStyle =
-        remote
-            ? "#8c9cff"
-            : "#e9efff";
-
-    ctx.fill();
-
-
-    /* Window */
-
-    ctx.beginPath();
-
-    ctx.arc(
-        4,
-        0,
-        4,
-        0,
-        TAU
-    );
-
-
-    ctx.fillStyle =
-        remote
-            ? "#202a55"
-            : "#38bdf8";
-
-    ctx.fill();
-
-
-    ctx.restore();
-
-}
-
-
-/* =========================================================
-   DRAW ASTEROID
-========================================================= */
-
-function drawAsteroid(
-    asteroid
-) {
-
-    ctx.save();
-
-
-    ctx.translate(
-        asteroid.x,
-        asteroid.y
-    );
-
-
-    ctx.rotate(
-        asteroid.rot
-    );
-
-
-    ctx.beginPath();
-
-
-    asteroid.shape.forEach(
-        (point, i) => {
-
-            const x =
-                Math.cos(point.a) *
-                point.r;
-
-            const y =
-                Math.sin(point.a) *
-                point.r;
-
-
-            if (i === 0) {
-
-                ctx.moveTo(
-                    x,
-                    y
-                );
-
-            } else {
-
-                ctx.lineTo(
-                    x,
-                    y
-                );
-
-            }
-
-        }
-    );
-
-
-    ctx.closePath();
-
-
-    ctx.fillStyle =
-        "#737b8d";
-
-    ctx.fill();
-
-
-    ctx.strokeStyle =
-        "rgba(255,255,255,.22)";
-
-    ctx.lineWidth = 1.5;
-
-    ctx.stroke();
-
-
-    /* Craters */
-
-    ctx.fillStyle =
-        "rgba(30,35,48,.45)";
-
-
-    for (let i = 0; i < 3; i++) {
-
-        const angle =
-            i * 2.1 + .7;
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-
-            Math.cos(angle) *
-                asteroid.size *
-                .35,
-
-            Math.sin(angle) *
-                asteroid.size *
-                .35,
-
-            asteroid.size *
-                .11,
-
-            0,
-            TAU
-
-        );
-
-        ctx.fill();
-
-    }
-
-
-    ctx.restore();
-
-}
-
-
-/* =========================================================
-   DRAW
-========================================================= */
-
-function draw(t) {
-
-    drawBackground(t);
-
-
-    ctx.save();
-
-
-    if (shake > 0) {
-
-        shake *= .86;
-
-        ctx.translate(
-            rand(-shake, shake),
-            rand(-shake, shake)
-        );
-
-    }
-
-
-    /* Explosion rings */
-
-    for (const ring of rings) {
-
-        ctx.globalAlpha =
-            clamp(
-                ring.life / .45,
-                0,
-                1
-            ) * .7;
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-            ring.x,
-            ring.y,
-            ring.r,
-            0,
-            TAU
-        );
-
-
-        ctx.strokeStyle =
-            "#8fb4ff";
-
-        ctx.lineWidth = 3;
-
-        ctx.stroke();
-
-    }
-
-
-    ctx.globalAlpha = 1;
-
-
-    /* Asteroids */
-
-    for (const asteroid of asteroids) {
-
-        drawAsteroid(
-            asteroid
-        );
-
-    }
-
-
-    /* Other players */
-
-    for (
-        const remote of
-        remotePlayers.values()
-    ) {
-
-        if (
-            remote.x != null
-        ) {
-
-            drawRocket(
-                remote,
-                true
-            );
-
-        }
-
-    }
-
-
-    /* Local player */
-
-    if (running) {
-
-        drawRocket(
-            player,
-            false
-        );
-
-    }
-
-
-    /* Particles */
-
-    for (const particle of particles) {
-
-        ctx.globalAlpha =
-            clamp(
-                particle.life /
-                particle.max,
-                0,
-                1
-            );
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-            particle.x,
-            particle.y,
-            particle.r,
-            0,
-            TAU
-        );
-
-
-        ctx.fillStyle =
-            "#ffffff";
-
-        ctx.fill();
-
-    }
-
-
-    ctx.globalAlpha = 1;
-
-    ctx.restore();
-
-}
-
-
-/* =========================================================
-   TOUCH / MOUSE
-========================================================= */
-
-function pointerMove(e) {
-
-    const p =
-        e.touches
-            ? e.touches[0]
-            : e;
-
-
-    if (!p)
         return;
-
-
-    player.tx =
-        p.clientX;
-
-    player.ty =
-        p.clientY;
-
-}
-
-
-function pointerTap(e) {
-
-    const p =
-        e.changedTouches
-            ? e.changedTouches[0]
-            : e;
-
-
-    if (!p)
-        return;
-
-
-    blastAt(
-        p.clientX,
-        p.clientY
-    );
-
-}
-
-
-canvas.addEventListener(
-    "mousemove",
-    pointerMove,
-    { passive: true }
-);
-
-canvas.addEventListener(
-    "touchmove",
-    pointerMove,
-    { passive: true }
-);
-
-canvas.addEventListener(
-    "click",
-    pointerTap
-);
-
-canvas.addEventListener(
-    "touchend",
-    pointerTap,
-    { passive: true }
-);
-
-
-/* =========================================================
-   MULTIPLAYER
-========================================================= */
-
-let socket = null;
-
-let myServerId = null;
-
-let reconnectTimer = null;
-
-
-/*
-    This function currently sees SERVER_URL as "".
-
-    Therefore the game simply runs locally.
-
-    Once we deploy the server, changing SERVER_URL will
-    automatically enable the multiplayer connection.
-*/
-
-function connectMultiplayer() {
-
-    if (!SERVER_URL) {
-
-        setStatus(
-            "LOCAL",
-            false
-        );
-
-        return;
-
     }
 
+    setStatus(
+        "Connecting...",
+        false
+    );
 
     try {
-
-        setStatus(
-            "CONNECTING",
-            false
-        );
-
 
         socket =
             new WebSocket(
                 SERVER_URL
             );
 
-
-        socket.addEventListener(
-            "open",
-            () => {
-
-                setStatus(
-                    "ONLINE",
-                    true
-                );
-
-
-                socket.send(
-                    JSON.stringify({
-
-                        type: "join",
-
-                        name: "Rocket"
-
-                    })
-                );
-
-            }
-        );
-
-
-        socket.addEventListener(
-            "message",
-            event => {
-
-                let message;
-
-
-                try {
-
-                    message =
-                        JSON.parse(
-                            event.data
-                        );
-
-                } catch {
-
-                    return;
-
-                }
-
-
-                /* Server assigned our ID */
-
-                if (
-                    message.type ===
-                    "welcome"
-                ) {
-
-                    myServerId =
-                        message.id;
-
-                    player.id =
-                        myServerId;
-
-                }
-
-
-                /* Other players */
-
-                else if (
-                    message.type ===
-                    "players"
-                ) {
-
-                    remotePlayers.clear();
-
-
-                    const list =
-                        Array.isArray(
-                            message.players
-                        )
-                            ? message.players
-                            : [];
-
-
-                    for (
-                        const p of list
-                    ) {
-
-                        if (
-                            p.id ===
-                            myServerId
-                        )
-                            continue;
-
-
-                        remotePlayers.set(
-                            p.id,
-                            {
-
-                                id: p.id,
-
-                                x: p.x,
-
-                                y: p.y,
-
-                                angle:
-                                    p.angle ||
-                                    -Math.PI / 2
-
-                            }
-                        );
-
-                    }
-
-
-                    updateHUD();
-
-                }
-
-
-                /* Another player exploded an asteroid */
-
-                else if (
-                    message.type ===
-                    "blast"
-                ) {
-
-                    if (
-                        message.id !==
-                        myServerId
-                    ) {
-
-                        applyRemoteBlast(
-
-                            message.x,
-
-                            message.y,
-
-                            message.size ||
-                            25
-
-                        );
-
-                    }
-
-                }
-
-            }
-        );
-
-
-        socket.addEventListener(
-            "close",
-            () => {
-
-                setStatus(
-                    "OFFLINE",
-                    false
-                );
-
-
-                socket = null;
-
-
-                if (running) {
-
-                    clearTimeout(
-                        reconnectTimer
-                    );
-
-
-                    reconnectTimer =
-                        setTimeout(
-                            connectMultiplayer,
-                            3000
-                        );
-
-                }
-
-            }
-        );
-
-
-        socket.addEventListener(
-            "error",
-            () => {
-
-                setStatus(
-                    "OFFLINE",
-                    false
-                );
-
-            }
-        );
-
-
-    } catch {
+    } catch (error) {
 
         setStatus(
-            "OFFLINE",
+            "Connection failed",
             false
         );
 
+        scheduleReconnect();
+
+        return;
     }
 
+
+    socket.addEventListener(
+        "open",
+        () => {
+
+            connected = true;
+
+            setStatus(
+                "ONLINE",
+                true
+            );
+
+            /*
+             * IMPORTANT:
+             * We do NOT create another player here.
+             *
+             * The server already created our player
+             * when this WebSocket connected.
+             */
+
+            send({
+
+                type: "join",
+
+                name: "Rocket"
+            });
+        }
+    );
+
+
+    socket.addEventListener(
+        "message",
+        event => {
+
+            let message;
+
+            try {
+
+                message =
+                    JSON.parse(
+                        event.data
+                    );
+
+            } catch {
+
+                return;
+            }
+
+            handleMessage(
+                message
+            );
+        }
+    );
+
+
+    socket.addEventListener(
+        "close",
+        () => {
+
+            connected = false;
+
+            setStatus(
+                "Disconnected",
+                false
+            );
+
+            /*
+             * If the socket genuinely closes,
+             * reconnect.
+             *
+             * Death does NOT close the socket.
+             */
+
+            scheduleReconnect();
+        }
+    );
+
+
+    socket.addEventListener(
+        "error",
+        () => {
+
+            connected = false;
+
+            setStatus(
+                "Connection error",
+                false
+            );
+        }
+    );
+}
+
+
+function scheduleReconnect() {
+
+    if (reconnectTimer) {
+        return;
+    }
+
+    reconnectTimer =
+        setTimeout(
+            () => {
+
+                reconnectTimer =
+                    null;
+
+                connect();
+
+            },
+            3000
+        );
+}
+
+
+function send(data) {
+
+    if (
+        socket &&
+        socket.readyState ===
+        WebSocket.OPEN
+    ) {
+
+        socket.send(
+            JSON.stringify(data)
+        );
+    }
+}
+
+
+/* =========================================================
+   SERVER MESSAGES
+========================================================= */
+
+function handleMessage(
+    message
+) {
+
+    switch (
+        message.type
+    ) {
+
+        case "welcome":
+
+            myId =
+                message.id;
+
+            worldWidth =
+                message.worldWidth;
+
+            worldHeight =
+                message.worldHeight;
+
+            break;
+
+
+        case "world":
+
+            worldWidth =
+                message.width;
+
+            worldHeight =
+                message.height;
+
+            /*
+             * Synchronise players.
+             */
+
+            players.clear();
+
+            for (
+                const player
+                of message.players
+            ) {
+
+                players.set(
+                    player.id,
+                    player
+                );
+
+                if (
+                    player.id === myId
+                ) {
+
+                    me.x =
+                        player.x;
+
+                    me.y =
+                        player.y;
+
+                    me.angle =
+                        player.angle;
+
+                    me.alive =
+                        player.alive;
+
+                    lives =
+                        player.lives;
+
+                    score =
+                        player.score;
+                }
+            }
+
+
+            /*
+             * Synchronise asteroids.
+             */
+
+            asteroids.clear();
+
+            for (
+                const asteroid
+                of message.asteroids
+            ) {
+
+                asteroids.set(
+                    asteroid.id,
+                    asteroid
+                );
+            }
+
+            updateHUD();
+
+            break;
+
+
+        case "playerJoined":
+
+            players.set(
+                message.player.id,
+                message.player
+            );
+
+            updateHUD();
+
+            break;
+
+
+        case "playerUpdated":
+
+            players.set(
+                message.player.id,
+                message.player
+            );
+
+            updateHUD();
+
+            break;
+
+
+        case "playerLeft":
+
+            players.delete(
+                message.id
+            );
+
+            updateHUD();
+
+            break;
+
+
+        case "blast":
+
+            createExplosion(
+                message.x,
+                message.y,
+                message.size
+            );
+
+            /*
+             * The server sends the asteroid list
+             * shortly afterwards.
+             */
+
+            break;
+
+
+        case "score":
+
+            if (
+                message.playerId ===
+                myId
+            ) {
+
+                score =
+                    message.score;
+
+                scoreElement.textContent =
+                    score;
+            }
+
+            break;
+
+
+        case "death":
+
+            lives =
+                message.lives;
+
+            me.alive =
+                false;
+
+            updateHUD();
+
+            createExplosion(
+                me.x,
+                me.y,
+                50
+            );
+
+            break;
+
+
+        case "respawn":
+
+            me.x =
+                message.player.x;
+
+            me.y =
+                message.player.y;
+
+            me.angle =
+                message.player.angle;
+
+            me.alive =
+                true;
+
+            lives =
+                message.player.lives;
+
+            score =
+                message.player.score;
+
+            updateHUD();
+
+            break;
+
+
+        case "playerDeath":
+
+            {
+
+                const player =
+                    players.get(
+                        message.id
+                    );
+
+                if (player) {
+
+                    player.alive =
+                        false;
+
+                    player.lives =
+                        message.lives;
+                }
+
+                updateHUD();
+            }
+
+            break;
+
+
+        case "playerRespawn":
+
+            players.set(
+                message.player.id,
+                message.player
+            );
+
+            updateHUD();
+
+            break;
+
+
+        case "gameOver":
+
+            score =
+                message.score;
+
+            showGameOver();
+
+            break;
+    }
+}
+
+
+/* =========================================================
+   START / STOP
+========================================================= */
+
+function startGame() {
+
+    playing = true;
+
+    menu.style.display =
+        "none";
+
+    gameOver.style.display =
+        "none";
+
+    /*
+     * Reset only local visual state.
+     *
+     * We do NOT open a new WebSocket.
+     *
+     * This is the fix for the duplicate player bug.
+     */
+
+    if (!connected) {
+        connect();
+    }
+
+    me.alive = true;
+
+    particles = [];
+
+    explosions = [];
+}
+
+
+function showGameOver() {
+
+    playing = false;
+
+    finalScore.textContent =
+        score;
+
+    gameOver.style.display =
+        "flex";
+}
+
+
+function returnToMenu() {
+
+    playing = false;
+
+    gameOver.style.display =
+        "none";
+
+    menu.style.display =
+        "flex";
+}
+
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+document
+    .getElementById("playButton")
+    .addEventListener(
+        "click",
+        startGame
+    );
+
+
+document
+    .getElementById("againButton")
+    .addEventListener(
+        "click",
+        startGame
+    );
+
+
+document
+    .getElementById("menuButton")
+    .addEventListener(
+        "click",
+        returnToMenu
+    );
+
+
+document
+    .getElementById("backButton")
+    .addEventListener(
+        "click",
+        () => {
+
+            window.location.href =
+                "index.html";
+        }
+    );
+
+
+/* =========================================================
+   TOUCH / MOUSE
+========================================================= */
+
+function screenToWorld(
+    x,
+    y
+) {
+
+    return {
+
+        x:
+            x -
+            screenWidth / 2 +
+            cameraX,
+
+        y:
+            y -
+            screenHeight / 2 +
+            cameraY
+    };
+}
+
+
+function blastAt(
+    screenX,
+    screenY
+) {
+
+    if (
+        !playing ||
+        !me.alive
+    ) {
+        return;
+    }
+
+    const point =
+        screenToWorld(
+            screenX,
+            screenY
+        );
+
+    /*
+     * Send the blast to the server.
+     *
+     * The server decides which asteroid(s)
+     * are actually destroyed.
+     */
+
+    send({
+
+        type: "blast",
+
+        x: point.x,
+
+        y: point.y,
+
+        size: 32
+    });
+}
+
+
+canvas.addEventListener(
+    "pointerdown",
+    event => {
+
+        if (!playing) {
+            return;
+        }
+
+        blastAt(
+            event.clientX,
+            event.clientY
+        );
+    },
+    {
+        passive: true
+    }
+);
+
+
+/* =========================================================
+   ROCKET MOVEMENT
+========================================================= */
+
+let targetX =
+    screenWidth / 2;
+
+let targetY =
+    screenHeight / 2;
+
+
+canvas.addEventListener(
+    "pointermove",
+    event => {
+
+        targetX =
+            event.clientX;
+
+        targetY =
+            event.clientY;
+    }
+);
+
+
+canvas.addEventListener(
+    "pointerdown",
+    event => {
+
+        targetX =
+            event.clientX;
+
+        targetY =
+            event.clientY;
+    }
+);
+
+
+function updateRocket() {
+
+    if (
+        !playing ||
+        !me.alive
+    ) {
+        return;
+    }
+
+    const dx =
+        targetX -
+        screenWidth / 2;
+
+    const dy =
+        targetY -
+        screenHeight / 2;
+
+    const distance =
+        Math.sqrt(
+            dx * dx +
+            dy * dy
+        );
+
+    if (
+        distance > 10
+    ) {
+
+        const speed =
+            Math.min(
+                distance * 0.035,
+                5
+            );
+
+        me.x +=
+            dx /
+            distance *
+            speed;
+
+        me.y +=
+            dy /
+            distance *
+            speed;
+
+        me.angle =
+            Math.atan2(
+                dy,
+                dx
+            );
+    }
+
+    me.x =
+        Math.max(
+            20,
+            Math.min(
+                worldWidth - 20,
+                me.x
+            )
+        );
+
+    me.y =
+        Math.max(
+            20,
+            Math.min(
+                worldHeight - 20,
+                me.y
+            )
+        );
 }
 
 
@@ -2142,185 +1333,749 @@ function connectMultiplayer() {
    SEND PLAYER POSITION
 ========================================================= */
 
-function sendState() {
+function sendPlayerState() {
 
     if (
-        !socket ||
-        socket.readyState !==
-        WebSocket.OPEN
-    )
+        !connected ||
+        !me.alive
+    ) {
         return;
+    }
 
+    const now =
+        performance.now();
 
-    socket.send(
-        JSON.stringify({
+    /*
+     * 20 updates/sec.
+     */
 
-            type: "state",
+    if (
+        now -
+        lastStateSent <
+        50
+    ) {
+        return;
+    }
 
-            x: player.x,
+    lastStateSent =
+        now;
 
-            y: player.y,
+    send({
 
-            angle: player.angle
+        type: "state",
 
-        })
-    );
+        x: me.x,
 
+        y: me.y,
+
+        angle: me.angle
+    });
 }
 
 
 /* =========================================================
-   SEND BLAST
+   CAMERA
 ========================================================= */
 
-function sendBlast(
+function updateCamera() {
+
+    cameraX =
+        me.x;
+
+    cameraY =
+        me.y;
+}
+
+
+/* =========================================================
+   DRAW SPACE
+========================================================= */
+
+function drawSpace() {
+
+    ctx.fillStyle =
+        "#02050d";
+
+    ctx.fillRect(
+        0,
+        0,
+        screenWidth,
+        screenHeight
+    );
+
+
+    for (
+        const star
+        of stars
+    ) {
+
+        const x =
+            star.x *
+            screenWidth;
+
+        const y =
+            star.y *
+            screenHeight;
+
+        ctx.globalAlpha =
+            star.alpha;
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            star.size,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+    ctx.globalAlpha =
+        1;
+}
+
+
+/* =========================================================
+   WORLD COORDINATES
+========================================================= */
+
+function worldToScreen(
+    x,
+    y
+) {
+
+    return {
+
+        x:
+            x -
+            cameraX +
+            screenWidth / 2,
+
+        y:
+            y -
+            cameraY +
+            screenHeight / 2
+    };
+}
+
+
+/* =========================================================
+   ASTEROIDS
+========================================================= */
+
+function drawAsteroid(
+    asteroid
+) {
+
+    const pos =
+        worldToScreen(
+            asteroid.x,
+            asteroid.y
+        );
+
+    const size =
+        asteroid.size;
+
+    if (
+        pos.x < -100 ||
+        pos.x >
+        screenWidth + 100 ||
+        pos.y < -100 ||
+        pos.y >
+        screenHeight + 100
+    ) {
+        return;
+    }
+
+    ctx.save();
+
+    ctx.translate(
+        pos.x,
+        pos.y
+    );
+
+    ctx.rotate(
+        asteroid.rotation
+    );
+
+    ctx.beginPath();
+
+    const points = 9;
+
+    for (
+        let i = 0;
+        i < points;
+        i++
+    ) {
+
+        const angle =
+            i /
+            points *
+            Math.PI *
+            2;
+
+        const variation =
+            0.72 +
+            Math.sin(
+                i * 7.13 +
+                asteroid.id.length
+            ) *
+            0.22;
+
+        const radius =
+            size *
+            variation;
+
+        const x =
+            Math.cos(angle) *
+            radius;
+
+        const y =
+            Math.sin(angle) *
+            radius;
+
+        if (i === 0) {
+            ctx.moveTo(
+                x,
+                y
+            );
+        } else {
+            ctx.lineTo(
+                x,
+                y
+            );
+        }
+    }
+
+    ctx.closePath();
+
+    ctx.fillStyle =
+        "#465064";
+
+    ctx.fill();
+
+    ctx.strokeStyle =
+        "#8b96aa";
+
+    ctx.lineWidth =
+        1.5;
+
+    ctx.stroke();
+
+
+    /* Craters */
+
+    ctx.globalAlpha =
+        0.4;
+
+    ctx.fillStyle =
+        "#171d2a";
+
+    for (
+        let i = 0;
+        i < 3;
+        i++
+    ) {
+
+        const a =
+            i * 2.2;
+
+        const r =
+            size *
+            (0.12 + i * 0.025);
+
+        ctx.beginPath();
+
+        ctx.arc(
+            Math.cos(a) *
+            size *
+            0.35,
+
+            Math.sin(a) *
+            size *
+            0.35,
+
+            r,
+
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+
+/* =========================================================
+   ROCKET
+========================================================= */
+
+function drawRocket(
+    player,
+    local = false
+) {
+
+    if (
+        !player.alive
+    ) {
+        return;
+    }
+
+    const pos =
+        worldToScreen(
+            player.x,
+            player.y
+        );
+
+    ctx.save();
+
+    ctx.translate(
+        pos.x,
+        pos.y
+    );
+
+    ctx.rotate(
+        player.angle +
+        Math.PI / 2
+    );
+
+
+    /* Engine flame */
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        -7,
+        14
+    );
+
+    ctx.lineTo(
+        0,
+        30 +
+        Math.random() * 7
+    );
+
+    ctx.lineTo(
+        7,
+        14
+    );
+
+    ctx.closePath();
+
+    ctx.fillStyle =
+        "#ffad33";
+
+    ctx.fill();
+
+
+    /* Rocket body */
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        -20
+    );
+
+    ctx.lineTo(
+        -10,
+        12
+    );
+
+    ctx.lineTo(
+        0,
+        8
+    );
+
+    ctx.lineTo(
+        10,
+        12
+    );
+
+    ctx.closePath();
+
+    ctx.fillStyle =
+        local
+            ? "#ffffff"
+            : "#4d9cff";
+
+    ctx.fill();
+
+    ctx.strokeStyle =
+        local
+            ? "#75b5ff"
+            : "#8dc6ff";
+
+    ctx.lineWidth =
+        2;
+
+    ctx.stroke();
+
+
+    /* Window */
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        -6,
+        4,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        "#091529";
+
+    ctx.fill();
+
+    ctx.strokeStyle =
+        "#80c7ff";
+
+    ctx.stroke();
+
+
+    ctx.restore();
+
+
+    /* Name */
+
+    if (!local) {
+
+        ctx.font =
+            "11px system-ui";
+
+        ctx.textAlign =
+            "center";
+
+        ctx.fillStyle =
+            "rgba(180,215,255,0.8)";
+
+        ctx.fillText(
+            player.name || "Rocket",
+            pos.x,
+            pos.y - 30
+        );
+    }
+}
+
+
+/* =========================================================
+   PARTICLES
+========================================================= */
+
+function createExplosion(
     x,
     y,
     size
 ) {
 
-    if (
-        !socket ||
-        socket.readyState !==
-        WebSocket.OPEN
-    )
-        return;
+    explosions.push({
+
+        x,
+        y,
+
+        radius: 5,
+
+        maxRadius:
+            size * 2,
+
+        life: 1
+    });
 
 
-    socket.send(
-        JSON.stringify({
-
-            type: "blast",
-
-            x,
-
-            y,
-
-            size
-
-        })
-    );
-
-}
-
-
-/* =========================================================
-   MAIN LOOP
-========================================================= */
-
-let networkTimer = 0;
-
-let last =
-    performance.now();
-
-
-function frame(now) {
-
-    const dt =
-        Math.min(
-            .033,
-            (now - last) / 1000
-        );
-
-
-    last = now;
-
-
-    networkTimer += dt;
-
-
-    update(dt);
-
-    draw(
-        now / 1000
-    );
-
-
-    /* Send player position ~20 times/sec */
-
-    if (
-        networkTimer > .05
+    for (
+        let i = 0;
+        i < 28;
+        i++
     ) {
 
-        networkTimer = 0;
+        const angle =
+            Math.random() *
+            Math.PI *
+            2;
 
-        sendState();
+        const speed =
+            Math.random() *
+            5 +
+            1;
 
+        particles.push({
+
+            x,
+            y,
+
+            vx:
+                Math.cos(angle) *
+                speed,
+
+            vy:
+                Math.sin(angle) *
+                speed,
+
+            life: 1,
+
+            size:
+                Math.random() *
+                3 +
+                1
+        });
     }
-
-
-    requestAnimationFrame(
-        frame
-    );
-
 }
 
 
-requestAnimationFrame(
-    frame
-);
+function updateParticles() {
+
+    for (
+        let i =
+            particles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const p =
+            particles[i];
+
+        p.x +=
+            p.vx;
+
+        p.y +=
+            p.vy;
+
+        p.vx *=
+            0.97;
+
+        p.vy *=
+            0.97;
+
+        p.life -=
+            0.025;
+
+        if (
+            p.life <= 0
+        ) {
+
+            particles.splice(
+                i,
+                1
+            );
+        }
+    }
+
+
+    for (
+        let i =
+            explosions.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const e =
+            explosions[i];
+
+        e.radius +=
+            e.maxRadius *
+            0.08;
+
+        e.life -=
+            0.04;
+
+        if (
+            e.life <= 0
+        ) {
+
+            explosions.splice(
+                i,
+                1
+            );
+        }
+    }
+}
+
+
+function drawParticles() {
+
+    for (
+        const p
+        of particles
+    ) {
+
+        const pos =
+            worldToScreen(
+                p.x,
+                p.y
+            );
+
+        ctx.globalAlpha =
+            p.life;
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            pos.x,
+            pos.y,
+            p.size,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+
+    for (
+        const e
+        of explosions
+    ) {
+
+        const pos =
+            worldToScreen(
+                e.x,
+                e.y
+            );
+
+        ctx.globalAlpha =
+            e.life;
+
+        ctx.strokeStyle =
+            "#ffffff";
+
+        ctx.lineWidth =
+            3;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            pos.x,
+            pos.y,
+            e.radius,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.stroke();
+    }
+
+    ctx.globalAlpha =
+        1;
+}
 
 
 /* =========================================================
-   BUTTONS
+   MAIN DRAW
 ========================================================= */
 
-playBtn.addEventListener(
-    "click",
-    startGame
-);
+function draw() {
 
+    drawSpace();
 
-againBtn.addEventListener(
-    "click",
-    startGame
-);
+    /*
+     * Draw asteroids.
+     */
 
+    for (
+        const asteroid
+        of asteroids.values()
+    ) {
 
-menuBtn.addEventListener(
-    "click",
-    () => {
-
-        gameOver.style.display =
-            "none";
-
-        menu.style.display =
-            "flex";
-
-        hud.style.display =
-            "none";
-
+        drawAsteroid(
+            asteroid
+        );
     }
-);
 
 
-backBtn.addEventListener(
-    "click",
-    () => {
+    /*
+     * Draw other players.
+     */
 
-        location.href =
-            "index.html";
+    for (
+        const player
+        of players.values()
+    ) {
 
-    }
-);
-
-
-/* =========================================================
-   CLEAN DISCONNECT
-========================================================= */
-
-addEventListener(
-    "beforeunload",
-    () => {
-
-        if (socket) {
-
-            socket.close();
-
+        if (
+            player.id === myId
+        ) {
+            continue;
         }
 
+        drawRocket(
+            player,
+            false
+        );
     }
-);
+
+
+    /*
+     * Draw our rocket last.
+     */
+
+    if (
+        playing &&
+        me.alive
+    ) {
+
+        drawRocket(
+            {
+
+                x: me.x,
+
+                y: me.y,
+
+                angle: me.angle,
+
+                alive: true
+
+            },
+            true
+        );
+    }
+
+
+    drawParticles();
+}
+
+
+/* =========================================================
+   GAME LOOP
+========================================================= */
+
+function loop() {
+
+    updateRocket();
+
+    updateCamera();
+
+    sendPlayerState();
+
+    updateParticles();
+
+    draw();
+
+    requestAnimationFrame(
+        loop
+    );
+}
+
+
+/* =========================================================
+   INITIALISE
+========================================================= */
+
+connect();
+
+loop();
 
 </script>
 
