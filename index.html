@@ -3379,7 +3379,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3391,7 +3391,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3404,7 +3404,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:2,
+        cost:25,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins early. "+
@@ -3417,7 +3417,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3429,7 +3429,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3441,7 +3441,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3453,7 +3453,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:4,
+        cost:45,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3466,7 +3466,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:4,
+        cost:45,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3478,7 +3478,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:6,
+        cost:60,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -4160,6 +4160,65 @@ function renderPlanetMap(){
  * in startGame() (highest-score docked ship) exactly, so this
  * is never a guess about what's about to happen.
  */
+function getEquippedLabel(ship){
+
+    return(
+        ship.equipment==="emp" ||
+        !ship.equipment
+        ?"⚡ EMP"
+        :SHOP_ITEMS[ship.equipment]
+        ?SHOP_ITEMS[ship.equipment].icon+
+          " "+
+          SHOP_ITEMS[ship.equipment].name
+        :"⚡ EMP"
+    );
+
+}
+
+function getHeartsLabel(ship){
+
+    const n=
+        clamp(
+            Number(ship.lives) || 3,
+            1,
+            3
+        );
+
+    return(
+        "❤".repeat(n)+
+        "🖤".repeat(3-n)
+    );
+
+}
+
+/*
+ * Picks which docked ship launch will actually use: whatever
+ * the player explicitly selected (if it's still valid for this
+ * planet), otherwise the highest-scoring one, same default as
+ * before.
+ */
+function resolveLaunchShip(ships){
+
+    if(!ships.length)
+        return null;
+
+    const chosen=
+        ships.find(
+            s =>
+                s.id===
+                selectedLaunchShipId
+        );
+
+    if(chosen)
+        return chosen;
+
+    return[...ships].sort(
+        (a,b) =>
+            b.score-a.score
+    )[0];
+
+}
+
 function renderLaunchPreview(){
 
     const el=
@@ -4197,58 +4256,110 @@ function renderLaunchPreview(){
 
     }
 
-    const best=
-        [...ships].sort(
-            (a,b) =>
-                b.score-a.score
-        )[0];
+    const chosen=
+        resolveLaunchShip(ships);
 
-    const equipped=
-        best.equipment==="emp" ||
-        !best.equipment
-        ?"⚡ EMP"
-        :SHOP_ITEMS[best.equipment]
-        ?SHOP_ITEMS[best.equipment].icon+
-          " "+
-          SHOP_ITEMS[best.equipment].name
-        :"⚡ EMP";
-
-    const hearts=
-        "❤".repeat(
-            clamp(
-                Number(best.lives) || 3,
-                1,
-                3
-            )
-        )+
-        "🖤".repeat(
-            3-
-            clamp(
-                Number(best.lives) || 3,
-                1,
-                3
-            )
-        );
-
-    el.innerHTML=
+    let html=
         "🚀 Launching <b>"+
-        best.score.toLocaleString()+
+        chosen.score.toLocaleString()+
         " pt ship</b> — "+
         "🪙"+
-        (best.coins || 0).toLocaleString()+
-        " · "+equipped+" · Wave "+
-        (best.wave || 1)+" · "+hearts+
-        (
-            ships.length>1
-            ?"<br><span style=\"opacity:.7;font-size:9px;\">"+
-              (ships.length-1)+
-              " other ship(s) also docked here — the "+
-              "highest-scoring one always launches first."+
-              "</span>"
-            :""
+        (chosen.coins || 0).toLocaleString()+
+        " · "+getEquippedLabel(chosen)+
+        " · Wave "+
+        (chosen.wave || 1)+" · "+
+        getHeartsLabel(chosen);
+
+    if(ships.length>1){
+
+        html+=
+            "<div style=\"margin-top:8px;"+
+            "display:flex;flex-direction:column;gap:5px;\">"+
+            "<span style=\"opacity:.7;font-size:9px;\">"+
+            ships.length+" ships docked here — tap one to "+
+            "choose which one launches:</span>";
+
+        ships.forEach(
+            ship=>{
+
+                const isChosen=
+                    ship.id===chosen.id;
+
+                html+=
+                    "<button data-action=\"pick-launch-ship\" "+
+                    "data-ship=\""+ship.id+"\" "+
+                    "style=\"text-align:left;padding:6px 8px;"+
+                    "border-radius:8px;font-size:9px;"+
+                    "border:1px solid "+
+                    (
+                        isChosen
+                        ?"rgba(110,220,255,.5)"
+                        :"rgba(255,255,255,.12)"
+                    )+
+                    ";background:"+
+                    (
+                        isChosen
+                        ?"rgba(110,220,255,.14)"
+                        :"rgba(255,255,255,.03)"
+                    )+
+                    ";color:"+
+                    (
+                        isChosen
+                        ?"#bcecff"
+                        :"#8fa7c7"
+                    )+
+                    ";cursor:pointer;\">"+
+                    (isChosen ? "▶ " : "")+
+                    ship.score.toLocaleString()+
+                    " pts · 🪙"+
+                    (ship.coins || 0)+
+                    " · "+getEquippedLabel(ship)+
+                    "</button>";
+
+            }
         );
 
+        html+=
+            "</div>";
+
+    }
+
+    el.innerHTML=
+        html;
+
 }
+
+document
+.getElementById(
+    "launchPreview"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const target=
+            event.target.closest(
+                '[data-action="pick-launch-ship"]'
+            );
+
+        if(!target)
+            return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        selectedLaunchShipId=
+            target.getAttribute(
+                "data-ship"
+            );
+
+        renderLaunchPreview();
+
+    },
+    {passive:false}
+);
 
 
 function selectStartPlanet(id){
@@ -4278,6 +4389,8 @@ function selectStartPlanet(id){
 
     selectedStartPlanet=id;
 
+    selectedLaunchShipId=null;
+
     renderPlanetMap();
 
 }
@@ -4288,6 +4401,16 @@ function selectStartPlanet(id){
 ========================================================= */
 
 let planetDetailId=null;
+
+/*
+ * Which specific docked ship will actually launch, when a
+ * planet has more than one. Without this, launch always
+ * silently picked whichever ship had the highest score — so a
+ * ship you'd just landed (typically lower-scoring than an
+ * older one already docked there) could never be the one that
+ * flew, no matter how many times you pressed Launch.
+ */
+let selectedLaunchShipId=null;
 
 /*
  * Which docked ship (if any) currently has its equip picker
@@ -4880,7 +5003,106 @@ function initAudio(){
 
     }
 
+    requestMotionAccess();
+
 }
+
+
+/*
+ * Ambient input for the Drift Rock wildcard (see
+ * SCORE_THRESHOLD_WILDCARDS): device tilt on mobile, or raw
+ * mouse position on desktop — neither requires clicking or
+ * pressing anything, exactly "movement when not clicked."
+ * Both are just passively tracked; iOS specifically requires a
+ * permission prompt for orientation data, requested once from
+ * the same first-interaction hook as audio.
+ */
+let deviceTiltX=0;
+let deviceTiltY=0;
+let mouseDriftX=0;
+let mouseDriftY=0;
+let motionPermissionRequested=false;
+
+function requestMotionAccess(){
+
+    if(motionPermissionRequested)
+        return;
+
+    motionPermissionRequested=true;
+
+    if(
+        typeof DeviceOrientationEvent!==
+        "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission===
+        "function"
+    ){
+
+        DeviceOrientationEvent.requestPermission().catch(
+            ()=>{}
+        );
+
+    }
+
+}
+
+window.addEventListener(
+    "deviceorientation",
+    event=>{
+
+        if(
+            event.beta===null ||
+            event.gamma===null
+        ){
+
+            return;
+
+        }
+
+        deviceTiltX=
+            clamp(
+                event.gamma/45,
+                -1,
+                1
+            );
+
+        deviceTiltY=
+            clamp(
+                (event.beta-45)/45,
+                -1,
+                1
+            );
+
+    }
+);
+
+document.addEventListener(
+    "mousemove",
+    event=>{
+
+        mouseDriftX=
+            clamp(
+                (
+                    event.clientX/
+                    window.innerWidth-
+                    .5
+                )*2,
+                -1,
+                1
+            );
+
+        mouseDriftY=
+            clamp(
+                (
+                    event.clientY/
+                    window.innerHeight-
+                    .5
+                )*2,
+                -1,
+                1
+            );
+
+    }
+);
 
 
 function sound(type){
@@ -5180,6 +5402,40 @@ function getPlanetSpecial(planetId){
 }
 
 
+/*
+ * Global wildcards: unlocked once and for all for the rest of
+ * a run when the running score crosses their threshold, and
+ * from then on can spawn on ANY planet (Earth included) on top
+ * of that planet's own normal mix — this is what makes a run
+ * feel like it keeps introducing new things the longer it goes,
+ * not just "the same nine planet specials forever."
+ */
+const SCORE_THRESHOLD_WILDCARDS=[
+
+    {
+        atScore:100000,
+        kind:"drift",
+        name:"Drift Rock",
+        icon:"🧭",
+        description:
+            "Pulled along by your phone's tilt, or your "+
+            "mouse's ambient drift when you're not clicking — "+
+            "steered by something other than the game itself."
+    }
+
+];
+
+function getUnlockedWildcardKinds(){
+
+    return SCORE_THRESHOLD_WILDCARDS.filter(
+        w => score>=w.atScore
+    ).map(
+        w => w.kind
+    );
+
+}
+
+
 const ASTEROID_TYPES={
 
     earth:{
@@ -5418,11 +5674,30 @@ class Asteroid{
 
         }
 
+        /*
+         * Specials get a genuinely different base colour, not
+         * just an outline overlay — obvious at a glance from
+         * across the field, not just once you're close enough
+         * to see the detail marking.
+         */
+        const specialColors={
+            explosive:"#ff5e3a",
+            sticky:"#4fd6ff",
+            shatter:"#d8f7ff",
+            durable:"#ffae42",
+            "coin-rich":"#ffd76b",
+            elite:"#ffd23f",
+            drift:"#b98cff"
+        };
+
         this.color=
-            this.special===
-            "elite"
-            ?"#ffd23f"
-            :this.type.color;
+            (
+                this.special &&
+                specialColors[
+                    this.special
+                ]
+            ) ||
+            this.type.color;
 
         this.hitFlash=0;
 
@@ -5434,6 +5709,59 @@ class Asteroid{
 
 
     update(dt){
+
+        if(
+            this.special===
+            "drift"
+        ){
+
+            /*
+             * Steered by ambient tilt/mouse rather than its own
+             * fixed trajectory — a small continuous nudge each
+             * frame, with an overall speed cap so it can't spin
+             * up into something absurd from sustained input in
+             * one direction.
+             */
+            const strength=
+                computeDriftStrength();
+
+            this.vx+=
+                (
+                    deviceTiltX+
+                    mouseDriftX
+                )*strength*dt;
+
+            this.vy+=
+                (
+                    deviceTiltY+
+                    mouseDriftY
+                )*strength*dt;
+
+            const currentSpeed=
+                Math.hypot(
+                    this.vx,
+                    this.vy
+                );
+
+            const maxSpeed=220;
+
+            if(
+                currentSpeed>maxSpeed
+            ){
+
+                this.vx=
+                    this.vx/
+                    currentSpeed*
+                    maxSpeed;
+
+                this.vy=
+                    this.vy/
+                    currentSpeed*
+                    maxSpeed;
+
+            }
+
+        }
 
         this.x+=
             this.vx*dt;
@@ -5678,6 +6006,31 @@ class Asteroid{
                 );
 
                 ctx.stroke();
+
+            }else if(
+                this.special===
+                "drift"
+            ){
+
+                ctx.fillStyle=
+                    "#b98cff";
+
+                ctx.font=
+                    "bold "+
+                    (this.radius*.7)+
+                    "px system-ui";
+
+                ctx.textAlign=
+                    "center";
+
+                ctx.textBaseline=
+                    "middle";
+
+                ctx.fillText(
+                    "🧭",
+                    0,
+                    1
+                );
 
             }
 
@@ -6858,15 +7211,26 @@ function computeSpecialSpawnRate(){
 
 }
 
+
+/*
+ * How strongly the Drift Rock responds to tilt/mouse input.
+ * Thriving players get a stronger pull — it's a genuine added
+ * challenge worth leaning into; a struggling player gets a
+ * gentler one so it reads as "slightly unusual" rather than
+ * "impossible to predict."
+ */
+function computeDriftStrength(){
+
+    return clamp(
+        55+
+        difficultyIntensity()*45,
+        55,
+        100
+    );
+
+}
+
 function rollSpecialKind(){
-
-    const entry=
-        getPlanetSpecial(
-            currentPlanetId
-        );
-
-    if(!entry)
-        return null;
 
     if(
         Math.random()>
@@ -6877,7 +7241,34 @@ function rollSpecialKind(){
 
     }
 
-    return entry.kind;
+    const candidates=[];
+
+    const planetEntry=
+        getPlanetSpecial(
+            currentPlanetId
+        );
+
+    if(planetEntry){
+
+        candidates.push(
+            planetEntry.kind
+        );
+
+    }
+
+    candidates.push(
+        ...getUnlockedWildcardKinds()
+    );
+
+    if(!candidates.length)
+        return null;
+
+    return candidates[
+        Math.floor(
+            Math.random()*
+            candidates.length
+        )
+    ];
 
 }
 
@@ -12831,6 +13222,17 @@ function landAtCurrentPlanet(){
 
     runCoins=0;
 
+    /*
+     * The ship you just landed becomes the default pick for
+     * next launch — this is the actual fix for "I land a ship
+     * here but can never launch with it": previously launch
+     * always silently used whichever docked ship had the
+     * highest score, so a fresh or low-scoring landing could
+     * never win out over an older one.
+     */
+    selectedLaunchShipId=
+        currentShipId;
+
     planetSave.landingsCount++;
 
     runLandingsCount++;
@@ -14992,17 +15394,35 @@ function startGame(){
         }
 
         /*
-         * Use the highest-score ship.
+         * Use whichever ship was explicitly selected (see
+         * resolveLaunchShip/selectedLaunchShipId), falling
+         * back to the highest-scoring one if nothing was
+         * picked or the pick is no longer valid.
          */
 
-        ships.sort(
-            (a,b)=>
-                b.score-
-                a.score
-        );
-
         const ship=
-            ships.shift();
+            resolveLaunchShip(
+                ships
+            );
+
+        const shipIndex=
+            ships.findIndex(
+                s =>
+                    s.id===
+                    ship.id
+            );
+
+        if(shipIndex!==-1){
+
+            ships.splice(
+                shipIndex,
+                1
+            );
+
+        }
+
+        selectedLaunchShipId=
+            null;
 
         currentShipId=
             ship.id;
