@@ -3379,7 +3379,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3391,7 +3391,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3404,7 +3404,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:2,
+        cost:25,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins early. "+
@@ -3417,7 +3417,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3429,7 +3429,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3441,7 +3441,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3453,7 +3453,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:4,
+        cost:45,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3466,7 +3466,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:4,
+        cost:45,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3478,7 +3478,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:6,
+        cost:60,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -5103,6 +5103,83 @@ function drawStars(){
    ASTEROID TYPES
 ========================================================= */
 
+/*
+ * Planet-unique special objects — one behavioral twist per
+ * planet, layered on top of the normal themed asteroid system
+ * rather than replacing it. Each "kind" is handled by its own
+ * dedicated logic in the Asteroid class and the collision code
+ * below; this registry is just the catalog + spawn metadata.
+ */
+const PLANET_SPECIALS={
+
+    mars:{
+        kind:"explosive",
+        name:"Flare Rock",
+        icon:"💥",
+        description:
+            "Explodes far bigger than normal on destruction, "+
+            "with a wider chain-reaction radius that's much "+
+            "more likely to set off nearby rocks."
+    },
+
+    aurora:{
+        kind:"sticky",
+        name:"Sticky Comet",
+        icon:"🧲",
+        description:
+            "Sticks fast to the next asteroid it touches, "+
+            "fusing their momentum into one until either one "+
+            "is destroyed."
+    },
+
+    europa:{
+        kind:"shatter",
+        name:"Shatter Ice",
+        icon:"❄",
+        description:
+            "Doesn't go quietly — breaks into smaller, faster "+
+            "shards that scatter outward on destruction."
+    },
+
+    helios:{
+        kind:"durable",
+        name:"Solar Core",
+        icon:"☀",
+        description:
+            "Takes two hits to bring down — the first only "+
+            "cracks it."
+    },
+
+    nova:{
+        kind:"coin-rich",
+        name:"Cache Rock",
+        icon:"💰",
+        description:
+            "Always drops a coin, and a noticeably bigger one "+
+            "than usual."
+    },
+
+    zenith:{
+        kind:"elite",
+        name:"Zenith Prime",
+        icon:"👑",
+        description:
+            "Bigger, tougher, and worth significantly more than "+
+            "anything else in the field — the closest thing "+
+            "this game has to a mini-boss."
+    }
+
+};
+
+function getPlanetSpecial(planetId){
+
+    return PLANET_SPECIALS[
+        planetId
+    ] || null;
+
+}
+
+
 const ASTEROID_TYPES={
 
     earth:{
@@ -5198,7 +5275,8 @@ class Asteroid{
         x,
         y,
         size=1,
-        typeId="earth"
+        typeId="earth",
+        special=null
     ){
 
         this.x=x;
@@ -5215,12 +5293,32 @@ class Asteroid{
             ] ||
             ASTEROID_TYPES.earth;
 
+        /*
+         * Special kind ("explosive"/"sticky"/"shatter"/
+         * "durable"/"coin-rich"/"elite"/null). Elite forces a
+         * bigger radius regardless of rolled size, since it's
+         * meant to read as a mini-boss on sight.
+         */
+        this.special=
+            special;
+
         this.radius=
-            size===3
+            special==="elite"
+            ?34
+            :size===3
             ?28
             :size===2
             ?20
             :13;
+
+        this.durability=
+            special==="durable"
+            ?2
+            :special==="elite"
+            ?2
+            :1;
+
+        this.stuckTo=null;
 
         this.angle=
             random(
@@ -5321,7 +5419,10 @@ class Asteroid{
         }
 
         this.color=
-            this.type.color;
+            this.special===
+            "elite"
+            ?"#ffd23f"
+            :this.type.color;
 
         this.hitFlash=0;
 
@@ -5441,6 +5542,146 @@ class Asteroid{
             :this.color;
 
         ctx.stroke();
+
+        /*
+         * A small distinguishing mark for planet-unique
+         * specials — enough to telegraph "this one's
+         * different" at a glance without redesigning the
+         * whole rock. Durable/Elite also show crack lines once
+         * they've soaked up their first hit.
+         */
+        if(this.special){
+
+            ctx.lineWidth=1.5;
+
+            if(
+                this.special===
+                "sticky"
+            ){
+
+                ctx.strokeStyle=
+                    "#7ee0ff";
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+5,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
+
+            }else if(
+                this.special===
+                "explosive"
+            ){
+
+                ctx.strokeStyle=
+                    "#ffb347";
+
+                ctx.setLineDash([
+                    3,4
+                ]);
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+5,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+
+            }else if(
+                (
+                    this.special===
+                    "durable" ||
+                    this.special===
+                    "elite"
+                ) &&
+                this.cracked
+            ){
+
+                ctx.strokeStyle=
+                    "#ffffff";
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    -this.radius*.5,
+                    -this.radius*.3
+                );
+
+                ctx.lineTo(
+                    this.radius*.2,
+                    this.radius*.1
+                );
+
+                ctx.lineTo(
+                    -this.radius*.1,
+                    this.radius*.5
+                );
+
+                ctx.stroke();
+
+            }else if(
+                this.special===
+                "coin-rich"
+            ){
+
+                ctx.fillStyle=
+                    "#ffd76b";
+
+                ctx.font=
+                    "bold "+
+                    (this.radius*.6)+
+                    "px system-ui";
+
+                ctx.textAlign=
+                    "center";
+
+                ctx.textBaseline=
+                    "middle";
+
+                ctx.fillText(
+                    "$",
+                    0,
+                    1
+                );
+
+            }else if(
+                this.special===
+                "elite"
+            ){
+
+                ctx.strokeStyle=
+                    "#ffd23f";
+
+                ctx.lineWidth=2;
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+7,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
+
+            }
+
+        }
 
         ctx.restore();
 
@@ -5608,8 +5849,16 @@ class CoinPickup{
  */
 function rollCoinDrop(asteroid){
 
+    const isCoinRich=
+        asteroid.special===
+        "coin-rich" ||
+        asteroid.special===
+        "elite";
+
     const dropChance=
-        computeCoinDropRate()+
+        isCoinRich
+        ?1
+        :computeCoinDropRate()+
         asteroid.size*.015;
 
     if(
@@ -5621,12 +5870,26 @@ function rollCoinDrop(asteroid){
 
     }
 
-    const value=
+    let value=
         asteroid.size===3
         ?random(3,5)|0
         :asteroid.size===2
         ?random(2,3)|0
         :1;
+
+    if(isCoinRich){
+
+        /*
+         * Cache Rock / Zenith Prime always drop, and always
+         * noticeably more than a normal rock of the same size
+         * would — that's the entire point of the type.
+         */
+        value=
+            Math.round(
+                (value+2)*1.8
+            );
+
+    }
 
     coinPickups.push(
         new CoinPickup(
@@ -6576,6 +6839,49 @@ function rollAsteroidSize(){
 }
 
 
+/*
+ * How often a spawn rolls as this planet's unique special
+ * instead of a normal themed asteroid. ML-controlled: a
+ * thriving player sees more of the added complexity/spice; a
+ * struggling one sees less while they're still learning the
+ * basics. Earth has no PLANET_SPECIALS entry at all, so this
+ * never fires there regardless of the rate.
+ */
+function computeSpecialSpawnRate(){
+
+    return clamp(
+        .08+
+        difficultyIntensity()*.12,
+        .08,
+        .2
+    );
+
+}
+
+function rollSpecialKind(){
+
+    const entry=
+        getPlanetSpecial(
+            currentPlanetId
+        );
+
+    if(!entry)
+        return null;
+
+    if(
+        Math.random()>
+        computeSpecialSpawnRate()
+    ){
+
+        return null;
+
+    }
+
+    return entry.kind;
+
+}
+
+
 function spawnAsteroid(){
 
     const pos=
@@ -6589,7 +6895,8 @@ function spawnAsteroid(){
             pos.x,
             pos.y,
             size,
-            getAsteroidType()
+            getAsteroidType(),
+            rollSpecialKind()
         )
     );
 
@@ -6657,10 +6964,49 @@ function detonateAsteroid(
     const asteroid=
         asteroids[index];
 
+    /*
+     * Durable/Elite absorb a hit instead of dying, unless it's
+     * already down to its last one. Special abilities (isEMP
+     * here covers all of them, not just literal EMP) always
+     * punch straight through regardless — a real reward for
+     * spending a charge on something tough.
+     */
+    if(
+        asteroid.durability>1 &&
+        !isEMP
+    ){
+
+        asteroid.durability--;
+
+        asteroid.hitFlash=.2;
+
+        asteroid.cracked=true;
+
+        sound("damage");
+
+        return;
+
+    }
+
     asteroids.splice(
         index,
         1
     );
+
+    /*
+     * A stuck partner (Sticky Comet) resumes independent
+     * movement the moment this one is destroyed — it already
+     * has its own velocity from the moment they fused, so
+     * there's nothing left to do but drop the reference.
+     */
+    if(
+        asteroid.stuckTo
+    ){
+
+        asteroid.stuckTo.stuckTo=
+            null;
+
+    }
 
     /*
      * EMP kills are excluded from the
@@ -6711,7 +7057,13 @@ function detonateAsteroid(
             Math.round(
                 basePoints*
                 combo*
-                asteroid.type.multiplier
+                asteroid.type.multiplier*
+                (
+                    asteroid.special===
+                    "elite"
+                    ?2.5
+                    :1
+                )
             );
 
     }
@@ -6802,6 +7154,22 @@ function detonateAsteroid(
     ){
 
         explosionPower*=1.5;
+
+    }
+
+    if(
+        asteroid.special===
+        "explosive"
+    ){
+
+        /*
+         * Everything below (visual explosion size, push
+         * radius/strength, chain-trigger chance) all scales
+         * off explosionPower, so boosting it here is enough to
+         * make this genuinely "explodes far bigger" rather
+         * than needing a second, separate system.
+         */
+        explosionPower*=2.1;
 
     }
 
@@ -6933,10 +7301,22 @@ function detonateAsteroid(
         asteroid.size>1
     ){
 
+        const isShatter=
+            asteroid.special===
+            "shatter";
+
         const pieces=
-            asteroid.size===3
-            ?3
-            :2;
+            isShatter
+            ?(
+                asteroid.size===3
+                ?4
+                :3
+            )
+            :(
+                asteroid.size===3
+                ?3
+                :2
+            );
 
         for(
             let i=0;
@@ -6954,6 +7334,7 @@ function detonateAsteroid(
 
             const child=
                 new Asteroid(
+
                     asteroid.x+
                     Math.cos(angle)*
                     15,
@@ -6964,21 +7345,42 @@ function detonateAsteroid(
 
                     asteroid.size-1,
 
-                    asteroid.typeId
+                    asteroid.typeId,
+
+                    /*
+                     * Shatter Ice inherits its own kind onto
+                     * its children — a size-3 breaks into
+                     * shattering size-2s, which break again
+                     * into a final spray of size-1 shards —
+                     * genuinely "doesn't go quietly," not just
+                     * a one-time split.
+                     */
+                    isShatter
+                    ?"shatter"
+                    :null
+
                 );
 
             child.vx=
                 Math.cos(angle)*
                 random(
-                    50,
-                    120
+                    isShatter
+                    ?80
+                    :50,
+                    isShatter
+                    ?170
+                    :120
                 );
 
             child.vy=
                 Math.sin(angle)*
                 random(
-                    50,
-                    120
+                    isShatter
+                    ?80
+                    :50,
+                    isShatter
+                    ?170
+                    :120
                 );
 
             asteroids.push(
@@ -12904,6 +13306,112 @@ function update(dt){
             asteroid.update(
                 asteroidDt
             );
+
+        }
+
+
+        /*
+         * Sticky Comet: the moment it touches ANY other
+         * asteroid, they fuse — combined velocity (a simple
+         * size-weighted average, so momentum genuinely changes
+         * on contact rather than either one just towing the
+         * other) and a live reference on both sides, until
+         * either is destroyed.
+         */
+        for(
+            const asteroid of asteroids
+        ){
+
+            if(
+                asteroid.special!==
+                "sticky" ||
+                asteroid.stuckTo
+            ){
+
+                continue;
+
+            }
+
+            for(
+                const other of asteroids
+            ){
+
+                if(
+                    other===asteroid ||
+                    other.stuckTo
+                ){
+
+                    continue;
+
+                }
+
+                if(
+                    Math.hypot(
+                        other.x-
+                        asteroid.x,
+                        other.y-
+                        asteroid.y
+                    )<=
+                    asteroid.radius+
+                    other.radius
+                ){
+
+                    const totalMass=
+                        asteroid.size+
+                        other.size;
+
+                    const combinedVx=
+                        (
+                            asteroid.vx*
+                            asteroid.size+
+                            other.vx*
+                            other.size
+                        )/totalMass;
+
+                    const combinedVy=
+                        (
+                            asteroid.vy*
+                            asteroid.size+
+                            other.vy*
+                            other.size
+                        )/totalMass;
+
+                    asteroid.vx=
+                        combinedVx;
+
+                    asteroid.vy=
+                        combinedVy;
+
+                    other.vx=
+                        combinedVx;
+
+                    other.vy=
+                        combinedVy;
+
+                    asteroid.stuckTo=
+                        other;
+
+                    other.stuckTo=
+                        asteroid;
+
+                    floatingText(
+                        "STUCK",
+                        (
+                            asteroid.x+
+                            other.x
+                        )/2,
+                        (
+                            asteroid.y+
+                            other.y
+                        )/2,
+                        "#7ee0ff"
+                    );
+
+                    break;
+
+                }
+
+            }
 
         }
 
