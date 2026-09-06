@@ -2649,6 +2649,14 @@ let score=0;
  */
 let runCoins=0;
 
+/*
+ * Materials currently carried by the flying ship, same risk
+ * profile as coins (lost on death, safe once landed) but
+ * tracked per-material-type and capped at MATERIAL_CAP each —
+ * a ship can only hold so much of any one material at a time.
+ */
+let runMaterials={};
+
 let highScore=
     Number(
         localStorage.getItem(
@@ -2688,6 +2696,7 @@ let particles=[];
 let stars=[];
 let shockwaves=[];
 let coinPickups=[];
+let materialPickups=[];
 let beamEffects=[];
 
 
@@ -2802,6 +2811,17 @@ function defaultPlanetSave(){
          * wherever the ship happens to be docked.
          */
         itemStock:{},
+
+        /*
+         * Materials safely deposited at each planet —
+         * planetSave.materialBanks[planetId][materialId]. This
+         * was missing from the default shape entirely, which is
+         * exactly the kind of gap that only shows up once real
+         * data flows through it — a fresh (or freshly-reset)
+         * save would throw the moment anything tried to read
+         * from it.
+         */
+        materialBanks:{},
 
         /*
          * Lifetime play-pattern data — landings and which
@@ -2942,6 +2962,21 @@ function loadPlanetSave(){
 
                         }
 
+                        if(
+                            !ship.materials ||
+                            typeof ship.materials!==
+                            "object"
+                        ){
+
+                            ship.materials={};
+
+                        }
+
+                        ship.materials=
+                            clampMaterials(
+                                ship.materials
+                            );
+
                     }
 
                 }
@@ -2953,6 +2988,16 @@ function loadPlanetSave(){
                 ){
 
                     saved.banks={};
+
+                }
+
+                if(
+                    !saved.materialBanks ||
+                    typeof saved.materialBanks!==
+                    "object"
+                ){
+
+                    saved.materialBanks={};
 
                 }
 
@@ -2996,6 +3041,30 @@ function loadPlanetSave(){
                         ]={};
 
                     }
+
+                    if(
+                        !saved.materialBanks[
+                            planet.id
+                        ] ||
+                        typeof saved.materialBanks[
+                            planet.id
+                        ]!=="object"
+                    ){
+
+                        saved.materialBanks[
+                            planet.id
+                        ]={};
+
+                    }
+
+                    saved.materialBanks[
+                        planet.id
+                    ]=
+                        cleanMaterialCounts(
+                            saved.materialBanks[
+                                planet.id
+                            ]
+                        );
 
                 }
 
@@ -3138,198 +3207,132 @@ function loadPlanetSave(){
 }
 
 
-let planetSave=
-    loadPlanetSave();
+/*
+ * Materials: what each unique asteroid gives instead of/on top
+ * of coins. Unlike coins, ships can only hold a limited amount
+ * of any one material at a time (see MATERIAL_CAP) — a real,
+ * separate resource with its own risk profile, not just coins
+ * with a different name. This is the foundation everything
+ * else in the requested economy (perks, structures, ship
+ * factories) will build on top of.
+ *
+ * Deliberately declared here, right before loadPlanetSave() is
+ * actually invoked below — its migration path calls
+ * clampMaterials(), which reads MATERIAL_CAP. Both are `const`,
+ * so if that call happened before this point in the script's
+ * top-to-bottom execution, it would throw a "before
+ * initialization" error the moment there was any real ship
+ * data to migrate — exactly the bug this fixes.
+ */
+const MATERIAL_CAP=20;
 
+const MATERIALS={
 
-function savePlanetProgress(
-    data=planetSave
-){
+    "volatile-alloy":{
+        id:"volatile-alloy",
+        name:"Volatile Alloy",
+        icon:"🔶",
+        color:"#ff2e9a",
+        planetId:"mars"
+    },
 
-    localStorage.setItem(
-        SAVE_KEY,
-        JSON.stringify(data)
-    );
+    "magnetic-resin":{
+        id:"magnetic-resin",
+        name:"Magnetic Resin",
+        icon:"🔷",
+        color:"#4fd6ff",
+        planetId:"aurora"
+    },
 
-}
+    "cryo-shard":{
+        id:"cryo-shard",
+        name:"Cryo Shard",
+        icon:"🔹",
+        color:"#5cffb0",
+        planetId:"europa"
+    },
 
+    "solar-plating":{
+        id:"solar-plating",
+        name:"Solar Plating",
+        icon:"🔸",
+        color:"#9fd8ff",
+        planetId:"helios"
+    },
 
-/* =========================================================
-   SHIP SYSTEM
-========================================================= */
+    "nova-dust":{
+        id:"nova-dust",
+        name:"Nova Dust",
+        icon:"✨",
+        color:"#ffd76b",
+        planetId:"nova"
+    },
 
-function ensurePlanetArray(
-    planetId
-){
+    "prime-core":{
+        id:"prime-core",
+        name:"Prime Core",
+        icon:"💠",
+        color:"#ffd23f",
+        planetId:"zenith"
+    },
 
-    if(
-        !Array.isArray(
-            planetSave.ships[
-                planetId
-            ]
-        )
-    ){
+    "shadow-vapor":{
+        id:"shadow-vapor",
+        name:"Shadow Vapor",
+        icon:"🔮",
+        color:"#8a7fff",
+        planetId:"titan"
+    },
 
-        planetSave.ships[
-            planetId
-        ]=[];
+    "mirror-alloy":{
+        id:"mirror-alloy",
+        name:"Mirror Alloy",
+        icon:"🔺",
+        color:"#ff9de6",
+        planetId:"neptune"
+    },
 
+    "chrono-crystal":{
+        id:"chrono-crystal",
+        name:"Chrono Crystal",
+        icon:"🔻",
+        color:"#6ee7c8",
+        planetId:"kepler"
+    },
+
+    "aether-dust":{
+        id:"aether-dust",
+        name:"Aether Dust",
+        icon:"🧭",
+        color:"#ff3860",
+        planetId:null
     }
 
-}
+};
 
+const MATERIAL_BY_SPECIAL_KIND={
+    explosive:"volatile-alloy",
+    sticky:"magnetic-resin",
+    shatter:"cryo-shard",
+    durable:"solar-plating",
+    "coin-rich":"nova-dust",
+    elite:"prime-core",
+    cloak:"shadow-vapor",
+    twin:"mirror-alloy",
+    rift:"chrono-crystal",
+    drift:"aether-dust"
+};
 
-function createShip(
-    planetId,
-    score,
-    coins=0,
-    equipment="emp",
-    wave=1,
-    lives=3
-){
+function getMaterialForSpecialKind(kind){
 
-    ensurePlanetArray(
-        planetId
-    );
+    const id=
+        MATERIAL_BY_SPECIAL_KIND[
+            kind
+        ];
 
-    const ship={
-
-        id:
-            "ship_"+(
-                planetSave.nextShipId++
-            ),
-
-        score:
-            Math.max(
-                0,
-                Math.floor(score)
-            ),
-
-        coins:
-            Math.max(
-                0,
-                Math.floor(coins)
-            ),
-
-        equipment:
-            equipment || "emp",
-
-        wave:
-            Math.max(
-                1,
-                Math.floor(wave)
-            ),
-
-        lives:
-            Math.max(
-                1,
-                Math.min(
-                    3,
-                    Math.floor(lives)
-                )
-            )
-
-    };
-
-    planetSave.ships[
-        planetId
-    ].push(ship);
-
-    savePlanetProgress();
-
-    return ship;
-
-}
-
-
-/*
- * Coin banks and shop stock live per-planet, separate from
- * anything a ship is carrying mid-flight. Banks are only
- * touched through these helpers so every read/write goes
- * through the same defaulting + save path.
- */
-function getBank(planetId){
-
-    return planetSave.banks[
-        planetId
-    ] || 0;
-
-}
-
-function addToBank(planetId,amount){
-
-    planetSave.banks[
-        planetId
-    ]=
-        Math.max(
-            0,
-            getBank(planetId)+
-            Math.floor(amount)
-        );
-
-    savePlanetProgress();
-
-}
-
-function getItemStock(planetId,itemId){
-
-    return(
-        (
-            planetSave.itemStock[
-                planetId
-            ] || {}
-        )[itemId] || 0
-    );
-
-}
-
-function addItemStock(planetId,itemId,amount){
-
-    if(
-        !planetSave.itemStock[
-            planetId
-        ]
-    ){
-
-        planetSave.itemStock[
-            planetId
-        ]={};
-
-    }
-
-    planetSave.itemStock[
-        planetId
-    ][itemId]=
-        Math.max(
-            0,
-            getItemStock(
-                planetId,
-                itemId
-            )+amount
-        );
-
-    savePlanetProgress();
-
-}
-
-/*
- * Sell price for offloading a stocked item, scaled by how far
- * out the planet is (its tier) — closer worlds barely value
- * spare gear, Zenith pays the most for it.
- */
-function computeSellPrice(planetId){
-
-    const planet=
-        getPlanet(planetId);
-
-    if(!planet)
-        return 1;
-
-    return 1+
-        Math.max(
-            0,
-            planet.tier-1
-        )*2;
+    return id
+        ?MATERIALS[id]
+        :null;
 
 }
 
@@ -3339,6 +3342,10 @@ function computeSellPrice(planetId){
  * stocked through the exact same generic code path as every
  * purchased item — it's just never required to be in stock to
  * equip, so a ship can never be stranded with nothing to fit.
+ * Also relocated here (with SHOP_ITEMS below) for the same
+ * reason as the materials block above: loadPlanetSave()'s
+ * legacy-save migration calls getShopItemForPlanet(), which
+ * needs SHOP_ITEMS to already exist.
  */
 const EMP_ITEM={
     id:"emp",
@@ -3501,6 +3508,280 @@ function getShopItemForPlanet(planetId){
 }
 
 
+let planetSave=
+    loadPlanetSave();
+
+
+function savePlanetProgress(
+    data=planetSave
+){
+
+    localStorage.setItem(
+        SAVE_KEY,
+        JSON.stringify(data)
+    );
+
+}
+
+
+/* =========================================================
+   SHIP SYSTEM
+========================================================= */
+
+function ensurePlanetArray(
+    planetId
+){
+
+    if(
+        !Array.isArray(
+            planetSave.ships[
+                planetId
+            ]
+        )
+    ){
+
+        planetSave.ships[
+            planetId
+        ]=[];
+
+    }
+
+}
+
+
+function createShip(
+    planetId,
+    score,
+    coins=0,
+    equipment="emp",
+    wave=1,
+    lives=3,
+    materials=null
+){
+
+    ensurePlanetArray(
+        planetId
+    );
+
+    const ship={
+
+        id:
+            "ship_"+(
+                planetSave.nextShipId++
+            ),
+
+        score:
+            Math.max(
+                0,
+                Math.floor(score)
+            ),
+
+        coins:
+            Math.max(
+                0,
+                Math.floor(coins)
+            ),
+
+        equipment:
+            equipment || "emp",
+
+        wave:
+            Math.max(
+                1,
+                Math.floor(wave)
+            ),
+
+        lives:
+            Math.max(
+                1,
+                Math.min(
+                    3,
+                    Math.floor(lives)
+                )
+            ),
+
+        materials:
+            clampMaterials(
+                materials || {}
+            )
+
+    };
+
+    planetSave.ships[
+        planetId
+    ].push(ship);
+
+    savePlanetProgress();
+
+    return ship;
+
+}
+
+
+/*
+ * Applies MATERIAL_CAP to every entry in a materials object,
+ * dropping anything at or below 0 entirely rather than storing
+ * zero-count clutter. Ship storage only — see
+ * cleanMaterialCounts() for the uncapped planet-bank version.
+ */
+function clampMaterials(materials){
+
+    const clean={};
+
+    for(
+        const id in materials
+    ){
+
+        const amount=
+            Math.max(
+                0,
+                Math.min(
+                    MATERIAL_CAP,
+                    Math.floor(
+                        materials[id]
+                    ) || 0
+                )
+            );
+
+        if(amount>0){
+
+            clean[id]=amount;
+
+        }
+
+    }
+
+    return clean;
+
+}
+
+
+/*
+ * Same tidy-up as clampMaterials but with no cap — planet
+ * material banks, once deposited, are meant to hold as much as
+ * you bring them, unlike a ship's limited hold.
+ */
+function cleanMaterialCounts(materials){
+
+    const clean={};
+
+    for(
+        const id in materials
+    ){
+
+        const amount=
+            Math.max(
+                0,
+                Math.floor(
+                    materials[id]
+                ) || 0
+            );
+
+        if(amount>0){
+
+            clean[id]=amount;
+
+        }
+
+    }
+
+    return clean;
+
+}
+
+
+/*
+ * Coin banks and shop stock live per-planet, separate from
+ * anything a ship is carrying mid-flight. Banks are only
+ * touched through these helpers so every read/write goes
+ * through the same defaulting + save path.
+ */
+function getBank(planetId){
+
+    return planetSave.banks[
+        planetId
+    ] || 0;
+
+}
+
+function addToBank(planetId,amount){
+
+    planetSave.banks[
+        planetId
+    ]=
+        Math.max(
+            0,
+            getBank(planetId)+
+            Math.floor(amount)
+        );
+
+    savePlanetProgress();
+
+}
+
+function getItemStock(planetId,itemId){
+
+    return(
+        (
+            planetSave.itemStock[
+                planetId
+            ] || {}
+        )[itemId] || 0
+    );
+
+}
+
+function addItemStock(planetId,itemId,amount){
+
+    if(
+        !planetSave.itemStock[
+            planetId
+        ]
+    ){
+
+        planetSave.itemStock[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.itemStock[
+        planetId
+    ][itemId]=
+        Math.max(
+            0,
+            getItemStock(
+                planetId,
+                itemId
+            )+amount
+        );
+
+    savePlanetProgress();
+
+}
+
+/*
+ * Sell price for offloading a stocked item, scaled by how far
+ * out the planet is (its tier) — closer worlds barely value
+ * spare gear, Zenith pays the most for it.
+ */
+function computeSellPrice(planetId){
+
+    const planet=
+        getPlanet(planetId);
+
+    if(!planet)
+        return 1;
+
+    return 1+
+        Math.max(
+            0,
+            planet.tier-1
+        )*2;
+
+}
+
+
 /*
  * Called the instant a ship is actually lost — the coin
  * equivalent of the run ending. Ordinarily every coin the
@@ -3546,6 +3827,49 @@ function resolveRunEndCoins(){
 }
 
 
+/*
+ * Materials aren't protected by the Return Capsule (that's
+ * specifically a coin-insurance item) — a lost ship always
+ * loses whatever it was carrying, full stop. Simpler mental
+ * model: capsule saves coins, nothing saves materials, so
+ * depositing them regularly actually matters.
+ */
+function resolveRunEndMaterials(){
+
+    const total=
+        Object.values(
+            runMaterials
+        ).reduce(
+            (a,b) => a+b,
+            0
+        );
+
+    if(total<=0){
+
+        runMaterials={};
+
+        return;
+
+    }
+
+    aiWindow.materialsLost+=
+        total;
+
+    runMaterialsLostTotal+=
+        total;
+
+    floatingText(
+        "LOST "+total+" MATERIALS",
+        W/2,
+        H*.48,
+        "#ff8d8d"
+    );
+
+    runMaterials={};
+
+}
+
+
 /* =========================================================
    PLANET DETAIL — bank, shop, equipment actions
 ========================================================= */
@@ -3573,6 +3897,109 @@ function depositShipCoins(planetId,shipId){
     );
 
     ship.coins=0;
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+
+/*
+ * Materials go straight into the planet's uncapped material
+ * bank — same all-or-nothing deposit as coins, just per-type.
+ */
+function addToMaterialBank(planetId,materialId,amount){
+
+    if(
+        !planetSave.materialBanks ||
+        typeof planetSave.materialBanks!==
+        "object"
+    ){
+
+        planetSave.materialBanks={};
+
+    }
+
+    if(
+        !planetSave.materialBanks[
+            planetId
+        ]
+    ){
+
+        planetSave.materialBanks[
+            planetId
+        ]={};
+
+    }
+
+    const current=
+        planetSave.materialBanks[
+            planetId
+        ][materialId] || 0;
+
+    planetSave.materialBanks[
+        planetId
+    ][materialId]=
+        Math.max(
+            0,
+            current+amount
+        );
+
+    savePlanetProgress();
+
+}
+
+function depositShipMaterials(planetId,shipId){
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !ship.materials
+    )
+        return;
+
+    let depositedAny=
+        false;
+
+    for(
+        const materialId in
+        ship.materials
+    ){
+
+        const amount=
+            ship.materials[
+                materialId
+            ];
+
+        if(amount>0){
+
+            addToMaterialBank(
+                planetId,
+                materialId,
+                amount
+            );
+
+            depositedAny=true;
+
+        }
+
+    }
+
+    if(!depositedAny)
+        return;
+
+    ship.materials={};
 
     savePlanetProgress();
 
@@ -3887,6 +4314,14 @@ function renderPlanetMap(){
 
     planetMap.innerHTML="";
 
+    /*
+     * Wrapped defensively: if any single planet's data causes
+     * a problem while building the map, this ensures it can't
+     * silently break the rest of the map (or every "i" badge
+     * along with it) the way a single uncaught error here
+     * previously could.
+     */
+    try{
 
     for(
         const route of ROUTES
@@ -4139,6 +4574,15 @@ function renderPlanetMap(){
     }
 
     renderLaunchPreview();
+
+    }catch(error){
+
+        console.error(
+            "Planet map render failed:",
+            error
+        );
+
+    }
 
 }
 
@@ -4532,7 +4976,43 @@ function openPlanetDetail(id){
 
     planetDetailId=id;
 
-    renderPlanetDetail(id);
+    /*
+     * The overlay must always actually open, even if something
+     * inside the render throws — previously a single rendering
+     * error would leave classList.remove("hidden") never
+     * reached, meaning the menu just silently failed to open
+     * with no visible sign anything went wrong.
+     */
+    try{
+
+        renderPlanetDetail(id);
+
+    }catch(error){
+
+        console.error(
+            "Planet detail render failed:",
+            error
+        );
+
+        const container=
+            document.getElementById(
+                "planetDetailContent"
+            );
+
+        if(container){
+
+            container.innerHTML=
+                '<div class="customizer-title">'+
+                'Something went wrong</div>'+
+                '<div class="metric-note">'+
+                'This planet\'s details couldn\'t be shown. '+
+                'Nothing was lost — try closing and reopening, '+
+                'or reloading the page if it keeps happening.'+
+                '</div>';
+
+        }
+
+    }
 
     document.getElementById(
         "planetDetail"
@@ -4622,6 +5102,62 @@ function renderPlanetDetail(id){
         '<span>🏦 Bank balance</span>'+
         '<strong>'+bank.toLocaleString()+' 🪙</strong>'+
         '</div>'+
+        '</div>';
+
+
+    /* -------- Material Bank -------- */
+
+    const materialBank=
+        (
+            planetSave.materialBanks ||
+            {}
+        )[id] || {};
+
+    const materialBankEntries=
+        Object.entries(
+            materialBank
+        ).filter(
+            ([,count]) => count>0
+        );
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">Material Bank</div>'+
+        '<div class="metric-callout">'+
+        'Only planet-unique asteroids drop materials, and a ship '+
+        'can only carry '+MATERIAL_CAP+' of any one type at once — '+
+        'deposit here to bank them safely and clear space to '+
+        'collect more. No cap once deposited.'+
+        '</div>';
+
+    if(!materialBankEntries.length){
+
+        html+=
+            '<div class="metric-note">'+
+            'Nothing deposited here yet.'+
+            '</div>';
+
+    }else{
+
+        materialBankEntries.forEach(
+            ([materialId,count])=>{
+
+                const info=
+                    MATERIALS[materialId] ||
+                    MATERIALS["aether-dust"];
+
+                html+=
+                    '<div class="selected-shape-info" style="margin-top:6px;">'+
+                    '<span>'+info.icon+' '+info.name+'</span>'+
+                    '<strong>'+count.toLocaleString()+'</strong>'+
+                    '</div>';
+
+            }
+        );
+
+    }
+
+    html+=
         '</div>';
 
 
@@ -4769,6 +5305,39 @@ function renderPlanetDetail(id){
                     '<button class="control-btn" data-action="deposit" data-ship="'+
                     ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
                     'Deposit all to bank</button>'+
+                    (
+                        Object.keys(
+                            ship.materials || {}
+                        ).some(
+                            k => ship.materials[k]>0
+                        )
+                        ?'<div style="display:flex;flex-wrap:wrap;gap:6px;'+
+                        'align-items:center;font-size:9px;color:#8fa7c7;">'+
+                        Object.entries(
+                            ship.materials
+                        ).filter(
+                            ([,c]) => c>0
+                        ).map(
+                            ([materialId,count])=>{
+
+                                const info=
+                                    MATERIALS[materialId] ||
+                                    MATERIALS["aether-dust"];
+
+                                return(
+                                    '<span>'+info.icon+' '+
+                                    count+'/'+MATERIAL_CAP+
+                                    '</span>'
+                                );
+
+                            }
+                        ).join("")+
+                        '</div>'+
+                        '<button class="control-btn" data-action="deposit-materials" data-ship="'+
+                        ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
+                        'Deposit materials to bank</button>'
+                        :''
+                    )+
                     (
                         bank>0
                         ?'<div class="slider-group" style="margin-bottom:0;">'+
@@ -4973,6 +5542,15 @@ document
         if(action==="deposit"){
 
             depositShipCoins(
+                planetDetailId,
+                shipId
+            );
+
+        }else if(
+            action==="deposit-materials"
+        ){
+
+            depositShipMaterials(
                 planetDetailId,
                 shipId
             );
@@ -6571,6 +7149,162 @@ class CoinPickup{
 
 
 /*
+ * A material dropped by a destroyed planet-special asteroid.
+ * Diamond-shaped rather than round specifically so it's never
+ * confused with a coin at a glance, tinted to that material's
+ * own colour, and shows its icon rather than a numeric value —
+ * materials are always worth exactly 1 unit each, the scarcity
+ * is in the drop rate and the per-ship cap, not the amount.
+ */
+class MaterialPickup{
+
+    constructor(x,y,materialId){
+
+        this.x=x;
+        this.y=y;
+
+        this.materialId=
+            materialId;
+
+        this.info=
+            MATERIALS[materialId] ||
+            MATERIALS["aether-dust"];
+
+        this.radius=13;
+
+        this.vx=
+            random(-18,18);
+
+        this.vy=
+            random(-18,18);
+
+        this.life=0;
+
+        this.maxLife=
+            random(5,7);
+
+        this.spin=
+            random(0,Math.PI*2);
+
+    }
+
+    update(dt){
+
+        this.life+=dt;
+
+        this.x+=
+            this.vx*dt;
+
+        this.y+=
+            this.vy*dt;
+
+        this.spin+=
+            dt*2.4;
+
+    }
+
+    get expired(){
+
+        return(
+            this.life>=
+            this.maxLife
+        );
+
+    }
+
+    draw(ctx){
+
+        const fade=
+            clamp(
+                (
+                    this.maxLife-
+                    this.life
+                )/.8,
+                0,
+                1
+            );
+
+        const pulse=
+            1+
+            Math.sin(
+                this.spin*2
+            )*.08;
+
+        ctx.save();
+
+        ctx.globalAlpha=
+            fade;
+
+        ctx.translate(
+            this.x,
+            this.y
+        );
+
+        ctx.rotate(
+            this.spin
+        );
+
+        ctx.shadowBlur=14;
+
+        ctx.shadowColor=
+            this.info.color;
+
+        ctx.fillStyle=
+            this.info.color;
+
+        ctx.strokeStyle=
+            "#ffffff";
+
+        ctx.lineWidth=1.5;
+
+        const r=
+            this.radius*pulse;
+
+        ctx.beginPath();
+
+        ctx.moveTo(0,-r);
+
+        ctx.lineTo(r,0);
+
+        ctx.lineTo(0,r);
+
+        ctx.lineTo(-r,0);
+
+        ctx.closePath();
+
+        ctx.fill();
+
+        ctx.stroke();
+
+        ctx.shadowBlur=0;
+
+        ctx.rotate(
+            -this.spin
+        );
+
+        ctx.font=
+            "11px system-ui";
+
+        ctx.textAlign=
+            "center";
+
+        ctx.textBaseline=
+            "middle";
+
+        ctx.fillText(
+            this.info.icon,
+            0,
+            1
+        );
+
+        ctx.restore();
+
+    }
+
+}
+
+
+/*
  * Small, deliberately modest drop chance — coins are a bonus
  * on top of normal scoring, not a replacement scoring loop.
  * Bigger asteroids are a little more likely to drop, and worth
@@ -6625,6 +7359,43 @@ function rollCoinDrop(asteroid){
             asteroid.x,
             asteroid.y,
             value
+        )
+    );
+
+}
+
+
+/*
+ * Only planet-special (and wildcard) asteroids carry a
+ * material at all — normal themed asteroids never do, so
+ * materials stay tied to the more interesting, harder-to-farm
+ * spawns rather than becoming another constant background drip
+ * like coins.
+ */
+function rollMaterialDrop(asteroid){
+
+    const material=
+        getMaterialForSpecialKind(
+            asteroid.special
+        );
+
+    if(!material)
+        return;
+
+    if(
+        Math.random()>
+        computeMaterialDropRate()
+    ){
+
+        return;
+
+    }
+
+    materialPickups.push(
+        new MaterialPickup(
+            asteroid.x,
+            asteroid.y,
+            material.id
         )
     );
 
@@ -8091,6 +8862,10 @@ function detonateAsteroid(
             asteroid
         );
 
+        rollMaterialDrop(
+            asteroid
+        );
+
     }
 
     /*
@@ -8450,11 +9225,6 @@ function updateProgress(){
 function updateCurrentShipScore(){
 
     if(
-        currentPlanetId==="earth"
-    )
-        return;
-
-    if(
         !currentShipId
     )
         return;
@@ -8488,18 +9258,16 @@ function updateCurrentShipScore(){
 
 
 /*
- * Mirrors updateCurrentShipScore: syncs whatever coins the
- * ship is carrying RIGHT NOW into its docked record. Unlike
- * score this isn't a running maximum — coins are a real
- * carried balance that can go up (collected more) any time
- * the record is refreshed while docked.
+ * Mirrors updateCurrentShipScore: syncs whatever coins and
+ * materials the ship is carrying RIGHT NOW into its docked
+ * record. Unlike score this isn't a running maximum — both are
+ * a real carried balance that can go up (collected more) any
+ * time the record is refreshed while docked. The Earth guard
+ * that used to be here was stale: it predated Earth ships being
+ * dockable at all, and would've silently dropped sync for any
+ * Earth ship re-landing without ever leaving dock.
  */
 function updateCurrentShipCoins(){
-
-    if(
-        currentPlanetId==="earth"
-    )
-        return;
 
     if(
         !currentShipId
@@ -8527,6 +9295,11 @@ function updateCurrentShipCoins(){
                 Math.floor(runCoins)
             );
 
+        ship.materials=
+            clampMaterials(
+                runMaterials
+            );
+
         savePlanetProgress();
 
     }
@@ -8543,11 +9316,6 @@ function updateCurrentShipCoins(){
  * equipped in flight.
  */
 function syncCurrentShipFlightState(){
-
-    if(
-        currentPlanetId==="earth"
-    )
-        return;
 
     if(
         !currentShipId
@@ -8677,6 +9445,14 @@ function checkPlayerCollisions(){
             ){
 
                 recordDeathCharge();
+
+                /*
+                 * Materials are never protected by anything
+                 * (the Return Capsule is coin-insurance only),
+                 * so they resolve immediately regardless of
+                 * which path the coins themselves take below.
+                 */
+                resolveRunEndMaterials();
 
                 if(
                     currentShipEquipment===
@@ -10551,7 +11327,9 @@ let aiWindow={
     taps:0,
     coinsCollected:0,
     coinsLost:0,
-    itemUses:0
+    itemUses:0,
+    materialsCollected:0,
+    materialsLost:0
 
 };
 
@@ -10995,6 +11773,24 @@ function computeCoinDropRate(){
         difficultyIntensity()*.05,
         .06,
         .11
+    );
+
+}
+
+
+/*
+ * Deliberately much rarer than coins — materials are a real
+ * resource meant to feel earned, not another ambient drip.
+ * Thriving players see slightly more (they're already spending
+ * extra attention hunting/destroying specials successfully).
+ */
+function computeMaterialDropRate(){
+
+    return clamp(
+        .25+
+        difficultyIntensity()*.15,
+        .25,
+        .4
     );
 
 }
@@ -11869,6 +12665,8 @@ let sessionTryAgains=0;
 let runCoinsCollectedTotal=0;
 let runCoinsLostTotal=0;
 let runItemUsesTotal=0;
+let runMaterialsCollectedTotal=0;
+let runMaterialsLostTotal=0;
 let runLandingsCount=0;
 let hasStartedOnce=false;
 
@@ -13163,6 +13961,8 @@ function enterPlanetPhase(){
 
     coinPickups=[];
 
+    materialPickups=[];
+
     beamEffects=[];
 
     beamArmed=false;
@@ -13258,6 +14058,8 @@ function enterAsteroidField(
 
     coinPickups=[];
 
+    materialPickups=[];
+
     beamEffects=[];
 
     beamArmed=false;
@@ -13346,6 +14148,8 @@ function enterInterplanetary(){
     asteroids=[];
 
     coinPickups=[];
+
+    materialPickups=[];
 
     beamEffects=[];
 
@@ -13921,11 +14725,13 @@ function departPlanet(){
      * duplicate or strand a ship on any multi-hop journey
      * (which backward travel makes much more likely to
      * actually happen). It gets a fresh, up-to-date record
-     * wherever it lands next, same planet or otherwise.
+     * wherever it lands next, same planet or otherwise. Earth
+     * is no longer exempt from this — now that Earth ships can
+     * be properly docked and selected, leaving one exempt would
+     * just recreate the same stale-record bug there specifically.
      */
     if(
-        currentShipId &&
-        currentPlanetId!=="earth"
+        currentShipId
     ){
 
         removeShip(
@@ -14819,6 +15625,63 @@ function update(dt){
 
 
     for(
+        let i=materialPickups.length-1;
+        i>=0;
+        i--
+    ){
+
+        materialPickups[i].update(dt);
+
+        if(
+            materialPickups[i].expired
+        ){
+
+            materialPickups.splice(
+                i,
+                1
+            );
+
+            continue;
+
+        }
+
+        for(
+            const a of asteroids
+        ){
+
+            if(
+                Math.hypot(
+                    a.x-
+                    materialPickups[i].x,
+                    a.y-
+                    materialPickups[i].y
+                )<=
+                a.radius+
+                materialPickups[i].radius
+            ){
+
+                floatingText(
+                    "MATERIAL LOST",
+                    materialPickups[i].x,
+                    materialPickups[i].y,
+                    "#ff8d8d"
+                );
+
+                materialPickups.splice(
+                    i,
+                    1
+                );
+
+                break;
+
+            }
+
+        }
+
+    }
+
+
+    for(
         let i=beamEffects.length-1;
         i>=0;
         i--
@@ -15063,6 +15926,15 @@ function draw(){
     ){
 
         c.draw(ctx);
+
+    }
+
+
+    for(
+        const m of materialPickups
+    ){
+
+        m.draw(ctx);
 
     }
 
@@ -15970,6 +16842,8 @@ function startGame(){
 
     let launchCoins=0;
 
+    let launchMaterials={};
+
     let launchEquipment=
         "emp";
 
@@ -16009,6 +16883,12 @@ function startGame(){
                 Number(
                     earthChoice.coins
                 ) || 0;
+
+            launchMaterials=
+                clampMaterials(
+                    earthChoice.materials ||
+                    {}
+                );
 
             launchEquipment=
                 earthChoice.equipment ||
@@ -16118,6 +16998,12 @@ function startGame(){
                 ship.coins
             ) || 0;
 
+        launchMaterials=
+            clampMaterials(
+                ship.materials ||
+                {}
+            );
+
         launchEquipment=
             ship.equipment ||
             "emp";
@@ -16163,6 +17049,9 @@ function startGame(){
 
     runCoins=
         launchCoins;
+
+    runMaterials=
+        {...launchMaterials};
 
     currentShipEquipment=
         launchEquipment;
@@ -16218,6 +17107,8 @@ function startGame(){
     aiWindow.coinsCollected=0;
     aiWindow.coinsLost=0;
     aiWindow.itemUses=0;
+    aiWindow.materialsCollected=0;
+    aiWindow.materialsLost=0;
 
     sessionStartTime=
         Date.now();
@@ -16230,6 +17121,10 @@ function startGame(){
 
     runItemUsesTotal=0;
 
+    runMaterialsCollectedTotal=0;
+
+    runMaterialsLostTotal=0;
+
     pendingFieldExit=null;
 
     pendingFieldExitTimer=0;
@@ -16239,6 +17134,8 @@ function startGame(){
     asteroids=[];
 
     coinPickups=[];
+
+    materialPickups=[];
 
     beamEffects=[];
 
@@ -16547,6 +17444,87 @@ function handlePointer(event){
                 p.x,
                 p.y,
                 "#ffd76b"
+            );
+
+            sound(
+                "click"
+            );
+
+        }
+
+    }
+
+    /*
+     * Material collection: same tap-to-collect pattern as
+     * coins, but capped — collecting past MATERIAL_CAP for
+     * that material wastes it instead of over-filling, a real
+     * incentive to actually go deposit rather than hoard.
+     */
+    for(
+        let i=materialPickups.length-1;
+        i>=0;
+        i--
+    ){
+
+        const m=
+            materialPickups[i];
+
+        if(
+            Math.hypot(
+                m.x-p.x,
+                m.y-p.y
+            )<=
+            m.radius+18
+        ){
+
+            const current=
+                runMaterials[
+                    m.materialId
+                ] || 0;
+
+            materialPickups.splice(
+                i,
+                1
+            );
+
+            if(
+                current>=
+                MATERIAL_CAP
+            ){
+
+                floatingText(
+                    "CARGO FULL",
+                    p.x,
+                    p.y,
+                    "#ff8d8d"
+                );
+
+                sound(
+                    "damage"
+                );
+
+                continue;
+
+            }
+
+            runMaterials[
+                m.materialId
+            ]=
+                current+1;
+
+            aiWindow.materialsCollected=
+                (
+                    aiWindow.materialsCollected||
+                    0
+                )+1;
+
+            runMaterialsCollectedTotal++;
+
+            floatingText(
+                "+1 "+m.info.icon,
+                p.x,
+                p.y,
+                m.info.color
             );
 
             sound(
