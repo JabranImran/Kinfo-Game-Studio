@@ -2860,7 +2860,43 @@ function defaultPlanetSave(){
          * a stock unit and resets by that amount, so another
          * unit always requires selling the full amount again.
          */
-        soldCounts:{}
+        soldCounts:{},
+
+        /*
+         * What's actually built at each planet —
+         * planetSave.structures[planetId][structureId]. Earth
+         * starts with a free Ship Factory; everywhere else has
+         * to build one from scratch.
+         */
+        structures:{
+            earth:{
+                "ship-factory":{
+                    level:1
+                }
+            }
+        },
+
+        /*
+         * In-progress builds — planetSave.buildQueue[planetId]
+         * is an array of {type, structureId, startedAt,
+         * durationSeconds, ...}. Resolved by comparing
+         * Date.now() against startedAt+duration whenever the
+         * planet is viewed, so a build can complete even while
+         * the game isn't open.
+         */
+        buildQueue:{},
+
+        /*
+         * How many pets are stationed at each planet —
+         * planetSave.pets[planetId]. Just a headcount for now;
+         * the full energy/food/autonomous-work system comes
+         * later. Earth starts with one free pet — the "labour"
+         * behind its free first ship and its always-available
+         * factory.
+         */
+        pets:{
+            earth:1
+        }
 
     };
 
@@ -3075,6 +3111,70 @@ function loadPlanetSave(){
                 ){
 
                     saved.soldCounts={};
+
+                }
+
+                if(
+                    !saved.structures ||
+                    typeof saved.structures!==
+                    "object"
+                ){
+
+                    saved.structures={};
+
+                }
+
+                if(
+                    !saved.structures.earth ||
+                    typeof saved.structures.earth!==
+                    "object"
+                ){
+
+                    saved.structures.earth={};
+
+                }
+
+                if(
+                    !saved.structures.earth[
+                        "ship-factory"
+                    ]
+                ){
+
+                    saved.structures.earth[
+                        "ship-factory"
+                    ]={
+                        level:1
+                    };
+
+                }
+
+                if(
+                    !saved.buildQueue ||
+                    typeof saved.buildQueue!==
+                    "object"
+                ){
+
+                    saved.buildQueue={};
+
+                }
+
+                if(
+                    !saved.pets ||
+                    typeof saved.pets!==
+                    "object"
+                ){
+
+                    saved.pets={};
+
+                }
+
+                if(
+                    typeof saved.pets.earth!==
+                    "number" ||
+                    saved.pets.earth<1
+                ){
+
+                    saved.pets.earth=1;
 
                 }
 
@@ -3694,6 +3794,88 @@ function getPerkStock(planetId,perkId){
                 {}
             )[planetId] || {}
         )[perkId] || 0
+    );
+
+}
+
+
+/*
+ * Structures: a generic framework for anything a planet can
+ * build, starting with the Ship Factory. Every structure type
+ * lives in one catalog entry here — building an entirely new
+ * kind of structure later (Bio Dome, Pilot Training, etc.) is
+ * just another entry, not a new system.
+ */
+const STRUCTURES={
+
+    "ship-factory":{
+        id:"ship-factory",
+        name:"Ship Factory",
+        icon:"🏭",
+        description:
+            "Builds new ships. Earth's factory comes for free — "+
+            "anywhere else, it has to be built first, using "+
+            "materials brought in from a few different planets "+
+            "plus a pet stationed there to actually do the work.",
+        /*
+         * Requirements to BUILD the factory itself on a
+         * non-Earth planet. Deliberately spans multiple
+         * planets' materials, per the original request —
+         * building a factory somewhere should mean you've
+         * already been travelling and trading, not just
+         * grinding one planet's own resource.
+         */
+        buildMaterials:[
+            {materialId:"volatile-alloy",amount:6},
+            {materialId:"cryo-shard",amount:6},
+            {materialId:"magnetic-resin",amount:6}
+        ],
+        requiresPet:true,
+        buildDurationSeconds:120
+    }
+
+};
+
+function getStructure(planetId,structureId){
+
+    return(
+        (
+            (
+                planetSave.structures ||
+                {}
+            )[planetId] || {}
+        )[structureId] || null
+    );
+
+}
+
+function hasStructure(planetId,structureId){
+
+    return !!getStructure(
+        planetId,
+        structureId
+    );
+
+}
+
+function getPetCount(planetId){
+
+    return(
+        (
+            planetSave.pets ||
+            {}
+        )[planetId] || 0
+    );
+
+}
+
+function getBuildQueue(planetId){
+
+    return(
+        (
+            planetSave.buildQueue ||
+            {}
+        )[planetId] || []
     );
 
 }
@@ -4889,6 +5071,8 @@ function renderPlanetMap(){
 
     planetMap.innerHTML="";
 
+    resolveAllBuildQueues();
+
     /*
      * Wrapped defensively: if any single planet's data causes
      * a problem while building the map, this ensures it can't
@@ -5206,25 +5390,405 @@ function getHeartsLabel(ship){
  * planet), otherwise the highest-scoring one, same default as
  * before.
  */
+/*
+ * Resolves any finished builds at a planet — checked whenever
+ * that planet's detail is viewed (and at landing), comparing
+ * real elapsed time against each queued build's duration, so a
+ * build can complete even while the game isn't open at all.
+ */
+function resolveBuildQueue(planetId){
+
+    const queue=
+        getBuildQueue(planetId);
+
+    if(!queue.length)
+        return;
+
+    const now=
+        Date.now();
+
+    const stillBuilding=[];
+
+    let changed=
+        false;
+
+    for(
+        const build of queue
+    ){
+
+        const readyAt=
+            build.startedAt+
+            build.durationSeconds*1000;
+
+        if(now>=readyAt){
+
+            changed=true;
+
+            if(
+                build.type===
+                "ship"
+            ){
+
+                createShip(
+                    planetId,
+                    0,
+                    0,
+                    "emp",
+                    1,
+                    3,
+                    {},
+                    null
+                );
+
+                showShipToast(
+                    "New ship built at "+
+                    (
+                        getPlanet(planetId) ||
+                        {name:planetId}
+                    ).name+"!"
+                );
+
+            }else if(
+                build.type===
+                "structure"
+            ){
+
+                if(!planetSave.structures){
+
+                    planetSave.structures={};
+
+                }
+
+                if(
+                    !planetSave.structures[
+                        planetId
+                    ]
+                ){
+
+                    planetSave.structures[
+                        planetId
+                    ]={};
+
+                }
+
+                planetSave.structures[
+                    planetId
+                ][build.structureId]=
+                    {level:1};
+
+                showShipToast(
+                    (
+                        STRUCTURES[
+                            build.structureId
+                        ] || {name:"Structure"}
+                    ).name+
+                    " completed!"
+                );
+
+            }
+
+        }else{
+
+            stillBuilding.push(
+                build
+            );
+
+        }
+
+    }
+
+    if(changed){
+
+        if(!planetSave.buildQueue){
+
+            planetSave.buildQueue={};
+
+        }
+
+        planetSave.buildQueue[
+            planetId
+        ]=stillBuilding;
+
+        savePlanetProgress();
+
+    }
+
+}
+
+function resolveAllBuildQueues(){
+
+    for(
+        const planet of PLANETS
+    ){
+
+        resolveBuildQueue(
+            planet.id
+        );
+
+    }
+
+}
+
+
+/*
+ * Cost rises gently with how many ships already exist or are
+ * queued there — a factory's first few ships are relatively
+ * cheap, but it's not a flat forever-cheap resource either.
+ */
+function computeShipBuildCost(planetId){
+
+    const total=
+        (
+            getShips(planetId) || []
+        ).length+
+        getBuildQueue(planetId).filter(
+            b => b.type==="ship"
+        ).length;
+
+    return 100+total*40;
+
+}
+
+/*
+ * Build duration shrinks with more pets stationed there — the
+ * "labour" the ship-building request specifically asked for,
+ * wired in now even ahead of the full pet system.
+ */
+function computeShipBuildDuration(planetId){
+
+    const pets=
+        getPetCount(planetId);
+
+    const base=90;
+
+    return Math.max(
+        20,
+        Math.round(
+            base/
+            (1+pets*.6)
+        )
+    );
+
+}
+
+function queueShipBuild(planetId){
+
+    if(
+        !hasStructure(
+            planetId,
+            "ship-factory"
+        )
+    )
+        return;
+
+    const cost=
+        computeShipBuildCost(
+            planetId
+        );
+
+    if(
+        getBank(planetId)<cost
+    )
+        return;
+
+    addToBank(
+        planetId,
+        -cost
+    );
+
+    if(!planetSave.buildQueue){
+
+        planetSave.buildQueue={};
+
+    }
+
+    if(
+        !planetSave.buildQueue[
+            planetId
+        ]
+    ){
+
+        planetSave.buildQueue[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.buildQueue[
+        planetId
+    ].push({
+        type:"ship",
+        startedAt:Date.now(),
+        durationSeconds:
+            computeShipBuildDuration(
+                planetId
+            )
+    });
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Ship queued for construction!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Builds a non-Earth structure — spends its full material
+ * requirement (which deliberately spans several planets'
+ * materials for the Ship Factory), requires a pet actually
+ * stationed there, and queues it just like a ship build.
+ */
+function buildStructure(planetId,structureId){
+
+    const structure=
+        STRUCTURES[structureId];
+
+    if(!structure)
+        return;
+
+    if(
+        hasStructure(
+            planetId,
+            structureId
+        )
+    )
+        return;
+
+    if(
+        getBuildQueue(planetId).some(
+            b =>
+                b.type===
+                "structure" &&
+                b.structureId===
+                structureId
+        )
+    )
+        return;
+
+    if(
+        structure.requiresPet &&
+        getPetCount(planetId)<=0
+    )
+        return;
+
+    const bank=
+        (
+            planetSave.materialBanks ||
+            {}
+        )[planetId] || {};
+
+    for(
+        const req of
+        structure.buildMaterials
+    ){
+
+        if(
+            (
+                bank[req.materialId] || 0
+            )<req.amount
+        )
+            return;
+
+    }
+
+    for(
+        const req of
+        structure.buildMaterials
+    ){
+
+        addToMaterialBank(
+            planetId,
+            req.materialId,
+            -req.amount
+        );
+
+    }
+
+    if(!planetSave.buildQueue){
+
+        planetSave.buildQueue={};
+
+    }
+
+    if(
+        !planetSave.buildQueue[
+            planetId
+        ]
+    ){
+
+        planetSave.buildQueue[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.buildQueue[
+        planetId
+    ].push({
+        type:"structure",
+        structureId:structureId,
+        startedAt:Date.now(),
+        durationSeconds:
+            structure.buildDurationSeconds
+    });
+
+    savePlanetProgress();
+
+    showShipToast(
+        structure.name+
+        " construction started!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+
 function getEarthLaunchCandidates(){
 
     const real=
         getShips("earth") || [];
 
-    const fresh={
-        id:"FRESH_EARTH",
-        score:0,
-        coins:0,
-        equipment:"emp",
-        wave:1,
-        lives:3,
-        isFresh:true
-    };
+    const queuedShips=
+        getBuildQueue("earth").filter(
+            b => b.type==="ship"
+        ).length;
 
-    return[
-        fresh,
+    const candidates=[
         ...real
     ];
+
+    /*
+     * The free instant ship is only available with genuinely
+     * nothing else going — zero docked, zero already queued.
+     * Otherwise a new one has to come from the factory, paid
+     * for and waited on like anywhere else.
+     */
+    if(
+        !real.length &&
+        !queuedShips
+    ){
+
+        candidates.unshift({
+            id:"FRESH_EARTH",
+            score:0,
+            coins:0,
+            equipment:"emp",
+            wave:1,
+            lives:3,
+            isFresh:true
+        });
+
+    }
+
+    return candidates;
 
 }
 
@@ -5281,8 +5845,48 @@ function renderLaunchPreview(){
         "earth"
     ){
 
+        resolveBuildQueue(
+            "earth"
+        );
+
         const candidates=
             getEarthLaunchCandidates();
+
+        if(!candidates.length){
+
+            const building=
+                getBuildQueue(
+                    "earth"
+                ).find(
+                    b => b.type==="ship"
+                );
+
+            const remaining=
+                building
+                ?Math.max(
+                    0,
+                    Math.ceil(
+                        (
+                            building.startedAt+
+                            building.durationSeconds*1000-
+                            Date.now()
+                        )/1000
+                    )
+                )
+                :null;
+
+            el.innerHTML=
+                "🏭 No ship ready here yet"+
+                (
+                    remaining!==null
+                    ?" — "+remaining+
+                     "s left on the current build."
+                    :"."
+                );
+
+            return;
+
+        }
 
         const chosen=
             resolveEarthLaunchChoice();
@@ -5557,6 +6161,8 @@ function openPlanetDetail(id){
     sound("click");
 
     planetDetailId=id;
+
+    resolveBuildQueue(id);
 
     /*
      * The overlay must always actually open, even if something
@@ -6265,6 +6871,209 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+
+    /* -------- Ship Factory (and structures generally) -------- */
+
+    const factory=
+        getStructure(
+            id,
+            "ship-factory"
+        );
+
+    const petsHere=
+        getPetCount(id);
+
+    const planetQueue=
+        getBuildQueue(id);
+
+    const shipBuilds=
+        planetQueue.filter(
+            b => b.type==="ship"
+        );
+
+    const structureBuild=
+        planetQueue.find(
+            b =>
+                b.type===
+                "structure" &&
+                b.structureId===
+                "ship-factory"
+        );
+
+    function formatRemaining(build){
+
+        const remaining=
+            Math.max(
+                0,
+                Math.ceil(
+                    (
+                        build.startedAt+
+                        build.durationSeconds*1000-
+                        Date.now()
+                    )/1000
+                )
+            );
+
+        return remaining>=60
+            ?Math.ceil(remaining/60)+"m left"
+            :remaining+"s left";
+
+    }
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        STRUCTURES["ship-factory"].icon+
+        ' Ship Factory'+
+        '</div>';
+
+    if(factory){
+
+        const shipCost=
+            computeShipBuildCost(id);
+
+        const shipDuration=
+            computeShipBuildDuration(id);
+
+        const canAfford=
+            bank>=shipCost;
+
+        html+=
+            '<div class="metric-callout">'+
+            '🐾 '+petsHere+' pet(s) stationed here — more pets '+
+            'means faster builds. Current build time: '+
+            shipDuration+'s.'+
+            '</div>'+
+            '<div class="selected-shape-info">'+
+            '<span>Build a new ship</span>'+
+            '<button class="remove-btn" style="background:'+
+            (
+                canAfford
+                ?'rgba(110,220,255,.18)'
+                :'rgba(255,255,255,.05)'
+            )+
+            ';border-color:'+
+            (
+                canAfford
+                ?'rgba(110,220,255,.45)'
+                :'rgba(255,255,255,.12)'
+            )+
+            ';color:'+
+            (
+                canAfford
+                ?'#bcecff'
+                :'#5c7ba0'
+            )+
+            ';" data-action="queue-ship" '+
+            (
+                canAfford
+                ?''
+                :'disabled'
+            )+
+            '>Build '+shipCost+' 🪙</button>'+
+            '</div>';
+
+        if(shipBuilds.length){
+
+            shipBuilds.forEach(
+                build=>{
+
+                    html+=
+                        '<div class="metric-note">'+
+                        '🏗 Ship under construction — '+
+                        formatRemaining(build)+
+                        '</div>';
+
+                }
+            );
+
+        }
+
+    }else if(structureBuild){
+
+        html+=
+            '<div class="metric-note">'+
+            '🏗 Factory under construction — '+
+            formatRemaining(structureBuild)+
+            '</div>';
+
+    }else{
+
+        const structure=
+            STRUCTURES["ship-factory"];
+
+        html+=
+            '<div class="metric-callout">'+
+            structure.description+
+            '</div>'+
+            '<div class="metric-note">'+
+            '🐾 Pet stationed here: '+
+            (
+                petsHere>0
+                ?'Yes ('+petsHere+')'
+                :'None — required to build'
+            )+
+            '</div>';
+
+        structure.buildMaterials.forEach(
+            req=>{
+
+                const info=
+                    MATERIALS[
+                        req.materialId
+                    ] ||
+                    MATERIALS["aether-dust"];
+
+                const have=
+                    materialBank[
+                        req.materialId
+                    ] || 0;
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>'+info.icon+' '+info.name+'</span>'+
+                    '<span style="opacity:.7;font-size:10px;'+
+                    'color:'+
+                    (
+                        have>=req.amount
+                        ?'#8dffb0'
+                        :'#ff8d8d'
+                    )+
+                    ';">'+have+'/'+req.amount+
+                    '</span>'+
+                    '</div>';
+
+            }
+        );
+
+        const canBuild=
+            petsHere>0 &&
+            structure.buildMaterials.every(
+                req =>
+                    (
+                        materialBank[
+                            req.materialId
+                        ] || 0
+                    )>=req.amount
+            );
+
+        html+=
+            '<button class="big-button secondary-button" '+
+            'style="margin-top:10px;" data-action="build-structure" '+
+            'data-structure="ship-factory" '+
+            (
+                canBuild
+                ?''
+                :'disabled'
+            )+
+            '>Build Factory ('+
+            structure.buildDurationSeconds+'s)</button>';
+
+    }
+
+    html+=
+        '</div>';
+
     container.innerHTML=
         html;
 
@@ -6484,6 +7293,28 @@ document
             sellMaterialStock(
                 planetDetailId,
                 materialId
+            );
+
+        }else if(
+            action==="queue-ship"
+        ){
+
+            queueShipBuild(
+                planetDetailId
+            );
+
+        }else if(
+            action==="build-structure"
+        ){
+
+            const structureId=
+                target.getAttribute(
+                    "data-structure"
+                );
+
+            buildStructure(
+                planetDetailId,
+                structureId
             );
 
         }
@@ -17783,8 +18614,23 @@ function startGame(){
         chosen.id==="earth"
     ){
 
+        resolveBuildQueue(
+            "earth"
+        );
+
         const earthChoice=
             resolveEarthLaunchChoice();
+
+        if(!earthChoice){
+
+            showShipToast(
+                "No ship ready at Earth yet — "+
+                "check the factory's build progress."
+            );
+
+            return;
+
+        }
 
         if(earthChoice.isFresh){
 
