@@ -1926,14 +1926,6 @@ and (max-height:500px){
 
         </button>
 
-<button
-    class="big-button secondary-button"
-    id="multiplayerButton">
-
-    🌐 Multiplayer
-
-</button>
-
         <button
             class="big-button secondary-button"
             id="startLeaderboardButton">
@@ -3387,7 +3379,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3399,7 +3391,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3412,7 +3404,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:2,
+        cost:25,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins early. "+
@@ -3425,7 +3417,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3437,7 +3429,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3449,7 +3441,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3461,7 +3453,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:4,
+        cost:45,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3474,7 +3466,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:4,
+        cost:45,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3486,7 +3478,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:6,
+        cost:60,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -3790,11 +3782,6 @@ function removeShip(
     shipId
 ){
 
-    if(
-        planetId==="earth"
-    )
-        return;
-
     ensurePlanetArray(
         planetId
     );
@@ -3827,11 +3814,6 @@ function removeShip(
 function getShips(
     planetId
 ){
-
-    if(
-        planetId==="earth"
-    )
-        return null;
 
     ensurePlanetArray(
         planetId
@@ -4205,6 +4187,44 @@ function getHeartsLabel(ship){
  * planet), otherwise the highest-scoring one, same default as
  * before.
  */
+function getEarthLaunchCandidates(){
+
+    const real=
+        getShips("earth") || [];
+
+    const fresh={
+        id:"FRESH_EARTH",
+        score:0,
+        coins:0,
+        equipment:"emp",
+        wave:1,
+        lives:3,
+        isFresh:true
+    };
+
+    return[
+        fresh,
+        ...real
+    ];
+
+}
+
+function resolveEarthLaunchChoice(){
+
+    const candidates=
+        getEarthLaunchCandidates();
+
+    return(
+        candidates.find(
+            s =>
+                s.id===
+                selectedLaunchShipId
+        ) ||
+        candidates[0]
+    );
+
+}
+
 function resolveLaunchShip(ships){
 
     if(!ships.length)
@@ -4242,9 +4262,86 @@ function renderLaunchPreview(){
         "earth"
     ){
 
+        const candidates=
+            getEarthLaunchCandidates();
+
+        const chosen=
+            resolveEarthLaunchChoice();
+
+        let earthHtml=
+            chosen.isFresh
+            ?"🚀 <b>Fresh ship</b> — starts clean, no prior "+
+             "score, coins, or equipment."
+            :"🚀 Launching <b>"+
+             chosen.score.toLocaleString()+
+             " pt ship</b> — 🪙"+
+             (chosen.coins || 0).toLocaleString()+
+             " · "+getEquippedLabel(chosen)+
+             " · Wave "+(chosen.wave || 1)+
+             " · "+getHeartsLabel(chosen);
+
+        if(candidates.length>1){
+
+            earthHtml+=
+                "<div style=\"margin-top:8px;"+
+                "display:flex;flex-direction:column;gap:5px;\">"+
+                "<span style=\"opacity:.7;font-size:9px;\">"+
+                "Earth also has "+
+                (candidates.length-1)+
+                " landed ship(s) — tap one to launch it "+
+                "instead:</span>";
+
+            candidates.forEach(
+                ship=>{
+
+                    const isChosen=
+                        ship.id===chosen.id;
+
+                    earthHtml+=
+                        "<button data-action=\"pick-launch-ship\" "+
+                        "data-ship=\""+ship.id+"\" "+
+                        "style=\"text-align:left;padding:6px 8px;"+
+                        "border-radius:8px;font-size:9px;"+
+                        "border:1px solid "+
+                        (
+                            isChosen
+                            ?"rgba(110,220,255,.5)"
+                            :"rgba(255,255,255,.12)"
+                        )+
+                        ";background:"+
+                        (
+                            isChosen
+                            ?"rgba(110,220,255,.14)"
+                            :"rgba(255,255,255,.03)"
+                        )+
+                        ";color:"+
+                        (
+                            isChosen
+                            ?"#bcecff"
+                            :"#8fa7c7"
+                        )+
+                        ";cursor:pointer;\">"+
+                        (isChosen ? "▶ " : "")+
+                        (
+                            ship.isFresh
+                            ?"Fresh ship (∞)"
+                            :ship.score.toLocaleString()+
+                             " pts · 🪙"+
+                             (ship.coins || 0)+
+                             " · "+getEquippedLabel(ship)
+                        )+
+                        "</button>";
+
+                }
+            );
+
+            earthHtml+=
+                "</div>";
+
+        }
+
         el.innerHTML=
-            "🚀 <b>Fresh ship</b> — Earth launches always "+
-            "start clean, no prior score, coins, or equipment.";
+            earthHtml;
 
         return;
 
@@ -5397,6 +5494,36 @@ const PLANET_SPECIALS={
             "Bigger, tougher, and worth significantly more than "+
             "anything else in the field — the closest thing "+
             "this game has to a mini-boss."
+    },
+
+    titan:{
+        kind:"cloak",
+        name:"Cloaked Rock",
+        icon:"🌑",
+        description:
+            "Fades to nearly invisible and back on a cycle — "+
+            "just as dangerous while cloaked, just much harder "+
+            "to track."
+    },
+
+    neptune:{
+        kind:"twin",
+        name:"Twin Rock",
+        icon:"♊",
+        description:
+            "Always spawns with a mirrored partner. Destroy one "+
+            "and the other briefly flares up, worth double if "+
+            "you can catch it in time."
+    },
+
+    kepler:{
+        kind:"rift",
+        name:"Rift Rock",
+        icon:"🌀",
+        description:
+            "Leaves a brief pocket of slowed time behind on "+
+            "destruction, easing the pace for everything nearby "+
+            "for a moment."
     }
 
 };
@@ -5584,6 +5711,23 @@ class Asteroid{
 
         this.stuckTo=null;
 
+        /*
+         * Cloaked Rock: cycles between visible and
+         * near-invisible on a timer.
+         */
+        this.cloakTimer=
+            random(0,2);
+
+        this.cloakVisible=true;
+
+        /*
+         * Twin Rock: linked to its spawn partner; briefly
+         * worth double once its twin is destroyed.
+         */
+        this.twinPartner=null;
+
+        this.bonusWindow=0;
+
         this.angle=
             random(
                 0,
@@ -5688,14 +5832,26 @@ class Asteroid{
          * across the field, not just once you're close enough
          * to see the detail marking.
          */
+        /*
+         * Picked to contrast against that planet's OWN native
+         * asteroid color, not just look distinct in isolation —
+         * Helios's "durable" was originally #ffae42 against a
+         * native solar orange of #ffb52e, which is why it was
+         * unreadable before the first hit. Same fix applied to
+         * Mars (explosive vs its native crimson) and Europa
+         * (shatter vs its native ice blue).
+         */
         const specialColors={
-            explosive:"#ff5e3a",
+            explosive:"#ff2e9a",
             sticky:"#4fd6ff",
-            shatter:"#d8f7ff",
-            durable:"#ffae42",
+            shatter:"#5cffb0",
+            durable:"#9fd8ff",
             "coin-rich":"#ffd76b",
             elite:"#ffd23f",
-            drift:"#b98cff"
+            drift:"#ff3860",
+            cloak:"#8a7fff",
+            twin:"#ff9de6",
+            rift:"#6ee7c8"
         };
 
         this.color=
@@ -5771,6 +5927,37 @@ class Asteroid{
 
         }
 
+        if(
+            this.special===
+            "cloak"
+        ){
+
+            this.cloakTimer-=dt;
+
+            if(
+                this.cloakTimer<=0
+            ){
+
+                this.cloakVisible=
+                    !this.cloakVisible;
+
+                this.cloakTimer=
+                    this.cloakVisible
+                    ?computeCloakVisibleDuration()
+                    :computeCloakHiddenDuration();
+
+            }
+
+        }
+
+        if(
+            this.bonusWindow>0
+        ){
+
+            this.bonusWindow-=dt;
+
+        }
+
         this.x+=
             this.vx*dt;
 
@@ -5824,6 +6011,38 @@ class Asteroid{
         ctx.rotate(
             this.angle
         );
+
+        /*
+         * Cloaked Rock fades to near-invisible on its cycle —
+         * still fully dangerous, just hard to track by eye.
+         * Twin Rock gets a bright pulsing glow during its
+         * bonus window instead, the opposite instinct: "look
+         * at me, I'm worth double right now."
+         */
+        if(
+            this.special===
+            "cloak" &&
+            !this.cloakVisible
+        ){
+
+            ctx.globalAlpha=.12;
+
+        }else if(
+            this.bonusWindow>0
+        ){
+
+            ctx.shadowBlur=22;
+
+            ctx.shadowColor=
+                "#ff9de6";
+
+            ctx.globalAlpha=
+                .75+
+                Math.sin(
+                    performance.now()*.02
+                )*.25;
+
+        }
 
         ctx.beginPath();
 
@@ -5916,7 +6135,7 @@ class Asteroid{
             ){
 
                 ctx.strokeStyle=
-                    "#ffb347";
+                    "#ff2e9a";
 
                 ctx.setLineDash([
                     3,4
@@ -5946,8 +6165,21 @@ class Asteroid{
                 this.cracked
             ){
 
+                /*
+                 * Deliberately more dramatic than a single hit
+                 * mark — this needs to clearly read as "one
+                 * more hit finishes it," not just a subtle
+                 * scratch.
+                 */
+                ctx.shadowBlur=16;
+
+                ctx.shadowColor=
+                    "#ff4d4d";
+
                 ctx.strokeStyle=
                     "#ffffff";
+
+                ctx.lineWidth=2;
 
                 ctx.beginPath();
 
@@ -5964,6 +6196,35 @@ class Asteroid{
                 ctx.lineTo(
                     -this.radius*.1,
                     this.radius*.5
+                );
+
+                ctx.moveTo(
+                    this.radius*.4,
+                    -this.radius*.5
+                );
+
+                ctx.lineTo(
+                    this.radius*.05,
+                    -this.radius*.05
+                );
+
+                ctx.stroke();
+
+                ctx.shadowBlur=0;
+
+                ctx.strokeStyle=
+                    "#ff4d4d";
+
+                ctx.lineWidth=2.5;
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+4,
+                    0,
+                    Math.PI*2
                 );
 
                 ctx.stroke();
@@ -6039,6 +6300,113 @@ class Asteroid{
                     0,
                     1
                 );
+
+            }else if(
+                this.special===
+                "cloak" &&
+                this.cloakVisible
+            ){
+
+                ctx.strokeStyle=
+                    "#8a7fff";
+
+                ctx.setLineDash([
+                    2,3
+                ]);
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+5,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+
+            }else if(
+                this.special===
+                "twin"
+            ){
+
+                ctx.strokeStyle=
+                    "#ff9de6";
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    -this.radius-6,
+                    0
+                );
+
+                ctx.lineTo(
+                    -this.radius-2,
+                    0
+                );
+
+                ctx.moveTo(
+                    this.radius+2,
+                    0
+                );
+
+                ctx.lineTo(
+                    this.radius+6,
+                    0
+                );
+
+                ctx.stroke();
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+4,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
+
+            }else if(
+                this.special===
+                "rift"
+            ){
+
+                ctx.strokeStyle=
+                    "#6ee7c8";
+
+                ctx.lineWidth=1.5;
+
+                for(
+                    let ring=0;
+                    ring<2;
+                    ring++
+                ){
+
+                    ctx.globalAlpha=
+                        .6-ring*.25;
+
+                    ctx.beginPath();
+
+                    ctx.arc(
+                        0,
+                        0,
+                        this.radius+
+                        4+ring*5,
+                        0,
+                        Math.PI*2
+                    );
+
+                    ctx.stroke();
+
+                }
+
+                ctx.globalAlpha=1;
 
             }
 
@@ -7238,6 +7606,89 @@ function computeDriftStrength(){
 
 }
 
+
+/*
+ * Cloaked Rock's visible/invisible cycle lengths, seconds. A
+ * thriving player gets shorter visible windows (more of the
+ * challenge); a struggling one gets more time to actually see
+ * it coming.
+ */
+function computeCloakVisibleDuration(){
+
+    return clamp(
+        2.6-
+        difficultyIntensity()*1,
+        1.6,
+        2.6
+    );
+
+}
+
+function computeCloakHiddenDuration(){
+
+    return clamp(
+        1+
+        difficultyIntensity()*.8,
+        1,
+        1.8
+    );
+
+}
+
+
+/*
+ * Twin Rock's bonus window (how long the surviving twin stays
+ * worth double after its partner dies) and speed boost.
+ */
+function computeTwinBonusWindow(){
+
+    return clamp(
+        3.5-
+        difficultyIntensity()*1.2,
+        2.3,
+        3.5
+    );
+
+}
+
+function computeTwinSpeedBoost(){
+
+    return clamp(
+        1.2+
+        difficultyIntensity()*.5,
+        1.2,
+        1.7
+    );
+
+}
+
+
+/*
+ * Rift Rock's slow pulse on destruction: radius, strength, and
+ * how long the dampened asteroids stay slowed.
+ */
+function computeRiftRadius(){
+
+    return clamp(
+        130-
+        difficultyIntensity()*20,
+        110,
+        130
+    );
+
+}
+
+function computeRiftSlowFactor(){
+
+    return clamp(
+        .3+
+        difficultyIntensity()*.25,
+        .3,
+        .55
+    );
+
+}
+
 function rollSpecialKind(){
 
     if(
@@ -7289,15 +7740,59 @@ function spawnAsteroid(){
     const size=
         rollAsteroidSize();
 
-    asteroids.push(
+    const special=
+        rollSpecialKind();
+
+    const asteroid=
         new Asteroid(
             pos.x,
             pos.y,
             size,
             getAsteroidType(),
-            rollSpecialKind()
-        )
+            special
+        );
+
+    asteroids.push(
+        asteroid
     );
+
+    /*
+     * Twin Rock always spawns with a mirrored partner — mirrored
+     * position (opposite edge) and mirrored velocity, so they
+     * genuinely read as a synchronized pair rather than two
+     * unrelated rocks that happen to share a name.
+     */
+    if(
+        special===
+        "twin"
+    ){
+
+        const partner=
+            new Asteroid(
+                W-pos.x,
+                H-pos.y,
+                size,
+                asteroid.typeId,
+                "twin"
+            );
+
+        partner.vx=
+            -asteroid.vx;
+
+        partner.vy=
+            -asteroid.vy;
+
+        asteroid.twinPartner=
+            partner;
+
+        partner.twinPartner=
+            asteroid;
+
+        asteroids.push(
+            partner
+        );
+
+    }
 
 }
 
@@ -7408,6 +7903,94 @@ function detonateAsteroid(
     }
 
     /*
+     * Twin Rock: if its partner is still alive, it flares up —
+     * bonus window (worth double if destroyed in time) and a
+     * speed boost, both ML-tunable. Checking asteroids.includes
+     * confirms the partner hasn't already been destroyed itself
+     * (its own detonateAsteroid call would have cleared this
+     * side's reference already if so).
+     */
+    if(
+        asteroid.twinPartner &&
+        asteroids.includes(
+            asteroid.twinPartner
+        )
+    ){
+
+        const partner=
+            asteroid.twinPartner;
+
+        partner.bonusWindow=
+            computeTwinBonusWindow();
+
+        partner.twinPartner=
+            null;
+
+        const boost=
+            computeTwinSpeedBoost();
+
+        partner.vx*=boost;
+
+        partner.vy*=boost;
+
+        floatingText(
+            "DOUBLE UP",
+            partner.x,
+            partner.y,
+            "#ff9de6"
+        );
+
+    }
+
+    /*
+     * Rift Rock: a one-time slow pulse to anything nearby,
+     * rather than a sustained field-wide effect like Chrono
+     * Field — a smaller, localized echo of the same idea.
+     */
+    if(
+        asteroid.special===
+        "rift"
+    ){
+
+        const riftRadius=
+            computeRiftRadius();
+
+        const slowFactor=
+            computeRiftSlowFactor();
+
+        for(
+            const other of asteroids
+        ){
+
+            if(
+                Math.hypot(
+                    other.x-
+                    asteroid.x,
+                    other.y-
+                    asteroid.y
+                )<=riftRadius
+            ){
+
+                other.vx*=
+                    slowFactor;
+
+                other.vy*=
+                    slowFactor;
+
+            }
+
+        }
+
+        floatingText(
+            "RIFT",
+            asteroid.x,
+            asteroid.y,
+            "#6ee7c8"
+        );
+
+    }
+
+    /*
      * EMP kills are excluded from the
      * "destroyed" wave-escalation counter.
      * Otherwise, panic-clearing the field
@@ -7461,6 +8044,8 @@ function detonateAsteroid(
                     asteroid.special===
                     "elite"
                     ?2.5
+                    :asteroid.bonusWindow>0
+                    ?2
                     :1
                 )
             );
@@ -7747,16 +8332,14 @@ function detonateAsteroid(
                     asteroid.typeId,
 
                     /*
-                     * Shatter Ice inherits its own kind onto
-                     * its children — a size-3 breaks into
-                     * shattering size-2s, which break again
-                     * into a final spray of size-1 shards —
-                     * genuinely "doesn't go quietly," not just
-                     * a one-time split.
+                     * Every special kind inherits onto its
+                     * children now, not just Shatter Ice — a
+                     * Sticky Comet or Cache Rock that splits
+                     * should still be a Sticky Comet or Cache
+                     * Rock, not quietly turn back into a normal
+                     * rock the moment it fragments.
                      */
-                    isShatter
-                    ?"shatter"
-                    :null
+                    asteroid.special
 
                 );
 
@@ -13228,6 +13811,45 @@ function landAtCurrentPlanet(){
 
     }
 
+    /*
+     * Earth's docked list would otherwise fill up with
+     * meaningless "0 score, 0 coins" clutter every time someone
+     * does a quick fresh run and lands with nothing to show for
+     * it — genuinely indistinguishable from just launching
+     * fresh again, so there's nothing worth keeping.
+     */
+    if(
+        currentPlanetId===
+        "earth"
+    ){
+
+        const earthShip=
+            (
+                getShips("earth") ||
+                []
+            ).find(
+                s =>
+                    s.id===
+                    currentShipId
+            );
+
+        if(
+            earthShip &&
+            earthShip.score<=0 &&
+            earthShip.coins<=0
+        ){
+
+            removeShip(
+                "earth",
+                currentShipId
+            );
+
+            currentShipId=null;
+
+        }
+
+    }
+
     runCoins=0;
 
     /*
@@ -15359,9 +15981,57 @@ function startGame(){
         chosen.id==="earth"
     ){
 
-        currentShipId=null;
+        const earthChoice=
+            resolveEarthLaunchChoice();
 
-        launchScore=0;
+        if(earthChoice.isFresh){
+
+            currentShipId=null;
+
+            launchScore=0;
+
+        }else{
+
+            removeShip(
+                "earth",
+                earthChoice.id
+            );
+
+            currentShipId=
+                earthChoice.id;
+
+            launchScore=
+                Number(
+                    earthChoice.score
+                ) || 0;
+
+            launchCoins=
+                Number(
+                    earthChoice.coins
+                ) || 0;
+
+            launchEquipment=
+                earthChoice.equipment ||
+                "emp";
+
+            launchWave=
+                Number(
+                    earthChoice.wave
+                ) || 1;
+
+            launchLives=
+                clamp(
+                    Number(
+                        earthChoice.lives
+                    ) || 3,
+                    1,
+                    3
+                );
+
+        }
+
+        selectedLaunchShipId=
+            null;
 
     }else{
 
@@ -15390,6 +16060,9 @@ function startGame(){
 
                 selectedStartPlanet=
                     "earth";
+
+                selectedLaunchShipId=
+                    null;
 
                 renderPlanetMap();
 
@@ -17766,21 +18439,6 @@ document
     }
 );
 
-document
-.getElementById("multiplayerButton")
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        window.location.href =
-            "multiplayer.html";
-
-    },
-    {passive:false}
-);
 
 document
 .getElementById(
