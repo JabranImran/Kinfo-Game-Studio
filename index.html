@@ -4009,6 +4009,77 @@ function depositShipMaterials(planetId,shipId){
 
 }
 
+/*
+ * Withdraws as much of one material as the ship has room for
+ * (MATERIAL_CAP minus whatever it's already carrying) — a
+ * single click grabs what fits rather than needing a slider
+ * for numbers this small, unlike coins.
+ */
+function withdrawMaterialToShip(planetId,shipId,materialId){
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(!ship)
+        return;
+
+    if(!ship.materials){
+
+        ship.materials={};
+
+    }
+
+    const bankAmount=
+        (
+            (
+                planetSave.materialBanks ||
+                {}
+            )[planetId] || {}
+        )[materialId] || 0;
+
+    const currentOnShip=
+        ship.materials[
+            materialId
+        ] || 0;
+
+    const room=
+        MATERIAL_CAP-
+        currentOnShip;
+
+    const amount=
+        Math.min(
+            bankAmount,
+            room
+        );
+
+    if(amount<=0)
+        return;
+
+    ship.materials[
+        materialId
+    ]=
+        currentOnShip+amount;
+
+    addToMaterialBank(
+        planetId,
+        materialId,
+        -amount
+    );
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
 function withdrawToShip(planetId,shipId,amount){
 
     const ship=
@@ -5241,6 +5312,19 @@ function renderPlanetDetail(id){
         ships.forEach(
             ship=>{
 
+                /*
+                 * Defensive normalization: every ship should
+                 * already have a materials object via createShip()
+                 * or migration, but given how much trouble a
+                 * missing/undefined materials field has already
+                 * caused, guaranteeing it here too costs nothing.
+                 */
+                if(!ship.materials){
+
+                    ship.materials={};
+
+                }
+
                 const equippedInfo=
                     getItemInfo(
                         ship.equipment
@@ -5336,6 +5420,70 @@ function renderPlanetDetail(id){
                         '<button class="control-btn" data-action="deposit-materials" data-ship="'+
                         ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
                         'Deposit materials to bank</button>'
+                        :''
+                    )+
+                    (
+                        Object.entries(
+                            materialBank
+                        ).filter(
+                            ([materialId,bankCount]) =>
+                                bankCount>0 &&
+                                (
+                                    ship.materials[
+                                        materialId
+                                    ] || 0
+                                )<MATERIAL_CAP
+                        ).length
+                        ?'<div style="display:flex;flex-direction:column;gap:6px;'+
+                        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                        '<span style="font-size:9px;color:#8fa7c7;">'+
+                        'Withdraw from planet bank:</span>'+
+                        Object.entries(
+                            materialBank
+                        ).filter(
+                            ([materialId,bankCount]) =>
+                                bankCount>0 &&
+                                (
+                                    ship.materials[
+                                        materialId
+                                    ] || 0
+                                )<MATERIAL_CAP
+                        ).map(
+                            ([materialId,bankCount])=>{
+
+                                const info=
+                                    MATERIALS[materialId] ||
+                                    MATERIALS["aether-dust"];
+
+                                const room=
+                                    MATERIAL_CAP-
+                                    (
+                                        ship.materials[
+                                            materialId
+                                        ] || 0
+                                    );
+
+                                const grab=
+                                    Math.min(
+                                        bankCount,
+                                        room
+                                    );
+
+                                return(
+                                    '<button class="control-btn" style="width:100%;'+
+                                    'display:flex;justify-content:space-between;'+
+                                    'padding:7px 10px;" data-action="withdraw-material" '+
+                                    'data-ship="'+ship.id+'" data-material="'+
+                                    materialId+'">'+
+                                    '<span>'+info.icon+' '+info.name+'</span>'+
+                                    '<span style="opacity:.7;">+'+grab+
+                                    ' (bank has '+bankCount+')</span>'+
+                                    '</button>'
+                                );
+
+                            }
+                        ).join("")+
+                        '</div>'
                         :''
                     )+
                     (
@@ -5553,6 +5701,21 @@ document
             depositShipMaterials(
                 planetDetailId,
                 shipId
+            );
+
+        }else if(
+            action==="withdraw-material"
+        ){
+
+            const materialId=
+                target.getAttribute(
+                    "data-material"
+                );
+
+            withdrawMaterialToShip(
+                planetDetailId,
+                shipId,
+                materialId
             );
 
         }else if(
@@ -14599,7 +14762,8 @@ function landAtCurrentPlanet(){
                 runCoins,
                 currentShipEquipment,
                 wave,
-                lives
+                lives,
+                runMaterials
             );
 
         currentShipId=
@@ -14640,7 +14804,11 @@ function landAtCurrentPlanet(){
         if(
             earthShip &&
             earthShip.score<=0 &&
-            earthShip.coins<=0
+            earthShip.coins<=0 &&
+            !Object.keys(
+                earthShip.materials ||
+                {}
+            ).length
         ){
 
             removeShip(
