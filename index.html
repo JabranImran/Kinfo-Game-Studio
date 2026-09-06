@@ -2098,6 +2098,15 @@ and (max-height:500px){
 
             </button>
 
+            <button
+                class="pause-tab"
+                id="pauseTabBtnFleet"
+                type="button">
+
+                🚀 Fleet
+
+            </button>
+
         </div>
 
         <div id="pauseTabMenu">
@@ -2139,6 +2148,14 @@ and (max-height:500px){
             class="hidden">
 
             <div id="aiMetricsContent"></div>
+
+        </div>
+
+        <div
+            id="pauseTabFleet"
+            class="hidden">
+
+            <div id="fleetContent"></div>
 
         </div>
 
@@ -2887,16 +2904,29 @@ function defaultPlanetSave(){
         buildQueue:{},
 
         /*
-         * How many pets are stationed at each planet —
-         * planetSave.pets[planetId]. Just a headcount for now;
-         * the full energy/food/autonomous-work system comes
-         * later. Earth starts with one free pet — the "labour"
-         * behind its free first ship and its always-available
-         * factory.
+         * Pets stationed at each planet —
+         * planetSave.pets[planetId] is an array of
+         * {id, energy} objects, not just a headcount, since
+         * each pet has its own energy that needs feeding to
+         * keep it actually working. Earth starts with one free
+         * pet at full energy — the "labour" behind its free
+         * first ship and its always-available factory.
          */
         pets:{
-            earth:1
-        }
+            earth:[
+                {
+                    id:"pet_earth_starter",
+                    energy:100
+                }
+            ]
+        },
+
+        /*
+         * Timestamp of the last time each planet's pet energy
+         * was drained against real elapsed time —
+         * planetSave.petEnergyResolved[planetId].
+         */
+        petEnergyResolved:{}
 
     };
 
@@ -3168,13 +3198,87 @@ function loadPlanetSave(){
 
                 }
 
-                if(
-                    typeof saved.pets.earth!==
-                    "number" ||
-                    saved.pets.earth<1
+                /*
+                 * Migrate every planet's pets from the old
+                 * flat-count shape (a plain number) into the
+                 * new array-of-objects shape, each with its own
+                 * energy — an old save's existing pets start at
+                 * full energy rather than being lost entirely.
+                 */
+                for(
+                    const petPlanetId in
+                    saved.pets
                 ){
 
-                    saved.pets.earth=1;
+                    const value=
+                        saved.pets[
+                            petPlanetId
+                        ];
+
+                    if(
+                        typeof value===
+                        "number"
+                    ){
+
+                        const converted=[];
+
+                        for(
+                            let i=0;
+                            i<value;
+                            i++
+                        ){
+
+                            converted.push({
+                                id:
+                                    "pet_"+
+                                    petPlanetId+
+                                    "_"+i,
+                                energy:100
+                            });
+
+                        }
+
+                        saved.pets[
+                            petPlanetId
+                        ]=converted;
+
+                    }else if(
+                        !Array.isArray(
+                            value
+                        )
+                    ){
+
+                        saved.pets[
+                            petPlanetId
+                        ]=[];
+
+                    }
+
+                }
+
+                if(
+                    !Array.isArray(
+                        saved.pets.earth
+                    ) ||
+                    !saved.pets.earth.length
+                ){
+
+                    saved.pets.earth=[
+                        {
+                            id:"pet_earth_starter",
+                            energy:100
+                        }
+                    ];
+
+                }
+
+                if(
+                    !saved.petEnergyResolved ||
+                    typeof saved.petEnergyResolved!==
+                    "object"
+                ){
+
+                    saved.petEnergyResolved={};
 
                 }
 
@@ -3862,9 +3966,249 @@ function getPetCount(planetId){
 
     return(
         (
+            (
+                planetSave.pets ||
+                {}
+            )[planetId] || []
+        ).length
+    );
+
+}
+
+/*
+ * Only pets with energy left actually count as "working" for
+ * anything that scales with pet labour — an unfed pet still
+ * exists (and still needs feeding to recover), it just isn't
+ * contributing right now.
+ */
+function getWorkingPetCount(planetId){
+
+    return(
+        (
+            (
+                planetSave.pets ||
+                {}
+            )[planetId] || []
+        ).filter(
+            pet => pet.energy>0
+        ).length
+    );
+
+}
+
+function getPets(planetId){
+
+    return(
+        (
             planetSave.pets ||
             {}
-        )[planetId] || 0
+        )[planetId] || []
+    );
+
+}
+
+/*
+ * Exponential per-planet pricing, as requested — each
+ * additional pet costs meaningfully more than the last, at
+ * whichever planet you're buying it at.
+ */
+function computePetCost(planetId){
+
+    const existing=
+        getPetCount(planetId);
+
+    return Math.round(
+        20*
+        Math.pow(
+            1.8,
+            existing
+        )
+    );
+
+}
+
+const PET_FOOD_COST=15;
+const PET_ENERGY_PER_FOOD=40;
+
+/*
+ * Passive energy drain, resolved against real elapsed time the
+ * same way build queues are — a pet left unfed for a while
+ * will genuinely have run down by the next time it's checked,
+ * whether or not the game was open in between.
+ */
+const PET_ENERGY_DRAIN_PER_MINUTE=2;
+
+function resolvePetEnergy(planetId){
+
+    const pets=
+        getPets(planetId);
+
+    if(!pets.length)
+        return;
+
+    if(!planetSave.petEnergyResolved){
+
+        planetSave.petEnergyResolved={};
+
+    }
+
+    const lastResolved=
+        planetSave.petEnergyResolved[
+            planetId
+        ] || Date.now();
+
+    const elapsedMinutes=
+        (
+            Date.now()-
+            lastResolved
+        )/60000;
+
+    if(elapsedMinutes<=0){
+
+        planetSave.petEnergyResolved[
+            planetId
+        ]=Date.now();
+
+        return;
+
+    }
+
+    const drain=
+        elapsedMinutes*
+        PET_ENERGY_DRAIN_PER_MINUTE;
+
+    let changed=
+        false;
+
+    pets.forEach(
+        pet=>{
+
+            const before=
+                pet.energy;
+
+            pet.energy=
+                Math.max(
+                    0,
+                    pet.energy-drain
+                );
+
+            if(pet.energy!==before){
+
+                changed=true;
+
+            }
+
+        }
+    );
+
+    planetSave.petEnergyResolved[
+        planetId
+    ]=Date.now();
+
+    if(changed){
+
+        savePlanetProgress();
+
+    }
+
+}
+
+function buyPet(planetId){
+
+    const cost=
+        computePetCost(planetId);
+
+    if(
+        getBank(planetId)<cost
+    )
+        return;
+
+    addToBank(
+        planetId,
+        -cost
+    );
+
+    if(!planetSave.pets){
+
+        planetSave.pets={};
+
+    }
+
+    if(
+        !planetSave.pets[
+            planetId
+        ]
+    ){
+
+        planetSave.pets[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.pets[
+        planetId
+    ].push({
+        id:
+            "pet_"+
+            Date.now()+
+            "_"+
+            Math.floor(
+                Math.random()*1000
+            ),
+        energy:100
+    });
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pet purchased!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function feedPet(planetId,petId){
+
+    const pets=
+        getPets(planetId);
+
+    const pet=
+        pets.find(
+            p => p.id===petId
+        );
+
+    if(
+        !pet ||
+        pet.energy>=100
+    )
+        return;
+
+    if(
+        getBank(planetId)<
+        PET_FOOD_COST
+    )
+        return;
+
+    addToBank(
+        planetId,
+        -PET_FOOD_COST
+    );
+
+    pet.energy=
+        Math.min(
+            100,
+            pet.energy+
+            PET_ENERGY_PER_FOOD
+        );
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
     );
 
 }
@@ -5557,7 +5901,9 @@ function computeShipBuildCost(planetId){
 function computeShipBuildDuration(planetId){
 
     const pets=
-        getPetCount(planetId);
+        getWorkingPetCount(
+            planetId
+        );
 
     const base=90;
 
@@ -5672,7 +6018,7 @@ function buildStructure(planetId,structureId){
 
     if(
         structure.requiresPet &&
-        getPetCount(planetId)<=0
+        getWorkingPetCount(planetId)<=0
     )
         return;
 
@@ -6239,6 +6585,8 @@ function renderPlanetDetail(id){
         !container
     )
         return;
+
+    resolvePetEnergy(id);
 
     const ships=
         id==="earth"
@@ -6872,6 +7220,81 @@ function renderPlanetDetail(id){
         '</div>';
 
 
+    /* -------- Pets -------- */
+
+    const pets=
+        getPets(id);
+
+    const petCost=
+        computePetCost(id);
+
+    const canAffordPet=
+        bank>=petCost;
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">🐾 Pets</div>'+
+        '<div class="metric-callout">'+
+        'Pets are what actually do the labour — more working '+
+        'pets (energy above 0) means faster ship and structure '+
+        'builds here. Energy drains slowly over time and needs '+
+        'feeding to recover. Each additional pet costs more than '+
+        'the last.'+
+        '</div>';
+
+    if(!pets.length){
+
+        html+=
+            '<div class="metric-note">'+
+            'No pets stationed here.'+
+            '</div>';
+
+    }else{
+
+        pets.forEach(
+            pet=>{
+
+                const energyColor=
+                    pet.energy<=0
+                    ?'#ff8d8d'
+                    :pet.energy<40
+                    ?'#ffd76b'
+                    :'#8dffb0';
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>🐾 Energy: '+
+                    '<span style="color:'+energyColor+';">'+
+                    Math.round(pet.energy)+'%</span></span>'+
+                    '<button class="control-btn" style="width:auto;'+
+                    'padding:7px 10px;" data-action="feed-pet" '+
+                    'data-pet="'+pet.id+'" '+
+                    (
+                        pet.energy>=100 ||
+                        bank<PET_FOOD_COST
+                        ?'disabled'
+                        :''
+                    )+
+                    '>Feed ('+PET_FOOD_COST+' 🪙)</button>'+
+                    '</div>';
+
+            }
+        );
+
+    }
+
+    html+=
+        '<button class="big-button secondary-button" '+
+        'style="margin-top:10px;" data-action="buy-pet" '+
+        (
+            canAffordPet
+            ?''
+            :'disabled'
+        )+
+        '>Buy Pet ('+petCost+' 🪙)</button>'+
+        '</div>';
+
+
     /* -------- Ship Factory (and structures generally) -------- */
 
     const factory=
@@ -6882,6 +7305,9 @@ function renderPlanetDetail(id){
 
     const petsHere=
         getPetCount(id);
+
+    const workingPetsHere=
+        getWorkingPetCount(id);
 
     const planetQueue=
         getBuildQueue(id);
@@ -6940,9 +7366,10 @@ function renderPlanetDetail(id){
 
         html+=
             '<div class="metric-callout">'+
-            '🐾 '+petsHere+' pet(s) stationed here — more pets '+
-            'means faster builds. Current build time: '+
-            shipDuration+'s.'+
+            '🐾 '+petsHere+' pet(s) stationed here ('+
+            workingPetsHere+' currently working) — more '+
+            'working pets means faster builds. Current build '+
+            'time: '+shipDuration+'s.'+
             '</div>'+
             '<div class="selected-shape-info">'+
             '<span>Build a new ship</span>'+
@@ -7007,11 +7434,12 @@ function renderPlanetDetail(id){
             structure.description+
             '</div>'+
             '<div class="metric-note">'+
-            '🐾 Pet stationed here: '+
+            '🐾 Working pet stationed here: '+
             (
-                petsHere>0
-                ?'Yes ('+petsHere+')'
-                :'None — required to build'
+                workingPetsHere>0
+                ?'Yes ('+workingPetsHere+')'
+                :'None — required to build (a pet with 0 '+
+                 'energy doesn\'t count until fed)'
             )+
             '</div>';
 
@@ -7047,7 +7475,7 @@ function renderPlanetDetail(id){
         );
 
         const canBuild=
-            petsHere>0 &&
+            workingPetsHere>0 &&
             structure.buildMaterials.every(
                 req =>
                     (
@@ -7315,6 +7743,28 @@ document
             buildStructure(
                 planetDetailId,
                 structureId
+            );
+
+        }else if(
+            action==="buy-pet"
+        ){
+
+            buyPet(
+                planetDetailId
+            );
+
+        }else if(
+            action==="feed-pet"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            feedPet(
+                planetDetailId,
+                petId
             );
 
         }
@@ -19846,6 +20296,13 @@ function switchPauseTab(tab, silent){
     );
 
     document.getElementById(
+        "pauseTabBtnFleet"
+    ).classList.toggle(
+        "active",
+        tab==="fleet"
+    );
+
+    document.getElementById(
         "pauseTabMenu"
     ).classList.toggle(
         "hidden",
@@ -19859,9 +20316,22 @@ function switchPauseTab(tab, silent){
         tab!=="metrics"
     );
 
+    document.getElementById(
+        "pauseTabFleet"
+    ).classList.toggle(
+        "hidden",
+        tab!=="fleet"
+    );
+
     if(tab==="metrics"){
 
         renderAIMetrics();
+
+    }
+
+    if(tab==="fleet"){
+
+        renderFleetOverview();
 
     }
 
@@ -19896,6 +20366,23 @@ document
         event.stopPropagation();
 
         switchPauseTab("metrics");
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "pauseTabBtnFleet"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        switchPauseTab("fleet");
 
     },
     {passive:false}
@@ -19999,6 +20486,168 @@ function formatSessionTime(t){
     );
 
 }
+
+/*
+ * A read-only overview of the entire fleet, reachable from the
+ * pause menu — every planet with a ship, a build in progress,
+ * or a factory, without having to quit back to the start
+ * screen just to check.
+ */
+function renderFleetOverview(){
+
+    resolveAllBuildQueues();
+
+    const container=
+        document.getElementById(
+            "fleetContent"
+        );
+
+    if(!container)
+        return;
+
+    let html=
+        '<div class="customizer-title">🚀 Fleet Overview</div>'+
+        '<div class="subtitle" style="text-align:center;margin-bottom:16px;">'+
+        'Every ship, wherever it\'s docked</div>';
+
+    let totalShips=0;
+
+    PLANETS.forEach(
+        planet=>{
+
+            const ships=
+                planet.id==="earth"
+                ?(planetSave.ships.earth || [])
+                :(getShips(planet.id) || []);
+
+            const queue=
+                getBuildQueue(
+                    planet.id
+                );
+
+            const pets=
+                getPetCount(
+                    planet.id
+                );
+
+            const hasFactory=
+                hasStructure(
+                    planet.id,
+                    "ship-factory"
+                );
+
+            if(
+                !ships.length &&
+                !queue.length &&
+                !hasFactory
+            ){
+
+                return;
+
+            }
+
+            totalShips+=
+                ships.length;
+
+            html+=
+                '<div class="customizer-section">'+
+                '<div class="customizer-section-title">'+
+                planet.icon+' '+planet.name+
+                '</div>';
+
+            if(hasFactory){
+
+                html+=
+                    '<div class="metric-note">'+
+                    '🏭 Ship Factory · 🐾 '+pets+
+                    ' pet(s) stationed</div>';
+
+            }
+
+            if(!ships.length){
+
+                html+=
+                    '<div class="metric-note">'+
+                    'No ships docked here.'+
+                    '</div>';
+
+            }else{
+
+                ships.forEach(
+                    ship=>{
+
+                        html+=
+                            '<div class="selected-shape-info">'+
+                            '<span>'+
+                            ship.score.toLocaleString()+
+                            ' pts · 🪙'+
+                            (ship.coins || 0)+
+                            '</span>'+
+                            '<span style="font-size:9px;opacity:.7;">'+
+                            getEquippedLabel(ship)+
+                            '</span>'+
+                            '</div>';
+
+                    }
+                );
+
+            }
+
+            queue.forEach(
+                build=>{
+
+                    const remaining=
+                        Math.max(
+                            0,
+                            Math.ceil(
+                                (
+                                    build.startedAt+
+                                    build.durationSeconds*1000-
+                                    Date.now()
+                                )/1000
+                            )
+                        );
+
+                    const label=
+                        build.type==="ship"
+                        ?"🏗 Ship building"
+                        :"🏗 "+
+                          (
+                              STRUCTURES[
+                                  build.structureId
+                              ] || {name:"Structure"}
+                          ).name+
+                          " building";
+
+                    html+=
+                        '<div class="metric-note">'+
+                        label+' — '+remaining+
+                        's left</div>';
+
+                }
+            );
+
+            html+=
+                '</div>';
+
+        }
+    );
+
+    if(!totalShips){
+
+        html+=
+            '<div class="metric-note">'+
+            'No ships anywhere yet — launch from Earth to '+
+            'get started.'+
+            '</div>';
+
+    }
+
+    container.innerHTML=
+        html;
+
+}
+
 
 function renderAIMetrics(){
 
