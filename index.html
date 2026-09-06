@@ -2832,7 +2832,35 @@ function defaultPlanetSave(){
          */
         landingsCount:0,
 
-        launchesByPlanet:{}
+        launchesByPlanet:{},
+
+        /*
+         * Perks discovered so far (had stock granted at least
+         * once) — planetSave.unlockedPerks[perkId]. Purely a
+         * display flag now; a perk's actual availability is
+         * just whatever perkStock currently says.
+         */
+        unlockedPerks:{},
+
+        /*
+         * Units of each perk currently in stock at each planet
+         * — planetSave.perkStock[planetId][perkId]. Generated
+         * entirely by selling that perk's tracked material (see
+         * soldCounts below), not bought with coins — mirrors
+         * itemStock's shape, just a separate namespace since a
+         * perk and an ability can be equipped at the same time.
+         */
+        perkStock:{},
+
+        /*
+         * Cumulative sold counts per planet per resource (item
+         * or material id) — planetSave.soldCounts[planetId][id].
+         * Selling always pays out coins immediately; separately,
+         * crossing a perk's unlockAmount threshold here grants
+         * a stock unit and resets by that amount, so another
+         * unit always requires selling the full amount again.
+         */
+        soldCounts:{}
 
     };
 
@@ -2977,6 +3005,15 @@ function loadPlanetSave(){
                                 ship.materials
                             );
 
+                        if(
+                            ship.perk===
+                            undefined
+                        ){
+
+                            ship.perk=null;
+
+                        }
+
                     }
 
                 }
@@ -3011,6 +3048,36 @@ function loadPlanetSave(){
 
                 }
 
+                if(
+                    !saved.unlockedPerks ||
+                    typeof saved.unlockedPerks!==
+                    "object"
+                ){
+
+                    saved.unlockedPerks={};
+
+                }
+
+                if(
+                    !saved.perkStock ||
+                    typeof saved.perkStock!==
+                    "object"
+                ){
+
+                    saved.perkStock={};
+
+                }
+
+                if(
+                    !saved.soldCounts ||
+                    typeof saved.soldCounts!==
+                    "object"
+                ){
+
+                    saved.soldCounts={};
+
+                }
+
                 for(
                     const planet of PLANETS
                 ){
@@ -3037,6 +3104,21 @@ function loadPlanetSave(){
                     ){
 
                         saved.itemStock[
+                            planet.id
+                        ]={};
+
+                    }
+
+                    if(
+                        !saved.perkStock[
+                            planet.id
+                        ] ||
+                        typeof saved.perkStock[
+                            planet.id
+                        ]!=="object"
+                    ){
+
+                        saved.perkStock[
                             planet.id
                         ]={};
 
@@ -3508,6 +3590,115 @@ function getShopItemForPlanet(planetId){
 }
 
 
+/*
+ * Perks: unlocked by selling (spending) a planet-unique
+ * material, then bought with coins like a normal shop item —
+ * two-step content that only exists once you've actually
+ * engaged with the material economy. Unlike equipment, a perk
+ * sits in its own slot and stacks alongside whatever ability
+ * is equipped, since it's a passive multiplier rather than an
+ * active ability.
+ */
+/*
+ * Perks: unlocked/restocked by selling — "unlockMaterial" is a
+ * bit of a misnomer kept for continuity; it can be a material
+ * id (sold via sellMaterialStock) OR an ability item id (sold
+ * via sellItemStock) equally well, since trackResourceSold()
+ * doesn't care which kind of resource crossed the threshold.
+ * Coin Magnet Charm and Refinery Core are material-driven;
+ * Overcharge Coil below demonstrates the equipment-driven case.
+ */
+const PERKS={
+
+    "coin-magnet":{
+        id:"coin-magnet",
+        planetId:"mars",
+        name:"Coin Magnet Charm",
+        icon:"🧲",
+        unlockMaterial:"volatile-alloy",
+        unlockAmount:5,
+        effectType:"coinMultiplier",
+        effectValue:.25,
+        description:
+            "Every coin you collect is worth 25% more. Stacks "+
+            "alongside whatever ability you have equipped."
+    },
+
+    "refinery-core":{
+        id:"refinery-core",
+        planetId:"aurora",
+        name:"Refinery Core",
+        icon:"⚙",
+        unlockMaterial:"magnetic-resin",
+        unlockAmount:5,
+        effectType:"materialDropBoost",
+        effectValue:.4,
+        description:
+            "Meaningfully raises the chance a unique asteroid "+
+            "drops its material at all, on top of whatever the "+
+            "field is already offering."
+    },
+
+    "overcharge-coil":{
+        id:"overcharge-coil",
+        planetId:"titan",
+        name:"Overcharge Coil",
+        icon:"🔋",
+        unlockMaterial:"incinerator-beam",
+        unlockAmount:3,
+        effectType:"chargeRateBoost",
+        effectValue:.2,
+        description:
+            "Whatever ability is equipped charges 20% faster. "+
+            "Restocked by selling spare Incinerator Beam units "+
+            "rather than a material — surplus hardware, not ore."
+    }
+
+};
+
+function getUnlockedPerks(){
+
+    return(
+        planetSave.unlockedPerks ||
+        {}
+    );
+
+}
+
+function isPerkUnlocked(perkId){
+
+    return !!getUnlockedPerks()[
+        perkId
+    ];
+
+}
+
+function getPerkForPlanet(planetId){
+
+    return Object.values(
+        PERKS
+    ).find(
+        perk =>
+            perk.planetId===
+            planetId
+    ) || null;
+
+}
+
+function getPerkStock(planetId,perkId){
+
+    return(
+        (
+            (
+                planetSave.perkStock ||
+                {}
+            )[planetId] || {}
+        )[perkId] || 0
+    );
+
+}
+
+
 let planetSave=
     loadPlanetSave();
 
@@ -3556,7 +3747,8 @@ function createShip(
     equipment="emp",
     wave=1,
     lives=3,
-    materials=null
+    materials=null,
+    perk=null
 ){
 
     ensurePlanetArray(
@@ -3603,7 +3795,10 @@ function createShip(
         materials:
             clampMaterials(
                 materials || {}
-            )
+            ),
+
+        perk:
+            perk || null
 
     };
 
@@ -4170,6 +4365,148 @@ function buyShopItem(planetId){
  * currently viewing, for that planet's own distance-scaled
  * price. Works for anything in stock, EMP included.
  */
+/*
+ * Cumulative sold-count tracking, shared by both materials and
+ * ability items — this is what drives perk stock now, instead
+ * of a one-time "spend a lump sum to unlock" transaction.
+ * Selling anything (material OR equipment) always pays out
+ * coins immediately via the normal sell price; separately, if
+ * what was just sold happens to be a perk's tracked resource,
+ * this checks whether enough has now been sold (cumulatively)
+ * to grant another unit of that perk's stock — and resets the
+ * counter by that threshold each time, so getting a second unit
+ * genuinely requires selling that amount all over again.
+ */
+function trackResourceSold(planetId,resourceId,amount){
+
+    if(!planetSave.soldCounts){
+
+        planetSave.soldCounts={};
+
+    }
+
+    if(
+        !planetSave.soldCounts[
+            planetId
+        ]
+    ){
+
+        planetSave.soldCounts[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.soldCounts[
+        planetId
+    ][resourceId]=
+        (
+            planetSave.soldCounts[
+                planetId
+            ][resourceId] || 0
+        )+amount;
+
+    const perk=
+        getPerkForPlanet(
+            planetId
+        );
+
+    if(
+        !perk ||
+        perk.unlockMaterial!==
+        resourceId
+    ){
+
+        return;
+
+    }
+
+    while(
+        planetSave.soldCounts[
+            planetId
+        ][resourceId]>=
+        perk.unlockAmount
+    ){
+
+        planetSave.soldCounts[
+            planetId
+        ][resourceId]-=
+            perk.unlockAmount;
+
+        addPerkStock(
+            planetId,
+            perk.id,
+            1
+        );
+
+        if(!planetSave.unlockedPerks){
+
+            planetSave.unlockedPerks={};
+
+        }
+
+        planetSave.unlockedPerks[
+            perk.id
+        ]=true;
+
+        showShipToast(
+            perk.name+
+            " stock +1!"
+        );
+
+    }
+
+}
+
+function getSoldProgress(planetId,resourceId){
+
+    return(
+        (
+            (
+                planetSave.soldCounts ||
+                {}
+            )[planetId] || {}
+        )[resourceId] || 0
+    );
+
+}
+
+function addPerkStock(planetId,perkId,amount){
+
+    if(!planetSave.perkStock){
+
+        planetSave.perkStock={};
+
+    }
+
+    if(
+        !planetSave.perkStock[
+            planetId
+        ]
+    ){
+
+        planetSave.perkStock[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.perkStock[
+        planetId
+    ][perkId]=
+        Math.max(
+            0,
+            getPerkStock(
+                planetId,
+                perkId
+            )+amount
+        );
+
+    savePlanetProgress();
+
+}
+
+
 function sellItemStock(planetId,itemId){
 
     if(
@@ -4194,6 +4531,62 @@ function sellItemStock(planetId,itemId){
     addToBank(
         planetId,
         price
+    );
+
+    trackResourceSold(
+        planetId,
+        itemId,
+        1
+    );
+
+    showShipToast(
+        "Sold for "+price+" 🪙"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Mirrors sellItemStock exactly, for a material instead of an
+ * ability item — same price, same coin payout, same
+ * contribution toward any perk tracking that material.
+ */
+function sellMaterialStock(planetId,materialId){
+
+    const bank=
+        (
+            planetSave.materialBanks ||
+            {}
+        )[planetId] || {};
+
+    if(
+        (bank[materialId] || 0)<=0
+    )
+        return;
+
+    addToMaterialBank(
+        planetId,
+        materialId,
+        -1
+    );
+
+    const price=
+        computeSellPrice(
+            planetId
+        );
+
+    addToBank(
+        planetId,
+        price
+    );
+
+    trackResourceSold(
+        planetId,
+        materialId,
+        1
     );
 
     showShipToast(
@@ -4266,6 +4659,117 @@ function equipItemAt(planetId,shipId,itemId){
     showShipToast(
         "Equipped "+
         getItemInfo(itemId).name
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+
+/*
+ * Unlocking spends materials from the planet's bank, once and
+ * for all — it's a permanent, global unlock, not something
+ * tied to any one ship or even any one planet visit.
+ */
+/*
+ * Buying only works once unlocked — spends coins from the
+ * bank, adds a unit to that planet's perk stock, same pattern
+ * as buying an ability item.
+ */
+/*
+ * Equipping/unequipping a perk mirrors equipItemAt(), but on
+ * its own slot (ship.perk) with its own stock namespace
+ * (perkStock) — entirely independent of whatever ability is
+ * equipped at the same time.
+ */
+function equipPerkAt(planetId,shipId,perkId){
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        ship.perk===perkId
+    ){
+
+        return;
+
+    }
+
+    if(
+        perkId &&
+        getPerkStock(
+            planetId,
+            perkId
+        )<=0
+    ){
+
+        return;
+
+    }
+
+    if(!planetSave.perkStock){
+
+        planetSave.perkStock={};
+
+    }
+
+    if(
+        !planetSave.perkStock[
+            planetId
+        ]
+    ){
+
+        planetSave.perkStock[
+            planetId
+        ]={};
+
+    }
+
+    if(ship.perk){
+
+        planetSave.perkStock[
+            planetId
+        ][ship.perk]=
+            (
+                getPerkStock(
+                    planetId,
+                    ship.perk
+                )
+            )+1;
+
+    }
+
+    if(perkId){
+
+        planetSave.perkStock[
+            planetId
+        ][perkId]=
+            getPerkStock(
+                planetId,
+                perkId
+            )-1;
+
+    }
+
+    ship.perk=perkId || null;
+
+    expandedPerkShipId=null;
+
+    savePlanetProgress();
+
+    showShipToast(
+        perkId
+        ?"Equipped "+PERKS[perkId].name
+        :"Perk unequipped"
     );
 
     renderPlanetDetail(
@@ -5039,6 +5543,13 @@ let selectedLaunchShipId=null;
  */
 let expandedEquipShipId=null;
 
+/*
+ * Same idea, separate tracking, for the perk picker — a ship
+ * can have its ability picker and its perk picker expanded
+ * independently since they're genuinely separate slots.
+ */
+let expandedPerkShipId=null;
+
 function openPlanetDetail(id){
 
     initAudio();
@@ -5176,7 +5687,8 @@ function renderPlanetDetail(id){
         '</div>';
 
 
-    /* -------- Material Bank -------- */
+    /* -------- Material Bank (informational only — selling
+       happens down in Planet Stock, right alongside items) -------- */
 
     const materialBank=
         (
@@ -5190,46 +5702,6 @@ function renderPlanetDetail(id){
         ).filter(
             ([,count]) => count>0
         );
-
-    html+=
-        '<div class="customizer-section">'+
-        '<div class="customizer-section-title">Material Bank</div>'+
-        '<div class="metric-callout">'+
-        'Only planet-unique asteroids drop materials, and a ship '+
-        'can only carry '+MATERIAL_CAP+' of any one type at once — '+
-        'deposit here to bank them safely and clear space to '+
-        'collect more. No cap once deposited.'+
-        '</div>';
-
-    if(!materialBankEntries.length){
-
-        html+=
-            '<div class="metric-note">'+
-            'Nothing deposited here yet.'+
-            '</div>';
-
-    }else{
-
-        materialBankEntries.forEach(
-            ([materialId,count])=>{
-
-                const info=
-                    MATERIALS[materialId] ||
-                    MATERIALS["aether-dust"];
-
-                html+=
-                    '<div class="selected-shape-info" style="margin-top:6px;">'+
-                    '<span>'+info.icon+' '+info.name+'</span>'+
-                    '<strong>'+count.toLocaleString()+'</strong>'+
-                    '</div>';
-
-            }
-        );
-
-    }
-
-    html+=
-        '</div>';
 
 
     /* -------- Shop -------- */
@@ -5286,6 +5758,72 @@ function renderPlanetDetail(id){
             '<div class="customizer-section-title">Shop</div>'+
             '<div class="metric-note">'+
             'This planet doesn\'t sell anything of its own.'+
+            '</div>'+
+            '</div>';
+
+    }
+
+
+    /* -------- Perks -------- */
+
+    const perk=
+        getPerkForPlanet(id);
+
+    if(perk){
+
+        const unlocked=
+            isPerkUnlocked(perk.id);
+
+        const perkStockHere=
+            getPerkStock(
+                id,
+                perk.id
+            );
+
+        const unlockMaterialInfo=
+            MATERIALS[
+                perk.unlockMaterial
+            ] ||
+            MATERIALS["aether-dust"];
+
+        const soldSoFar=
+            getSoldProgress(
+                id,
+                perk.unlockMaterial
+            );
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Perk</div>'+
+            '<div class="metric-callout">'+
+            'Not bought — earned. Sell '+unlockMaterialInfo.icon+
+            ' '+unlockMaterialInfo.name+
+            ' in Planet Stock above and this perk\'s stock grows '+
+            'on its own. Once a ship equips a unit, selling more '+
+            'of the same material is what restocks it.'+
+            '</div>'+
+            '<div class="selected-shape-info" style="align-items:flex-start;">'+
+            '<span>'+
+            '<strong>'+
+            (
+                unlocked
+                ?perk.icon+' '+perk.name
+                :'🔒 '+perk.icon+' '+perk.name
+            )+
+            '</strong>'+
+            '<div class="selected-shape-core" style="color:#8fa7c7;font-size:10px;margin-top:4px;max-width:260px;">'+
+            perk.description+
+            '</div>'+
+            '<div class="selected-shape-core" style="color:#70ddff;margin-top:6px;">'+
+            (
+                unlocked
+                ?'In stock: '+perkStockHere+' · '
+                :''
+            )+
+            'Progress to next: '+soldSoFar+'/'+
+            perk.unlockAmount+' '+unlockMaterialInfo.name+
+            ' sold</div>'+
+            '</span>'+
             '</div>'+
             '</div>';
 
@@ -5542,6 +6080,98 @@ function renderPlanetDetail(id){
                         '</div>'
                         :''
                     )+
+                    (
+                        (function(){
+
+                            const localPerk=
+                                getPerkForPlanet(id);
+
+                            const perkOptions=[];
+
+                            if(
+                                localPerk &&
+                                isPerkUnlocked(localPerk.id) &&
+                                ship.perk!==
+                                localPerk.id &&
+                                getPerkStock(
+                                    id,
+                                    localPerk.id
+                                )>0
+                            ){
+
+                                perkOptions.push(
+                                    localPerk
+                                );
+
+                            }
+
+                            const perkExpanded=
+                                expandedPerkShipId===
+                                ship.id;
+
+                            const currentPerkInfo=
+                                ship.perk
+                                ?PERKS[ship.perk]
+                                :null;
+
+                            return(
+                                '<button class="control-btn" data-action="toggle-perk" data-ship="'+
+                                ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
+                                'display:flex;align-items:center;gap:6px;">'+
+                                '<span>Perk: '+
+                                (
+                                    currentPerkInfo
+                                    ?currentPerkInfo.icon+' '+currentPerkInfo.name
+                                    :"None"
+                                )+
+                                '</span>'+
+                                '<span style="opacity:.6;">'+
+                                (perkExpanded ? "▲" : "▼")+
+                                '</span>'+
+                                '</button>'+
+                                (
+                                    perkExpanded
+                                    ?'<div style="display:flex;flex-direction:column;gap:6px;'+
+                                    'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                                    (
+                                        ship.perk
+                                        ?'<button class="shape-btn" style="width:100%;'+
+                                        'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                        'data-action="equip-perk" data-ship="'+
+                                        ship.id+'" data-perk="">'+
+                                        'None (unequip)</button>'
+                                        :''
+                                    )+
+                                    (
+                                        perkOptions.length
+                                        ?perkOptions.map(
+                                            p =>
+                                                '<button class="shape-btn" style="width:100%;'+
+                                                'display:flex;align-items:center;justify-content:space-between;'+
+                                                'padding:8px 10px;font-size:11px;" '+
+                                                'data-action="equip-perk" data-ship="'+
+                                                ship.id+'" data-perk="'+p.id+'">'+
+                                                '<span>'+p.icon+' '+p.name+'</span>'+
+                                                '<span style="opacity:.6;font-size:9px;">'+
+                                                getPerkStock(id,p.id)+
+                                                ' in stock</span>'+
+                                                '</button>'
+                                        ).join("")
+                                        :(
+                                            ship.perk
+                                            ?''
+                                            :'<span style="font-size:10px;color:#5c7ba0;">'+
+                                              'Nothing to equip here — unlock and buy a '+
+                                              'perk above first.</span>'
+                                        )
+                                    )+
+                                    '</div>'
+                                    :''
+                                )
+                            );
+
+                        })()
+                    )+
                     '</div>';
 
             }
@@ -5553,7 +6183,9 @@ function renderPlanetDetail(id){
         '</div>';
 
 
-    /* -------- Planet stock (sellable) -------- */
+    /* -------- Planet stock (sellable — items and materials
+       together, since selling either one works identically and
+       both can feed a perk's stock) -------- */
 
     const stockEntries=
         Object.entries(
@@ -5570,13 +6202,17 @@ function renderPlanetDetail(id){
         'Planet Stock'+
         '</div>'+
         '<div class="metric-callout">'+
-        'Anything swapped off a ship here stays here. Sell price '+
-        'scales with distance — '+
+        'Anything swapped off a ship, or any material deposited '+
+        'here, can be sold. Sell price scales with distance — '+
         computeSellPrice(id)+
-        ' 🪙 each at '+planet.name+'.'+
+        ' 🪙 each at '+planet.name+'. Selling a planet\'s own '+
+        'material also feeds that planet\'s perk — see below.'+
         '</div>';
 
-    if(!stockEntries.length){
+    if(
+        !stockEntries.length &&
+        !materialBankEntries.length
+    ){
 
         html+=
             '<div class="metric-note">'+
@@ -5598,6 +6234,26 @@ function renderPlanetDetail(id){
                     count+'</span></span>'+
                     '<button class="remove-btn" data-action="sell-item" '+
                     'data-item="'+itemId+'">Sell '+
+                    computeSellPrice(id)+' 🪙</button>'+
+                    '</div>';
+
+            }
+        );
+
+        materialBankEntries.forEach(
+            ([materialId,count])=>{
+
+                const info=
+                    MATERIALS[materialId] ||
+                    MATERIALS["aether-dust"];
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>'+info.icon+' '+info.name+
+                    ' <span style="opacity:.6;font-size:9px;">×'+
+                    count+'</span></span>'+
+                    '<button class="remove-btn" data-action="sell-material" '+
+                    'data-material="'+materialId+'">Sell '+
                     computeSellPrice(id)+' 🪙</button>'+
                     '</div>';
 
@@ -5774,6 +6430,35 @@ document
             );
 
         }else if(
+            action==="toggle-perk"
+        ){
+
+            expandedPerkShipId=
+                expandedPerkShipId===
+                shipId
+                ?null
+                :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="equip-perk"
+        ){
+
+            const perkId=
+                target.getAttribute(
+                    "data-perk"
+                );
+
+            equipPerkAt(
+                planetDetailId,
+                shipId,
+                perkId || null
+            );
+
+        }else if(
             action==="sell-item"
         ){
 
@@ -5785,6 +6470,20 @@ document
             sellItemStock(
                 planetDetailId,
                 itemId
+            );
+
+        }else if(
+            action==="sell-material"
+        ){
+
+            const materialId=
+                target.getAttribute(
+                    "data-material"
+                );
+
+            sellMaterialStock(
+                planetDetailId,
+                materialId
             );
 
         }
@@ -9504,6 +10203,10 @@ function syncCurrentShipFlightState(){
             currentShipEquipment ||
             "emp";
 
+        ship.perk=
+            currentShipPerk ||
+            null;
+
         ship.wave=
             Math.max(
                 1,
@@ -11831,7 +12534,19 @@ function computeEmpChargeRate(){
             aiModel.chargeRateCorrection[key]
         ) || 1;
 
-    return base*correction;
+    /*
+     * Overcharge Coil (or any future chargeRateBoost perk)
+     * stacks on top of everything above, regardless of which
+     * ability is actually equipped — it's a perk, not tied to
+     * a specific item.
+     */
+    const perkBoost=
+        1+
+        getPerkEffect(
+            "chargeRateBoost"
+        );
+
+    return base*correction*perkBoost;
 
 }
 
@@ -11949,12 +12664,47 @@ function computeCoinDropRate(){
  */
 function computeMaterialDropRate(){
 
-    return clamp(
-        .25+
-        difficultyIntensity()*.15,
-        .25,
-        .4
-    );
+    const base=
+        clamp(
+            .25+
+            difficultyIntensity()*.15,
+            .25,
+            .4
+        );
+
+    return base*
+        (
+            1+
+            getPerkEffect(
+                "materialDropBoost"
+            )
+        );
+
+}
+
+
+/*
+ * Returns the equipped perk's bonus (0 if no perk, or the
+ * equipped one doesn't match this effect type) — a perk stacks
+ * alongside whatever ability is equipped, so this is checked
+ * independently of currentShipEquipment entirely.
+ */
+function getPerkEffect(effectType){
+
+    const perk=
+        PERKS[currentShipPerk];
+
+    if(
+        perk &&
+        perk.effectType===
+        effectType
+    ){
+
+        return perk.effectValue;
+
+    }
+
+    return 0;
 
 }
 
@@ -14763,7 +15513,8 @@ function landAtCurrentPlanet(){
                 currentShipEquipment,
                 wave,
                 lives,
-                runMaterials
+                runMaterials,
+                currentShipPerk
             );
 
         currentShipId=
@@ -16908,6 +17659,13 @@ let currentShipId=null;
  * from some planet's shop.
  */
 let currentShipEquipment="emp";
+
+/*
+ * Separate from equipment entirely — a perk is a passive
+ * multiplier that stacks alongside whatever ability is
+ * equipped, not a replacement for it.
+ */
+let currentShipPerk=null;
 let beamArmed=false;
 
 /*
@@ -17015,6 +17773,8 @@ function startGame(){
     let launchEquipment=
         "emp";
 
+    let launchPerk=null;
+
     let launchWave=1;
 
     let launchLives=3;
@@ -17061,6 +17821,10 @@ function startGame(){
             launchEquipment=
                 earthChoice.equipment ||
                 "emp";
+
+            launchPerk=
+                earthChoice.perk ||
+                null;
 
             launchWave=
                 Number(
@@ -17176,6 +17940,10 @@ function startGame(){
             ship.equipment ||
             "emp";
 
+        launchPerk=
+            ship.perk ||
+            null;
+
         launchWave=
             Number(
                 ship.wave
@@ -17223,6 +17991,9 @@ function startGame(){
 
     currentShipEquipment=
         launchEquipment;
+
+    currentShipPerk=
+        launchPerk;
 
     combo=1;
 
@@ -17593,14 +18364,25 @@ function handlePointer(event){
             c.radius+18
         ){
 
+            const awarded=
+                Math.round(
+                    c.value*
+                    (
+                        1+
+                        getPerkEffect(
+                            "coinMultiplier"
+                        )
+                    )
+                );
+
             runCoins+=
-                c.value;
+                awarded;
 
             aiWindow.coinsCollected+=
-                c.value;
+                awarded;
 
             runCoinsCollectedTotal+=
-                c.value;
+                awarded;
 
             coinPickups.splice(
                 i,
@@ -17608,7 +18390,7 @@ function handlePointer(event){
             );
 
             floatingText(
-                "+"+c.value+" 🪙",
+                "+"+awarded+" 🪙",
                 p.x,
                 p.y,
                 "#ffd76b"
