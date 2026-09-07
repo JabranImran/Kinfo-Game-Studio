@@ -2906,9 +2906,10 @@ function defaultPlanetSave(){
         /*
          * Pets stationed at each planet —
          * planetSave.pets[planetId] is an array of
-         * {id, energy} objects, not just a headcount, since
-         * each pet has its own energy that needs feeding to
-         * keep it actually working. Earth starts with one free
+         * {id, energy, trainingLevel} objects, not just a
+         * headcount, since each pet has its own energy that
+         * needs feeding to keep it actually working, and its
+         * own trained skill level. Earth starts with one free
          * pet at full energy — the "labour" behind its free
          * first ship and its always-available factory.
          */
@@ -2916,7 +2917,8 @@ function defaultPlanetSave(){
             earth:[
                 {
                     id:"pet_earth_starter",
-                    energy:100
+                    energy:100,
+                    trainingLevel:1
                 }
             ]
         },
@@ -2926,7 +2928,18 @@ function defaultPlanetSave(){
          * was drained against real elapsed time —
          * planetSave.petEnergyResolved[planetId].
          */
-        petEnergyResolved:{}
+        petEnergyResolved:{},
+
+        /*
+         * Pets currently out on a Pilot Training mission —
+         * planetSave.missions[planetId] is an array of
+         * {ship, pet, destinationId, hops, startedAt,
+         * durationSeconds}. Both the ship and pet are removed
+         * from their normal docked lists while a mission is in
+         * flight, and one or both return (or the pet doesn't)
+         * when it resolves.
+         */
+        missions:{}
 
     };
 
@@ -3266,9 +3279,52 @@ function loadPlanetSave(){
                     saved.pets.earth=[
                         {
                             id:"pet_earth_starter",
-                            energy:100
+                            energy:100,
+                            trainingLevel:1
                         }
                     ];
+
+                }
+
+                /*
+                 * Every existing pet, wherever it is, gets a
+                 * trainingLevel if it doesn't already have one —
+                 * this is what Pilot Training reads to decide
+                 * mission range and survival odds.
+                 */
+                for(
+                    const petPlanetId2 in
+                    saved.pets
+                ){
+
+                    (
+                        saved.pets[
+                            petPlanetId2
+                        ] || []
+                    ).forEach(
+                        pet=>{
+
+                            if(
+                                typeof pet.trainingLevel!==
+                                "number"
+                            ){
+
+                                pet.trainingLevel=1;
+
+                            }
+
+                        }
+                    );
+
+                }
+
+                if(
+                    !saved.missions ||
+                    typeof saved.missions!==
+                    "object"
+                ){
+
+                    saved.missions={};
 
                 }
 
@@ -3936,6 +3992,25 @@ const STRUCTURES={
         ],
         requiresPet:true,
         buildDurationSeconds:120
+    },
+
+    "pilot-training":{
+        id:"pilot-training",
+        name:"Pilot Training",
+        icon:"🎓",
+        description:
+            "Trains pets to fly a spare ship out and back on "+
+            "their own, gathering a destination's material while "+
+            "they're there. Every mission carries real risk — a "+
+            "pet can die out there — and always needs at least "+
+            "one other ship left docked for you to fly yourself.",
+        buildMaterials:[
+            {materialId:"solar-plating",amount:6},
+            {materialId:"shadow-vapor",amount:6},
+            {materialId:"chrono-crystal",amount:6}
+        ],
+        requiresPet:true,
+        buildDurationSeconds:150
     }
 
 };
@@ -4156,7 +4231,8 @@ function buyPet(planetId){
             Math.floor(
                 Math.random()*1000
             ),
-        energy:100
+        energy:100,
+        trainingLevel:1
     });
 
     savePlanetProgress();
@@ -4212,6 +4288,528 @@ function feedPet(planetId,petId){
     );
 
 }
+
+
+/*
+ * Pilot Training: pet skill levels, mission range/risk/reward,
+ * and the actual mission lifecycle (send, resolve).
+ */
+
+const PET_TRAINING_MAX_LEVEL=3;
+
+const PET_TRAINING_LEVELS={
+    1:{
+        maxHops:0,
+        survivalChance:.7
+    },
+    2:{
+        maxHops:1,
+        survivalChance:.82
+    },
+    3:{
+        maxHops:2,
+        survivalChance:.92
+    }
+};
+
+function getTrainingInfo(level){
+
+    return(
+        PET_TRAINING_LEVELS[
+            level
+        ] ||
+        PET_TRAINING_LEVELS[1]
+    );
+
+}
+
+function computeTrainCost(level){
+
+    return Math.round(
+        150*
+        Math.pow(2,level-1)
+    );
+
+}
+
+function trainPet(planetId,petId){
+
+    const pets=
+        getPets(planetId);
+
+    const pet=
+        pets.find(
+            p => p.id===petId
+        );
+
+    if(
+        !pet ||
+        (pet.trainingLevel || 1)>=
+        PET_TRAINING_MAX_LEVEL
+    )
+        return;
+
+    const cost=
+        computeTrainCost(
+            pet.trainingLevel || 1
+        );
+
+    if(
+        getBank(planetId)<cost
+    )
+        return;
+
+    addToBank(
+        planetId,
+        -cost
+    );
+
+    pet.trainingLevel=
+        (pet.trainingLevel || 1)+1;
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pet trained to level "+
+        pet.trainingLevel+"!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Breadth-first hop distance over the ROUTES graph — used to
+ * work out which planets a given training level can actually
+ * reach, and to scale mission duration/reward by distance.
+ */
+function computeHopDistance(fromId,toId){
+
+    if(fromId===toId)
+        return 0;
+
+    const visited=
+        new Set([fromId]);
+
+    let frontier=
+        [fromId];
+
+    let hops=0;
+
+    while(frontier.length){
+
+        hops++;
+
+        const next=[];
+
+        for(
+            const planetId of
+            frontier
+        ){
+
+            for(
+                const route of
+                ROUTES
+            ){
+
+                let neighbor=
+                    null;
+
+                if(
+                    route[0]===
+                    planetId
+                ){
+
+                    neighbor=
+                        route[1];
+
+                }else if(
+                    route[1]===
+                    planetId
+                ){
+
+                    neighbor=
+                        route[0];
+
+                }
+
+                if(
+                    neighbor &&
+                    !visited.has(
+                        neighbor
+                    )
+                ){
+
+                    if(
+                        neighbor===toId
+                    ){
+
+                        return hops;
+
+                    }
+
+                    visited.add(
+                        neighbor
+                    );
+
+                    next.push(
+                        neighbor
+                    );
+
+                }
+
+            }
+
+        }
+
+        frontier=next;
+
+    }
+
+    return Infinity;
+
+}
+
+function getReachablePlanets(homeId,level){
+
+    const maxHops=
+        getTrainingInfo(level).maxHops;
+
+    return PLANETS.filter(
+        planet =>
+            computeHopDistance(
+                homeId,
+                planet.id
+            )<=maxHops
+    );
+
+}
+
+function computeMissionDuration(hops){
+
+    return 45+hops*45;
+
+}
+
+function computeMissionYield(hops){
+
+    return 2+hops*3;
+
+}
+
+function getMissions(planetId){
+
+    return(
+        (
+            planetSave.missions ||
+            {}
+        )[planetId] || []
+    );
+
+}
+
+/*
+ * Sending a pet always needs a SPARE ship — at least one other
+ * ship has to stay docked for the player to actually fly. The
+ * spare sent is whichever docked ship isn't needed to satisfy
+ * that minimum, chosen arbitrarily (lowest score first, so the
+ * ship you'd most want to keep for yourself is the one left
+ * behind).
+ */
+function sendPetOnMission(planetId,petId,destinationId){
+
+    const pets=
+        getPets(planetId);
+
+    const pet=
+        pets.find(
+            p => p.id===petId
+        );
+
+    if(
+        !pet ||
+        pet.energy<=0
+    )
+        return;
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    if(ships.length<2)
+        return;
+
+    const hops=
+        computeHopDistance(
+            planetId,
+            destinationId
+        );
+
+    const range=
+        getTrainingInfo(
+            pet.trainingLevel || 1
+        ).maxHops;
+
+    if(hops>range)
+        return;
+
+    const sorted=
+        [...ships].sort(
+            (a,b) =>
+                a.score-b.score
+        );
+
+    const spareShip=
+        sorted[0];
+
+    const shipIndex=
+        ships.findIndex(
+            s => s.id===spareShip.id
+        );
+
+    if(shipIndex!==-1){
+
+        ships.splice(
+            shipIndex,
+            1
+        );
+
+    }
+
+    const petIndex=
+        pets.findIndex(
+            p => p.id===petId
+        );
+
+    if(petIndex!==-1){
+
+        pets.splice(
+            petIndex,
+            1
+        );
+
+    }
+
+    if(!planetSave.missions){
+
+        planetSave.missions={};
+
+    }
+
+    if(
+        !planetSave.missions[
+            planetId
+        ]
+    ){
+
+        planetSave.missions[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.missions[
+        planetId
+    ].push({
+        ship:spareShip,
+        pet:pet,
+        destinationId:destinationId,
+        hops:hops,
+        startedAt:Date.now(),
+        durationSeconds:
+            computeMissionDuration(hops)
+    });
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pet sent to "+
+        (
+            getPlanet(destinationId) ||
+            {name:destinationId}
+        ).name+"!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function resolveMissions(planetId){
+
+    const missions=
+        getMissions(planetId);
+
+    if(!missions.length)
+        return;
+
+    const now=
+        Date.now();
+
+    const stillFlying=[];
+
+    let changed=
+        false;
+
+    for(
+        const mission of
+        missions
+    ){
+
+        const readyAt=
+            mission.startedAt+
+            mission.durationSeconds*1000;
+
+        if(now<readyAt){
+
+            stillFlying.push(
+                mission
+            );
+
+            continue;
+
+        }
+
+        changed=true;
+
+        ensurePlanetArray(
+            planetId
+        );
+
+        planetSave.ships[
+            planetId
+        ].push(
+            mission.ship
+        );
+
+        const survived=
+            Math.random()<
+            getTrainingInfo(
+                mission.pet.trainingLevel ||
+                1
+            ).survivalChance;
+
+        if(survived){
+
+            if(!planetSave.pets){
+
+                planetSave.pets={};
+
+            }
+
+            if(
+                !planetSave.pets[
+                    planetId
+                ]
+            ){
+
+                planetSave.pets[
+                    planetId
+                ]=[];
+
+            }
+
+            planetSave.pets[
+                planetId
+            ].push(
+                mission.pet
+            );
+
+            const destinationSpecial=
+                getPlanetSpecial(
+                    mission.destinationId
+                );
+
+            const material=
+                destinationSpecial
+                ?getMaterialForSpecialKind(
+                    destinationSpecial.kind
+                )
+                :null;
+
+            if(material){
+
+                addToMaterialBank(
+                    planetId,
+                    material.id,
+                    computeMissionYield(
+                        mission.hops
+                    )
+                );
+
+            }
+
+            showShipToast(
+                "🐾 Pilot returned safely from "+
+                (
+                    getPlanet(
+                        mission.destinationId
+                    ) || {name:mission.destinationId}
+                ).name+
+                (
+                    material
+                    ?" with "+
+                     computeMissionYield(
+                        mission.hops
+                     )+" "+
+                     material.name
+                    :""
+                )+"!"
+            );
+
+        }else{
+
+            showShipToast(
+                "💔 The pilot didn't make it back "+
+                "from "+
+                (
+                    getPlanet(
+                        mission.destinationId
+                    ) || {name:mission.destinationId}
+                ).name+
+                " — the ship returned alone."
+            );
+
+        }
+
+    }
+
+    if(changed){
+
+        if(!planetSave.missions){
+
+            planetSave.missions={};
+
+        }
+
+        planetSave.missions[
+            planetId
+        ]=stillFlying;
+
+        savePlanetProgress();
+
+    }
+
+}
+
+function resolveAllMissions(){
+
+    for(
+        const planet of PLANETS
+    ){
+
+        resolveMissions(
+            planet.id
+        );
+
+    }
+
+}
+
 
 function getBuildQueue(planetId){
 
@@ -5417,6 +6015,8 @@ function renderPlanetMap(){
 
     resolveAllBuildQueues();
 
+    resolveAllMissions();
+
     /*
      * Wrapped defensively: if any single planet's data causes
      * a problem while building the map, this ensures it can't
@@ -6500,6 +7100,13 @@ let expandedEquipShipId=null;
  */
 let expandedPerkShipId=null;
 
+/*
+ * Which pet (if any) currently has its mission-destination
+ * picker expanded — same one-at-a-time pattern as the equip
+ * and perk pickers.
+ */
+let expandedMissionPetId=null;
+
 function openPlanetDetail(id){
 
     initAudio();
@@ -6587,6 +7194,8 @@ function renderPlanetDetail(id){
         return;
 
     resolvePetEnergy(id);
+
+    resolveMissions(id);
 
     const ships=
         id==="earth"
@@ -7231,6 +7840,15 @@ function renderPlanetDetail(id){
     const canAffordPet=
         bank>=petCost;
 
+    const hasPilotTraining=
+        hasStructure(
+            id,
+            "pilot-training"
+        );
+
+    const shipsHereCount=
+        ships.length;
+
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">🐾 Pets</div>'+
@@ -7261,11 +7879,16 @@ function renderPlanetDetail(id){
                     ?'#ffd76b'
                     :'#8dffb0';
 
+                const level=
+                    pet.trainingLevel || 1;
+
                 html+=
-                    '<div class="selected-shape-info">'+
+                    '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
+                    '<div style="display:flex;justify-content:space-between;">'+
                     '<span>🐾 Energy: '+
                     '<span style="color:'+energyColor+';">'+
-                    Math.round(pet.energy)+'%</span></span>'+
+                    Math.round(pet.energy)+'%</span>'+
+                    ' · Lv.'+level+'</span>'+
                     '<button class="control-btn" style="width:auto;'+
                     'padding:7px 10px;" data-action="feed-pet" '+
                     'data-pet="'+pet.id+'" '+
@@ -7276,6 +7899,172 @@ function renderPlanetDetail(id){
                         :''
                     )+
                     '>Feed ('+PET_FOOD_COST+' 🪙)</button>'+
+                    '</div>';
+
+                if(hasPilotTraining){
+
+                    const trainCost=
+                        computeTrainCost(level);
+
+                    const maxed=
+                        level>=
+                        PET_TRAINING_MAX_LEVEL;
+
+                    html+=
+                        '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+                        '<button class="control-btn" style="width:auto;'+
+                        'padding:7px 10px;" data-action="train-pet" '+
+                        'data-pet="'+pet.id+'" '+
+                        (
+                            maxed ||
+                            bank<trainCost
+                            ?'disabled'
+                            :''
+                        )+
+                        '>'+
+                        (
+                            maxed
+                            ?'Max level'
+                            :'Train ('+trainCost+' 🪙)'
+                        )+
+                        '</button>'+
+                        '<button class="control-btn" style="width:auto;'+
+                        'padding:7px 10px;" data-action="toggle-mission" '+
+                        'data-pet="'+pet.id+'" '+
+                        (
+                            pet.energy<=0 ||
+                            shipsHereCount<2
+                            ?'disabled'
+                            :''
+                        )+
+                        '>Send on Mission ▾</button>'+
+                        '</div>';
+
+                    if(
+                        shipsHereCount<2
+                    ){
+
+                        html+=
+                            '<span style="font-size:9px;color:#5c7ba0;">'+
+                            'Needs at least one other ship docked '+
+                            'here to spare one for the mission.'+
+                            '</span>';
+
+                    }
+
+                    if(
+                        expandedMissionPetId===
+                        pet.id
+                    ){
+
+                        const reachable=
+                            getReachablePlanets(
+                                id,
+                                level
+                            ).filter(
+                                p => p.id!==id
+                            );
+
+                        const localYield=
+                            computeMissionYield(0);
+
+                        const localDuration=
+                            computeMissionDuration(0);
+
+                        html+=
+                            '<div style="display:flex;flex-direction:column;gap:6px;'+
+                            'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                            '<button class="shape-btn" style="width:100%;'+
+                            'text-align:left;padding:8px 10px;font-size:11px;" '+
+                            'data-action="send-mission" data-pet="'+pet.id+'" '+
+                            'data-destination="'+id+'">'+
+                            '📍 Stay local ('+localDuration+
+                            's, ~'+localYield+' units)'+
+                            '</button>';
+
+                        reachable.forEach(
+                            destPlanet=>{
+
+                                const destHops=
+                                    computeHopDistance(
+                                        id,
+                                        destPlanet.id
+                                    );
+
+                                const destYield=
+                                    computeMissionYield(
+                                        destHops
+                                    );
+
+                                const destDuration=
+                                    computeMissionDuration(
+                                        destHops
+                                    );
+
+                                html+=
+                                    '<button class="shape-btn" style="width:100%;'+
+                                    'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                    'data-action="send-mission" data-pet="'+
+                                    pet.id+'" data-destination="'+
+                                    destPlanet.id+'">'+
+                                    destPlanet.icon+' '+destPlanet.name+
+                                    ' ('+destDuration+'s, ~'+destYield+
+                                    ' units)'+
+                                    '</button>';
+
+                            }
+                        );
+
+                        html+=
+                            '<span style="font-size:9px;color:#5c7ba0;">'+
+                            'Survival chance at this level: '+
+                            Math.round(
+                                getTrainingInfo(level).survivalChance*100
+                            )+'%'+
+                            '</span>'+
+                            '</div>';
+
+                    }
+
+                }
+
+                html+=
+                    '</div>';
+
+            }
+        );
+
+    }
+
+    const missionsHere=
+        getMissions(id);
+
+    if(missionsHere.length){
+
+        missionsHere.forEach(
+            mission=>{
+
+                const remaining=
+                    Math.max(
+                        0,
+                        Math.ceil(
+                            (
+                                mission.startedAt+
+                                mission.durationSeconds*1000-
+                                Date.now()
+                            )/1000
+                        )
+                    );
+
+                html+=
+                    '<div class="metric-note">'+
+                    '🐾✈ Pilot flying to '+
+                    (
+                        getPlanet(
+                            mission.destinationId
+                        ) || {name:mission.destinationId}
+                    ).name+
+                    ' — '+remaining+'s left'+
                     '</div>';
 
             }
@@ -7495,6 +8284,125 @@ function renderPlanetDetail(id){
                 :'disabled'
             )+
             '>Build Factory ('+
+            structure.buildDurationSeconds+'s)</button>';
+
+    }
+
+    html+=
+        '</div>';
+
+
+    /* -------- Pilot Training -------- */
+
+    const pilotTraining=
+        getStructure(
+            id,
+            "pilot-training"
+        );
+
+    const pilotTrainingBuild=
+        planetQueue.find(
+            b =>
+                b.type===
+                "structure" &&
+                b.structureId===
+                "pilot-training"
+        );
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        STRUCTURES["pilot-training"].icon+
+        ' Pilot Training'+
+        '</div>';
+
+    if(pilotTraining){
+
+        html+=
+            '<div class="metric-note">'+
+            'Built here — train and send pets on missions from '+
+            'the Pets section above.'+
+            '</div>';
+
+    }else if(pilotTrainingBuild){
+
+        html+=
+            '<div class="metric-note">'+
+            '🏗 Under construction — '+
+            formatRemaining(pilotTrainingBuild)+
+            '</div>';
+
+    }else{
+
+        const structure=
+            STRUCTURES["pilot-training"];
+
+        html+=
+            '<div class="metric-callout">'+
+            structure.description+
+            '</div>'+
+            '<div class="metric-note">'+
+            '🐾 Working pet stationed here: '+
+            (
+                workingPetsHere>0
+                ?'Yes ('+workingPetsHere+')'
+                :'None — required to build (a pet with 0 '+
+                 'energy doesn\'t count until fed)'
+            )+
+            '</div>';
+
+        structure.buildMaterials.forEach(
+            req=>{
+
+                const info=
+                    MATERIALS[
+                        req.materialId
+                    ] ||
+                    MATERIALS["aether-dust"];
+
+                const have=
+                    materialBank[
+                        req.materialId
+                    ] || 0;
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>'+info.icon+' '+info.name+'</span>'+
+                    '<span style="opacity:.7;font-size:10px;'+
+                    'color:'+
+                    (
+                        have>=req.amount
+                        ?'#8dffb0'
+                        :'#ff8d8d'
+                    )+
+                    ';">'+have+'/'+req.amount+
+                    '</span>'+
+                    '</div>';
+
+            }
+        );
+
+        const canBuildPilotTraining=
+            workingPetsHere>0 &&
+            structure.buildMaterials.every(
+                req =>
+                    (
+                        materialBank[
+                            req.materialId
+                        ] || 0
+                    )>=req.amount
+            );
+
+        html+=
+            '<button class="big-button secondary-button" '+
+            'style="margin-top:10px;" data-action="build-structure" '+
+            'data-structure="pilot-training" '+
+            (
+                canBuildPilotTraining
+                ?''
+                :'disabled'
+            )+
+            '>Build ('+
             structure.buildDurationSeconds+'s)</button>';
 
     }
@@ -7765,6 +8673,62 @@ document
             feedPet(
                 planetDetailId,
                 petId
+            );
+
+        }else if(
+            action==="train-pet"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            trainPet(
+                planetDetailId,
+                petId
+            );
+
+        }else if(
+            action==="toggle-mission"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            expandedMissionPetId=
+                expandedMissionPetId===
+                petId
+                ?null
+                :petId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="send-mission"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            const destinationId=
+                target.getAttribute(
+                    "data-destination"
+                );
+
+            expandedMissionPetId=
+                null;
+
+            sendPetOnMission(
+                planetDetailId,
+                petId,
+                destinationId
             );
 
         }
