@@ -3136,11 +3136,6 @@ function loadPlanetSave(){
 
                         }
 
-                        ship.materials=
-                            clampMaterials(
-                                ship.materials
-                            );
-
                         if(
                             ship.perk===
                             undefined
@@ -3149,6 +3144,65 @@ function loadPlanetSave(){
                             ship.perk=null;
 
                         }
+
+                        if(
+                            typeof ship.materialCapBonus!==
+                            "number"
+                        ){
+
+                            ship.materialCapBonus=0;
+
+                        }
+
+                        if(
+                            !ship.hasDualPerk
+                        ){
+
+                            ship.hasDualPerk=false;
+
+                        }
+
+                        if(
+                            ship.perk2===
+                            undefined
+                        ){
+
+                            ship.perk2=null;
+
+                        }
+
+                        if(
+                            typeof ship.cargoPetCapacity!==
+                            "number"
+                        ){
+
+                            ship.cargoPetCapacity=1;
+
+                        }
+
+                        if(
+                            !Array.isArray(
+                                ship.cargoPets
+                            )
+                        ){
+
+                            ship.cargoPets=[];
+
+                        }
+
+                        /*
+                         * Re-clamp using THIS ship's actual cap
+                         * (base + Cargo Hold bonus if any) — a
+                         * plain clampMaterials() call here would
+                         * silently strip an upgraded ship back
+                         * down to the base cap on every load.
+                         */
+                        ship.materials=
+                            clampMaterials(
+                                ship.materials,
+                                MATERIAL_CAP+
+                                ship.materialCapBonus
+                            );
 
                     }
 
@@ -4184,6 +4238,22 @@ const STRUCTURES={
         ],
         requiresPet:true,
         buildDurationSeconds:75
+    },
+
+    "bio-dome":{
+        id:"bio-dome",
+        name:"Bio Dome",
+        icon:"🏝",
+        description:
+            "Lets this planet house a pet that didn't originate "+
+            "here. Without a Bio Dome at the destination, a ship "+
+            "carrying a pet in cargo has nowhere to drop it off.",
+        buildMaterials:[
+            {materialId:"nova-dust",amount:3},
+            {materialId:"mirror-alloy",amount:3}
+        ],
+        requiresPet:true,
+        buildDurationSeconds:60
     }
 
 };
@@ -5323,6 +5393,22 @@ const STRUCTURE_UPGRADES={
             buyCost:30,
             effectType:"shipToggle",
             toggleId:"dual-perk"
+        },
+        {
+            id:"ship-factory-pet-bay",
+            structureId:"ship-factory",
+            name:"Pet Bay Expansion",
+            icon:"🐾",
+            description:
+                "Adds an optional toggle when building a ship "+
+                "here: room for 2 pets in cargo instead of 1.",
+            unlockMaterials:[
+                {materialId:"mirror-alloy",amount:5},
+                {materialId:"solar-plating",amount:5}
+            ],
+            buyCost:30,
+            effectType:"shipToggle",
+            toggleId:"pet-bay"
         }
     ]
 
@@ -5703,7 +5789,9 @@ function createShip(
     perk=null,
     materialCapBonus=0,
     hasDualPerk=false,
-    perk2=null
+    perk2=null,
+    cargoPetCapacity=1,
+    cargoPets=null
 ){
 
     ensurePlanetArray(
@@ -5777,7 +5865,28 @@ function createShip(
             !!hasDualPerk,
 
         perk2:
-            perk2 || null
+            perk2 || null,
+
+        /*
+         * Pet Bay Expansion: cargoPetCapacity is baked in at
+         * build time (1 by default, 2 with the upgrade toggled);
+         * cargoPets is the actual pet(s) currently loaded,
+         * riding along through flight and lost with the ship if
+         * it doesn't survive — same real stakes as a Pilot
+         * Training mission, just carried differently.
+         */
+        cargoPetCapacity:
+            Math.max(
+                1,
+                Math.floor(
+                    cargoPetCapacity
+                ) || 1
+            ),
+
+        cargoPets:
+            Array.isArray(cargoPets)
+            ?cargoPets
+            :[]
 
     };
 
@@ -6043,6 +6152,38 @@ function resolveRunEndMaterials(){
     );
 
     runMaterials={};
+
+}
+
+/*
+ * Cargo pets are never protected by anything (not even the
+ * Return Capsule, which only covers coins and materials) — a
+ * lost ship always loses whatever pets it was carrying too,
+ * genuine stakes for transporting them at all.
+ */
+function resolveRunEndCargoPets(){
+
+    if(!currentShipCargoPets.length){
+
+        currentShipCargoPets=[];
+
+        return;
+
+    }
+
+    const count=
+        currentShipCargoPets.length;
+
+    floatingText(
+        count===1
+        ?"LOST THE PET IN CARGO"
+        :"LOST "+count+" PETS IN CARGO",
+        W/2,
+        H*.54,
+        "#ff8d8d"
+    );
+
+    currentShipCargoPets=[];
 
 }
 
@@ -7153,6 +7294,164 @@ function equipPerkAt(planetId,shipId,perkId,slot){
 }
 
 
+/*
+ * Loading a pet onto a docked ship's cargo — any pet at the
+ * current planet, any role, as long as there's room. Doesn't
+ * need a Bio Dome to LOAD (leaving is always fine); only
+ * unloading somewhere new needs one.
+ */
+function loadPetToCargo(planetId,shipId,petId){
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(!ship)
+        return;
+
+    if(
+        !Array.isArray(
+            ship.cargoPets
+        )
+    ){
+
+        ship.cargoPets=[];
+
+    }
+
+    if(
+        ship.cargoPets.length>=
+        (ship.cargoPetCapacity || 1)
+    ){
+
+        return;
+
+    }
+
+    const pets=
+        getPets(planetId);
+
+    const petIndex=
+        pets.findIndex(
+            p => p.id===petId
+        );
+
+    if(petIndex===-1)
+        return;
+
+    const pet=
+        pets[petIndex];
+
+    pets.splice(
+        petIndex,
+        1
+    );
+
+    ship.cargoPets.push(
+        pet
+    );
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pet loaded into cargo!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Unloading only works if THIS planet has a Bio Dome — that's
+ * the whole point of the structure, giving a planet the
+ * infrastructure to actually house a pet that didn't
+ * originate there.
+ */
+function unloadPetFromCargo(planetId,shipId,petId){
+
+    if(
+        !hasStructure(
+            planetId,
+            "bio-dome"
+        )
+    )
+        return;
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !Array.isArray(
+            ship.cargoPets
+        )
+    )
+        return;
+
+    const petIndex=
+        ship.cargoPets.findIndex(
+            p => p.id===petId
+        );
+
+    if(petIndex===-1)
+        return;
+
+    const pet=
+        ship.cargoPets[petIndex];
+
+    ship.cargoPets.splice(
+        petIndex,
+        1
+    );
+
+    if(!planetSave.pets){
+
+        planetSave.pets={};
+
+    }
+
+    if(
+        !planetSave.pets[
+            planetId
+        ]
+    ){
+
+        planetSave.pets[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.pets[
+        planetId
+    ].push(pet);
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pet unloaded here!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+
 function removeShip(
     planetId,
     shipId
@@ -7666,6 +7965,10 @@ function resolveBuildQueue(planetId){
                     ?10
                     :0,
                     !!build.dualPerk,
+                    null,
+                    build.petBay
+                    ?2
+                    :1,
                     null
                 );
 
@@ -7677,7 +7980,8 @@ function resolveBuildQueue(planetId){
                     ).name+
                     (
                         build.cargoHold ||
-                        build.dualPerk
+                        build.dualPerk ||
+                        build.petBay
                         ?" (upgraded)"
                         :""
                     )+"!"
@@ -7850,6 +8154,14 @@ function queueShipBuild(planetId,options){
             "dual-perk"
         );
 
+    const usePetBay=
+        !!options.petBay &&
+        hasPurchasedToggleUpgrade(
+            planetId,
+            "ship-factory",
+            "pet-bay"
+        );
+
     let cost=
         computeShipBuildCost(
             planetId
@@ -7860,6 +8172,9 @@ function queueShipBuild(planetId,options){
 
     if(useDualPerk)
         cost+=5;
+
+    if(usePetBay)
+        cost+=4;
 
     if(
         getBank(planetId)<cost
@@ -7899,7 +8214,8 @@ function queueShipBuild(planetId,options){
                 planetId
             ),
         cargoHold:useCargoHold,
-        dualPerk:useDualPerk
+        dualPerk:useDualPerk,
+        petBay:usePetBay
     });
 
     savePlanetProgress();
@@ -8492,6 +8808,13 @@ let expandedPerk2ShipId=null;
  * sub-list replaces the pet list for that same ship.
  */
 let expandedShipPilotId=null;
+
+/*
+ * Which ship's Cargo dropdown (for Bio Dome pet transport) is
+ * currently open — same one-at-a-time pattern as everything
+ * else on the ship card.
+ */
+let expandedShipCargoId=null;
 
 /*
  * Which optional build toggles are currently checked for the
@@ -9469,6 +9792,141 @@ function renderPlanetDetail(id){
                         })()
                         :''
                     )+
+                    (function(){
+
+                        const cargoCap=
+                            ship.cargoPetCapacity || 1;
+
+                        const cargoPets=
+                            Array.isArray(
+                                ship.cargoPets
+                            )
+                            ?ship.cargoPets
+                            :[];
+
+                        const cargoOpen=
+                            expandedShipCargoId===
+                            ship.id;
+
+                        const availableToLoad=
+                            getPets(id).filter(
+                                p =>
+                                    cargoPets.length<
+                                    cargoCap
+                            );
+
+                        const hasBioDomeHere=
+                            hasStructure(
+                                id,
+                                "bio-dome"
+                            );
+
+                        let cargoInner=
+                            '<button class="control-btn" data-action="toggle-ship-cargo" '+
+                            'data-ship="'+ship.id+'" style="width:auto;padding:7px 10px;'+
+                            'align-self:flex-start;display:flex;align-items:center;gap:6px;">'+
+                            '<span>Cargo: '+
+                            (
+                                cargoPets.length
+                                ?cargoPets.length+'/'+cargoCap+' 🐾'
+                                :'Empty ('+cargoCap+' slot'+
+                                 (cargoCap>1 ? 's' : '')+')'
+                            )+
+                            '</span>'+
+                            '<span style="opacity:.6;">'+
+                            (cargoOpen ? "▲" : "▼")+
+                            '</span></button>';
+
+                        if(cargoOpen){
+
+                            cargoInner+=
+                                '<div style="display:flex;flex-direction:column;gap:6px;'+
+                                'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">';
+
+                            if(cargoPets.length){
+
+                                cargoInner+=
+                                    '<span style="font-size:9px;color:#8fa7c7;">'+
+                                    'Carrying:</span>';
+
+                                cargoPets.forEach(
+                                    pet=>{
+
+                                        cargoInner+=
+                                            '<button class="shape-btn" style="width:100%;'+
+                                            'display:flex;align-items:center;justify-content:space-between;'+
+                                            'padding:8px 10px;font-size:11px;" '+
+                                            'data-action="unload-pet" data-ship="'+
+                                            ship.id+'" data-pet="'+pet.id+'" '+
+                                            (
+                                                hasBioDomeHere
+                                                ?''
+                                                :'disabled'
+                                            )+
+                                            '>🐾 Energy '+Math.round(pet.energy)+
+                                            '% <span style="opacity:.6;font-size:9px;">'+
+                                            (
+                                                hasBioDomeHere
+                                                ?'Unload here'
+                                                :'Needs a Bio Dome here'
+                                            )+
+                                            '</span></button>';
+
+                                    }
+                                );
+
+                            }
+
+                            if(
+                                cargoPets.length<
+                                cargoCap
+                            ){
+
+                                if(availableToLoad.length){
+
+                                    cargoInner+=
+                                        '<span style="font-size:9px;color:#8fa7c7;">'+
+                                        'Load from here:</span>';
+
+                                    availableToLoad.forEach(
+                                        pet=>{
+
+                                            cargoInner+=
+                                                '<button class="shape-btn" style="width:100%;'+
+                                                'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                                'data-action="load-pet" data-ship="'+
+                                                ship.id+'" data-pet="'+pet.id+'">'+
+                                                '🐾 Energy '+Math.round(pet.energy)+
+                                                '% · '+
+                                                (
+                                                    (pet.role || "builder")===
+                                                    "pilot"
+                                                    ?"Pilot"
+                                                    :"Builder"
+                                                )+
+                                                '</button>';
+
+                                        }
+                                    );
+
+                                }else{
+
+                                    cargoInner+=
+                                        '<span style="font-size:10px;color:#5c7ba0;">'+
+                                        'No pets stationed here to load.</span>';
+
+                                }
+
+                            }
+
+                            cargoInner+=
+                                '</div>';
+
+                        }
+
+                        return cargoInner;
+
+                    })()+
                     '</div>';
 
             }
@@ -10303,6 +10761,148 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+
+    /* -------- Bio Dome -------- */
+
+    const bioDome=
+        getStructure(
+            id,
+            "bio-dome"
+        );
+
+    const bioDomeBuild=
+        planetQueue.find(
+            b =>
+                b.type===
+                "structure" &&
+                b.structureId===
+                "bio-dome"
+        );
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        STRUCTURES["bio-dome"].icon+
+        ' Bio Dome'+
+        '</div>';
+
+    if(bioDome){
+
+        html+=
+            '<div class="metric-note">'+
+            'Built here — ships can unload cargo pets at this '+
+            'planet from their Cargo section above.'+
+            '</div>';
+
+    }else if(bioDomeBuild){
+
+        html+=
+            '<div class="metric-note">'+
+            '🏗 Under construction — '+
+            formatRemaining(bioDomeBuild)+
+            '</div>';
+
+    }else{
+
+        const structure=
+            STRUCTURES["bio-dome"];
+
+        const unlocked=
+            isStructureUnlocked(
+                id,
+                "bio-dome"
+            );
+
+        html+=
+            '<div class="metric-callout">'+
+            structure.description+
+            '</div>';
+
+        if(!unlocked){
+
+            html+=
+                '<div class="metric-note">'+
+                'Sell these materials in Planet Stock above to '+
+                'unlock this structure for purchase — a one-time '+
+                'unlock, not spent when you actually build it.'+
+                '</div>';
+
+            structure.buildMaterials.forEach(
+                req=>{
+
+                    const info=
+                        MATERIALS[
+                            req.materialId
+                        ] ||
+                        MATERIALS["aether-dust"];
+
+                    const sold=
+                        getSoldProgress(
+                            id,
+                            req.materialId
+                        );
+
+                    html+=
+                        '<div class="selected-shape-info">'+
+                        '<span>'+info.icon+' '+info.name+
+                        ' sold</span>'+
+                        '<span style="opacity:.7;font-size:10px;'+
+                        'color:'+
+                        (
+                            sold>=req.amount
+                            ?'#8dffb0'
+                            :'#ff8d8d'
+                        )+
+                        ';">'+
+                        Math.min(sold,req.amount)+'/'+
+                        req.amount+
+                        '</span>'+
+                        '</div>';
+
+                }
+            );
+
+        }else{
+
+            const structureCost=
+                computeStructureBuildCost(
+                    "bio-dome"
+                );
+
+            const canBuildBioDome=
+                workingPetsHere>0 &&
+                bank>=structureCost;
+
+            html+=
+                '<div class="metric-note">'+
+                '🐾 Working pet stationed here: '+
+                (
+                    workingPetsHere>0
+                    ?'Yes ('+workingPetsHere+')'
+                    :'None — required to build (a pet '+
+                     'with 0 energy doesn\'t count until fed)'
+                )+
+                '</div>';
+
+            html+=
+                '<button class="big-button secondary-button" '+
+                'style="margin-top:10px;" data-action="build-structure" '+
+                'data-structure="bio-dome" '+
+                (
+                    canBuildBioDome
+                    ?''
+                    :'disabled'
+                )+
+                '>Build ('+structureCost+' 🪙, '+
+                structure.buildDurationSeconds+'s)</button>';
+
+        }
+
+    }
+
+    html+=
+        '</div>';
+
     container.innerHTML=
         html;
 
@@ -10525,6 +11125,50 @@ document
                 shipId,
                 perkId || null,
                 2
+            );
+
+        }else if(
+            action==="toggle-ship-cargo"
+        ){
+
+            expandedShipCargoId=
+                expandedShipCargoId===
+                shipId
+                ?null
+                :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="load-pet"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            loadPetToCargo(
+                planetDetailId,
+                shipId,
+                petId
+            );
+
+        }else if(
+            action==="unload-pet"
+        ){
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            unloadPetFromCargo(
+                planetDetailId,
+                shipId,
+                petId
             );
 
         }else if(
@@ -14522,6 +15166,9 @@ function updateCurrentShipCoins(){
             ?currentShipPerk2
             :null;
 
+        ship.cargoPets=
+            currentShipCargoPets;
+
         savePlanetProgress();
 
     }
@@ -14679,6 +15326,8 @@ function checkPlayerCollisions(){
                  * and if it doesn't eject, both resolve as lost
                  * together right here.
                  */
+                resolveRunEndCargoPets();
+
                 if(
                     currentShipEquipment===
                     "return-capsule" &&
@@ -19908,7 +20557,9 @@ function landAtCurrentPlanet(){
                 currentShipPerk,
                 currentShipMaterialCapBonus,
                 currentShipHasDualPerk,
-                currentShipPerk2
+                currentShipPerk2,
+                currentShipCargoPetCapacity,
+                currentShipCargoPets
             );
 
         currentShipId=
@@ -22080,6 +22731,15 @@ let currentShipMaterialCapBonus=0;
 let currentShipHasDualPerk=false;
 let currentShipPerk2=null;
 
+/*
+ * Pets riding along in cargo for this flight — a snapshot taken
+ * at launch, since loading/unloading only ever happens while
+ * docked. Lost entirely if the ship doesn't survive; there's no
+ * capsule protection for cargo pets, unlike coins/materials.
+ */
+let currentShipCargoPets=[];
+let currentShipCargoPetCapacity=1;
+
 let beamArmed=false;
 
 /*
@@ -22195,6 +22855,10 @@ function startGame(){
 
     let launchPerk2=null;
 
+    let launchCargoPets=[];
+
+    let launchCargoPetCapacity=1;
+
     let launchWave=1;
 
     let launchLives=3;
@@ -22271,6 +22935,21 @@ function startGame(){
             launchPerk2=
                 earthChoice.perk2 ||
                 null;
+
+            launchCargoPets=
+                Array.isArray(
+                    earthChoice.cargoPets
+                )
+                ?earthChoice.cargoPets
+                :[];
+
+            launchCargoPetCapacity=
+                Math.max(
+                    1,
+                    Math.floor(
+                        earthChoice.cargoPetCapacity
+                    ) || 1
+                );
 
             launchWave=
                 Number(
@@ -22401,6 +23080,21 @@ function startGame(){
             ship.perk2 ||
             null;
 
+        launchCargoPets=
+            Array.isArray(
+                ship.cargoPets
+            )
+            ?ship.cargoPets
+            :[];
+
+        launchCargoPetCapacity=
+            Math.max(
+                1,
+                Math.floor(
+                    ship.cargoPetCapacity
+                ) || 1
+            );
+
         launchWave=
             Number(
                 ship.wave
@@ -22460,6 +23154,12 @@ function startGame(){
 
     currentShipPerk2=
         launchPerk2;
+
+    currentShipCargoPets=
+        launchCargoPets;
+
+    currentShipCargoPetCapacity=
+        launchCargoPetCapacity;
 
     combo=1;
 
