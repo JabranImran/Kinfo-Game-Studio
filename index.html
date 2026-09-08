@@ -2949,7 +2949,10 @@ function defaultPlanetSave(){
                 {
                     id:"pet_earth_starter",
                     energy:100,
-                    trainingLevel:1,
+                    role:"builder",
+                    rangeLevel:1,
+                    enduranceLevel:1,
+                    survivalLevel:1,
                     lastEnergyCheck:Date.now()
                 }
             ]
@@ -3350,9 +3353,10 @@ function loadPlanetSave(){
 
                 /*
                  * Every existing pet, wherever it is, gets a
-                 * trainingLevel if it doesn't already have one —
-                 * this is what Pilot Training reads to decide
-                 * mission range and survival odds.
+                 * role and the three pilot stats if it doesn't
+                 * already have them — old single-trainingLevel
+                 * pets become level-1 across the board, which is
+                 * the same effective starting point they had.
                  */
                 for(
                     const petPlanetId2 in
@@ -3367,13 +3371,48 @@ function loadPlanetSave(){
                         pet=>{
 
                             if(
-                                typeof pet.trainingLevel!==
+                                !pet.role
+                            ){
+
+                                pet.role=
+                                    "builder";
+
+                            }
+
+                            if(
+                                typeof pet.rangeLevel!==
                                 "number"
                             ){
 
-                                pet.trainingLevel=1;
+                                pet.rangeLevel=
+                                    pet.trainingLevel ||
+                                    1;
 
                             }
+
+                            if(
+                                typeof pet.enduranceLevel!==
+                                "number"
+                            ){
+
+                                pet.enduranceLevel=
+                                    pet.trainingLevel ||
+                                    1;
+
+                            }
+
+                            if(
+                                typeof pet.survivalLevel!==
+                                "number"
+                            ){
+
+                                pet.survivalLevel=
+                                    pet.trainingLevel ||
+                                    1;
+
+                            }
+
+                            delete pet.trainingLevel;
 
                             /*
                              * Defaults to "now" rather than
@@ -3806,7 +3845,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3818,7 +3857,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3831,7 +3870,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:2,
+        cost:25,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins AND "+
@@ -3845,7 +3884,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3857,7 +3896,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3869,7 +3908,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3881,7 +3920,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:4,
+        cost:45,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3894,7 +3933,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:4,
+        cost:45,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3906,7 +3945,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:6,
+        cost:60,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -3955,8 +3994,8 @@ const PERKS={
         name:"Coin Magnet Charm",
         icon:"🧲",
         unlockMaterial:"volatile-alloy",
-        unlockAmount:2,
-        buyCost:8,
+        unlockAmount:5,
+        buyCost:80,
         effectType:"coinMultiplier",
         effectValue:.25,
         description:
@@ -3970,8 +4009,8 @@ const PERKS={
         name:"Refinery Core",
         icon:"⚙",
         unlockMaterial:"magnetic-resin",
-        unlockAmount:2,
-        buyCost:8,
+        unlockAmount:5,
+        buyCost:80,
         effectType:"materialDropBoost",
         effectValue:.4,
         description:
@@ -3987,7 +4026,7 @@ const PERKS={
         icon:"🔋",
         unlockMaterial:"incinerator-beam",
         unlockAmount:3,
-        buyCost:10,
+        buyCost:100,
         effectType:"chargeRateBoost",
         effectValue:.2,
         description:
@@ -4087,9 +4126,9 @@ const STRUCTURES={
             "pet can die out there — and always needs at least "+
             "one other ship left docked for you to fly yourself.",
         buildMaterials:[
-            {materialId:"solar-plating",amount:1},
-            {materialId:"shadow-vapor",amount:1},
-            {materialId:"chrono-crystal",amount:1}
+            {materialId:"solar-plating",amount:6},
+            {materialId:"shadow-vapor",amount:6},
+            {materialId:"chrono-crystal",amount:6}
         ],
         requiresPet:true,
         buildDurationSeconds:150
@@ -4147,8 +4186,37 @@ function getWorkingPetCount(planetId){
                 {}
             )[planetId] || []
         ).filter(
-            pet => pet.energy>0
+            pet =>
+                pet.energy>0 &&
+                (pet.role || "builder")===
+                "builder"
         ).length
+    );
+
+}
+
+function setPetRole(planetId,petId,role){
+
+    const pets=
+        getPets(planetId);
+
+    const pet=
+        pets.find(
+            p => p.id===petId
+        );
+
+    if(!pet)
+        return;
+
+    pet.role=
+        role==="pilot"
+        ?"pilot"
+        :"builder";
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
     );
 
 }
@@ -4319,7 +4387,10 @@ function buyPet(planetId){
                 Math.random()*1000
             ),
         energy:100,
-        trainingLevel:1,
+        role:"builder",
+        rangeLevel:1,
+        enduranceLevel:1,
+        survivalLevel:1,
         lastEnergyCheck:Date.now()
     });
 
@@ -4383,44 +4454,76 @@ function feedPet(planetId,petId){
  * and the actual mission lifecycle (send, resolve).
  */
 
-const PET_TRAINING_MAX_LEVEL=3;
+/*
+ * Pilot Training: pet roles, three independently-trainable
+ * pilot stats (range/endurance/survival), and the actual
+ * mission lifecycle (send, resolve). Each stat is trainable up
+ * to level 3 for now — a future structure upgrade can raise
+ * that cap without changing anything else here.
+ */
 
-const PET_TRAINING_LEVELS={
-    1:{
-        maxHops:0,
-        survivalChance:.7
-    },
-    2:{
-        maxHops:1,
-        survivalChance:.82
-    },
-    3:{
-        maxHops:2,
-        survivalChance:.92
-    }
+const PET_STAT_MAX_LEVEL=3;
+
+/*
+ * Range: how many hops from home a pilot can be sent.
+ */
+const PET_RANGE_HOPS={
+    1:0,
+    2:1,
+    3:2
 };
 
-function getTrainingInfo(level){
+/*
+ * Endurance: bonus time (and proportional bonus yield) added
+ * ON TOP of the base travel time for whatever distance was
+ * chosen — training this makes every trip longer AND more
+ * lucrative, which is exactly why it also feeds survival risk
+ * below rather than being a free upgrade.
+ */
+const PET_ENDURANCE_BONUS_SECONDS={
+    1:0,
+    2:40,
+    3:85
+};
 
-    return(
-        PET_TRAINING_LEVELS[
-            level
-        ] ||
-        PET_TRAINING_LEVELS[1]
-    );
+const PET_ENDURANCE_BONUS_YIELD={
+    1:0,
+    2:3,
+    3:7
+};
+
+/*
+ * Survival: a base chance per level, BEFORE the duration
+ * penalty below is applied — so training survival raises the
+ * ceiling, but a longer trip (whether from range or endurance)
+ * always eats into it.
+ */
+const PET_SURVIVAL_BASE={
+    1:.9,
+    2:.95,
+    3:.98
+};
+
+const PET_SURVIVAL_PENALTY_PER_MINUTE=.06;
+
+function getPetStatLevel(pet,statName){
+
+    return pet[
+        statName+"Level"
+    ] || 1;
 
 }
 
-function computeTrainCost(level){
+function computeStatTrainCost(currentLevel){
 
     return Math.round(
-        1*
-        Math.pow(2,level-1)
+        150*
+        Math.pow(2,currentLevel-1)
     );
 
 }
 
-function trainPet(planetId,petId){
+function trainPetStat(planetId,petId,statName){
 
     const pets=
         getPets(planetId);
@@ -4430,16 +4533,24 @@ function trainPet(planetId,petId){
             p => p.id===petId
         );
 
+    if(!pet)
+        return;
+
+    const fieldName=
+        statName+"Level";
+
+    const currentLevel=
+        pet[fieldName] || 1;
+
     if(
-        !pet ||
-        (pet.trainingLevel || 1)>=
-        PET_TRAINING_MAX_LEVEL
+        currentLevel>=
+        PET_STAT_MAX_LEVEL
     )
         return;
 
     const cost=
-        computeTrainCost(
-            pet.trainingLevel || 1
+        computeStatTrainCost(
+            currentLevel
         );
 
     if(
@@ -4452,14 +4563,15 @@ function trainPet(planetId,petId){
         -cost
     );
 
-    pet.trainingLevel=
-        (pet.trainingLevel || 1)+1;
+    pet[fieldName]=
+        currentLevel+1;
 
     savePlanetProgress();
 
     showShipToast(
-        "Pet trained to level "+
-        pet.trainingLevel+"!"
+        "Pilot's "+statName+
+        " trained to level "+
+        pet[fieldName]+"!"
     );
 
     renderPlanetDetail(
@@ -4560,10 +4672,12 @@ function computeHopDistance(fromId,toId){
 
 }
 
-function getReachablePlanets(homeId,level){
+function getReachablePlanets(homeId,rangeLevel){
 
     const maxHops=
-        getTrainingInfo(level).maxHops;
+        PET_RANGE_HOPS[
+            rangeLevel
+        ] || 0;
 
     return PLANETS.filter(
         planet =>
@@ -4575,15 +4689,50 @@ function getReachablePlanets(homeId,level){
 
 }
 
-function computeMissionDuration(hops){
+function computeMissionDuration(hops,enduranceLevel){
 
-    return 45+hops*45;
+    return 45+hops*45+
+        (
+            PET_ENDURANCE_BONUS_SECONDS[
+                enduranceLevel
+            ] || 0
+        );
 
 }
 
-function computeMissionYield(hops){
+function computeMissionYield(hops,enduranceLevel){
 
-    return 2+hops*3;
+    return 2+hops*3+
+        (
+            PET_ENDURANCE_BONUS_YIELD[
+                enduranceLevel
+            ] || 0
+        );
+
+}
+
+/*
+ * A longer trip is always riskier, whether that length comes
+ * from distance (range) or lingering (endurance) — training
+ * survival raises the ceiling, but never removes the tradeoff.
+ */
+function computeSurvivalChance(survivalLevel,totalDurationSeconds){
+
+    const base=
+        PET_SURVIVAL_BASE[
+            survivalLevel
+        ] ||
+        PET_SURVIVAL_BASE[1];
+
+    const penalty=
+        (totalDurationSeconds/60)*
+        PET_SURVIVAL_PENALTY_PER_MINUTE;
+
+    return clamp(
+        base-penalty,
+        .25,
+        .99
+    );
 
 }
 
@@ -4599,14 +4748,14 @@ function getMissions(planetId){
 }
 
 /*
- * Sending a pet always needs a SPARE ship — at least one other
- * ship has to stay docked for the player to actually fly. The
- * spare sent is whichever docked ship isn't needed to satisfy
- * that minimum, chosen arbitrarily (lowest score first, so the
- * ship you'd most want to keep for yourself is the one left
- * behind).
+ * Sending a pet now always names the SPECIFIC ship it's taking
+ * (chosen by the player in that ship's own Pilot picker), and
+ * the "keep at least one ship for the player" rule is checked
+ * GLOBALLY — as long as one other player-flyable ship exists
+ * anywhere in the game, any ship anywhere can be spared for a
+ * mission, not just ones at the departure planet.
  */
-function sendPetOnMission(planetId,petId,destinationId){
+function sendPetOnMission(planetId,shipId,petId,destinationId){
 
     const pets=
         getPets(planetId);
@@ -4618,7 +4767,14 @@ function sendPetOnMission(planetId,petId,destinationId){
 
     if(
         !pet ||
-        pet.energy<=0
+        pet.energy<=0 ||
+        (pet.role || "builder")!==
+        "pilot"
+    )
+        return;
+
+    if(
+        getTotalPlayerShipCount()<2
     )
         return;
 
@@ -4627,7 +4783,12 @@ function sendPetOnMission(planetId,petId,destinationId){
         ?(planetSave.ships.earth || [])
         :(getShips(planetId) || []);
 
-    if(ships.length<2)
+    const shipIndex=
+        ships.findIndex(
+            s => s.id===shipId
+        );
+
+    if(shipIndex===-1)
         return;
 
     const hops=
@@ -4637,35 +4798,22 @@ function sendPetOnMission(planetId,petId,destinationId){
         );
 
     const range=
-        getTrainingInfo(
-            pet.trainingLevel || 1
-        ).maxHops;
+        PET_RANGE_HOPS[
+            getPetStatLevel(
+                pet,"range"
+            )
+        ] || 0;
 
     if(hops>range)
         return;
 
-    const sorted=
-        [...ships].sort(
-            (a,b) =>
-                a.score-b.score
-        );
+    const chosenShip=
+        ships[shipIndex];
 
-    const spareShip=
-        sorted[0];
-
-    const shipIndex=
-        ships.findIndex(
-            s => s.id===spareShip.id
-        );
-
-    if(shipIndex!==-1){
-
-        ships.splice(
-            shipIndex,
-            1
-        );
-
-    }
+    ships.splice(
+        shipIndex,
+        1
+    );
 
     const petIndex=
         pets.findIndex(
@@ -4699,22 +4847,42 @@ function sendPetOnMission(planetId,petId,destinationId){
 
     }
 
+    const enduranceLevel=
+        getPetStatLevel(
+            pet,"endurance"
+        );
+
+    const survivalLevel=
+        getPetStatLevel(
+            pet,"survival"
+        );
+
+    const durationSeconds=
+        computeMissionDuration(
+            hops,
+            enduranceLevel
+        );
+
     planetSave.missions[
         planetId
     ].push({
-        ship:spareShip,
+        ship:chosenShip,
         pet:pet,
         destinationId:destinationId,
         hops:hops,
+        survivalLevel:survivalLevel,
         startedAt:Date.now(),
-        durationSeconds:
-            computeMissionDuration(hops)
+        durationSeconds:durationSeconds
     });
+
+    expandedShipPilotId=null;
+
+    pilotAssignmentPetId=null;
 
     savePlanetProgress();
 
     showShipToast(
-        "Pet sent to "+
+        "Pilot sent to "+
         (
             getPlanet(destinationId) ||
             {name:destinationId}
@@ -4776,10 +4944,14 @@ function resolveMissions(planetId){
 
         const survived=
             Math.random()<
-            getTrainingInfo(
-                mission.pet.trainingLevel ||
-                1
-            ).survivalChance;
+            computeSurvivalChance(
+                mission.survivalLevel ||
+                getPetStatLevel(
+                    mission.pet,
+                    "survival"
+                ),
+                mission.durationSeconds
+            );
 
         if(survived){
 
@@ -4825,7 +4997,11 @@ function resolveMissions(planetId){
                     planetId,
                     material.id,
                     computeMissionYield(
-                        mission.hops
+                        mission.hops,
+                        getPetStatLevel(
+                            mission.pet,
+                            "endurance"
+                        )
                     )
                 );
 
@@ -4842,7 +5018,11 @@ function resolveMissions(planetId){
                     material
                     ?" with "+
                      computeMissionYield(
-                        mission.hops
+                        mission.hops,
+                        getPetStatLevel(
+                            mission.pet,
+                            "endurance"
+                        )
                      )+" "+
                      material.name
                     :""
@@ -6380,9 +6560,39 @@ function renderPlanetMap(){
 
     planetMap.innerHTML="";
 
-    resolveAllBuildQueues();
+    /*
+     * Each wrapped independently: a failure resolving one
+     * planet's builds/missions must never prevent the other
+     * from running, and neither may be allowed to propagate
+     * uncaught — that's exactly what let a single bad mission
+     * resolution cascade into breaking the entire map, every
+     * ship list, and button labels throughout the game.
+     */
+    try{
 
-    resolveAllMissions();
+        resolveAllBuildQueues();
+
+    }catch(error){
+
+        console.error(
+            "Build queue resolution failed:",
+            error
+        );
+
+    }
+
+    try{
+
+        resolveAllMissions();
+
+    }catch(error){
+
+        console.error(
+            "Mission resolution failed:",
+            error
+        );
+
+    }
 
     /*
      * Wrapped defensively: if any single planet's data causes
@@ -6870,7 +7080,7 @@ function computeStructureBuildCost(structureId){
 
     return structureId==="ship-factory"
         ?400
-        :3;
+        :350;
 
 }
 
@@ -7069,29 +7279,79 @@ function buildStructure(planetId,structureId){
 }
 
 
+/*
+ * Every ship docked anywhere across the whole game — used both
+ * to gate Earth's free ship (so a player can't dodge ever
+ * landing at Earth and farm infinite free ships by always
+ * leaving ships stranded elsewhere) and to gate sending a pet
+ * on a mission (which needs at least one OTHER player-flyable
+ * ship left somewhere, not just at the departure planet).
+ * Ships currently mid-build or mid-mission are already absent
+ * from these docked lists, so they're correctly excluded here
+ * too.
+ */
+function getTotalPlayerShipCount(){
+
+    let total=0;
+
+    for(
+        const planet of PLANETS
+    ){
+
+        total+=
+            (
+                planet.id==="earth"
+                ?(planetSave.ships.earth || [])
+                :(getShips(planet.id) || [])
+            ).length;
+
+    }
+
+    return total;
+
+}
+
+function getTotalQueuedShipCount(){
+
+    let total=0;
+
+    for(
+        const planet of PLANETS
+    ){
+
+        total+=
+            getBuildQueue(
+                planet.id
+            ).filter(
+                b => b.type==="ship"
+            ).length;
+
+    }
+
+    return total;
+
+}
+
 function getEarthLaunchCandidates(){
 
     const real=
         getShips("earth") || [];
 
-    const queuedShips=
-        getBuildQueue("earth").filter(
-            b => b.type==="ship"
-        ).length;
-
+    /*
+     * The free instant ship is only available with genuinely
+     * nothing else going ANYWHERE in the game — zero docked,
+     * zero already queued, on any planet. Otherwise a new one
+     * has to come from a factory, paid for and waited on like
+     * anywhere else — this is what stops a player dodging
+     * Earth forever to keep farming free ships.
+     */
     const candidates=[
         ...real
     ];
 
-    /*
-     * The free instant ship is only available with genuinely
-     * nothing else going — zero docked, zero already queued.
-     * Otherwise a new one has to come from the factory, paid
-     * for and waited on like anywhere else.
-     */
     if(
-        !real.length &&
-        !queuedShips
+        !getTotalPlayerShipCount() &&
+        !getTotalQueuedShipCount()
     ){
 
         candidates.unshift({
@@ -7477,7 +7737,16 @@ let expandedPerkShipId=null;
  * picker expanded — same one-at-a-time pattern as the equip
  * and perk pickers.
  */
-let expandedMissionPetId=null;
+/*
+ * Ship-based pilot assignment replaces the old pet-initiated
+ * flow entirely: expandedShipPilotId tracks which ship's
+ * "Assign Pilot" dropdown is open (showing Player + eligible
+ * pilot pets); pilotAssignmentPetId tracks which pet within
+ * that dropdown has been picked, at which point a destination
+ * sub-list replaces the pet list for that same ship.
+ */
+let expandedShipPilotId=null;
+let pilotAssignmentPetId=null;
 
 function openPlanetDetail(id){
 
@@ -7487,8 +7756,6 @@ function openPlanetDetail(id){
 
     planetDetailId=id;
 
-    resolveBuildQueue(id);
-
     /*
      * The overlay must always actually open, even if something
      * inside the render throws — previously a single rendering
@@ -7497,6 +7764,8 @@ function openPlanetDetail(id){
      * with no visible sign anything went wrong.
      */
     try{
+
+        resolveBuildQueue(id);
 
         renderPlanetDetail(id);
 
@@ -7576,6 +7845,21 @@ function renderPlanetDetail(id){
 
     const bank=
         getBank(id);
+
+    /*
+     * Declared here (rather than down in the Pets section where
+     * it's ALSO used) because the Docked Ships section, which
+     * renders first, needs it too for each ship's Pilot picker —
+     * referencing a later const before its own declaration line
+     * runs is a real ReferenceError, not just bad style, and was
+     * the actual cause of "Something went wrong" on any planet
+     * with at least one docked ship.
+     */
+    const hasPilotTraining=
+        hasStructure(
+            id,
+            "pilot-training"
+        );
 
     const shopItem=
         getShopItemForPlanet(id);
@@ -8149,6 +8433,183 @@ function renderPlanetDetail(id){
 
                         })()
                     )+
+                    (
+                        hasPilotTraining
+                        ?(function(){
+
+                            const pilotOpen=
+                                expandedShipPilotId===
+                                ship.id;
+
+                            const availablePilots=
+                                getPets(id).filter(
+                                    p =>
+                                        (
+                                            p.role ||
+                                            "builder"
+                                        )==="pilot" &&
+                                        p.energy>0
+                                );
+
+                            const canSpare=
+                                getTotalPlayerShipCount()>=2;
+
+                            let inner=
+                                '<button class="control-btn" data-action="toggle-ship-pilot" '+
+                                'data-ship="'+ship.id+'" style="width:auto;padding:7px 10px;'+
+                                'align-self:flex-start;display:flex;align-items:center;gap:6px;">'+
+                                '<span>Pilot: Player</span>'+
+                                '<span style="opacity:.6;">'+
+                                (pilotOpen ? "▲" : "▼")+
+                                '</span></button>';
+
+                            if(pilotOpen){
+
+                                if(!canSpare){
+
+                                    inner+=
+                                        '<span style="font-size:10px;color:#5c7ba0;">'+
+                                        'Need at least one other ship docked '+
+                                        'somewhere else in the game first.'+
+                                        '</span>';
+
+                                }else if(
+                                    pilotAssignmentPetId &&
+                                    availablePilots.some(
+                                        p =>
+                                            p.id===
+                                            pilotAssignmentPetId
+                                    )
+                                ){
+
+                                    const pet=
+                                        availablePilots.find(
+                                            p =>
+                                                p.id===
+                                                pilotAssignmentPetId
+                                        );
+
+                                    const reachable=
+                                        getReachablePlanets(
+                                            id,
+                                            getPetStatLevel(
+                                                pet,"range"
+                                            )
+                                        );
+
+                                    inner+=
+                                        '<div style="display:flex;flex-direction:column;gap:6px;'+
+                                        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                                        '<span style="font-size:9px;color:#8fa7c7;">'+
+                                        'Choose a destination:</span>';
+
+                                    reachable.forEach(
+                                        dest=>{
+
+                                            const hops=
+                                                computeHopDistance(
+                                                    id,dest.id
+                                                );
+
+                                            const duration=
+                                                computeMissionDuration(
+                                                    hops,
+                                                    getPetStatLevel(
+                                                        pet,"endurance"
+                                                    )
+                                                );
+
+                                            const yieldAmt=
+                                                computeMissionYield(
+                                                    hops,
+                                                    getPetStatLevel(
+                                                        pet,"endurance"
+                                                    )
+                                                );
+
+                                            const survival=
+                                                computeSurvivalChance(
+                                                    getPetStatLevel(
+                                                        pet,"survival"
+                                                    ),
+                                                    duration
+                                                );
+
+                                            inner+=
+                                                '<button class="shape-btn" style="width:100%;'+
+                                                'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                                'data-action="send-ship-mission" data-ship="'+
+                                                ship.id+'" data-pet="'+pet.id+
+                                                '" data-destination="'+dest.id+'">'+
+                                                (
+                                                    dest.id===id
+                                                    ?'📍 Stay local'
+                                                    :dest.icon+' '+dest.name
+                                                )+
+                                                ' ('+duration+'s, ~'+yieldAmt+
+                                                ' units, '+
+                                                Math.round(survival*100)+
+                                                '% survival)</button>';
+
+                                        }
+                                    );
+
+                                    inner+=
+                                        '<button class="control-btn" style="width:auto;'+
+                                        'padding:6px 8px;font-size:10px;" '+
+                                        'data-action="back-ship-pilot" data-ship="'+
+                                        ship.id+'">← Back</button>'+
+                                        '</div>';
+
+                                }else{
+
+                                    inner+=
+                                        '<div style="display:flex;flex-direction:column;gap:6px;'+
+                                        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">';
+
+                                    if(!availablePilots.length){
+
+                                        inner+=
+                                            '<span style="font-size:10px;color:#5c7ba0;">'+
+                                            'No pilot-role pets with energy here — '+
+                                            'assign one the Pilot role in the Pets '+
+                                            'section above.</span>';
+
+                                    }else{
+
+                                        availablePilots.forEach(
+                                            pet=>{
+
+                                                inner+=
+                                                    '<button class="shape-btn" style="width:100%;'+
+                                                    'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                                    'data-action="pick-ship-pilot" data-ship="'+
+                                                    ship.id+'" data-pet="'+pet.id+'">'+
+                                                    '🐾 Pilot (R'+
+                                                    getPetStatLevel(pet,"range")+
+                                                    ' E'+
+                                                    getPetStatLevel(pet,"endurance")+
+                                                    ' S'+
+                                                    getPetStatLevel(pet,"survival")+
+                                                    ')</button>';
+
+                                            }
+                                        );
+
+                                    }
+
+                                    inner+=
+                                        '</div>';
+
+                                }
+
+                            }
+
+                            return inner;
+
+                        })()
+                        :''
+                    )+
                     '</div>';
 
             }
@@ -8254,15 +8715,6 @@ function renderPlanetDetail(id){
     const canAffordPet=
         bank>=petCost;
 
-    const hasPilotTraining=
-        hasStructure(
-            id,
-            "pilot-training"
-        );
-
-    const shipsHereCount=
-        ships.length;
-
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">🐾 Pets</div>'+
@@ -8293,16 +8745,15 @@ function renderPlanetDetail(id){
                     ?'#ffd76b'
                     :'#8dffb0';
 
-                const level=
-                    pet.trainingLevel || 1;
+                const role=
+                    pet.role || "builder";
 
                 html+=
                     '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
                     '<div style="display:flex;justify-content:space-between;">'+
                     '<span>🐾 Energy: '+
                     '<span style="color:'+energyColor+';">'+
-                    Math.round(pet.energy)+'%</span>'+
-                    ' · Lv.'+level+'</span>'+
+                    Math.round(pet.energy)+'%</span></span>'+
                     '<button class="control-btn" style="width:auto;'+
                     'padding:7px 10px;" data-action="feed-pet" '+
                     'data-pet="'+pet.id+'" '+
@@ -8313,132 +8764,108 @@ function renderPlanetDetail(id){
                         :''
                     )+
                     '>Feed ('+PET_FOOD_COST+' 🪙)</button>'+
+                    '</div>'+
+                    '<div style="display:flex;gap:6px;align-items:center;">'+
+                    '<span style="font-size:9px;color:#8fa7c7;">Role:</span>'+
+                    '<button class="shape-btn'+
+                    (
+                        role==="builder"
+                        ?' selected'
+                        :''
+                    )+
+                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
+                    'data-action="set-pet-role" data-pet="'+pet.id+'" '+
+                    'data-role="builder">🔧 Builder</button>'+
+                    (
+                        hasPilotTraining
+                        ?'<button class="shape-btn'+
+                        (
+                            role==="pilot"
+                            ?' selected'
+                            :''
+                        )+
+                        '" style="width:auto;padding:6px 10px;font-size:10px;" '+
+                        'data-action="set-pet-role" data-pet="'+pet.id+'" '+
+                        'data-role="pilot">✈ Pilot</button>'
+                        :''
+                    )+
                     '</div>';
 
-                if(hasPilotTraining){
+                if(
+                    role==="pilot" &&
+                    hasPilotTraining
+                ){
 
-                    const trainCost=
-                        computeTrainCost(level);
-
-                    const maxed=
-                        level>=
-                        PET_TRAINING_MAX_LEVEL;
-
-                    html+=
-                        '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
-                        '<button class="control-btn" style="width:auto;'+
-                        'padding:7px 10px;" data-action="train-pet" '+
-                        'data-pet="'+pet.id+'" '+
-                        (
-                            maxed ||
-                            bank<trainCost
-                            ?'disabled'
-                            :''
-                        )+
-                        '>'+
-                        (
-                            maxed
-                            ?'Max level'
-                            :'Train ('+trainCost+' 🪙)'
-                        )+
-                        '</button>'+
-                        '<button class="control-btn" style="width:auto;'+
-                        'padding:7px 10px;" data-action="toggle-mission" '+
-                        'data-pet="'+pet.id+'" '+
-                        (
-                            pet.energy<=0 ||
-                            shipsHereCount<2
-                            ?'disabled'
-                            :''
-                        )+
-                        '>Send on Mission ▾</button>'+
-                        '</div>';
-
-                    if(
-                        shipsHereCount<2
-                    ){
-
-                        html+=
-                            '<span style="font-size:9px;color:#5c7ba0;">'+
-                            'Needs at least one other ship docked '+
-                            'here to spare one for the mission.'+
-                            '</span>';
-
-                    }
-
-                    if(
-                        expandedMissionPetId===
-                        pet.id
-                    ){
-
-                        const reachable=
-                            getReachablePlanets(
-                                id,
-                                level
-                            ).filter(
-                                p => p.id!==id
-                            );
-
-                        const localYield=
-                            computeMissionYield(0);
-
-                        const localDuration=
-                            computeMissionDuration(0);
-
-                        html+=
-                            '<div style="display:flex;flex-direction:column;gap:6px;'+
-                            'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
-                            '<button class="shape-btn" style="width:100%;'+
-                            'text-align:left;padding:8px 10px;font-size:11px;" '+
-                            'data-action="send-mission" data-pet="'+pet.id+'" '+
-                            'data-destination="'+id+'">'+
-                            '📍 Stay local ('+localDuration+
-                            's, ~'+localYield+' units)'+
-                            '</button>';
-
-                        reachable.forEach(
-                            destPlanet=>{
-
-                                const destHops=
-                                    computeHopDistance(
-                                        id,
-                                        destPlanet.id
-                                    );
-
-                                const destYield=
-                                    computeMissionYield(
-                                        destHops
-                                    );
-
-                                const destDuration=
-                                    computeMissionDuration(
-                                        destHops
-                                    );
-
-                                html+=
-                                    '<button class="shape-btn" style="width:100%;'+
-                                    'text-align:left;padding:8px 10px;font-size:11px;" '+
-                                    'data-action="send-mission" data-pet="'+
-                                    pet.id+'" data-destination="'+
-                                    destPlanet.id+'">'+
-                                    destPlanet.icon+' '+destPlanet.name+
-                                    ' ('+destDuration+'s, ~'+destYield+
-                                    ' units)'+
-                                    '</button>';
-
-                            }
+                    const rangeLevel=
+                        getPetStatLevel(
+                            pet,"range"
                         );
 
-                        html+=
-                            '<span style="font-size:9px;color:#5c7ba0;">'+
-                            'Survival chance at this level: '+
-                            Math.round(
-                                getTrainingInfo(level).survivalChance*100
-                            )+'%'+
-                            '</span>'+
-                            '</div>';
+                    const enduranceLevel=
+                        getPetStatLevel(
+                            pet,"endurance"
+                        );
 
-                    }
+                    const survivalLevel=
+                        getPetStatLevel(
+                            pet,"survival"
+                        );
+
+                    html+=
+                        '<div style="font-size:9px;color:#70ddff;">'+
+                        'Range Lv.'+rangeLevel+' · Endurance Lv.'+
+                        enduranceLevel+' · Survival Lv.'+
+                        survivalLevel+
+                        '</div>'+
+                        '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+
+                    [
+                        ["range","Range"],
+                        ["endurance","Endurance"],
+                        ["survival","Survival"]
+                    ].forEach(
+                        ([statKey,statLabel])=>{
+
+                            const statLevel=
+                                getPetStatLevel(
+                                    pet,statKey
+                                );
+
+                            const maxed=
+                                statLevel>=
+                                PET_STAT_MAX_LEVEL;
+
+                            const trainCost=
+                                computeStatTrainCost(
+                                    statLevel
+                                );
+
+                            html+=
+                                '<button class="control-btn" style="width:auto;'+
+                                'padding:6px 8px;font-size:10px;" '+
+                                'data-action="train-pet-stat" '+
+                                'data-pet="'+pet.id+'" data-stat="'+
+                                statKey+'" '+
+                                (
+                                    maxed ||
+                                    bank<trainCost
+                                    ?'disabled'
+                                    :''
+                                )+
+                                '>'+
+                                (
+                                    maxed
+                                    ?statLabel+' maxed'
+                                    :'Train '+statLabel+
+                                     ' ('+trainCost+' 🪙)'
+                                )+
+                                '</button>';
+
+                        }
+                    );
+
+                    html+=
+                        '</div>';
 
                 }
 
@@ -9150,7 +9577,7 @@ document
             );
 
         }else if(
-            action==="train-pet"
+            action==="set-pet-role"
         ){
 
             const petId=
@@ -9158,13 +9585,19 @@ document
                     "data-pet"
                 );
 
-            trainPet(
+            const role=
+                target.getAttribute(
+                    "data-role"
+                );
+
+            setPetRole(
                 planetDetailId,
-                petId
+                petId,
+                role
             );
 
         }else if(
-            action==="toggle-mission"
+            action==="train-pet-stat"
         ){
 
             const petId=
@@ -9172,18 +9605,60 @@ document
                     "data-pet"
                 );
 
-            expandedMissionPetId=
-                expandedMissionPetId===
-                petId
+            const statKey=
+                target.getAttribute(
+                    "data-stat"
+                );
+
+            trainPetStat(
+                planetDetailId,
+                petId,
+                statKey
+            );
+
+        }else if(
+            action==="toggle-ship-pilot"
+        ){
+
+            expandedShipPilotId=
+                expandedShipPilotId===
+                shipId
                 ?null
-                :petId;
+                :shipId;
+
+            pilotAssignmentPetId=
+                null;
 
             renderPlanetDetail(
                 planetDetailId
             );
 
         }else if(
-            action==="send-mission"
+            action==="pick-ship-pilot"
+        ){
+
+            pilotAssignmentPetId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="back-ship-pilot"
+        ){
+
+            pilotAssignmentPetId=
+                null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="send-ship-mission"
         ){
 
             const petId=
@@ -9196,11 +9671,9 @@ document
                     "data-destination"
                 );
 
-            expandedMissionPetId=
-                null;
-
             sendPetOnMission(
                 planetDetailId,
+                shipId,
                 petId,
                 destinationId
             );
