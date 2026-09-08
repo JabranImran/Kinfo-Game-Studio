@@ -2982,7 +2982,21 @@ function defaultPlanetSave(){
          * {destinationId, survived, materials, materialName,
          * resolvedAt}.
          */
-        missionLog:{}
+        missionLog:{},
+
+        /*
+         * Structure upgrades unlocked (by selling materials,
+         * one-time per planet) — planetSave.unlockedUpgrades
+         * [planetId][upgradeId] — separate from whether it's
+         * actually been bought yet.
+         */
+        unlockedUpgrades:{},
+
+        /*
+         * Structure upgrades actually purchased with coins —
+         * planetSave.purchasedUpgrades[planetId][upgradeId].
+         */
+        purchasedUpgrades:{}
 
     };
 
@@ -3464,6 +3478,26 @@ function loadPlanetSave(){
                 }
 
                 if(
+                    !saved.unlockedUpgrades ||
+                    typeof saved.unlockedUpgrades!==
+                    "object"
+                ){
+
+                    saved.unlockedUpgrades={};
+
+                }
+
+                if(
+                    !saved.purchasedUpgrades ||
+                    typeof saved.purchasedUpgrades!==
+                    "object"
+                ){
+
+                    saved.purchasedUpgrades={};
+
+                }
+
+                if(
                     !saved.petEnergyResolved ||
                     typeof saved.petEnergyResolved!==
                     "object"
@@ -3863,7 +3897,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:20,
+        cost:1,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3875,7 +3909,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:30,
+        cost:2,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3888,7 +3922,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:25,
+        cost:1,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins AND "+
@@ -3902,7 +3936,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:35,
+        cost:2,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3914,7 +3948,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:35,
+        cost:2,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3926,7 +3960,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:35,
+        cost:2,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3938,7 +3972,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:45,
+        cost:2,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3951,7 +3985,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:45,
+        cost:2,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3963,7 +3997,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:60,
+        cost:3,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -4012,8 +4046,8 @@ const PERKS={
         name:"Coin Magnet Charm",
         icon:"🧲",
         unlockMaterial:"volatile-alloy",
-        unlockAmount:5,
-        buyCost:80,
+        unlockAmount:3,
+        buyCost:4,
         effectType:"coinMultiplier",
         effectValue:.25,
         description:
@@ -4027,8 +4061,8 @@ const PERKS={
         name:"Refinery Core",
         icon:"⚙",
         unlockMaterial:"magnetic-resin",
-        unlockAmount:5,
-        buyCost:80,
+        unlockAmount:3,
+        buyCost:4,
         effectType:"materialDropBoost",
         effectValue:.4,
         description:
@@ -4043,8 +4077,8 @@ const PERKS={
         name:"Overcharge Coil",
         icon:"🔋",
         unlockMaterial:"incinerator-beam",
-        unlockAmount:3,
-        buyCost:100,
+        unlockAmount:2,
+        buyCost:5,
         effectType:"chargeRateBoost",
         effectValue:.2,
         description:
@@ -4125,12 +4159,12 @@ const STRUCTURES={
          * grinding one planet's own resource.
          */
         buildMaterials:[
-            {materialId:"volatile-alloy",amount:6},
-            {materialId:"cryo-shard",amount:6},
-            {materialId:"magnetic-resin",amount:6}
+            {materialId:"volatile-alloy",amount:3},
+            {materialId:"cryo-shard",amount:3},
+            {materialId:"magnetic-resin",amount:3}
         ],
         requiresPet:true,
-        buildDurationSeconds:120
+        buildDurationSeconds:60
     },
 
     "pilot-training":{
@@ -4144,12 +4178,12 @@ const STRUCTURES={
             "pet can die out there — and always needs at least "+
             "one other ship left docked for you to fly yourself.",
         buildMaterials:[
-            {materialId:"solar-plating",amount:6},
-            {materialId:"shadow-vapor",amount:6},
-            {materialId:"chrono-crystal",amount:6}
+            {materialId:"solar-plating",amount:3},
+            {materialId:"shadow-vapor",amount:3},
+            {materialId:"chrono-crystal",amount:3}
         ],
         requiresPet:true,
-        buildDurationSeconds:150
+        buildDurationSeconds:75
     }
 
 };
@@ -4219,7 +4253,7 @@ function getWorkingPetCount(planetId){
  * not just a free label swap. Re-assigning it back to pilot
  * later (after being demoted to builder) pays it again.
  */
-const PET_PILOT_ASSIGNMENT_FEE=1;
+const PET_PILOT_ASSIGNMENT_FEE=6;
 
 function setPetRole(planetId,petId,role){
 
@@ -4296,17 +4330,20 @@ function computePetCost(planetId){
     const existing=
         getPetCount(planetId);
 
-    return Math.round(
-        20*
-        Math.pow(
-            1.8,
-            existing
+    return Math.max(
+        1,
+        Math.round(
+            1.2*
+            Math.pow(
+                1.8,
+                existing
+            )
         )
     );
 
 }
 
-const PET_FOOD_COST=15;
+const PET_FOOD_COST=1;
 const PET_ENERGY_PER_FOOD=40;
 
 /*
@@ -4570,9 +4607,12 @@ function getPetStatLevel(pet,statName){
 
 function computeStatTrainCost(currentLevel){
 
-    return Math.round(
-        150*
-        Math.pow(2,currentLevel-1)
+    return Math.max(
+        1,
+        Math.round(
+            7.5*
+            Math.pow(2,currentLevel-1)
+        )
     );
 
 }
@@ -4598,7 +4638,9 @@ function trainPetStat(planetId,petId,statName){
 
     if(
         currentLevel>=
-        PET_STAT_MAX_LEVEL
+        getPetStatMaxLevel(
+            planetId
+        )
     )
         return;
 
@@ -5216,6 +5258,399 @@ function getBuildQueue(planetId){
 }
 
 
+/*
+ * Structure upgrades: a generic framework, same shape as
+ * everything else in the sell-to-unlock economy — sell the
+ * required materials to unlock (one-time, per planet), then
+ * buy with coins. Deliberately keyed by structureId so any
+ * future structure just adds its own array here, nothing
+ * structural to build. Each entry lists its own effect so
+ * generic code can apply it without a switch statement per
+ * upgrade.
+ */
+const STRUCTURE_UPGRADES={
+
+    "pilot-training":[
+        {
+            id:"pilot-training-advanced",
+            structureId:"pilot-training",
+            name:"Advanced Flight School",
+            icon:"🎖",
+            description:
+                "Raises the training cap for all three pilot "+
+                "stats here from level 3 to level 5.",
+            unlockMaterials:[
+                {materialId:"chrono-crystal",amount:4},
+                {materialId:"shadow-vapor",amount:4}
+            ],
+            buyCost:25,
+            effectType:"statCapBoost",
+            effectValue:2
+        }
+    ],
+
+    "ship-factory":[
+        {
+            id:"ship-factory-cargo-hold",
+            structureId:"ship-factory",
+            name:"Cargo Hold Expansion",
+            icon:"📦",
+            description:
+                "Adds an optional toggle when building a ship "+
+                "here: +10 material capacity per type, for a "+
+                "steeper coin cost.",
+            unlockMaterials:[
+                {materialId:"volatile-alloy",amount:4},
+                {materialId:"magnetic-resin",amount:4}
+            ],
+            buyCost:20,
+            effectType:"shipToggle",
+            toggleId:"cargo-hold"
+        },
+        {
+            id:"ship-factory-dual-perk",
+            structureId:"ship-factory",
+            name:"Dual Perk Rig",
+            icon:"⚡",
+            description:
+                "Adds an optional toggle when building a ship "+
+                "here: room for a second perk at once, for an "+
+                "even steeper coin cost.",
+            unlockMaterials:[
+                {materialId:"cryo-shard",amount:5},
+                {materialId:"nova-dust",amount:5}
+            ],
+            buyCost:30,
+            effectType:"shipToggle",
+            toggleId:"dual-perk"
+        }
+    ]
+
+};
+
+function getUpgradesForStructure(structureId){
+
+    return STRUCTURE_UPGRADES[
+        structureId
+    ] || [];
+
+}
+
+function isUpgradeUnlocked(planetId,upgradeId){
+
+    return !!(
+        (
+            planetSave.unlockedUpgrades ||
+            {}
+        )[planetId] || {}
+    )[upgradeId];
+
+}
+
+function markUpgradeUnlocked(planetId,upgradeId){
+
+    if(!planetSave.unlockedUpgrades){
+
+        planetSave.unlockedUpgrades={};
+
+    }
+
+    if(
+        !planetSave.unlockedUpgrades[
+            planetId
+        ]
+    ){
+
+        planetSave.unlockedUpgrades[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.unlockedUpgrades[
+        planetId
+    ][upgradeId]=true;
+
+    savePlanetProgress();
+
+}
+
+function isUpgradePurchased(planetId,upgradeId){
+
+    return !!(
+        (
+            planetSave.purchasedUpgrades ||
+            {}
+        )[planetId] || {}
+    )[upgradeId];
+
+}
+
+function buyStructureUpgrade(planetId,upgradeId){
+
+    const upgrade=
+        Object.values(
+            STRUCTURE_UPGRADES
+        ).flat().find(
+            u => u.id===upgradeId
+        );
+
+    if(
+        !upgrade ||
+        !hasStructure(
+            planetId,
+            upgrade.structureId
+        ) ||
+        !isUpgradeUnlocked(
+            planetId,
+            upgradeId
+        ) ||
+        isUpgradePurchased(
+            planetId,
+            upgradeId
+        )
+    )
+        return;
+
+    if(
+        getBank(planetId)<
+        upgrade.buyCost
+    )
+        return;
+
+    addToBank(
+        planetId,
+        -upgrade.buyCost
+    );
+
+    if(!planetSave.purchasedUpgrades){
+
+        planetSave.purchasedUpgrades={};
+
+    }
+
+    if(
+        !planetSave.purchasedUpgrades[
+            planetId
+        ]
+    ){
+
+        planetSave.purchasedUpgrades[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.purchasedUpgrades[
+        planetId
+    ][upgradeId]=true;
+
+    savePlanetProgress();
+
+    showShipToast(
+        upgrade.name+" purchased!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Every purchased upgrade of a given effect type at a planet —
+ * used by anything that needs to apply cumulative bonuses (a
+ * planet with two stat-cap upgrades gets both, say) rather than
+ * just checking one.
+ */
+function getPurchasedUpgradesOfType(planetId,structureId,effectType){
+
+    return getUpgradesForStructure(
+        structureId
+    ).filter(
+        u =>
+            u.effectType===effectType &&
+            isUpgradePurchased(
+                planetId,
+                u.id
+            )
+    );
+
+}
+
+function hasPurchasedToggleUpgrade(planetId,structureId,toggleId){
+
+    return getUpgradesForStructure(
+        structureId
+    ).some(
+        u =>
+            u.effectType===
+            "shipToggle" &&
+            u.toggleId===toggleId &&
+            isUpgradePurchased(
+                planetId,
+                u.id
+            )
+    );
+
+}
+
+function getPetStatMaxLevel(planetId){
+
+    const boosts=
+        getPurchasedUpgradesOfType(
+            planetId,
+            "pilot-training",
+            "statCapBoost"
+        );
+
+    return boosts.reduce(
+        (max,u) => max+u.effectValue,
+        PET_STAT_MAX_LEVEL
+    );
+
+}
+
+/*
+ * Shared upgrade-list renderer — any structure's Planet Detail
+ * section just calls this with its own id, so adding upgrades
+ * to a future structure never means writing new UI logic.
+ */
+function renderStructureUpgradesHtml(planetId,structureId){
+
+    const upgrades=
+        getUpgradesForStructure(
+            structureId
+        );
+
+    if(!upgrades.length)
+        return '';
+
+    let sectionHtml=
+        '<div style="margin-top:10px;padding-top:10px;'+
+        'border-top:1px solid rgba(255,255,255,.08);">'+
+        '<div style="font-size:10px;color:#8fa7c7;'+
+        'margin-bottom:6px;">Upgrades:</div>';
+
+    upgrades.forEach(
+        upgrade=>{
+
+            const purchased=
+                isUpgradePurchased(
+                    planetId,
+                    upgrade.id
+                );
+
+            const unlocked=
+                isUpgradeUnlocked(
+                    planetId,
+                    upgrade.id
+                );
+
+            if(purchased){
+
+                sectionHtml+=
+                    '<div class="metric-note" style="color:#8dffb0;">'+
+                    upgrade.icon+' '+upgrade.name+' — owned'+
+                    '</div>';
+
+            }else if(unlocked){
+
+                const canBuy=
+                    getBank(planetId)>=
+                    upgrade.buyCost;
+
+                sectionHtml+=
+                    '<div class="selected-shape-info" style="align-items:flex-start;">'+
+                    '<span><strong>'+upgrade.icon+' '+
+                    upgrade.name+'</strong>'+
+                    '<div style="font-size:9px;color:#8fa7c7;'+
+                    'margin-top:2px;max-width:220px;">'+
+                    upgrade.description+'</div></span>'+
+                    '<button class="remove-btn" style="background:'+
+                    (
+                        canBuy
+                        ?'rgba(110,220,255,.18)'
+                        :'rgba(255,255,255,.05)'
+                    )+
+                    ';border-color:'+
+                    (
+                        canBuy
+                        ?'rgba(110,220,255,.45)'
+                        :'rgba(255,255,255,.12)'
+                    )+
+                    ';color:'+
+                    (
+                        canBuy
+                        ?'#bcecff'
+                        :'#5c7ba0'
+                    )+
+                    ';" data-action="buy-upgrade" data-upgrade="'+
+                    upgrade.id+'" '+
+                    (
+                        canBuy
+                        ?''
+                        :'disabled'
+                    )+
+                    '>Buy '+upgrade.buyCost+' 🪙</button>'+
+                    '</div>';
+
+            }else{
+
+                sectionHtml+=
+                    '<div class="selected-shape-info" style="align-items:flex-start;">'+
+                    '<span><strong>🔒 '+upgrade.icon+' '+
+                    upgrade.name+'</strong>'+
+                    '<div style="font-size:9px;color:#8fa7c7;'+
+                    'margin-top:2px;max-width:220px;">'+
+                    upgrade.description+'</div>';
+
+                upgrade.unlockMaterials.forEach(
+                    req=>{
+
+                        const info=
+                            MATERIALS[
+                                req.materialId
+                            ] ||
+                            MATERIALS["aether-dust"];
+
+                        const sold=
+                            getSoldProgress(
+                                planetId,
+                                req.materialId
+                            );
+
+                        sectionHtml+=
+                            '<div style="font-size:9px;color:'+
+                            (
+                                sold>=req.amount
+                                ?'#8dffb0'
+                                :'#ff8d8d'
+                            )+
+                            ';margin-top:2px;">'+
+                            info.icon+' '+info.name+': '+
+                            Math.min(sold,req.amount)+'/'+
+                            req.amount+' sold</div>';
+
+                    }
+                );
+
+                sectionHtml+=
+                    '</span></div>';
+
+            }
+
+        }
+    );
+
+    sectionHtml+=
+        '</div>';
+
+    return sectionHtml;
+
+}
+
+
 let planetSave=
     loadPlanetSave();
 
@@ -5265,7 +5700,10 @@ function createShip(
     wave=1,
     lives=3,
     materials=null,
-    perk=null
+    perk=null,
+    materialCapBonus=0,
+    hasDualPerk=false,
+    perk2=null
 ){
 
     ensurePlanetArray(
@@ -5311,11 +5749,35 @@ function createShip(
 
         materials:
             clampMaterials(
-                materials || {}
+                materials || {},
+                MATERIAL_CAP+
+                (materialCapBonus || 0)
             ),
 
         perk:
-            perk || null
+            perk || null,
+
+        /*
+         * Cargo Hold Expansion: a flat bonus baked into this
+         * specific ship at build time, not a global constant —
+         * different ships from the same factory can have
+         * different capacities depending on what was toggled
+         * when each was built.
+         */
+        materialCapBonus:
+            materialCapBonus || 0,
+
+        /*
+         * Dual Perk Rig: hasDualPerk is baked in at build time
+         * (whether this ship's second slot exists at all); perk2
+         * is what's actually equipped there, same shape as the
+         * normal perk slot.
+         */
+        hasDualPerk:
+            !!hasDualPerk,
+
+        perk2:
+            perk2 || null
 
     };
 
@@ -5336,9 +5798,12 @@ function createShip(
  * zero-count clutter. Ship storage only — see
  * cleanMaterialCounts() for the uncapped planet-bank version.
  */
-function clampMaterials(materials){
+function clampMaterials(materials,capOverride){
 
     const clean={};
+
+    const cap=
+        capOverride || MATERIAL_CAP;
 
     for(
         const id in materials
@@ -5348,7 +5813,7 @@ function clampMaterials(materials){
             Math.max(
                 0,
                 Math.min(
-                    MATERIAL_CAP,
+                    cap,
                     Math.floor(
                         materials[id]
                     ) || 0
@@ -5761,7 +6226,8 @@ function withdrawMaterialToShip(planetId,shipId,materialId){
         ] || 0;
 
     const room=
-        MATERIAL_CAP-
+        MATERIAL_CAP+
+        (ship.materialCapBonus || 0)-
         currentOnShip;
 
     const amount=
@@ -6061,6 +6527,86 @@ function trackResourceSold(planetId,resourceId,amount){
             );
 
         }
+
+    }
+
+    /*
+     * Structure upgrades: same one-time-unlock pattern as
+     * structures themselves, but gated on the base structure
+     * actually being built here first, and only checked for
+     * upgrades not already unlocked or bought.
+     */
+    for(
+        const structureId in
+        STRUCTURE_UPGRADES
+    ){
+
+        if(
+            !hasStructure(
+                planetId,
+                structureId
+            )
+        ){
+
+            continue;
+
+        }
+
+        getUpgradesForStructure(
+            structureId
+        ).forEach(
+            upgrade=>{
+
+                if(
+                    isUpgradeUnlocked(
+                        planetId,
+                        upgrade.id
+                    ) ||
+                    isUpgradePurchased(
+                        planetId,
+                        upgrade.id
+                    )
+                ){
+
+                    return;
+
+                }
+
+                const relevantUpgrade=
+                    upgrade.unlockMaterials.some(
+                        req =>
+                            req.materialId===
+                            resourceId
+                    );
+
+                if(!relevantUpgrade)
+                    return;
+
+                const allMetUpgrade=
+                    upgrade.unlockMaterials.every(
+                        req =>
+                            getSoldProgress(
+                                planetId,
+                                req.materialId
+                            )>=req.amount
+                    );
+
+                if(allMetUpgrade){
+
+                    markUpgradeUnlocked(
+                        planetId,
+                        upgrade.id
+                    );
+
+                    showShipToast(
+                        upgrade.name+
+                        " unlocked for purchase!"
+                    );
+
+                }
+
+            }
+        );
 
     }
 
@@ -6480,7 +7026,9 @@ function equipItemAt(planetId,shipId,itemId){
  * (perkStock) — entirely independent of whatever ability is
  * equipped at the same time.
  */
-function equipPerkAt(planetId,shipId,perkId){
+function equipPerkAt(planetId,shipId,perkId,slot){
+
+    slot=slot===2 ? 2 : 1;
 
     const ship=
         (
@@ -6491,9 +7039,39 @@ function equipPerkAt(planetId,shipId,perkId){
             s => s.id===shipId
         );
 
+    if(!ship)
+        return;
+
     if(
-        !ship ||
-        ship.perk===perkId
+        slot===2 &&
+        !ship.hasDualPerk
+    ){
+
+        return;
+
+    }
+
+    const fieldName=
+        slot===2 ? "perk2" : "perk";
+
+    const otherFieldName=
+        slot===2 ? "perk" : "perk2";
+
+    if(ship[fieldName]===perkId){
+
+        return;
+
+    }
+
+    /*
+     * The same perk can't sit in both slots at once — that
+     * would just be double-dipping one effect rather than
+     * genuinely running two different perks together.
+     */
+    if(
+        perkId &&
+        perkId===
+        ship[otherFieldName]
     ){
 
         return;
@@ -6530,15 +7108,15 @@ function equipPerkAt(planetId,shipId,perkId){
 
     }
 
-    if(ship.perk){
+    if(ship[fieldName]){
 
         planetSave.perkStock[
             planetId
-        ][ship.perk]=
+        ][ship[fieldName]]=
             (
                 getPerkStock(
                     planetId,
-                    ship.perk
+                    ship[fieldName]
                 )
             )+1;
 
@@ -6556,7 +7134,7 @@ function equipPerkAt(planetId,shipId,perkId){
 
     }
 
-    ship.perk=perkId || null;
+    ship[fieldName]=perkId || null;
 
     expandedPerkShipId=null;
 
@@ -7083,6 +7661,11 @@ function resolveBuildQueue(planetId){
                     1,
                     3,
                     {},
+                    null,
+                    build.cargoHold
+                    ?10
+                    :0,
+                    !!build.dualPerk,
                     null
                 );
 
@@ -7091,7 +7674,13 @@ function resolveBuildQueue(planetId){
                     (
                         getPlanet(planetId) ||
                         {name:planetId}
-                    ).name+"!"
+                    ).name+
+                    (
+                        build.cargoHold ||
+                        build.dualPerk
+                        ?" (upgraded)"
+                        :""
+                    )+"!"
                 );
 
             }else if(
@@ -7191,7 +7780,7 @@ function computeShipBuildCost(planetId){
             b => b.type==="ship"
         ).length;
 
-    return 100+total*40;
+    return 5+total*2;
 
 }
 
@@ -7204,8 +7793,8 @@ function computeShipBuildCost(planetId){
 function computeStructureBuildCost(structureId){
 
     return structureId==="ship-factory"
-        ?400
-        :350;
+        ?18
+        :15;
 
 }
 
@@ -7233,7 +7822,9 @@ function computeShipBuildDuration(planetId){
 
 }
 
-function queueShipBuild(planetId){
+function queueShipBuild(planetId,options){
+
+    options=options || {};
 
     if(
         !hasStructure(
@@ -7243,10 +7834,32 @@ function queueShipBuild(planetId){
     )
         return;
 
-    const cost=
+    const useCargoHold=
+        !!options.cargoHold &&
+        hasPurchasedToggleUpgrade(
+            planetId,
+            "ship-factory",
+            "cargo-hold"
+        );
+
+    const useDualPerk=
+        !!options.dualPerk &&
+        hasPurchasedToggleUpgrade(
+            planetId,
+            "ship-factory",
+            "dual-perk"
+        );
+
+    let cost=
         computeShipBuildCost(
             planetId
         );
+
+    if(useCargoHold)
+        cost+=3;
+
+    if(useDualPerk)
+        cost+=5;
 
     if(
         getBank(planetId)<cost
@@ -7284,7 +7897,9 @@ function queueShipBuild(planetId){
         durationSeconds:
             computeShipBuildDuration(
                 planetId
-            )
+            ),
+        cargoHold:useCargoHold,
+        dualPerk:useDualPerk
     });
 
     savePlanetProgress();
@@ -7858,6 +8473,12 @@ let expandedEquipShipId=null;
 let expandedPerkShipId=null;
 
 /*
+ * Same again for the second perk slot (Dual Perk Rig ships
+ * only) — independent from the first slot's expand state.
+ */
+let expandedPerk2ShipId=null;
+
+/*
  * Which pet (if any) currently has its mission-destination
  * picker expanded — same one-at-a-time pattern as the equip
  * and perk pickers.
@@ -7871,6 +8492,16 @@ let expandedPerkShipId=null;
  * sub-list replaces the pet list for that same ship.
  */
 let expandedShipPilotId=null;
+
+/*
+ * Which optional build toggles are currently checked for the
+ * NEXT ship queued at whichever planet is open — resets after
+ * each build so it never silently carries over between visits.
+ */
+let shipBuildToggles={
+    cargoHold:false,
+    dualPerk:false
+};
 let pilotAssignmentPetId=null;
 
 function openPlanetDetail(id){
@@ -8334,7 +8965,11 @@ function renderPlanetDetail(id){
 
                                 return(
                                     '<span>'+info.icon+' '+
-                                    count+'/'+MATERIAL_CAP+
+                                    count+'/'+
+                                    (
+                                        MATERIAL_CAP+
+                                        (ship.materialCapBonus || 0)
+                                    )+
                                     '</span>'
                                 );
 
@@ -8356,7 +8991,8 @@ function renderPlanetDetail(id){
                                     ship.materials[
                                         materialId
                                     ] || 0
-                                )<MATERIAL_CAP
+                                )<MATERIAL_CAP+
+                                (ship.materialCapBonus || 0)
                         ).length
                         ?'<div style="display:flex;flex-direction:column;gap:6px;'+
                         'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
@@ -8371,7 +9007,8 @@ function renderPlanetDetail(id){
                                     ship.materials[
                                         materialId
                                     ] || 0
-                                )<MATERIAL_CAP
+                                )<MATERIAL_CAP+
+                                (ship.materialCapBonus || 0)
                         ).map(
                             ([materialId,bankCount])=>{
 
@@ -8380,7 +9017,8 @@ function renderPlanetDetail(id){
                                     MATERIALS["aether-dust"];
 
                                 const room=
-                                    MATERIAL_CAP-
+                                    MATERIAL_CAP+
+                                    (ship.materialCapBonus || 0)-
                                     (
                                         ship.materials[
                                             materialId
@@ -8557,6 +9195,102 @@ function renderPlanetDetail(id){
                             );
 
                         })()
+                    )+
+                    (
+                        ship.hasDualPerk
+                        ?(function(){
+
+                            const localPerk2=
+                                getPerkForPlanet(id);
+
+                            const perk2Options=[];
+
+                            if(
+                                localPerk2 &&
+                                isPerkUnlocked(localPerk2.id) &&
+                                ship.perk2!==
+                                localPerk2.id &&
+                                localPerk2.id!==
+                                ship.perk &&
+                                getPerkStock(
+                                    id,
+                                    localPerk2.id
+                                )>0
+                            ){
+
+                                perk2Options.push(
+                                    localPerk2
+                                );
+
+                            }
+
+                            const perk2Expanded=
+                                expandedPerk2ShipId===
+                                ship.id;
+
+                            const currentPerk2Info=
+                                ship.perk2
+                                ?PERKS[ship.perk2]
+                                :null;
+
+                            return(
+                                '<button class="control-btn" data-action="toggle-perk2" data-ship="'+
+                                ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
+                                'display:flex;align-items:center;gap:6px;">'+
+                                '<span>Perk 2: '+
+                                (
+                                    currentPerk2Info
+                                    ?currentPerk2Info.icon+' '+currentPerk2Info.name
+                                    :"None"
+                                )+
+                                '</span>'+
+                                '<span style="opacity:.6;">'+
+                                (perk2Expanded ? "▲" : "▼")+
+                                '</span>'+
+                                '</button>'+
+                                (
+                                    perk2Expanded
+                                    ?'<div style="display:flex;flex-direction:column;gap:6px;'+
+                                    'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                                    (
+                                        ship.perk2
+                                        ?'<button class="shape-btn" style="width:100%;'+
+                                        'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                        'data-action="equip-perk2" data-ship="'+
+                                        ship.id+'" data-perk="">'+
+                                        'None (unequip)</button>'
+                                        :''
+                                    )+
+                                    (
+                                        perk2Options.length
+                                        ?perk2Options.map(
+                                            p =>
+                                                '<button class="shape-btn" style="width:100%;'+
+                                                'display:flex;align-items:center;justify-content:space-between;'+
+                                                'padding:8px 10px;font-size:11px;" '+
+                                                'data-action="equip-perk2" data-ship="'+
+                                                ship.id+'" data-perk="'+p.id+'">'+
+                                                '<span>'+p.icon+' '+p.name+'</span>'+
+                                                '<span style="opacity:.6;font-size:9px;">'+
+                                                getPerkStock(id,p.id)+
+                                                ' in stock</span>'+
+                                                '</button>'
+                                        ).join("")
+                                        :(
+                                            ship.perk2
+                                            ?''
+                                            :'<span style="font-size:10px;color:#5c7ba0;">'+
+                                              'Nothing else to equip here — the same perk '+
+                                              'can\'t fill both slots.</span>'
+                                        )
+                                    )+
+                                    '</div>'
+                                    :''
+                                )
+                            );
+
+                        })()
+                        :''
                     )+
                     (
                         hasPilotTraining
@@ -8971,7 +9705,7 @@ function renderPlanetDetail(id){
 
                             const maxed=
                                 statLevel>=
-                                PET_STAT_MAX_LEVEL;
+                                getPetStatMaxLevel(id);
 
                             const trainCost=
                                 computeStatTrainCost(
@@ -9123,8 +9857,30 @@ function renderPlanetDetail(id){
 
     if(factory){
 
+        const hasCargoHoldUpgrade=
+            isUpgradePurchased(
+                id,
+                "ship-factory-cargo-hold"
+            );
+
+        const hasDualPerkUpgrade=
+            isUpgradePurchased(
+                id,
+                "ship-factory-dual-perk"
+            );
+
+        const useCargoHold=
+            hasCargoHoldUpgrade &&
+            shipBuildToggles.cargoHold;
+
+        const useDualPerk=
+            hasDualPerkUpgrade &&
+            shipBuildToggles.dualPerk;
+
         const shipCost=
-            computeShipBuildCost(id);
+            computeShipBuildCost(id)+
+            (useCargoHold ? 3 : 0)+
+            (useDualPerk ? 5 : 0);
 
         const shipDuration=
             computeShipBuildDuration(id);
@@ -9138,9 +9894,62 @@ function renderPlanetDetail(id){
             workingPetsHere+' currently working) — more '+
             'working pets means faster builds. Current build '+
             'time: '+shipDuration+'s.'+
-            '</div>'+
+            '</div>';
+
+        if(
+            hasCargoHoldUpgrade ||
+            hasDualPerkUpgrade
+        ){
+
+            html+=
+                '<div style="display:flex;gap:6px;flex-wrap:wrap;'+
+                'margin-bottom:8px;">';
+
+            if(hasCargoHoldUpgrade){
+
+                html+=
+                    '<button class="shape-btn'+
+                    (
+                        shipBuildToggles.cargoHold
+                        ?' selected'
+                        :''
+                    )+
+                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
+                    'data-action="toggle-ship-build-option" '+
+                    'data-option="cargoHold">📦 Cargo Hold (+3 🪙)</button>';
+
+            }
+
+            if(hasDualPerkUpgrade){
+
+                html+=
+                    '<button class="shape-btn'+
+                    (
+                        shipBuildToggles.dualPerk
+                        ?' selected'
+                        :''
+                    )+
+                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
+                    'data-action="toggle-ship-build-option" '+
+                    'data-option="dualPerk">⚡ Dual Perk (+5 🪙)</button>';
+
+            }
+
+            html+=
+                '</div>';
+
+        }
+
+        html+=
             '<div class="selected-shape-info">'+
-            '<span>Build a new ship</span>'+
+            '<span>Build a new ship'+
+            (
+                useCargoHold ||
+                useDualPerk
+                ?' (upgraded)'
+                :''
+            )+
+            '</span>'+
             '<button class="remove-btn" style="background:'+
             (
                 canAfford
@@ -9183,6 +9992,12 @@ function renderPlanetDetail(id){
             );
 
         }
+
+        html+=
+            renderStructureUpgradesHtml(
+                id,
+                "ship-factory"
+            );
 
     }else if(structureBuild){
 
@@ -9372,6 +10187,12 @@ function renderPlanetDetail(id){
             );
 
         }
+
+        html+=
+            renderStructureUpgradesHtml(
+                id,
+                "pilot-training"
+            );
 
     }else if(pilotTrainingBuild){
 
@@ -9672,7 +10493,38 @@ document
             equipPerkAt(
                 planetDetailId,
                 shipId,
-                perkId || null
+                perkId || null,
+                1
+            );
+
+        }else if(
+            action==="toggle-perk2"
+        ){
+
+            expandedPerk2ShipId=
+                expandedPerk2ShipId===
+                shipId
+                ?null
+                :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="equip-perk2"
+        ){
+
+            const perkId=
+                target.getAttribute(
+                    "data-perk"
+                );
+
+            equipPerkAt(
+                planetDetailId,
+                shipId,
+                perkId || null,
+                2
             );
 
         }else if(
@@ -9722,8 +10574,41 @@ document
         ){
 
             queueShipBuild(
-                planetDetailId
+                planetDetailId,
+                shipBuildToggles
             );
+
+            shipBuildToggles={
+                cargoHold:false,
+                dualPerk:false
+            };
+
+        }else if(
+            action==="toggle-ship-build-option"
+        ){
+
+            const optionKey=
+                target.getAttribute(
+                    "data-option"
+                );
+
+            if(
+                optionKey==="cargoHold" ||
+                optionKey==="dualPerk"
+            ){
+
+                shipBuildToggles[
+                    optionKey
+                ]=
+                    !shipBuildToggles[
+                        optionKey
+                    ];
+
+                renderPlanetDetail(
+                    planetDetailId
+                );
+
+            }
 
         }else if(
             action==="build-structure"
@@ -9737,6 +10622,20 @@ document
             buildStructure(
                 planetDetailId,
                 structureId
+            );
+
+        }else if(
+            action==="buy-upgrade"
+        ){
+
+            const upgradeId=
+                target.getAttribute(
+                    "data-upgrade"
+                );
+
+            buyStructureUpgrade(
+                planetDetailId,
+                upgradeId
             );
 
         }else if(
@@ -13613,8 +14512,15 @@ function updateCurrentShipCoins(){
 
         ship.materials=
             clampMaterials(
-                runMaterials
+                runMaterials,
+                MATERIAL_CAP+
+                currentShipMaterialCapBonus
             );
+
+        ship.perk2=
+            currentShipHasDualPerk
+            ?currentShipPerk2
+            :null;
 
         savePlanetProgress();
 
@@ -16151,6 +17057,8 @@ function computeMaterialDropRate(){
  */
 function getPerkEffect(effectType){
 
+    let total=0;
+
     const perk=
         PERKS[currentShipPerk];
 
@@ -16160,11 +17068,34 @@ function getPerkEffect(effectType){
         effectType
     ){
 
-        return perk.effectValue;
+        total+=
+            perk.effectValue;
 
     }
 
-    return 0;
+    /*
+     * Dual Perk Rig: a second slot, entirely independent of the
+     * first — a ship without the upgrade always has
+     * currentShipPerk2 as null regardless of what's stored on
+     * it, so this is safe to check unconditionally.
+     */
+    const perk2=
+        PERKS[currentShipPerk2];
+
+    if(
+        perk2 &&
+        perk2.effectType===
+        effectType &&
+        currentShipPerk2!==
+        currentShipPerk
+    ){
+
+        total+=
+            perk2.effectValue;
+
+    }
+
+    return total;
 
 }
 
@@ -18974,7 +19905,10 @@ function landAtCurrentPlanet(){
                 wave,
                 lives,
                 runMaterials,
-                currentShipPerk
+                currentShipPerk,
+                currentShipMaterialCapBonus,
+                currentShipHasDualPerk,
+                currentShipPerk2
             );
 
         currentShipId=
@@ -21134,6 +22068,18 @@ let currentShipEquipment="emp";
  * equipped, not a replacement for it.
  */
 let currentShipPerk=null;
+
+/*
+ * Cargo Hold Expansion and Dual Perk Rig — baked into a
+ * specific ship at build time (see createShip's materialCapBonus
+ * and hasDualPerk), not global settings. currentShipPerk2 only
+ * does anything if currentShipHasDualPerk is true for this
+ * flight's ship.
+ */
+let currentShipMaterialCapBonus=0;
+let currentShipHasDualPerk=false;
+let currentShipPerk2=null;
+
 let beamArmed=false;
 
 /*
@@ -21243,6 +22189,12 @@ function startGame(){
 
     let launchPerk=null;
 
+    let launchMaterialCapBonus=0;
+
+    let launchHasDualPerk=false;
+
+    let launchPerk2=null;
+
     let launchWave=1;
 
     let launchLives=3;
@@ -21307,6 +22259,17 @@ function startGame(){
 
             launchPerk=
                 earthChoice.perk ||
+                null;
+
+            launchMaterialCapBonus=
+                earthChoice.materialCapBonus ||
+                0;
+
+            launchHasDualPerk=
+                !!earthChoice.hasDualPerk;
+
+            launchPerk2=
+                earthChoice.perk2 ||
                 null;
 
             launchWave=
@@ -21427,6 +22390,17 @@ function startGame(){
             ship.perk ||
             null;
 
+        launchMaterialCapBonus=
+            ship.materialCapBonus ||
+            0;
+
+        launchHasDualPerk=
+            !!ship.hasDualPerk;
+
+        launchPerk2=
+            ship.perk2 ||
+            null;
+
         launchWave=
             Number(
                 ship.wave
@@ -21477,6 +22451,15 @@ function startGame(){
 
     currentShipPerk=
         launchPerk;
+
+    currentShipMaterialCapBonus=
+        launchMaterialCapBonus;
+
+    currentShipHasDualPerk=
+        launchHasDualPerk;
+
+    currentShipPerk2=
+        launchPerk2;
 
     combo=1;
 
@@ -21922,7 +22905,8 @@ function handlePointer(event){
 
             if(
                 current>=
-                MATERIAL_CAP
+                MATERIAL_CAP+
+                currentShipMaterialCapBonus
             ){
 
                 floatingText(
