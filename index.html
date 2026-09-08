@@ -2017,6 +2017,16 @@ and (max-height:500px){
                 <input type="range" id="polygonSidesSlider" class="slider-input" min="3" max="12" step="1" value="5">
                 <span class="slider-value" id="polygonSidesValue">5</span>
             </div>
+            <div class="slider-group">
+                <label class="slider-label">Width</label>
+                <input type="range" id="polygonWidthSlider" class="slider-input" min="30" max="250" step="5" value="100">
+                <span class="slider-value" id="polygonWidthValue">100%</span>
+            </div>
+            <div class="slider-group">
+                <label class="slider-label">Height</label>
+                <input type="range" id="polygonHeightSlider" class="slider-input" min="30" max="250" step="5" value="100">
+                <span class="slider-value" id="polygonHeightValue">100%</span>
+            </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#9db4d4;margin:10px 0;">
                 <input type="checkbox" id="polygonHoleToggle" style="width:16px;height:16px;">
                 Cut a hole in the middle
@@ -2030,6 +2040,16 @@ and (max-height:500px){
                 <label class="slider-label">Hole Size</label>
                 <input type="range" id="polygonHoleSizeSlider" class="slider-input" min="10" max="80" step="5" value="45">
                 <span class="slider-value" id="polygonHoleSizeValue">45%</span>
+            </div>
+            <div class="slider-group hidden" id="polygonHoleWidthSliderGroup">
+                <label class="slider-label">Hole Width</label>
+                <input type="range" id="polygonHoleWidthSlider" class="slider-input" min="30" max="250" step="5" value="100">
+                <span class="slider-value" id="polygonHoleWidthValue">100%</span>
+            </div>
+            <div class="slider-group hidden" id="polygonHoleHeightSliderGroup">
+                <label class="slider-label">Hole Height</label>
+                <input type="range" id="polygonHoleHeightSlider" class="slider-input" min="30" max="250" step="5" value="100">
+                <span class="slider-value" id="polygonHoleHeightValue">100%</span>
             </div>
             <canvas id="polygonPreview" width="140" height="140" style="display:block;margin:10px auto;background:rgba(0,0,0,.25);border-radius:12px;"></canvas>
             <button class="big-button secondary-button" id="createPolygonBtn">Add This Shape</button>
@@ -4462,9 +4482,12 @@ const PET_ENERGY_PER_FOOD=40;
  * Passive energy drain, resolved against real elapsed time the
  * same way build queues are — a pet left unfed for a while
  * will genuinely have run down by the next time it's checked,
- * whether or not the game was open in between.
+ * whether or not the game was open in between. Tuned so a full
+ * drain from 100% takes about a week of real time, not under
+ * an hour.
  */
-const PET_ENERGY_DRAIN_PER_MINUTE=2;
+const PET_ENERGY_DRAIN_PER_MINUTE=
+    100/(7*24*60);
 
 /*
  * Per-PET timestamp, not per-planet — this is the actual fix
@@ -26382,11 +26405,17 @@ const shipCustomizer = {
         bind('createPolygonBtn', () => { sound('click'); this.createCustomPolygon(); });
 
         document.getElementById('polygonSidesSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonWidthSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHeightSlider').addEventListener('input', () => this.updatePolygonPreview());
         document.getElementById('polygonHoleSidesSlider').addEventListener('input', () => this.updatePolygonPreview());
         document.getElementById('polygonHoleSizeSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHoleWidthSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHoleHeightSlider').addEventListener('input', () => this.updatePolygonPreview());
         document.getElementById('polygonHoleToggle').addEventListener('change', (e) => {
             document.getElementById('polygonHoleSliderGroup').classList.toggle('hidden', !e.target.checked);
             document.getElementById('polygonHoleSizeSliderGroup').classList.toggle('hidden', !e.target.checked);
+            document.getElementById('polygonHoleWidthSliderGroup').classList.toggle('hidden', !e.target.checked);
+            document.getElementById('polygonHoleHeightSliderGroup').classList.toggle('hidden', !e.target.checked);
             this.updatePolygonPreview();
         });
         bind('resetCustomizerBtn', () => this.reset());
@@ -26464,11 +26493,14 @@ const shipCustomizer = {
 
     // Generates a regular polygon's vertices — the starting point for
     // every custom shape now, rather than asking for raw coordinates.
-    regularPolygonPoints(sides, radius) {
+    // radiusX/radiusY can differ, which is what gives width/height ratio
+    // control — a plain circle-based polygon otherwise has no way to be
+    // anything but uniformly round.
+    regularPolygonPoints(sides, radiusX, radiusY = radiusX) {
         const points = [];
         for (let i = 0; i < sides; i++) {
             const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
-            points.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+            points.push([Math.cos(angle) * radiusX, Math.sin(angle) * radiusY]);
         }
         return points;
     },
@@ -26479,6 +26511,8 @@ const shipCustomizer = {
         document.getElementById('polygonHoleToggle').checked = false;
         document.getElementById('polygonHoleSliderGroup').classList.add('hidden');
         document.getElementById('polygonHoleSizeSliderGroup').classList.add('hidden');
+        document.getElementById('polygonHoleWidthSliderGroup').classList.add('hidden');
+        document.getElementById('polygonHoleHeightSliderGroup').classList.add('hidden');
         this.updatePolygonPreview();
     },
 
@@ -26486,11 +26520,20 @@ const shipCustomizer = {
         const sides = Number(document.getElementById('polygonSidesSlider').value);
         document.getElementById('polygonSidesValue').textContent = sides;
 
+        const widthPercent = Number(document.getElementById('polygonWidthSlider').value);
+        const heightPercent = Number(document.getElementById('polygonHeightSlider').value);
+        document.getElementById('polygonWidthValue').textContent = widthPercent + '%';
+        document.getElementById('polygonHeightValue').textContent = heightPercent + '%';
+
         const hasHole = document.getElementById('polygonHoleToggle').checked;
         const holeSides = Number(document.getElementById('polygonHoleSidesSlider').value);
         const holeSizePercent = Number(document.getElementById('polygonHoleSizeSlider').value);
+        const holeWidthPercent = Number(document.getElementById('polygonHoleWidthSlider').value);
+        const holeHeightPercent = Number(document.getElementById('polygonHoleHeightSlider').value);
         document.getElementById('polygonHoleSidesValue').textContent = holeSides;
         document.getElementById('polygonHoleSizeValue').textContent = holeSizePercent + '%';
+        document.getElementById('polygonHoleWidthValue').textContent = holeWidthPercent + '%';
+        document.getElementById('polygonHoleHeightValue').textContent = holeHeightPercent + '%';
 
         const canvas = document.getElementById('polygonPreview');
         const ctx2d = canvas.getContext('2d');
@@ -26499,7 +26542,7 @@ const shipCustomizer = {
         ctx2d.translate(canvas.width / 2, canvas.height / 2);
 
         const outerRadius = 50;
-        const points = this.regularPolygonPoints(sides, outerRadius);
+        const points = this.regularPolygonPoints(sides, outerRadius * (widthPercent / 100), outerRadius * (heightPercent / 100));
 
         ctx2d.fillStyle = '#00ff00';
         ctx2d.strokeStyle = '#64beff';
@@ -26514,7 +26557,11 @@ const shipCustomizer = {
         ctx2d.closePath();
 
         if (hasHole) {
-            const holePoints = this.regularPolygonPoints(holeSides, outerRadius * (holeSizePercent / 100));
+            const holePoints = this.regularPolygonPoints(
+                holeSides,
+                outerRadius * (holeSizePercent / 100) * (holeWidthPercent / 100),
+                outerRadius * (holeSizePercent / 100) * (holeHeightPercent / 100)
+            );
             holePoints.forEach(([px, py], i) => {
                 if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
             });
@@ -26529,14 +26576,22 @@ const shipCustomizer = {
 
     createCustomPolygon() {
         const sides = Number(document.getElementById('polygonSidesSlider').value);
-        const points = this.regularPolygonPoints(sides, 30);
+        const widthPercent = Number(document.getElementById('polygonWidthSlider').value);
+        const heightPercent = Number(document.getElementById('polygonHeightSlider').value);
+        const points = this.regularPolygonPoints(sides, 30 * (widthPercent / 100), 30 * (heightPercent / 100));
 
         const hasHole = document.getElementById('polygonHoleToggle').checked;
         let holePoints = null;
         if (hasHole) {
             const holeSides = Number(document.getElementById('polygonHoleSidesSlider').value);
             const holeSizePercent = Number(document.getElementById('polygonHoleSizeSlider').value);
-            holePoints = this.regularPolygonPoints(holeSides, 30 * (holeSizePercent / 100));
+            const holeWidthPercent = Number(document.getElementById('polygonHoleWidthSlider').value);
+            const holeHeightPercent = Number(document.getElementById('polygonHoleHeightSlider').value);
+            holePoints = this.regularPolygonPoints(
+                holeSides,
+                30 * (holeSizePercent / 100) * (holeWidthPercent / 100),
+                30 * (holeSizePercent / 100) * (holeHeightPercent / 100)
+            );
         }
 
         const shape = new ShapeObject('custom', 200, 140, '#00ff00', 1, 0, points, '#64beff', holePoints);
