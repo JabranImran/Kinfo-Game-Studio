@@ -2971,10 +2971,18 @@ function defaultPlanetSave(){
          * {ship, pet, destinationId, hops, startedAt,
          * durationSeconds}. Both the ship and pet are removed
          * from their normal docked lists while a mission is in
-         * flight, and one or both return (or the pet doesn't)
-         * when it resolves.
+         * flight; if the pet doesn't survive, the ship is lost
+         * with it — neither returns.
          */
-        missions:{}
+        missions:{},
+
+        /*
+         * Last 3 resolved mission outcomes per planet, newest
+         * first — planetSave.missionLog[planetId], each entry
+         * {destinationId, survived, materials, materialName,
+         * resolvedAt}.
+         */
+        missionLog:{}
 
     };
 
@@ -3446,6 +3454,16 @@ function loadPlanetSave(){
                 }
 
                 if(
+                    !saved.missionLog ||
+                    typeof saved.missionLog!==
+                    "object"
+                ){
+
+                    saved.missionLog={};
+
+                }
+
+                if(
                     !saved.petEnergyResolved ||
                     typeof saved.petEnergyResolved!==
                     "object"
@@ -3845,7 +3863,7 @@ const SHOP_ITEMS={
         planetId:"mars",
         name:"Regen Coil",
         icon:"❤",
-        cost:2,
+        cost:20,
         description:
             "Slowly repairs your hull over time instead of "+
             "clearing the field — passive survivability rather "+
@@ -3857,7 +3875,7 @@ const SHOP_ITEMS={
         planetId:"titan",
         name:"Incinerator Beam",
         icon:"🔥",
-        cost:3,
+        cost:30,
         description:
             "Fires a directed beam toward wherever you tap, "+
             "instantly destroying every asteroid in its path — "+
@@ -3870,7 +3888,7 @@ const SHOP_ITEMS={
         planetId:"europa",
         name:"Return Capsule",
         icon:"📦",
-        cost:2,
+        cost:25,
         description:
             "Ejects automatically if your ship is lost, or fire "+
             "it yourself once charged to bank your coins AND "+
@@ -3884,7 +3902,7 @@ const SHOP_ITEMS={
         planetId:"neptune",
         name:"Ghost Shield",
         icon:"👻",
-        cost:3,
+        cost:35,
         description:
             "Turns your hull intangible for a few seconds — "+
             "asteroids pass straight through without dealing "+
@@ -3896,7 +3914,7 @@ const SHOP_ITEMS={
         planetId:"kepler",
         name:"Chrono Field",
         icon:"🌀",
-        cost:3,
+        cost:35,
         description:
             "Slows every asteroid in the field, including "+
             "anything spawned while it's active, giving you a "+
@@ -3908,7 +3926,7 @@ const SHOP_ITEMS={
         planetId:"aurora",
         name:"Ricochet Orb",
         icon:"🔵",
-        cost:3,
+        cost:35,
         description:
             "Fires toward wherever you tap and bounces off each "+
             "asteroid it destroys, carving through the field "+
@@ -3920,7 +3938,7 @@ const SHOP_ITEMS={
         planetId:"helios",
         name:"Solar Blade",
         icon:"☄",
-        cost:4,
+        cost:45,
         description:
             "Arms a glowing blade at your fingertip — drag across "+
             "the field and anything the trail crosses is cut "+
@@ -3933,7 +3951,7 @@ const SHOP_ITEMS={
         planetId:"nova",
         name:"Nova Burst",
         icon:"✨",
-        cost:4,
+        cost:45,
         description:
             "An instant flash that sweeps in every coin currently "+
             "on the field at once, with a bonus on top — pure "+
@@ -3945,7 +3963,7 @@ const SHOP_ITEMS={
         planetId:"zenith",
         name:"Singularity",
         icon:"🌌",
-        cost:6,
+        cost:60,
         description:
             "Tap to collapse a point in space — nearby asteroids "+
             "get dragged in and destroyed as they reach the "+
@@ -3995,7 +4013,7 @@ const PERKS={
         icon:"🧲",
         unlockMaterial:"volatile-alloy",
         unlockAmount:5,
-        buyCost:8,
+        buyCost:80,
         effectType:"coinMultiplier",
         effectValue:.25,
         description:
@@ -4010,7 +4028,7 @@ const PERKS={
         icon:"⚙",
         unlockMaterial:"magnetic-resin",
         unlockAmount:5,
-        buyCost:8,
+        buyCost:80,
         effectType:"materialDropBoost",
         effectValue:.4,
         description:
@@ -4026,7 +4044,7 @@ const PERKS={
         icon:"🔋",
         unlockMaterial:"incinerator-beam",
         unlockAmount:3,
-        buyCost:1,
+        buyCost:100,
         effectType:"chargeRateBoost",
         effectValue:.2,
         description:
@@ -4107,9 +4125,9 @@ const STRUCTURES={
          * grinding one planet's own resource.
          */
         buildMaterials:[
-            {materialId:"volatile-alloy",amount:1},
-            {materialId:"cryo-shard",amount:1},
-            {materialId:"magnetic-resin",amount:1}
+            {materialId:"volatile-alloy",amount:6},
+            {materialId:"cryo-shard",amount:6},
+            {materialId:"magnetic-resin",amount:6}
         ],
         requiresPet:true,
         buildDurationSeconds:120
@@ -4126,9 +4144,9 @@ const STRUCTURES={
             "pet can die out there — and always needs at least "+
             "one other ship left docked for you to fly yourself.",
         buildMaterials:[
-            {materialId:"solar-plating",amount:1},
-            {materialId:"shadow-vapor",amount:1},
-            {materialId:"chrono-crystal",amount:1}
+            {materialId:"solar-plating",amount:6},
+            {materialId:"shadow-vapor",amount:6},
+            {materialId:"chrono-crystal",amount:6}
         ],
         requiresPet:true,
         buildDurationSeconds:150
@@ -4195,6 +4213,14 @@ function getWorkingPetCount(planetId){
 
 }
 
+/*
+ * One-time fee each time a pet is switched INTO the pilot role
+ * (not out of it) — reflects the actual training investment,
+ * not just a free label swap. Re-assigning it back to pilot
+ * later (after being demoted to builder) pays it again.
+ */
+const PET_PILOT_ASSIGNMENT_FEE=120;
+
 function setPetRole(planetId,petId,role){
 
     const pets=
@@ -4208,10 +4234,38 @@ function setPetRole(planetId,petId,role){
     if(!pet)
         return;
 
-    pet.role=
+    const newRole=
         role==="pilot"
         ?"pilot"
         :"builder";
+
+    const currentRole=
+        pet.role || "builder";
+
+    if(
+        newRole==="pilot" &&
+        currentRole!=="pilot"
+    ){
+
+        if(
+            getBank(planetId)<
+            PET_PILOT_ASSIGNMENT_FEE
+        )
+            return;
+
+        addToBank(
+            planetId,
+            -PET_PILOT_ASSIGNMENT_FEE
+        );
+
+        showShipToast(
+            "Pilot training fee paid — "+
+            PET_PILOT_ASSIGNMENT_FEE+" 🪙"
+        );
+
+    }
+
+    pet.role=newRole;
 
     savePlanetProgress();
 
@@ -4748,6 +4802,55 @@ function getMissions(planetId){
 }
 
 /*
+ * Keeps only the most recent 3 mission outcomes per planet,
+ * newest first — enough for the Pilot Training section to show
+ * a genuine track record without the log growing forever.
+ */
+function pushMissionLog(planetId,entry){
+
+    if(!planetSave.missionLog){
+
+        planetSave.missionLog={};
+
+    }
+
+    if(
+        !planetSave.missionLog[
+            planetId
+        ]
+    ){
+
+        planetSave.missionLog[
+            planetId
+        ]=[];
+
+    }
+
+    planetSave.missionLog[
+        planetId
+    ].unshift(entry);
+
+    planetSave.missionLog[
+        planetId
+    ]=
+        planetSave.missionLog[
+            planetId
+        ].slice(0,3);
+
+}
+
+function getMissionLog(planetId){
+
+    return(
+        (
+            planetSave.missionLog ||
+            {}
+        )[planetId] || []
+    );
+
+}
+
+/*
  * Sending a pet now always names the SPECIFIC ship it's taking
  * (chosen by the player in that ship's own Pilot picker), and
  * the "keep at least one ship for the player" rule is checked
@@ -4936,12 +5039,6 @@ function resolveMissions(planetId){
             planetId
         );
 
-        planetSave.ships[
-            planetId
-        ].push(
-            mission.ship
-        );
-
         const survived=
             Math.random()<
             computeSurvivalChance(
@@ -4953,7 +5050,23 @@ function resolveMissions(planetId){
                 mission.durationSeconds
             );
 
+        let materialsBrought=0;
+
+        let materialName=
+            null;
+
         if(survived){
+
+            /*
+             * The ship only comes home if the pilot does — a
+             * lost pet now genuinely means a lost ship too, not
+             * just a solo return.
+             */
+            planetSave.ships[
+                planetId
+            ].push(
+                mission.ship
+            );
 
             if(!planetSave.pets){
 
@@ -4993,16 +5106,22 @@ function resolveMissions(planetId){
 
             if(material){
 
-                addToMaterialBank(
-                    planetId,
-                    material.id,
+                materialsBrought=
                     computeMissionYield(
                         mission.hops,
                         getPetStatLevel(
                             mission.pet,
                             "endurance"
                         )
-                    )
+                    );
+
+                materialName=
+                    material.name;
+
+                addToMaterialBank(
+                    planetId,
+                    material.id,
+                    materialsBrought
                 );
 
             }
@@ -5017,14 +5136,8 @@ function resolveMissions(planetId){
                 (
                     material
                     ?" with "+
-                     computeMissionYield(
-                        mission.hops,
-                        getPetStatLevel(
-                            mission.pet,
-                            "endurance"
-                        )
-                     )+" "+
-                     material.name
+                     materialsBrought+" "+
+                     materialName
                     :""
                 )+"!"
             );
@@ -5039,10 +5152,22 @@ function resolveMissions(planetId){
                         mission.destinationId
                     ) || {name:mission.destinationId}
                 ).name+
-                " — the ship returned alone."
+                " — the ship was lost with them."
             );
 
         }
+
+        pushMissionLog(
+            planetId,
+            {
+                destinationId:
+                    mission.destinationId,
+                survived:survived,
+                materials:materialsBrought,
+                materialName:materialName,
+                resolvedAt:Date.now()
+            }
+        );
 
     }
 
@@ -7066,7 +7191,7 @@ function computeShipBuildCost(planetId){
             b => b.type==="ship"
         ).length;
 
-    return 1+total*4;
+    return 100+total*40;
 
 }
 
@@ -7080,7 +7205,7 @@ function computeStructureBuildCost(structureId){
 
     return structureId==="ship-factory"
         ?400
-        :3;
+        :350;
 
 }
 
@@ -8786,7 +8911,20 @@ function renderPlanetDetail(id){
                         )+
                         '" style="width:auto;padding:6px 10px;font-size:10px;" '+
                         'data-action="set-pet-role" data-pet="'+pet.id+'" '+
-                        'data-role="pilot">✈ Pilot</button>'
+                        'data-role="pilot" '+
+                        (
+                            role!=="pilot" &&
+                            bank<PET_PILOT_ASSIGNMENT_FEE
+                            ?'disabled'
+                            :''
+                        )+
+                        '>✈ Pilot'+
+                        (
+                            role!=="pilot"
+                            ?' ('+PET_PILOT_ASSIGNMENT_FEE+' 🪙)'
+                            :''
+                        )+
+                        '</button>'
                         :''
                     )+
                     '</div>';
@@ -9187,6 +9325,53 @@ function renderPlanetDetail(id){
             'Built here — train and send pets on missions from '+
             'the Pets section above.'+
             '</div>';
+
+        const log=
+            getMissionLog(id);
+
+        if(log.length){
+
+            html+=
+                '<div style="font-size:9px;color:#8fa7c7;'+
+                'margin-top:8px;">Last '+log.length+
+                ' mission outcome(s):</div>';
+
+            log.forEach(
+                entry=>{
+
+                    const destName=
+                        (
+                            getPlanet(
+                                entry.destinationId
+                            ) || {name:entry.destinationId}
+                        ).name;
+
+                    html+=
+                        '<div class="metric-note" style="color:'+
+                        (
+                            entry.survived
+                            ?'#8dffb0'
+                            :'#ff8d8d'
+                        )+
+                        ';">'+
+                        (
+                            entry.survived
+                            ?'✅ Returned from '+destName+
+                             (
+                                 entry.materials>0
+                                 ?' with '+entry.materials+
+                                  ' '+entry.materialName
+                                 :' with nothing'
+                             )
+                            :'💀 Lost with the ship near '+
+                             destName
+                        )+
+                        '</div>';
+
+                }
+            );
+
+        }
 
     }else if(pilotTrainingBuild){
 
