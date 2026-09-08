@@ -26138,7 +26138,7 @@ class ShapeObject {
     hitRadius() {
         const base = {
             circle: 25, square: 35, triangle: 28, rectangle: 29,
-            hexagon: 25, pentagon: 25, diamond: 35, 'emp-cube': 21, custom: 32
+            hexagon: 25, pentagon: 25, diamond: 35, 'emp-cube': 21, custom: 32, thruster: 20
         }[this.type] || 30;
         return base * this.scale;
     }
@@ -26228,6 +26228,62 @@ class ShapeObject {
                 ctx.fillRect(-cubeSize/2, -cubeSize/2, cubeSize, cubeSize);
                 ctx.strokeRect(-cubeSize/2, -cubeSize/2, cubeSize, cubeSize);
                 break;
+            case 'thruster': {
+                // A little animated exhaust flame — flickers using two
+                // offset sine waves so it reads as organic rather than a
+                // mechanical pulse, and each thruster's phase is seeded
+                // from its own id so multiple thrusters on one ship never
+                // flicker in perfect unison.
+                const phase = this.id * 1000;
+                const time = performance.now();
+                const flicker = 0.82 + Math.sin(time * 0.014 + phase) * 0.12 + Math.sin(time * 0.037 + phase * 1.7) * 0.06;
+                const flameLength = 46 * this.scale * flicker;
+                const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1);
+                const coreColor = this.outlineColor || '#ffffff';
+
+                // Bright nozzle dot at the mount point
+                ctx.shadowBlur = 14;
+                ctx.shadowColor = coreColor;
+                ctx.fillStyle = coreColor;
+                ctx.beginPath();
+                ctx.arc(0, 0, 4 * this.scale, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Soft outer flame in the shape's fill color
+                const outerGrad = ctx.createLinearGradient(0, 0, 0, flameLength);
+                outerGrad.addColorStop(0, this.color);
+                outerGrad.addColorStop(0.55, this.color);
+                outerGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.globalAlpha = 0.85;
+                ctx.fillStyle = outerGrad;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.moveTo(-flameWidth / 2, 0);
+                ctx.quadraticCurveTo(-flameWidth * 0.15, flameLength * 0.55, 0, flameLength);
+                ctx.quadraticCurveTo(flameWidth * 0.15, flameLength * 0.55, flameWidth / 2, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // Brighter inner core, shorter and narrower, in the outline color
+                ctx.globalAlpha = 1;
+                const innerLength = flameLength * 0.6;
+                const innerWidth = flameWidth * 0.45;
+                const innerGrad = ctx.createLinearGradient(0, 0, 0, innerLength);
+                innerGrad.addColorStop(0, coreColor);
+                innerGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = innerGrad;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.moveTo(-innerWidth / 2, 0);
+                ctx.quadraticCurveTo(0, innerLength * 0.6, 0, innerLength);
+                ctx.quadraticCurveTo(0, innerLength * 0.6, innerWidth / 2, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.globalAlpha = 1;
+                break;
+            }
         }
 
         ctx.restore();
@@ -26299,7 +26355,7 @@ const shipCustomizer = {
     setupEventListeners() {
         const canvas = document.getElementById('customPreview');
 
-        ['circle', 'square', 'triangle', 'rectangle', 'hexagon', 'pentagon', 'diamond'].forEach(shape => {
+        ['circle', 'square', 'triangle', 'rectangle', 'hexagon', 'pentagon', 'diamond', 'thruster'].forEach(shape => {
             const btn = document.createElement('button');
             btn.className = 'shape-btn';
             btn.type = 'button';
@@ -26391,12 +26447,16 @@ const shipCustomizer = {
     },
 
     getShapeEmoji(type) {
-        const emojis = { circle: '●', square: '▪', triangle: '▲', rectangle: '▬', hexagon: '⬡', pentagon: '⬠', diamond: '◆' };
+        const emojis = { circle: '●', square: '▪', triangle: '▲', rectangle: '▬', hexagon: '⬡', pentagon: '⬠', diamond: '◆', thruster: '🔥' };
         return emojis[type] || '○';
     },
 
     addShape(type) {
-        const shape = new ShapeObject(type, 200 + (Math.random() * 40 - 20), 140 + (Math.random() * 30 - 15));
+        const spawnX = 200 + (Math.random() * 40 - 20);
+        const spawnY = 140 + (Math.random() * 30 - 15);
+        const shape = type === 'thruster'
+            ? new ShapeObject(type, spawnX, spawnY, '#ff8a3d', 1, 0, null, '#ffe680')
+            : new ShapeObject(type, spawnX, spawnY);
         this.shapes.push(shape);
         this.selectShape(shape);
         this.render();
@@ -26496,7 +26556,7 @@ const shipCustomizer = {
         const section = document.getElementById('selectedShapeSection');
         if (this.selectedShape) {
             section.style.display = 'block';
-            const shapeType = this.selectedShape.type === 'emp-cube' ? '⚡ Reactor Core' : this.selectedShape.type.toUpperCase();
+            const shapeType = this.selectedShape.type === 'emp-cube' ? '⚡ Reactor Core' : this.selectedShape.type === 'thruster' ? '🔥 Thruster Exhaust' : this.selectedShape.type.toUpperCase();
             let html = `<strong>${shapeType}</strong> selected`;
             html += `<button class="remove-btn" id="removeShapeBtn" type="button">Remove</button>`;
             info.innerHTML = html;
