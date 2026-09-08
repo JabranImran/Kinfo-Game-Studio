@@ -1966,12 +1966,13 @@ and (max-height:500px){
 
         </button>
 
-        <div class="customizer-title">
+        <div class="customizer-title" id="shipCustomizerTitle">
             ⚙ SHIP BUILDER
         </div>
 
         <div
             class="subtitle"
+            id="shipCustomizerSubtitle"
             style="text-align:center;margin-bottom:16px;">
 
             Design Your Vessel
@@ -1996,9 +1997,28 @@ and (max-height:500px){
         </div>
 
         <div class="customizer-section hidden" id="polygonSection">
-            <div class="customizer-section-title">Define Polygon Points</div>
-            <div class="polygon-input-row" id="polygonInput"></div>
-            <button class="big-button secondary-button" id="createPolygonBtn">Create Polygon</button>
+            <div class="customizer-section-title">Custom Polygon</div>
+            <div class="slider-group">
+                <label class="slider-label">Vertices</label>
+                <input type="range" id="polygonSidesSlider" class="slider-input" min="3" max="12" step="1" value="5">
+                <span class="slider-value" id="polygonSidesValue">5</span>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#9db4d4;margin:10px 0;">
+                <input type="checkbox" id="polygonHoleToggle" style="width:16px;height:16px;">
+                Cut a hole in the middle
+            </label>
+            <div class="slider-group hidden" id="polygonHoleSliderGroup">
+                <label class="slider-label">Hole Vertices</label>
+                <input type="range" id="polygonHoleSidesSlider" class="slider-input" min="3" max="12" step="1" value="5">
+                <span class="slider-value" id="polygonHoleSidesValue">5</span>
+            </div>
+            <div class="slider-group hidden" id="polygonHoleSizeSliderGroup">
+                <label class="slider-label">Hole Size</label>
+                <input type="range" id="polygonHoleSizeSlider" class="slider-input" min="10" max="80" step="5" value="45">
+                <span class="slider-value" id="polygonHoleSizeValue">45%</span>
+            </div>
+            <canvas id="polygonPreview" width="140" height="140" style="display:block;margin:10px auto;background:rgba(0,0,0,.25);border-radius:12px;"></canvas>
+            <button class="big-button secondary-button" id="createPolygonBtn">Add This Shape</button>
         </div>
 
         <div class="customizer-section" id="selectedShapeSection" style="display:none;">
@@ -2008,8 +2028,12 @@ and (max-height:500px){
         <div class="customizer-section" id="colorSection" style="display:none;">
             <div class="customizer-section-title">Color</div>
             <div class="color-picker-group">
-                <label class="color-picker-label">RGB Color</label>
+                <label class="color-picker-label">Fill Color</label>
                 <input type="color" id="shapeColor" class="color-input" value="#00ff00">
+            </div>
+            <div class="color-picker-group">
+                <label class="color-picker-label">Neon Outline</label>
+                <input type="color" id="shapeOutlineColor" class="color-input" value="#64beff">
             </div>
         </div>
 
@@ -2033,6 +2057,10 @@ and (max-height:500px){
                 <input type="range" id="rotateSlider" class="slider-input" min="0" max="360" step="5" value="0">
                 <span class="slider-value" id="rotateValue">0°</span>
             </div>
+        </div>
+
+        <div class="customizer-actions">
+            <button class="big-button secondary-button" id="centerDesignBtn">⌖ Center Design</button>
         </div>
 
         <div class="customizer-actions">
@@ -5602,6 +5630,143 @@ function getPetStatMaxLevel(planetId){
  * section just calls this with its own id, so adding upgrades
  * to a future structure never means writing new UI logic.
  */
+/*
+ * Structure designs reuse the exact same ShapeObject class and
+ * customizer overlay as the Ship Builder — each structure type
+ * has its own saved design (one shared design per type, same
+ * as the ship, not per-planet), stored under its own
+ * localStorage key so opening the ship builder later doesn't
+ * touch it.
+ */
+function getStructureDesignKey(structureId){
+
+    return "structureDesign_"+structureId;
+
+}
+
+function renderStructureDesignerHtml(structureId,structureName){
+
+    const canvasId=
+        "structurePreview_"+
+        structureId;
+
+    return(
+        '<div style="margin-top:10px;padding-top:10px;'+
+        'border-top:1px solid rgba(255,255,255,.08);">'+
+        '<canvas id="'+canvasId+'" width="120" height="90" '+
+        'style="display:block;margin:0 auto 8px;background:'+
+        'rgba(0,0,0,.25);border-radius:10px;"></canvas>'+
+        '<button class="control-btn" style="width:100%;" '+
+        'data-action="design-structure" data-structure="'+
+        structureId+'" data-structure-name="'+
+        structureName+'">🎨 Design This Structure</button>'+
+        '</div>'
+    );
+
+}
+
+/*
+ * Paints every structure-design preview canvas currently in the
+ * DOM — called right after Planet Detail's HTML is written in,
+ * since the canvases don't exist to draw on until then.
+ */
+function paintStructureDesignPreviews(){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    for(
+        const structureId in
+        STRUCTURES
+    ){
+
+        const canvas=
+            document.getElementById(
+                "structurePreview_"+
+                structureId
+            );
+
+        if(!canvas)
+            continue;
+
+        const ctx2d=
+            canvas.getContext("2d");
+
+        ctx2d.clearRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        const saved=
+            localStorage.getItem(
+                getStructureDesignKey(
+                    structureId
+                )
+            );
+
+        if(!saved)
+            continue;
+
+        try{
+
+            const shapeData=
+                JSON.parse(saved);
+
+            const shapes=
+                shapeData.map(
+                    s =>
+                        new ShapeObject(
+                            s.type,
+                            s.x,
+                            s.y,
+                            s.color,
+                            s.scale,
+                            s.rotation,
+                            s.points,
+                            s.outlineColor,
+                            s.holePoints
+                        )
+                );
+
+            ctx2d.save();
+
+            const scaleFactor=
+                canvas.width/400;
+
+            ctx2d.scale(
+                scaleFactor,
+                scaleFactor
+            );
+
+            for(
+                const shape of shapes
+            ){
+
+                shape.draw(ctx2d);
+
+            }
+
+            ctx2d.restore();
+
+        }catch(error){
+
+            console.error(
+                "Structure design preview failed:",
+                error
+            );
+
+        }
+
+    }
+
+}
+
+
 function renderStructureUpgradesHtml(planetId,structureId){
 
     const upgrades=
@@ -10457,6 +10622,12 @@ function renderPlanetDetail(id){
                 "ship-factory"
             );
 
+        html+=
+            renderStructureDesignerHtml(
+                "ship-factory",
+                "Ship Factory"
+            );
+
     }else if(structureBuild){
 
         html+=
@@ -10652,6 +10823,12 @@ function renderPlanetDetail(id){
                 "pilot-training"
             );
 
+        html+=
+            renderStructureDesignerHtml(
+                "pilot-training",
+                "Pilot Training"
+            );
+
     }else if(pilotTrainingBuild){
 
         html+=
@@ -10794,6 +10971,12 @@ function renderPlanetDetail(id){
             'planet from their Cargo section above.'+
             '</div>';
 
+        html+=
+            renderStructureDesignerHtml(
+                "bio-dome",
+                "Bio Dome"
+            );
+
     }else if(bioDomeBuild){
 
         html+=
@@ -10905,6 +11088,8 @@ function renderPlanetDetail(id){
 
     container.innerHTML=
         html;
+
+    paintStructureDesignPreviews();
 
 }
 
@@ -11280,6 +11465,29 @@ document
             buyStructureUpgrade(
                 planetDetailId,
                 upgradeId
+            );
+
+        }else if(
+            action==="design-structure"
+        ){
+
+            const structureId=
+                target.getAttribute(
+                    "data-structure"
+                );
+
+            const structureName=
+                target.getAttribute(
+                    "data-structure-name"
+                );
+
+            shipCustomizer.open(
+                getStructureDesignKey(
+                    structureId
+                ),
+                "🎨 "+
+                structureName.toUpperCase(),
+                "Design This Structure"
             );
 
         }else if(
@@ -25898,7 +26106,7 @@ requestAnimationFrame(
 
 class ShapeObject {
 
-    constructor(type, x = 200, y = 140, color = '#00ff00', scale = 1, rotation = 0, points = null) {
+    constructor(type, x = 200, y = 140, color = '#00ff00', scale = 1, rotation = 0, points = null, outlineColor = '#64beff', holePoints = null) {
         this.type = type;
         this.x = x;
         this.y = y;
@@ -25906,6 +26114,8 @@ class ShapeObject {
         this.scale = scale;
         this.rotation = rotation;
         this.points = points;
+        this.outlineColor = outlineColor;
+        this.holePoints = holePoints;
         this.id = Math.random();
     }
 
@@ -25924,8 +26134,10 @@ class ShapeObject {
         ctx.translate(this.x, this.y);
         ctx.rotate((this.rotation * Math.PI) / 180);
         ctx.fillStyle = this.color;
-        ctx.strokeStyle = 'rgba(100,190,255,0.5)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = this.outlineColor || 'rgba(100,190,255,0.5)';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = this.outlineColor || 'rgba(100,190,255,0.5)';
 
         switch(this.type) {
             case 'circle':
@@ -25980,7 +26192,18 @@ class ShapeObject {
                         else ctx.lineTo(sx, sy);
                     });
                     ctx.closePath();
-                    ctx.fill();
+                    if (this.holePoints && this.holePoints.length >= 3) {
+                        this.holePoints.forEach(([px, py], i) => {
+                            const sx = px * this.scale;
+                            const sy = py * this.scale;
+                            if (i === 0) ctx.moveTo(sx, sy);
+                            else ctx.lineTo(sx, sy);
+                        });
+                        ctx.closePath();
+                        ctx.fill('evenodd');
+                    } else {
+                        ctx.fill();
+                    }
                     ctx.stroke();
                 }
                 break;
@@ -26018,15 +26241,25 @@ const shipCustomizer = {
     isDragging: false,
     dragOffsetX: 0,
     dragOffsetY: 0,
+    targetKey: 'customShip',
+    isShipMode: true,
 
     init() {
-        this.loadCustomShip();
+        this.loadDesign();
         this.setupEventListeners();
     },
 
-    open() {
+    // targetKey defaults to the player's own ship. Called with a
+    // different key (and title/subtitle) to reuse this exact same
+    // overlay, canvas, and shape-editing logic for designing a
+    // structure instead — see openStructureDesigner().
+    open(targetKey = 'customShip', title = '⚙ SHIP BUILDER', subtitle = 'Design Your Vessel') {
         initAudio();
-        this.loadCustomShip();
+        this.targetKey = targetKey;
+        this.isShipMode = targetKey === 'customShip';
+        document.getElementById('shipCustomizerTitle').textContent = title;
+        document.getElementById('shipCustomizerSubtitle').textContent = subtitle;
+        this.loadDesign();
         this.selectShape(
             this.shapes[0] || null
         );
@@ -26037,6 +26270,16 @@ const shipCustomizer = {
     close() {
         document.getElementById('polygonSection').classList.add('hidden');
         document.getElementById('shipCustomizer').classList.add('hidden');
+        // Always leave the shared state pointed back at the player's
+        // own ship when the overlay closes — otherwise, after editing
+        // a structure, hasCustomShip()/drawCustomShipShapes() would
+        // keep reading that structure's shapes as if they were the
+        // player's actual ship.
+        if (!this.isShipMode) {
+            this.targetKey = 'customShip';
+            this.isShipMode = true;
+            this.loadDesign();
+        }
     },
 
     setupEventListeners() {
@@ -26067,12 +26310,27 @@ const shipCustomizer = {
 
         bind('customPolygonBtn', () => this.showPolygonInput());
         bind('createPolygonBtn', () => { sound('click'); this.createCustomPolygon(); });
+
+        document.getElementById('polygonSidesSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHoleSidesSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHoleSizeSlider').addEventListener('input', () => this.updatePolygonPreview());
+        document.getElementById('polygonHoleToggle').addEventListener('change', (e) => {
+            document.getElementById('polygonHoleSliderGroup').classList.toggle('hidden', !e.target.checked);
+            document.getElementById('polygonHoleSizeSliderGroup').classList.toggle('hidden', !e.target.checked);
+            this.updatePolygonPreview();
+        });
         bind('resetCustomizerBtn', () => this.reset());
+        bind('centerDesignBtn', () => { sound('click'); this.centerDesign(); });
         bind('startGameBtn', () => { sound('click'); this.finishCustomization(); });
         bind('closeShipBuilderBtn', () => { sound('click'); this.close(); });
 
         document.getElementById('shapeColor').addEventListener('input', (e) => {
             if (this.selectedShape) this.selectedShape.color = e.target.value;
+            this.render();
+        });
+
+        document.getElementById('shapeOutlineColor').addEventListener('input', (e) => {
+            if (this.selectedShape) this.selectedShape.outlineColor = e.target.value;
             this.render();
         });
 
@@ -26130,35 +26388,88 @@ const shipCustomizer = {
         this.render();
     },
 
+    // Generates a regular polygon's vertices — the starting point for
+    // every custom shape now, rather than asking for raw coordinates.
+    regularPolygonPoints(sides, radius) {
+        const points = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
+            points.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+        }
+        return points;
+    },
+
     showPolygonInput() {
         sound('click');
         document.getElementById('polygonSection').classList.remove('hidden');
-        const container = document.getElementById('polygonInput');
-        container.innerHTML = '';
-        const defaults = ['0,-30', '30,30', '-30,30', '0,-30'];
-        for (let i = 0; i < 4; i++) {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = `Point ${i+1} (x,y)`;
-            input.value = defaults[i];
-            container.appendChild(input);
+        document.getElementById('polygonHoleToggle').checked = false;
+        document.getElementById('polygonHoleSliderGroup').classList.add('hidden');
+        document.getElementById('polygonHoleSizeSliderGroup').classList.add('hidden');
+        this.updatePolygonPreview();
+    },
+
+    updatePolygonPreview() {
+        const sides = Number(document.getElementById('polygonSidesSlider').value);
+        document.getElementById('polygonSidesValue').textContent = sides;
+
+        const hasHole = document.getElementById('polygonHoleToggle').checked;
+        const holeSides = Number(document.getElementById('polygonHoleSidesSlider').value);
+        const holeSizePercent = Number(document.getElementById('polygonHoleSizeSlider').value);
+        document.getElementById('polygonHoleSidesValue').textContent = holeSides;
+        document.getElementById('polygonHoleSizeValue').textContent = holeSizePercent + '%';
+
+        const canvas = document.getElementById('polygonPreview');
+        const ctx2d = canvas.getContext('2d');
+        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+        ctx2d.save();
+        ctx2d.translate(canvas.width / 2, canvas.height / 2);
+
+        const outerRadius = 50;
+        const points = this.regularPolygonPoints(sides, outerRadius);
+
+        ctx2d.fillStyle = '#00ff00';
+        ctx2d.strokeStyle = '#64beff';
+        ctx2d.lineWidth = 2;
+        ctx2d.shadowBlur = 10;
+        ctx2d.shadowColor = '#64beff';
+
+        ctx2d.beginPath();
+        points.forEach(([px, py], i) => {
+            if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+        });
+        ctx2d.closePath();
+
+        if (hasHole) {
+            const holePoints = this.regularPolygonPoints(holeSides, outerRadius * (holeSizePercent / 100));
+            holePoints.forEach(([px, py], i) => {
+                if (i === 0) ctx2d.moveTo(px, py); else ctx2d.lineTo(px, py);
+            });
+            ctx2d.closePath();
+            ctx2d.fill('evenodd');
+        } else {
+            ctx2d.fill();
         }
+        ctx2d.stroke();
+        ctx2d.restore();
     },
 
     createCustomPolygon() {
-        const inputs = document.querySelectorAll('#polygonInput input[type="text"]');
-        const points = Array.from(inputs).map(input => {
-            const [x, y] = input.value.split(',').map(v => Number(v.trim()));
-            return [x, y];
-        }).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+        const sides = Number(document.getElementById('polygonSidesSlider').value);
+        const points = this.regularPolygonPoints(sides, 30);
 
-        if (points.length >= 3) {
-            const shape = new ShapeObject('custom', 200, 140, '#00ff00', 1, 0, points);
-            this.shapes.push(shape);
-            this.selectShape(shape);
-            document.getElementById('polygonSection').classList.add('hidden');
-            this.render();
+        const hasHole = document.getElementById('polygonHoleToggle').checked;
+        let holePoints = null;
+        if (hasHole) {
+            const holeSides = Number(document.getElementById('polygonHoleSidesSlider').value);
+            const holeSizePercent = Number(document.getElementById('polygonHoleSizeSlider').value);
+            holePoints = this.regularPolygonPoints(holeSides, 30 * (holeSizePercent / 100));
         }
+
+        const shape = new ShapeObject('custom', 200, 140, '#00ff00', 1, 0, points, '#64beff', holePoints);
+        this.shapes.push(shape);
+        this.selectShape(shape);
+        document.getElementById('polygonSection').classList.add('hidden');
+        this.render();
     },
 
     selectShape(shape) {
@@ -26186,6 +26497,7 @@ const shipCustomizer = {
             document.getElementById('colorSection').style.display = 'block';
             document.getElementById('transformSection').style.display = 'block';
             document.getElementById('shapeColor').value = this.selectedShape.color;
+            document.getElementById('shapeOutlineColor').value = this.selectedShape.outlineColor || '#64beff';
             document.getElementById('scaleSlider').value = this.selectedShape.scale;
             document.getElementById('scaleValue').textContent = this.selectedShape.scale.toFixed(1);
             document.getElementById('rotateSlider').value = this.selectedShape.rotation;
@@ -26206,6 +26518,26 @@ const shipCustomizer = {
         }
     },
 
+    // Shifts every shape by the same offset so the design's overall
+    // centroid (average position, weighted by nothing fancier than
+    // "one vote per shape") lands on the canvas's true center —
+    // an easy way to fix a design that's drifted off-center after a
+    // lot of individual shape nudging.
+    centerDesign() {
+        if (!this.shapes.length) return;
+        const canvas = document.getElementById('customPreview');
+        const avgX = this.shapes.reduce((sum, s) => sum + s.x, 0) / this.shapes.length;
+        const avgY = this.shapes.reduce((sum, s) => sum + s.y, 0) / this.shapes.length;
+        const dx = canvas.width / 2 - avgX;
+        const dy = canvas.height / 2 - avgY;
+        this.shapes.forEach(s => {
+            s.x += dx;
+            s.y += dy;
+        });
+        this.render();
+        showShipToast('Design centered!');
+    },
+
     removeShape() {
         if (this.selectedShape) {
             sound('click');
@@ -26218,8 +26550,8 @@ const shipCustomizer = {
 
     canvasMouseDown(e, canvas) {
         const { x, y } = this.toCanvasSpace(e.clientX, e.clientY, canvas);
-        this.selectShapeAt(x, y);
-        if (this.selectedShape) {
+        const hit = this.selectShapeAt(x, y);
+        if (hit && this.selectedShape) {
             this.isDragging = true;
             this.dragOffsetX = x - this.selectedShape.x;
             this.dragOffsetY = y - this.selectedShape.y;
@@ -26239,8 +26571,8 @@ const shipCustomizer = {
         e.preventDefault();
         const touch = e.touches[0];
         const { x, y } = this.toCanvasSpace(touch.clientX, touch.clientY, canvas);
-        this.selectShapeAt(x, y);
-        if (this.selectedShape) {
+        const hit = this.selectShapeAt(x, y);
+        if (hit && this.selectedShape) {
             this.isDragging = true;
             this.dragOffsetX = x - this.selectedShape.x;
             this.dragOffsetY = y - this.selectedShape.y;
@@ -26263,10 +26595,15 @@ const shipCustomizer = {
             const dist = Math.sqrt((x - shape.x) ** 2 + (y - shape.y) ** 2);
             if (dist < shape.hitRadius()) {
                 this.selectShape(shape);
-                return;
+                return true;
             }
         }
-        this.selectShape(null);
+        // Deliberately does NOT deselect on a miss — tapping empty
+        // background used to clear the whole editing panel (color,
+        // transform, remove button all vanishing), which made it very
+        // easy to lose your controls with one stray tap. The only way
+        // to deselect now is removing the shape or picking another one.
+        return false;
     },
 
     render() {
@@ -26303,16 +26640,16 @@ const shipCustomizer = {
     },
 
     reset() {
-        if (confirm('Reset ship to default?')) {
+        if (confirm(this.isShipMode ? 'Reset ship to default?' : 'Reset this structure design to default?')) {
             sound('click');
             this.shapes = [];
             this.selectShape(null);
-            localStorage.removeItem('customShip');
+            localStorage.removeItem(this.targetKey);
             this.render();
         }
     },
 
-    saveCustomShip() {
+    saveDesign() {
         const shipData = this.shapes.map(s => ({
             type: s.type,
             x: s.x,
@@ -26320,17 +26657,19 @@ const shipCustomizer = {
             color: s.color,
             scale: s.scale,
             rotation: s.rotation,
-            points: s.points
+            points: s.points,
+            outlineColor: s.outlineColor,
+            holePoints: s.holePoints
         }));
-        localStorage.setItem('customShip', JSON.stringify(shipData));
+        localStorage.setItem(this.targetKey, JSON.stringify(shipData));
     },
 
-    loadCustomShip() {
-        const saved = localStorage.getItem('customShip');
+    loadDesign() {
+        const saved = localStorage.getItem(this.targetKey);
         if (saved) {
             try {
                 const shipData = JSON.parse(saved);
-                this.shapes = shipData.map(s => new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points));
+                this.shapes = shipData.map(s => new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints));
             } catch (e) {
                 this.shapes = [];
             }
@@ -26340,9 +26679,11 @@ const shipCustomizer = {
     },
 
     finishCustomization() {
-        this.saveCustomShip();
+        this.saveDesign();
         showShipToast(
-            this.shapes.length > 1 ? 'Ship saved!' : 'Core saved — add some shapes to design your hull!'
+            this.isShipMode
+                ? (this.shapes.length > 1 ? 'Ship saved!' : 'Core saved — add some shapes to design your hull!')
+                : 'Structure design saved!'
         );
         this.close();
     }
