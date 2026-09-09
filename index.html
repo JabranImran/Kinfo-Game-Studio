@@ -6561,7 +6561,9 @@ function renderStructureUpgradesHtml(planetId,structureId){
  */
 const PET_ROSTER_BY_PLANET={
 
-    earth:["penguin","cat","gorilla"]
+    earth:["penguin","cat","gorilla"],
+
+    kepler:["rex"]
 
 };
 
@@ -10087,6 +10089,561 @@ function drawGorillaPet(c,x,y,size,energy,walkSeed){
 }
 
 /*
+ * T-REX — back to the fused-egg body the penguin and cat use
+ * (the reference's sitting pose is genuinely egg-shaped, unlike
+ * the gorilla), but with back spikes, a curling tail, tiny
+ * stub arms, and a real roar: on its own cycle the mouth
+ * doesn't just pulse a little, it snaps wide open into a dark
+ * cavity with a pink tongue, eyes narrowing, for a proper
+ * dinosaur moment.
+ */
+function drawRexPet(c,x,y,size,energy,walkSeed){
+
+    const time=
+        performance.now()/1000;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    const bodyColor=
+        "#a3b291";
+
+    const spikeColor=
+        "#f5e6c4";
+
+    const bellyColor=
+        "#f5e6c4";
+
+    const cheekColor=
+        "#ffb3c6";
+
+    const mouthColor=
+        "#2c2320";
+
+    const tongueColor=
+        "#ff86ab";
+
+    const neonColor=
+        "#8effb0";
+
+    c.save();
+
+    c.translate(x,y);
+
+    const bob=
+        Math.sin(
+            time*4+walkSeed
+        )*size*.05;
+
+    c.translate(0,bob);
+
+    const waddle=
+        Math.sin(
+            time*5+walkSeed
+        )*.08;
+
+    c.rotate(waddle);
+
+    /*
+     * Tail — curling out from the back, drawn first so the
+     * body overlaps its base.
+     */
+    const tailSwish=
+        Math.sin(
+            time*2.6+walkSeed
+        )*.16;
+
+    c.save();
+
+    c.translate(
+        size*.4,
+        size*.22
+    );
+
+    c.rotate(.7+tailSwish);
+
+    c.beginPath();
+
+    c.moveTo(0,-size*.12);
+
+    c.quadraticCurveTo(
+        size*.32,-size*.05,
+        size*.4,size*.22
+    );
+
+    c.quadraticCurveTo(
+        size*.3,size*.14,
+        0,size*.12
+    );
+
+    c.closePath();
+
+    c.fillStyle=
+        bodyColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.04);
+
+    c.shadowBlur=
+        glow*.4;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fill();
+
+    c.stroke();
+
+    c.restore();
+
+    /*
+     * Feet.
+     */
+    c.fillStyle=
+        bodyColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.04);
+
+    c.shadowBlur=
+        glow*.3;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.17,
+        size*.57,
+        size*.12,
+        size*.08,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.17,
+        size*.57,
+        size*.12,
+        size*.08,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Tiny arms — small stub ovals near the belly, with a
+     * gentle idle gesture.
+     */
+    const armWave=
+        Math.sin(
+            time*3.2+walkSeed*1.4
+        )*.15;
+
+    [-1,1].forEach(
+        side=>{
+
+            c.save();
+
+            c.translate(
+                side*size*.33,
+                size*.18
+            );
+
+            c.rotate(side*armWave);
+
+            c.beginPath();
+
+            c.ellipse(
+                0,0,
+                size*.07,
+                size*.15,
+                0,0,Math.PI*2
+            );
+
+            c.fillStyle=
+                bodyColor;
+
+            c.strokeStyle=
+                neonColor;
+
+            c.lineWidth=
+                Math.max(1,size*.032);
+
+            c.shadowBlur=
+                glow*.35;
+
+            c.shadowColor=
+                neonColor;
+
+            c.fill();
+
+            c.stroke();
+
+            c.restore();
+
+        }
+    );
+
+    /*
+     * Main body — one fused egg silhouette, head and back
+     * together.
+     */
+    c.fillStyle=
+        bodyColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.05);
+
+    c.shadowBlur=glow;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,0,
+        size*.5,
+        size*.58,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Back spikes — small triangles running from between the
+     * eyes down over the back.
+     */
+    c.shadowBlur=
+        glow*.4;
+
+    c.fillStyle=
+        spikeColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.025);
+
+    [
+        [-.05,-.56,.06],
+        [.14,-.52,.065],
+        [.29,-.4,.07],
+        [.4,-.22,.06],
+        [.45,-.02,.05]
+    ].forEach(
+        ([sx,sy,ss])=>{
+
+            c.beginPath();
+
+            c.moveTo(
+                size*sx-size*ss*.5,
+                size*sy
+            );
+
+            c.lineTo(
+                size*sx+size*ss*.5,
+                size*sy
+            );
+
+            c.lineTo(
+                size*sx,
+                size*sy-size*ss
+            );
+
+            c.closePath();
+
+            c.fill();
+
+            c.stroke();
+
+        }
+    );
+
+    /*
+     * Belly patch.
+     */
+    c.shadowBlur=
+        glow*.3;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.16,
+        size*.32,
+        size*.38,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        bellyColor;
+
+    c.fill();
+
+    /*
+     * Face group — same slow attention cycle as the other
+     * species, following the waddle and resting forward every
+     * so often.
+     */
+    const attentionPeriod=
+        5.5+(walkSeed%5)*.6;
+
+    const attentionPhase=
+        (
+            (
+                time*.55+
+                walkSeed*1.7
+            )%attentionPeriod
+        )/attentionPeriod;
+
+    const followAmount=
+        Math.cos(
+            attentionPhase*Math.PI*2
+        )*.5+.5;
+
+    const faceSwayX=
+        waddle*size*1.5*
+        followAmount;
+
+    const faceSwayY=
+        Math.sin(
+            time*3+walkSeed*1.7
+        )*size*.015*
+        followAmount;
+
+    c.save();
+
+    c.translate(
+        faceSwayX,
+        faceSwayY
+    );
+
+    /*
+     * Cheeks.
+     */
+    c.shadowBlur=0;
+
+    c.globalAlpha*=.7;
+
+    c.fillStyle=
+        cheekColor;
+
+    c.beginPath();
+
+    c.arc(
+        -size*.25,
+        -size*.06,
+        size*.075,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.25,
+        -size*.06,
+        size*.075,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.globalAlpha/=.7;
+
+    /*
+     * ROAR — a genuinely separate, longer, rarer cycle from
+     * the small mouth-flutter every other species uses. Most
+     * of the time the mouth is a simple closed line; every so
+     * often (per-pet phased) it snaps wide open into a dark
+     * cavity with a pink tongue, and the eyes narrow to match.
+     */
+    const roarCycle=
+        8+(walkSeed%4);
+
+    const roarDuration=
+        .7;
+
+    const roarCyclePos=
+        (
+            time+
+            walkSeed*2.1
+        )%roarCycle;
+
+    let roarAmount=0;
+
+    if(roarCyclePos<roarDuration){
+
+        roarAmount=
+            Math.sin(
+                (roarCyclePos/roarDuration)*
+                Math.PI
+            );
+
+    }
+
+    if(roarAmount>.05){
+
+        const mouthRadius=
+            size*.08+
+            size*.14*roarAmount;
+
+        c.shadowBlur=
+            glow*.5*roarAmount;
+
+        c.shadowColor=
+            mouthColor;
+
+        c.beginPath();
+
+        c.ellipse(
+            0,
+            size*.1+mouthRadius*.35,
+            mouthRadius*.72,
+            mouthRadius,
+            0,0,Math.PI*2
+        );
+
+        c.fillStyle=
+            mouthColor;
+
+        c.fill();
+
+        c.shadowBlur=0;
+
+        c.beginPath();
+
+        c.ellipse(
+            0,
+            size*.1+mouthRadius*.6,
+            mouthRadius*.42,
+            mouthRadius*.4,
+            0,0,Math.PI*2
+        );
+
+        c.fillStyle=
+            tongueColor;
+
+        c.fill();
+
+    }else{
+
+        c.strokeStyle=
+            mouthColor;
+
+        c.lineWidth=
+            Math.max(1,size*.025);
+
+        c.beginPath();
+
+        c.moveTo(
+            -size*.05,
+            size*.11
+        );
+
+        c.lineTo(
+            size*.05,
+            size*.11
+        );
+
+        c.stroke();
+
+    }
+
+    /*
+     * Eyes — round dots, blinking on the usual per-pet-phased
+     * cycle, and narrowing during a roar for a bit of extra
+     * character rather than staying wide the whole time.
+     */
+    const blinkCycle=3.6;
+
+    const blinkDuration=.16;
+
+    const blinkCyclePos=
+        (
+            time+
+            walkSeed*.7
+        )%blinkCycle;
+
+    let eyeOpenness=1;
+
+    if(blinkCyclePos<blinkDuration){
+
+        eyeOpenness=
+            1-Math.sin(
+                (blinkCyclePos/blinkDuration)*
+                Math.PI
+            );
+
+    }
+
+    eyeOpenness*=
+        1-roarAmount*.5;
+
+    const eyeRadiusX=
+        size*.06;
+
+    const eyeRadiusY=
+        eyeRadiusX*
+        Math.max(.15,eyeOpenness);
+
+    c.shadowBlur=
+        glow*.4;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fillStyle=
+        "#211a18";
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.15,
+        -size*.15,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.15,
+        -size*.15,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.shadowBlur=0;
+
+    c.restore();
+
+    c.restore();
+
+}
+
+/*
  * Draws one pet at (x,y) with the given on-screen size. energy
  * (0-100) drives glow intensity — a well-fed pet genuinely
  * glows brighter than a starving one. walkSeed offsets the leg
@@ -10122,6 +10679,17 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
     if(species==="gorilla"){
 
         drawGorillaPet(
+            c,x,y,size,
+            energy,walkSeed
+        );
+
+        return;
+
+    }
+
+    if(species==="rex"){
+
+        drawRexPet(
             c,x,y,size,
             energy,walkSeed
         );
