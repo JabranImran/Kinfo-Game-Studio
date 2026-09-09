@@ -425,6 +425,197 @@ body{
 
 
 /* =========================================================
+   UNIFIED STAR MAP
+========================================================= */
+
+/*
+ * Same chrome-free principle as the zoomed planet view: this is
+ * space with planets in it, not a panel. Only the title, hint
+ * and close button float on top.
+ */
+.star-map{
+    position:fixed;
+    inset:0;
+    z-index:55;
+    overflow:hidden;
+}
+
+.star-map.hidden{
+    display:none;
+}
+
+#starMapCanvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+}
+
+.star-map-title{
+    position:absolute;
+    top:6%;
+    left:0;
+    right:0;
+    text-align:center;
+    font-size:15px;
+    font-weight:900;
+    letter-spacing:4px;
+    color:#eaf6ff;
+    text-shadow:0 0 22px rgba(90,190,255,.8);
+    pointer-events:none;
+}
+
+.star-map-hint{
+    position:absolute;
+    top:11%;
+    left:0;
+    right:0;
+    text-align:center;
+    font-size:10px;
+    letter-spacing:1px;
+    color:#7fa3c9;
+    pointer-events:none;
+}
+
+.star-map-close{
+    position:absolute;
+    bottom:max(20px,env(safe-area-inset-bottom));
+    left:50%;
+    transform:translateX(-50%);
+}
+
+
+/* =========================================================
+   ZOOMED PLANET VIEW (chrome-free start screen)
+========================================================= */
+
+/*
+ * Deliberately no card, panel, border or background box — the
+ * whole point is that this reads as space, not as a UI. The
+ * canvas fills the layer and everything else floats on top of
+ * it with only text shadows for legibility.
+ */
+.planet-focus{
+    position:fixed;
+    inset:0;
+    z-index:16;
+    overflow:hidden;
+}
+
+.planet-focus.hidden{
+    display:none;
+}
+
+#planetFocusCanvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+}
+
+.focus-logo{
+    position:absolute;
+    top:8%;
+    left:0;
+    right:0;
+    text-align:center;
+    font-size:clamp(30px,9vw,52px);
+    font-weight:900;
+    letter-spacing:5px;
+    line-height:1.02;
+    color:#eaf6ff;
+    text-shadow:
+        0 0 24px rgba(90,190,255,.75),
+        0 0 60px rgba(60,140,255,.45);
+    pointer-events:none;
+}
+
+.focus-planet-name{
+    position:absolute;
+    top:34%;
+    left:0;
+    right:0;
+    text-align:center;
+    font-size:13px;
+    font-weight:900;
+    letter-spacing:4px;
+    color:#9fd0ff;
+    text-shadow:0 0 16px rgba(60,140,255,.6);
+    pointer-events:none;
+}
+
+.focus-hint{
+    position:absolute;
+    top:39.5%;
+    left:0;
+    right:0;
+    text-align:center;
+    font-size:10px;
+    letter-spacing:1px;
+    color:#6d8fb8;
+    pointer-events:none;
+}
+
+.focus-bottom{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:max(16px,env(safe-area-inset-bottom));
+    padding:0 16px;
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    align-items:center;
+}
+
+.focus-launch-info{
+    font-size:10.5px;
+    color:#b9d4f0;
+    text-align:center;
+    text-shadow:0 2px 10px rgba(0,0,0,.9);
+    line-height:1.5;
+    max-width:340px;
+}
+
+.focus-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    justify-content:center;
+}
+
+/*
+ * Translucent "glass" buttons rather than solid panels, so they
+ * sit on the starfield instead of covering it.
+ */
+.focus-btn{
+    padding:11px 16px;
+    border-radius:13px;
+    border:1px solid rgba(120,200,255,.35);
+    background:rgba(8,18,40,.55);
+    backdrop-filter:blur(7px);
+    color:#cfe6ff;
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.6px;
+    cursor:pointer;
+    touch-action:manipulation;
+}
+
+.focus-btn.primary{
+    border-color:rgba(120,220,255,.7);
+    background:rgba(40,120,210,.55);
+    color:#ffffff;
+}
+
+.focus-btn:disabled{
+    opacity:.4;
+}
+
+
+/* =========================================================
    PLANET MAP
 ========================================================= */
 
@@ -487,9 +678,9 @@ body{
     transform:
         translate(-50%,-50%);
 
-    width:78px;
+    width:86px;
 
-    min-height:68px;
+    min-height:78px;
 
     padding:5px;
 
@@ -553,6 +744,23 @@ body{
     font-size:23px;
 
     line-height:24px;
+}
+
+/*
+ * Canvas-rendered planet on the map — replaces the old emoji so
+ * map planets match the real, shaded planets you see on the
+ * landing/departure screens, complete with an orbiting asteroid
+ * ring. Sized generously so the ring has room around the body.
+ */
+.planet-node-canvas{
+
+    display:block;
+
+    width:46px;
+
+    height:46px;
+
+    margin-bottom:1px;
 }
 
 .planet-name{
@@ -866,6 +1074,40 @@ body{
 .destination-bubble .icon{
 
     font-size:27px;
+}
+
+/*
+ * Real rendered planet inside the in-flight route chooser —
+ * same drawMapPlanet renderer as the star map, so picking your
+ * next destination looks like the rest of the game rather than
+ * a row of emoji.
+ */
+.destination-bubble .destination-canvas{
+
+    display:block;
+
+    width:52px;
+
+    height:52px;
+
+    margin-bottom:-4px;
+}
+
+/*
+ * A clear pulsing ring marks routes you can actually take right
+ * now, so selectable destinations read at a glance against
+ * locked ones.
+ */
+.destination-bubble.selectable{
+
+    border-color:
+        rgba(140,235,255,.9);
+
+    box-shadow:
+        0 0 26px
+        rgba(90,220,255,.5),
+        inset 0 0 18px
+        rgba(90,220,255,.12);
 }
 
 .destination-bubble .name{
@@ -1614,6 +1856,50 @@ and (max-height:500px){
     color:#bcecff;
 }
 
+/*
+ * Planet menu tabs. Unlike the pause menu's fixed three, this
+ * bar can hold six or more (one per structure), so it scrolls
+ * horizontally instead of squeezing tabs into unreadable
+ * slivers.
+ */
+.planet-tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:16px;
+    padding-bottom:4px;
+    /*
+     * Wrapping onto multiple rows rather than scrolling
+     * horizontally — the parent .overlay and .card both set
+     * touch-action:pan-y, which blocks horizontal touch panning
+     * on every descendant, so a scrolling bar left later tabs
+     * genuinely unreachable on mobile. Wrapping sidesteps that
+     * entirely: every tab is always visible and tappable.
+     */
+}
+
+.planet-tab{
+    flex:0 0 auto;
+    padding:8px 10px;
+    border:1px solid rgba(100,190,255,.22);
+    border-radius:11px;
+    background:rgba(255,255,255,.035);
+    color:#8fa7c7;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.3px;
+    white-space:nowrap;
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.planet-tab.active{
+    background:rgba(100,190,255,.18);
+    border-color:rgba(120,200,255,.55);
+    color:#bcecff;
+}
+
 .metric-group{
     margin-bottom:18px;
 }
@@ -1883,6 +2169,27 @@ and (max-height:500px){
 
 <div id="destinationLayer"></div>
 
+<!-- =======================================================
+     UNIFIED STAR MAP — one zoomed-out view of real planets
+     serving both "choose where to launch from" (home) and
+     "choose where to fly next" (in flight). No cards, no
+     bubbles: just the worlds sitting in space.
+======================================================= -->
+
+<div class="star-map hidden" id="starMapView">
+
+    <canvas id="starMapCanvas"></canvas>
+
+    <div class="star-map-title" id="starMapTitle"></div>
+
+    <div class="star-map-hint" id="starMapHint"></div>
+
+    <button class="focus-btn star-map-close" id="starMapCloseBtn">
+        ✕ Close
+    </button>
+
+</div>
+
 
 <!-- =======================================================
      START SCREEN
@@ -1892,7 +2199,55 @@ and (max-height:500px){
     class="overlay"
     id="startScreen">
 
-    <div class="card">
+    <!--
+        Zoomed planet view — an alternative to the boxed card
+        below. Deliberately has no card/panel chrome: it's the
+        title floating in space up top, next-tier planets drifting
+        in the background, and the selected planet filling the
+        bottom half. Toggled against the map view rather than
+        replacing it, so the full map is always one tap away.
+    -->
+    <div class="planet-focus hidden" id="planetFocus">
+
+        <canvas id="planetFocusCanvas"></canvas>
+
+        <div class="focus-logo">
+            ASTEROID<br>IMPACT
+        </div>
+
+        <div class="focus-planet-name" id="focusPlanetName"></div>
+
+        <div class="focus-hint" id="focusHint"></div>
+
+        <div class="focus-bottom">
+
+            <div class="focus-launch-info" id="focusLaunchInfo"></div>
+
+            <div class="focus-actions">
+
+                <button class="focus-btn primary" id="focusLaunchBtn">
+                    Launch Mission
+                </button>
+
+                <button class="focus-btn" id="focusMenuBtn">
+                    🪐 Planet Menu
+                </button>
+
+                <button class="focus-btn" id="focusMapBtn">
+                    🗺 Star Map
+                </button>
+
+                <button class="focus-btn" id="focusLeaderboardBtn">
+                    🏆 Leaderboard
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="card" id="startScreenCard">
 
         <div class="logo">
 
@@ -7757,6 +8112,1788 @@ function isRoute(a,b){
    PLANET MAP
 ========================================================= */
 
+/*
+ * Draws a small version of a planet — the same shaded sphere
+ * used on the landing/departure screens (via the shared
+ * getPlanetPalette) — onto a tiny canvas for the planet map,
+ * plus an orbiting ring of asteroid specks around it. This is
+ * what replaces the old flat emoji icons.
+ *
+ * Locked planets render desaturated and dimmed so the map still
+ * reads at a glance which worlds are actually reachable.
+ */
+/* =========================================================
+   UNIFIED STAR MAP
+========================================================= */
+
+/*
+ * Draws a single planet directly onto a canvas context at an
+ * arbitrary position and size, with the same lit sphere and
+ * neon glow used on the land/depart screens, plus an orbiting
+ * asteroid ring. This is the one renderer every zoomed-out
+ * planet in the game goes through.
+ */
+function drawSpacePlanet(c,planetId,cx,cy,radius,options){
+
+    options=options || {};
+
+    const palette=
+        getPlanetPalette(planetId);
+
+    const dim=
+        options.dim;
+
+    const highlight=
+        options.highlight;
+
+    const time=
+        performance.now()/1000;
+
+    c.save();
+
+    if(dim){
+
+        c.globalAlpha=.34;
+
+    }
+
+    /*
+     * Selectable planets get a pulsing neon halo so reachable
+     * destinations read instantly without any UI chrome.
+     */
+    if(highlight){
+
+        const pulse=
+            .55+
+            Math.sin(time*2.2)*.25;
+
+        c.save();
+
+        c.globalAlpha=pulse;
+
+        c.shadowBlur=28;
+
+        c.shadowColor=palette.light;
+
+        c.strokeStyle=palette.light;
+
+        c.lineWidth=2;
+
+        c.beginPath();
+
+        c.arc(
+            cx,
+            cy,
+            radius*1.95,
+            0,
+            Math.PI*2
+        );
+
+        c.stroke();
+
+        c.restore();
+
+    }
+
+    /*
+     * Atmospheric bloom.
+     */
+    const glow=
+        c.createRadialGradient(
+            cx,
+            cy,
+            radius*.85,
+            cx,
+            cy,
+            radius*1.75
+        );
+
+    glow.addColorStop(
+        0,
+        palette.mid
+    );
+
+    glow.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+    );
+
+    c.save();
+
+    c.globalAlpha*=.45;
+
+    c.fillStyle=glow;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius*1.75,
+        0,
+        Math.PI*2
+    );
+
+    c.fill();
+
+    c.restore();
+
+    /*
+     * Asteroid ring — drawn in two passes so the half behind
+     * the planet is occluded by the body, selling the orbit.
+     */
+    let seed=0;
+
+    for(
+        let i=0;
+        i<planetId.length;
+        i++
+    ){
+
+        seed+=planetId.charCodeAt(i);
+
+    }
+
+    const ringX=
+        radius*1.85;
+
+    const ringY=
+        radius*.6;
+
+    const speckCount=18;
+
+    function drawRing(behind){
+
+        for(
+            let i=0;
+            i<speckCount;
+            i++
+        ){
+
+            const angle=
+                (i/speckCount)*
+                Math.PI*2+
+                seed*.35+
+                time*.06;
+
+            const isBehind=
+                Math.sin(angle)<0;
+
+            if(isBehind!==behind)
+                continue;
+
+            const wobble=
+                .85+
+                ((seed+i*7)%5)*.06;
+
+            const px=
+                cx+
+                Math.cos(angle)*
+                ringX*wobble;
+
+            const py=
+                cy+
+                Math.sin(angle)*
+                ringY*wobble;
+
+            c.save();
+
+            c.globalAlpha=
+                behind ? .35 : .9;
+
+            c.shadowBlur=6;
+
+            c.shadowColor="#bcecff";
+
+            c.fillStyle="#dcefff";
+
+            c.beginPath();
+
+            c.arc(
+                px,
+                py,
+                .9+((seed+i*3)%3)*.4,
+                0,
+                Math.PI*2
+            );
+
+            c.fill();
+
+            c.restore();
+
+        }
+
+    }
+
+    drawRing(true);
+
+    /*
+     * The body, lit from the upper-left.
+     */
+    const body=
+        c.createRadialGradient(
+            cx-radius*.35,
+            cy-radius*.35,
+            radius*.05,
+            cx,
+            cy,
+            radius*1.05
+        );
+
+    body.addColorStop(
+        0,
+        palette.light
+    );
+
+    body.addColorStop(
+        .32,
+        palette.mid
+    );
+
+    body.addColorStop(
+        .72,
+        palette.dark
+    );
+
+    body.addColorStop(
+        1,
+        "#01030a"
+    );
+
+    c.fillStyle=body;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Neon rim light.
+     */
+    c.save();
+
+    c.globalAlpha*=.7;
+
+    c.shadowBlur=14;
+
+    c.shadowColor=palette.light;
+
+    c.strokeStyle=palette.light;
+
+    c.lineWidth=1.4;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.stroke();
+
+    c.restore();
+
+    drawRing(false);
+
+    c.restore();
+
+}
+
+
+/*
+ * Star map state. mode "navigate" = choosing where to launch
+ * from on the home screen; mode "destination" = choosing the
+ * next hop mid-flight, where only route-connected planets are
+ * selectable.
+ */
+let starMapMode="navigate";
+let starMapRaf=null;
+let starMapSelectable=[];
+
+function getStarMapSelectable(){
+
+    if(
+        starMapMode==="destination"
+    ){
+
+        const current=
+            getPlanet(currentPlanetId);
+
+        if(!current)
+            return [];
+
+        return PLANETS.filter(
+            p =>
+                p.id!==current.id &&
+                isRoute(
+                    current.id,
+                    p.id
+                ) &&
+                score>=p.requirement
+        ).map(
+            p => p.id
+        );
+
+    }
+
+    return PLANETS.filter(
+        p =>
+            p.id==="earth" ||
+            (
+                getShipCount(p.id)>0 &&
+                highScore>=p.requirement
+            )
+    ).map(
+        p => p.id
+    );
+
+}
+
+function drawStarMapScene(){
+
+    const canvas=
+        document.getElementById(
+            "starMapCanvas"
+        );
+
+    if(!canvas)
+        return;
+
+    const width=
+        canvas.clientWidth;
+
+    const height=
+        canvas.clientHeight;
+
+    if(
+        !width ||
+        !height
+    )
+        return;
+
+    const dpr=
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    if(
+        canvas.width!==
+        Math.floor(width*dpr)
+    ){
+
+        canvas.width=
+            Math.floor(width*dpr);
+
+    }
+
+    if(
+        canvas.height!==
+        Math.floor(height*dpr)
+    ){
+
+        canvas.height=
+            Math.floor(height*dpr);
+
+    }
+
+    const c=
+        canvas.getContext("2d");
+
+    c.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+
+    const backdrop=
+        c.createLinearGradient(
+            0,0,0,height
+        );
+
+    backdrop.addColorStop(
+        0,
+        "#01030c"
+    );
+
+    backdrop.addColorStop(
+        1,
+        "#050b1e"
+    );
+
+    c.fillStyle=backdrop;
+
+    c.fillRect(
+        0,0,width,height
+    );
+
+    const time=
+        performance.now()/1000;
+
+    for(
+        let i=0;
+        i<110;
+        i++
+    ){
+
+        const sx=
+            ((i*97)%1000)/1000*width;
+
+        const sy=
+            ((i*61)%1000)/1000*height;
+
+        c.globalAlpha=
+            .3+
+            Math.abs(
+                Math.sin(time*.6+i)
+            )*.5;
+
+        c.fillStyle="#cfe4ff";
+
+        c.fillRect(
+            sx,sy,
+            i%7===0 ? 2 : 1.2,
+            i%7===0 ? 2 : 1.2
+        );
+
+    }
+
+    c.globalAlpha=1;
+
+    /*
+     * Route lines, drawn under the planets.
+     */
+    const mapTop=
+        height*.17;
+
+    const mapHeight=
+        height*.66;
+
+    function planetPos(p){
+
+        return{
+            x:(p.x/100)*width,
+            y:mapTop+(p.y/100)*mapHeight
+        };
+
+    }
+
+    ROUTES.forEach(
+        route=>{
+
+            const a=
+                getPlanet(route[0]);
+
+            const b=
+                getPlanet(route[1]);
+
+            if(!a || !b)
+                return;
+
+            const pa=planetPos(a);
+
+            const pb=planetPos(b);
+
+            c.save();
+
+            c.globalAlpha=.18;
+
+            c.strokeStyle="#5aa8ff";
+
+            c.lineWidth=1;
+
+            c.beginPath();
+
+            c.moveTo(pa.x,pa.y);
+
+            c.lineTo(pb.x,pb.y);
+
+            c.stroke();
+
+            c.restore();
+
+        }
+    );
+
+    starMapSelectable=
+        getStarMapSelectable();
+
+    canvas._starHitAreas=[];
+
+    const radius=
+        Math.max(
+            16,
+            Math.min(width,height)*.045
+        );
+
+    PLANETS.forEach(
+        p=>{
+
+            const pos=planetPos(p);
+
+            const selectable=
+                starMapSelectable.includes(
+                    p.id
+                );
+
+            drawSpacePlanet(
+                c,
+                p.id,
+                pos.x,
+                pos.y,
+                radius,
+                {
+                    dim:!selectable,
+                    highlight:selectable
+                }
+            );
+
+            c.save();
+
+            c.globalAlpha=
+                selectable ? 1 : .45;
+
+            c.fillStyle=
+                selectable
+                ?"#e8f6ff"
+                :"#7f9ac0";
+
+            c.font=
+                "800 10px system-ui";
+
+            c.textAlign="center";
+
+            c.fillText(
+                p.name.toUpperCase(),
+                pos.x,
+                pos.y+radius*2.5
+            );
+
+            c.restore();
+
+            canvas._starHitAreas.push({
+                x:pos.x,
+                y:pos.y,
+                r:radius*1.9,
+                planetId:p.id,
+                selectable:selectable
+            });
+
+        }
+    );
+
+}
+
+function starMapLoop(){
+
+    const el=
+        document.getElementById(
+            "starMapView"
+        );
+
+    if(
+        !el ||
+        el.classList.contains("hidden")
+    ){
+
+        starMapRaf=null;
+
+        return;
+
+    }
+
+    try{
+
+        drawStarMapScene();
+
+    }catch(error){
+
+        console.error(
+            "Star map render failed:",
+            error
+        );
+
+    }
+
+    starMapRaf=
+        requestAnimationFrame(
+            starMapLoop
+        );
+
+}
+
+function openStarMap(mode){
+
+    starMapMode=
+        mode || "navigate";
+
+    const el=
+        document.getElementById(
+            "starMapView"
+        );
+
+    if(!el)
+        return;
+
+    document.getElementById(
+        "starMapTitle"
+    ).textContent=
+        starMapMode==="destination"
+        ?"SET COURSE"
+        :"STAR MAP";
+
+    document.getElementById(
+        "starMapHint"
+    ).textContent=
+        starMapMode==="destination"
+        ?"Glowing worlds are within range"
+        :"Glowing worlds have a ship ready";
+
+    document.getElementById(
+        "starMapCloseBtn"
+    ).style.display=
+        starMapMode==="destination"
+        ?"none"
+        :"";
+
+    el.classList.remove("hidden");
+
+    if(!starMapRaf){
+
+        starMapLoop();
+
+    }
+
+}
+
+function closeStarMap(){
+
+    const el=
+        document.getElementById(
+            "starMapView"
+        );
+
+    if(el){
+
+        el.classList.add("hidden");
+
+    }
+
+}
+
+
+function drawMapPlanet(canvas,planetId,locked){
+
+    const context=
+        canvas.getContext("2d");
+
+    const size=
+        canvas.width;
+
+    const center=
+        size/2;
+
+    context.clearRect(
+        0,
+        0,
+        size,
+        size
+    );
+
+    /*
+     * The body is deliberately smaller than the canvas so the
+     * asteroid ring has somewhere to orbit without clipping.
+     */
+    const radius=
+        size*.3;
+
+    const palette=
+        getPlanetPalette(
+            planetId
+        );
+
+    context.save();
+
+    if(locked){
+
+        context.globalAlpha=.32;
+
+    }
+
+    /*
+     * Atmospheric glow.
+     */
+    const glow=
+        context.createRadialGradient(
+            center,
+            center,
+            radius*.8,
+            center,
+            center,
+            radius*1.6
+        );
+
+    glow.addColorStop(
+        0,
+        palette.mid
+    );
+
+    glow.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+    );
+
+    context.globalAlpha*=.5;
+
+    context.fillStyle=glow;
+
+    context.beginPath();
+
+    context.arc(
+        center,
+        center,
+        radius*1.6,
+        0,
+        Math.PI*2
+    );
+
+    context.fill();
+
+    context.globalAlpha=
+        locked ? .32 : 1;
+
+    /*
+     * The body itself, lit from the upper-left exactly like the
+     * full-size version.
+     */
+    const lightX=
+        center-radius*.35;
+
+    const lightY=
+        center-radius*.35;
+
+    const bodyGradient=
+        context.createRadialGradient(
+            lightX,
+            lightY,
+            radius*.05,
+            center,
+            center,
+            radius*1.05
+        );
+
+    bodyGradient.addColorStop(
+        0,
+        palette.light
+    );
+
+    bodyGradient.addColorStop(
+        .32,
+        palette.mid
+    );
+
+    bodyGradient.addColorStop(
+        .72,
+        palette.dark
+    );
+
+    bodyGradient.addColorStop(
+        1,
+        "#01030a"
+    );
+
+    context.fillStyle=
+        bodyGradient;
+
+    context.beginPath();
+
+    context.arc(
+        center,
+        center,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    context.fill();
+
+    /*
+     * Asteroid field ring — a scatter of specks on a squashed
+     * ellipse so it reads as an orbit in perspective rather than
+     * a flat circle. Seeded off the planet id's characters so
+     * each world's ring is consistent between renders rather
+     * than jittering every repaint.
+     */
+    let seed=0;
+
+    for(
+        let i=0;
+        i<planetId.length;
+        i++
+    ){
+
+        seed+=
+            planetId.charCodeAt(i);
+
+    }
+
+    const ringRadiusX=
+        radius*1.75;
+
+    const ringRadiusY=
+        radius*.62;
+
+    const speckCount=14;
+
+    context.fillStyle=
+        locked
+        ?"#5c7ba0"
+        :"#cfe6ff";
+
+    for(
+        let i=0;
+        i<speckCount;
+        i++
+    ){
+
+        const angle=
+            (i/speckCount)*
+            Math.PI*2+
+            seed*.35;
+
+        const wobble=
+            .82+
+            (
+                (seed+i*7)%5
+            )*.07;
+
+        const px=
+            center+
+            Math.cos(angle)*
+            ringRadiusX*wobble;
+
+        const py=
+            center+
+            Math.sin(angle)*
+            ringRadiusY*wobble;
+
+        /*
+         * Specks behind the planet are drawn dimmer, which is
+         * what sells the ring as passing around the body rather
+         * than sitting flat in front of it.
+         */
+        const behind=
+            Math.sin(angle)<0;
+
+        context.globalAlpha=
+            (locked ? .3 : 1)*
+            (behind ? .4 : .95);
+
+        const speckSize=
+            .9+
+            (
+                (seed+i*3)%3
+            )*.45;
+
+        context.beginPath();
+
+        context.arc(
+            px,
+            py,
+            speckSize,
+            0,
+            Math.PI*2
+        );
+
+        context.fill();
+
+    }
+
+    context.restore();
+
+}
+
+
+/* =========================================================
+   ZOOMED PLANET VIEW
+========================================================= */
+
+/*
+ * Which view the start screen is showing: "focus" (the zoomed,
+ * chrome-free planet) or "map" (the full star map card).
+ */
+let startScreenView="focus";
+
+let planetFocusRaf=null;
+
+function isStartScreenVisible(){
+
+    const el=
+        document.getElementById(
+            "startScreen"
+        );
+
+    return(
+        el &&
+        !el.classList.contains(
+            "hidden"
+        )
+    );
+
+}
+
+/*
+ * Planets one tier above the focused one — drawn small and dim
+ * in the upper background as "where you could go next", and
+ * tappable to jump straight to the star map.
+ */
+function getNextTierPlanets(planetId){
+
+    const planet=
+        getPlanet(planetId);
+
+    if(!planet)
+        return [];
+
+    return PLANETS.filter(
+        p =>
+            p.tier===
+            planet.tier+1
+    );
+
+}
+
+function drawPlanetFocusScene(){
+
+    const canvas=
+        document.getElementById(
+            "planetFocusCanvas"
+        );
+
+    if(!canvas)
+        return;
+
+    const width=
+        canvas.clientWidth;
+
+    const height=
+        canvas.clientHeight;
+
+    if(
+        !width ||
+        !height
+    )
+        return;
+
+    const dpr=
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    if(
+        canvas.width!==
+        Math.floor(width*dpr) ||
+        canvas.height!==
+        Math.floor(height*dpr)
+    ){
+
+        canvas.width=
+            Math.floor(width*dpr);
+
+        canvas.height=
+            Math.floor(height*dpr);
+
+    }
+
+    const c=
+        canvas.getContext("2d");
+
+    c.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+
+    c.clearRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+    const time=
+        performance.now()/1000;
+
+    /*
+     * Deep space backdrop.
+     */
+    const backdrop=
+        c.createLinearGradient(
+            0,
+            0,
+            0,
+            height
+        );
+
+    backdrop.addColorStop(
+        0,
+        "#01030c"
+    );
+
+    backdrop.addColorStop(
+        1,
+        "#050b1e"
+    );
+
+    c.fillStyle=backdrop;
+
+    c.fillRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+    /*
+     * Starfield — seeded arithmetically rather than randomly so
+     * stars hold still between frames instead of shimmering.
+     */
+    for(
+        let i=0;
+        i<90;
+        i++
+    ){
+
+        const sx=
+            (
+                (i*97)%1000
+            )/1000*width;
+
+        const sy=
+            (
+                (i*61)%1000
+            )/1000*height;
+
+        const twinkle=
+            .35+
+            Math.abs(
+                Math.sin(
+                    time*.6+i
+                )
+            )*.5;
+
+        c.globalAlpha=twinkle;
+
+        c.fillStyle="#cfe4ff";
+
+        c.fillRect(
+            sx,
+            sy,
+            i%7===0 ? 2 : 1.2,
+            i%7===0 ? 2 : 1.2
+        );
+
+    }
+
+    c.globalAlpha=1;
+
+    /*
+     * Next-tier planets drifting in the upper background. Their
+     * hit areas are stashed on the canvas so the tap handler can
+     * pick them without recomputing the layout.
+     */
+    const nextTier=
+        getNextTierPlanets(
+            selectedStartPlanet
+        );
+
+    canvas._focusHitAreas=[];
+
+    nextTier.forEach(
+        (p,index)=>{
+
+            const spread=
+                nextTier.length>1
+                ?index/(nextTier.length-1)
+                :.5;
+
+            const px=
+                width*(.2+spread*.6);
+
+            const py=
+                height*.19+
+                Math.sin(
+                    time*.35+index
+                )*6;
+
+            const pr=
+                Math.max(
+                    13,
+                    width*.038
+                );
+
+            const palette=
+                getPlanetPalette(p.id);
+
+            const unlockedNext=
+                p.requirement<=highScore;
+
+            c.save();
+
+            c.globalAlpha=
+                unlockedNext ? .75 : .3;
+
+            const grad=
+                c.createRadialGradient(
+                    px-pr*.35,
+                    py-pr*.35,
+                    pr*.05,
+                    px,
+                    py,
+                    pr*1.05
+                );
+
+            grad.addColorStop(
+                0,
+                palette.light
+            );
+
+            grad.addColorStop(
+                .45,
+                palette.mid
+            );
+
+            grad.addColorStop(
+                1,
+                palette.dark
+            );
+
+            c.fillStyle=grad;
+
+            c.beginPath();
+
+            c.arc(
+                px,
+                py,
+                pr,
+                0,
+                Math.PI*2
+            );
+
+            c.fill();
+
+            c.restore();
+
+            canvas._focusHitAreas.push({
+                x:px,
+                y:py,
+                r:pr+10,
+                planetId:p.id
+            });
+
+        }
+    );
+
+    /*
+     * The focused planet — huge, filling the bottom of the
+     * screen, with only its upper portion visible so it reads as
+     * a world you're hanging above.
+     */
+    const planet=
+        getPlanet(
+            selectedStartPlanet
+        );
+
+    if(!planet)
+        return;
+
+    const radius=
+        Math.max(
+            width*.95,
+            height*.62
+        );
+
+    const cx=
+        width/2;
+
+    const cy=
+        height*.72+radius;
+
+    const palette=
+        getPlanetPalette(
+            planet.id
+        );
+
+    /*
+     * Atmosphere halo along the horizon.
+     */
+    c.save();
+
+    const halo=
+        c.createRadialGradient(
+            cx,
+            cy,
+            radius*.97,
+            cx,
+            cy,
+            radius*1.1
+        );
+
+    halo.addColorStop(
+        0,
+        palette.mid
+    );
+
+    halo.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+    );
+
+    c.globalAlpha=.55;
+
+    c.fillStyle=halo;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius*1.1,
+        0,
+        Math.PI*2
+    );
+
+    c.fill();
+
+    c.restore();
+
+    const body=
+        c.createRadialGradient(
+            cx-radius*.3,
+            cy-radius*.42,
+            radius*.04,
+            cx,
+            cy,
+            radius*1.05
+        );
+
+    body.addColorStop(
+        0,
+        palette.light
+    );
+
+    body.addColorStop(
+        .3,
+        palette.mid
+    );
+
+    body.addColorStop(
+        .7,
+        palette.dark
+    );
+
+    body.addColorStop(
+        1,
+        "#01030a"
+    );
+
+    c.fillStyle=body;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * A thin bright rim along the horizon line sells the
+     * curvature of the world.
+     */
+    c.save();
+
+    c.globalAlpha=.5;
+
+    c.strokeStyle=
+        palette.light;
+
+    c.lineWidth=2;
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.stroke();
+
+    c.restore();
+
+    /*
+     * Surface objects — structures, the launch-ready ship, and
+     * pets, positioned along the planet's visible upper curve.
+     * Each is placed at an angle around the sphere and drawn
+     * standing "upright" relative to the planet centre, so they
+     * genuinely look like they're sitting on the world rather
+     * than floating over a picture of one.
+     */
+    const surfaceItems=[];
+
+    for(
+        const structureId in
+        STRUCTURES
+    ){
+
+        if(
+            hasStructure(
+                selectedStartPlanet,
+                structureId
+            )
+        ){
+
+            surfaceItems.push({
+                kind:"structure",
+                structureId:structureId,
+                icon:
+                    STRUCTURES[
+                        structureId
+                    ].icon,
+                tab:
+                    "structure-"+structureId
+            });
+
+        }
+
+    }
+
+    const focusShips=
+        selectedStartPlanet==="earth"
+        ?(planetSave.ships.earth || [])
+        :(
+            getShips(
+                selectedStartPlanet
+            ) || []
+        );
+
+    if(focusShips.length){
+
+        surfaceItems.push({
+            kind:"ship",
+            icon:"🚀",
+            tab:"ships",
+            /*
+             * Draws the player's actual Ship Builder design
+             * rather than a generic rocket emoji — same saved
+             * key the builder and gameplay renderer both use.
+             */
+            designKey:"customShip",
+            badge:
+                focusShips.length>1
+                ?String(focusShips.length)
+                :""
+        });
+
+    }
+
+    const focusPets=
+        getPets(
+            selectedStartPlanet
+        );
+
+    if(focusPets.length){
+
+        surfaceItems.push({
+            kind:"pet",
+            icon:"🐾",
+            tab:"pets",
+            badge:
+                focusPets.length>1
+                ?String(focusPets.length)
+                :""
+        });
+
+    }
+
+    if(surfaceItems.length){
+
+        /*
+         * Spread across a shallow arc centred on the top of the
+         * sphere. The arc widens with more items but stays
+         * narrow enough that everything sits on visible ground.
+         */
+        const arcSpan=
+            Math.min(
+                .5,
+                .16*surfaceItems.length
+            );
+
+        surfaceItems.forEach(
+            (item,index)=>{
+
+                const t=
+                    surfaceItems.length>1
+                    ?index/(surfaceItems.length-1)-.5
+                    :0;
+
+                /*
+                 * -PI/2 is the top of the circle in canvas
+                 * coordinates, i.e. the point of the planet
+                 * closest to the camera.
+                 */
+                const angle=
+                    -Math.PI/2+
+                    t*arcSpan;
+
+                const ix=
+                    cx+
+                    Math.cos(angle)*
+                    radius;
+
+                const iy=
+                    cy+
+                    Math.sin(angle)*
+                    radius;
+
+                c.save();
+
+                c.translate(ix,iy);
+
+                /*
+                 * Rotating by the surface angle makes each item
+                 * stand perpendicular to the ground beneath it,
+                 * leaning outward near the edges of the curve.
+                 */
+                c.rotate(
+                    angle+Math.PI/2
+                );
+
+                const iconSize=
+                    Math.max(
+                        item.kind==="ship"
+                        ?40
+                        :26,
+                        width*
+                        (
+                            item.kind==="ship"
+                            ?.115
+                            :.075
+                        )
+                    );
+
+                /*
+                 * A structure with a saved custom design draws
+                 * that design instead of its emoji, so what you
+                 * built in the Structure Designer is what you
+                 * actually see standing on the planet.
+                 */
+                let drewCustomDesign=false;
+
+                /*
+                 * Both structures and the player's ship draw
+                 * their saved design when one exists — the only
+                 * difference is which storage key they read.
+                 */
+                const designKey=
+                    item.designKey ||
+                    (
+                        item.kind==="structure"
+                        ?getStructureDesignKey(
+                            item.structureId
+                        )
+                        :null
+                    );
+
+                if(
+                    designKey &&
+                    typeof ShapeObject!==
+                    "undefined"
+                ){
+
+                    const saved=
+                        localStorage.getItem(
+                            designKey
+                        );
+
+                    if(saved){
+
+                        try{
+
+                            const shapeData=
+                                JSON.parse(saved);
+
+                            if(shapeData.length){
+
+                                /*
+                                 * Designs are authored around
+                                 * the 400x280 builder canvas, so
+                                 * shift that origin to this
+                                 * item's spot and scale it down
+                                 * to surface size.
+                                 */
+                                const designScale=
+                                    (iconSize*2.4)/400;
+
+                                c.save();
+
+                                c.scale(
+                                    designScale,
+                                    designScale
+                                );
+
+                                c.translate(
+                                    -200,
+                                    -140-
+                                    iconSize*.35/
+                                    designScale
+                                );
+
+                                shapeData.forEach(
+                                    s=>{
+
+                                        new ShapeObject(
+                                            s.type,
+                                            s.x,
+                                            s.y,
+                                            s.color,
+                                            s.scale,
+                                            s.rotation,
+                                            s.points,
+                                            s.outlineColor,
+                                            s.holePoints
+                                        ).draw(c);
+
+                                    }
+                                );
+
+                                c.restore();
+
+                                drewCustomDesign=true;
+
+                            }
+
+                        }catch(error){
+
+                            console.error(
+                                "Surface design draw failed:",
+                                error
+                            );
+
+                        }
+
+                    }
+
+                }
+
+                if(!drewCustomDesign){
+
+                    c.shadowBlur=16;
+
+                    c.shadowColor=
+                        "rgba(120,200,255,.8)";
+
+                    c.font=
+                        iconSize+
+                        "px system-ui";
+
+                    c.textAlign="center";
+
+                    c.textBaseline="alphabetic";
+
+                    c.fillText(
+                        item.icon,
+                        0,
+                        -iconSize*.18
+                    );
+
+                    c.shadowBlur=0;
+
+                }
+
+                c.textAlign="center";
+
+                c.textBaseline="alphabetic";
+
+                if(item.badge){
+
+                    c.fillStyle=
+                        "#bcecff";
+
+                    c.font=
+                        "bold "+
+                        (iconSize*.4)+
+                        "px system-ui";
+
+                    c.fillText(
+                        "×"+item.badge,
+                        iconSize*.5,
+                        -iconSize*.9
+                    );
+
+                }
+
+                c.restore();
+
+                canvas._focusHitAreas.push({
+                    x:ix,
+                    y:iy-iconSize*.4,
+                    r:iconSize*.75,
+                    tab:item.tab,
+                    /*
+                     * Only the ship is swipeable — flagged here
+                     * so the gesture handler knows a drag that
+                     * STARTED on the ship means "launch", while
+                     * a drag starting anywhere else is just a
+                     * stray gesture to ignore.
+                     */
+                    swipeable:
+                        item.kind==="ship"
+                });
+
+            }
+        );
+
+    }
+
+}
+
+function planetFocusLoop(){
+
+    if(
+        startScreenView!=="focus" ||
+        !isStartScreenVisible()
+    ){
+
+        planetFocusRaf=null;
+
+        return;
+
+    }
+
+    try{
+
+        drawPlanetFocusScene();
+
+    }catch(error){
+
+        console.error(
+            "Planet focus render failed:",
+            error
+        );
+
+    }
+
+    planetFocusRaf=
+        requestAnimationFrame(
+            planetFocusLoop
+        );
+
+}
+
+function renderPlanetFocus(){
+
+    const focusEl=
+        document.getElementById(
+            "planetFocus"
+        );
+
+    const cardEl=
+        document.getElementById(
+            "startScreenCard"
+        );
+
+    if(
+        !focusEl ||
+        !cardEl
+    )
+        return;
+
+    const showFocus=
+        startScreenView==="focus";
+
+    focusEl.classList.toggle(
+        "hidden",
+        !showFocus
+    );
+
+    cardEl.style.display=
+        showFocus ? "none" : "";
+
+    if(!showFocus){
+
+        return;
+
+    }
+
+    const planet=
+        getPlanet(
+            selectedStartPlanet
+        );
+
+    document.getElementById(
+        "focusPlanetName"
+    ).textContent=
+        planet
+        ?planet.name.toUpperCase()
+        :"";
+
+    const nextTier=
+        getNextTierPlanets(
+            selectedStartPlanet
+        );
+
+    document.getElementById(
+        "focusHint"
+    ).textContent=
+        "Tap anything on the surface to open it"+
+        (
+            nextTier.length
+            ?" · tap a distant world for the star map"
+            :""
+        );
+
+    /*
+     * Reuses the existing launch-preview logic so the focus view
+     * always agrees with the map view about what's about to fly.
+     */
+    renderLaunchPreview();
+
+    const previewEl=
+        document.getElementById(
+            "launchPreview"
+        );
+
+    document.getElementById(
+        "focusLaunchInfo"
+    ).innerHTML=
+        previewEl
+        ?previewEl.innerHTML
+        :"";
+
+    if(!planetFocusRaf){
+
+        planetFocusLoop();
+
+    }
+
+}
+
+
 function renderPlanetMap(){
 
     if(!planetMap)
@@ -7967,9 +10104,10 @@ function renderPlanetMap(){
 
         button.innerHTML=
             `
-            <span class="planet-icon">
-                ${planet.icon}
-            </span>
+            <canvas
+                class="planet-node-canvas"
+                width="92"
+                height="92"></canvas>
 
             <span class="planet-name">
                 ${planet.name}
@@ -7983,6 +10121,31 @@ function renderPlanetMap(){
                 ${requirementText}
             </span>
             `;
+
+        /*
+         * Painted immediately after the markup is set, since the
+         * canvas element doesn't exist to draw on until then.
+         * Wrapped so one planet failing to paint can't take down
+         * the rest of the map.
+         */
+        try{
+
+            drawMapPlanet(
+                button.querySelector(
+                    ".planet-node-canvas"
+                ),
+                planet.id,
+                !unlocked
+            );
+
+        }catch(error){
+
+            console.error(
+                "Map planet paint failed:",
+                error
+            );
+
+        }
 
 
         button.style.left=
@@ -8063,6 +10226,24 @@ function renderPlanetMap(){
 
         console.error(
             "Planet map render failed:",
+            error
+        );
+
+    }
+
+    /*
+     * Kept outside the try above so a map-render failure can't
+     * also take down the focus view (and vice versa) — they're
+     * two independent presentations of the same state.
+     */
+    try{
+
+        renderPlanetFocus();
+
+    }catch(error){
+
+        console.error(
+            "Planet focus render failed:",
             error
         );
 
@@ -8925,6 +11106,47 @@ document
     {passive:false}
 );
 
+/*
+ * The focus view shows a COPY of the launch preview's markup, so
+ * the handler bound to #launchPreview above never fires for taps
+ * on that copy — which is exactly why ship selection appeared
+ * dead in the zoomed view. This binds the same behaviour to the
+ * copy, then re-renders the focus view so the new selection is
+ * reflected immediately rather than only after leaving and
+ * returning to the planet.
+ */
+document
+.getElementById(
+    "focusLaunchInfo"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const target=
+            event.target.closest(
+                '[data-action="pick-launch-ship"]'
+            );
+
+        if(!target)
+            return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        selectedLaunchShipId=
+            target.getAttribute(
+                "data-ship"
+            );
+
+        renderPlanetFocus();
+
+    },
+    {passive:false}
+);
+
 
 function selectStartPlanet(id){
 
@@ -8955,6 +11177,15 @@ function selectStartPlanet(id){
 
     selectedLaunchShipId=null;
 
+    /*
+     * Picking a planet on the star map zooms straight into it —
+     * the map is a chooser, the focus view is where you actually
+     * launch from.
+     */
+    startScreenView="focus";
+
+    renderPlanetFocus();
+
     renderPlanetMap();
 
 }
@@ -8965,6 +11196,13 @@ function selectStartPlanet(id){
 ========================================================= */
 
 let planetDetailId=null;
+
+/*
+ * Which tab of the planet menu is showing. Kept per-open rather
+ * than per-planet: opening any planet starts on Overview, which
+ * keeps the mental model simple.
+ */
+let planetDetailTab="overview";
 
 /*
  * Which specific docked ship will actually launch, when a
@@ -9036,6 +11274,8 @@ function openPlanetDetail(id){
     sound("click");
 
     planetDetailId=id;
+
+    planetDetailTab="overview";
 
     /*
      * The overlay must always actually open, even if something
@@ -9169,15 +11409,122 @@ function renderPlanetDetail(id){
         )+
         '</div>';
 
+    /*
+     * Tab bar. Structure tabs only appear once that structure is
+     * actually built here, so a fresh planet shows a short,
+     * uncluttered bar that grows as you develop the world.
+     */
+    const availableTabs=[
+        {id:"overview",label:"🏦 Overview"},
+        {id:"shop",label:"🛒 Shop"},
+        {id:"stock",label:"📦 Stock"},
+        {id:"ships",label:"🚀 Ships"},
+        {id:"pets",label:"🐾 Pets"}
+    ];
+
+    for(
+        const structureId in
+        STRUCTURES
+    ){
+
+        /*
+         * A structure only earns its own tab once it's actually
+         * built here (or is mid-construction). Before that, it
+         * lives in the Shop tab alongside everything else you
+         * can buy — which is where you'd naturally look for it.
+         */
+        if(
+            hasStructure(
+                id,
+                structureId
+            ) ||
+            getBuildQueue(id).some(
+                b =>
+                    b.type==="structure" &&
+                    b.structureId===structureId
+            )
+        ){
+
+            availableTabs.push({
+                id:"structure-"+structureId,
+                label:
+                    STRUCTURES[structureId].icon+
+                    " "+
+                    STRUCTURES[structureId].name
+            });
+
+        }
+
+    }
+
+    /*
+     * If the remembered tab isn't valid here (e.g. you were on a
+     * structure tab, then opened a planet without it), fall back
+     * to Overview rather than rendering an empty menu.
+     */
+    if(
+        !availableTabs.some(
+            t => t.id===planetDetailTab
+        )
+    ){
+
+        planetDetailTab="overview";
+
+    }
+
+    html+=
+        '<div class="planet-tabs">';
+
+    availableTabs.forEach(
+        tab=>{
+
+            html+=
+                '<button class="planet-tab'+
+                (
+                    tab.id===planetDetailTab
+                    ?' active'
+                    :''
+                )+
+                '" data-action="planet-tab" data-tab="'+
+                tab.id+'">'+
+                tab.label+
+                '</button>';
+
+        }
+    );
+
+    html+=
+        '</div>';
+
+    const tab=
+        planetDetailTab;
+
+    const showOverview=
+        tab==="overview";
+
+    const showShop=
+        tab==="shop";
+
+    const showStock=
+        tab==="stock";
+
+    const showShips=
+        tab==="ships";
+
+    const showPets=
+        tab==="pets";
+
 
     /* -------- Bank -------- */
+
+    if(showOverview){
 
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">Planet Bank</div>'+
         '<div class="metric-callout">'+
         'Coins deposited here are safe — only bank balance can '+
-        'be spent at the shop below. Coins still on a ship are '+
+        'be spent in the Shop tab. Coins still on a ship are '+
         'lost if that ship is ever destroyed mid-flight.'+
         '</div>'+
         '<div class="selected-shape-info" style="margin-top:10px;">'+
@@ -9186,9 +11533,11 @@ function renderPlanetDetail(id){
         '</div>'+
         '</div>';
 
+    }
 
-    /* -------- Material Bank (informational only — selling
-       happens down in Planet Stock, right alongside items) -------- */
+    /* -------- Material Bank (declared for every tab, since Stock,
+       Ships and the structure tabs all read it — only the Overview
+       summary below is gated) -------- */
 
     const materialBank=
         (
@@ -9203,8 +11552,49 @@ function renderPlanetDetail(id){
             ([,count]) => count>0
         );
 
+    if(showOverview){
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Materials Banked</div>';
+
+        if(!materialBankEntries.length){
+
+            html+=
+                '<div class="metric-note">'+
+                'No materials banked here yet — deposit them '+
+                'from a docked ship in the Ships tab.'+
+                '</div>';
+
+        }else{
+
+            materialBankEntries.forEach(
+                ([materialId,count])=>{
+
+                    const info=
+                        MATERIALS[materialId] ||
+                        MATERIALS["aether-dust"];
+
+                    html+=
+                        '<div class="selected-shape-info">'+
+                        '<span>'+info.icon+' '+info.name+'</span>'+
+                        '<strong>'+count+'</strong>'+
+                        '</div>';
+
+                }
+            );
+
+        }
+
+        html+=
+            '</div>';
+
+    }
+
 
     /* -------- Shop -------- */
+
+    if(showShop){
 
     if(shopItem){
 
@@ -9371,14 +11761,20 @@ function renderPlanetDetail(id){
 
     }
 
+    }
+
 
     /* -------- Docked ships -------- */
+
+    if(showShips){
 
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
         'Docked Ships ('+ships.length+')'+
-        '</div>';
+        '</div>'+
+        '<button class="control-btn" style="width:100%;margin-bottom:10px;" '+
+        'data-action="customize-ship">🛠 Customize Ship Design</button>';
 
     if(!ships.length){
 
@@ -10139,10 +12535,14 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }
+
 
     /* -------- Planet stock (sellable — items and materials
        together, since selling either one works identically and
        both can feed a perk's stock) -------- */
+
+    if(showStock){
 
     const stockEntries=
         Object.entries(
@@ -10222,8 +12622,12 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }
+
 
     /* -------- Pets -------- */
+
+    if(showPets){
 
     const pets=
         getPets(id);
@@ -10456,8 +12860,54 @@ function renderPlanetDetail(id){
         '>Buy Pet ('+petCost+' 🪙)</button>'+
         '</div>';
 
+    }
+
 
     /* -------- Ship Factory (and structures generally) -------- */
+
+    /*
+     * Each structure section renders in one of two places: its
+     * own dedicated tab once built/building, or the Shop tab
+     * while it's still something you'd go buy. Never both.
+     */
+    const shipFactoryBuilt=
+        hasStructure(id,"ship-factory") ||
+        getBuildQueue(id).some(
+            b =>
+                b.type==="structure" &&
+                b.structureId==="ship-factory"
+        );
+
+    const pilotTrainingBuilt=
+        hasStructure(id,"pilot-training") ||
+        getBuildQueue(id).some(
+            b =>
+                b.type==="structure" &&
+                b.structureId==="pilot-training"
+        );
+
+    const bioDomeBuilt=
+        hasStructure(id,"bio-dome") ||
+        getBuildQueue(id).some(
+            b =>
+                b.type==="structure" &&
+                b.structureId==="bio-dome"
+        );
+
+    const showShipFactory=
+        shipFactoryBuilt
+        ?tab==="structure-ship-factory"
+        :showShop;
+
+    const showPilotTraining=
+        pilotTrainingBuilt
+        ?tab==="structure-pilot-training"
+        :showShop;
+
+    const showBioDome=
+        bioDomeBuilt
+        ?tab==="structure-bio-dome"
+        :showShop;
 
     const factory=
         getStructure(
@@ -10507,6 +12957,8 @@ function renderPlanetDetail(id){
             :remaining+"s left";
 
     }
+
+    if(showShipFactory){
 
     html+=
         '<div class="customizer-section">'+
@@ -10774,6 +13226,8 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }
+
 
     /* -------- Pilot Training -------- */
 
@@ -10792,6 +13246,8 @@ function renderPlanetDetail(id){
                 "pilot-training"
         );
 
+    if(showPilotTraining){
+
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
@@ -10804,7 +13260,7 @@ function renderPlanetDetail(id){
         html+=
             '<div class="metric-note">'+
             'Built here — train and send pets on missions from '+
-            'the Pets section above.'+
+            'the Pets tab.'+
             '</div>';
 
         const log=
@@ -10975,6 +13431,8 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }
+
 
     /* -------- Bio Dome -------- */
 
@@ -10992,6 +13450,8 @@ function renderPlanetDetail(id){
                 b.structureId===
                 "bio-dome"
         );
+
+    if(showBioDome){
 
     html+=
         '<div class="customizer-section">'+
@@ -11123,6 +13583,8 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }
+
     container.innerHTML=
         html;
 
@@ -11202,6 +13664,21 @@ document
             target.getAttribute(
                 "data-action"
             );
+
+        if(action==="planet-tab"){
+
+            planetDetailTab=
+                target.getAttribute(
+                    "data-tab"
+                );
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+            return;
+
+        }
 
         if(action==="deposit"){
 
@@ -11526,6 +14003,12 @@ document
                 structureName.toUpperCase(),
                 "Design This Structure"
             );
+
+        }else if(
+            action==="customize-ship"
+        ){
+
+            shipCustomizer.open();
 
         }else if(
             action==="buy-pet"
@@ -15681,7 +18164,32 @@ function drawCustomShipShapes(
 function drawPlayer(){
 
     const x=W/2;
-    const y=H/2;
+
+    /*
+     * A swipe-triggered launch/land/depart briefly slides the
+     * ship in the swiped direction, so the gesture reads as
+     * physically moving the vessel. Eases out and decays on its
+     * own; zero effect when idle.
+     */
+    let swipeOffset=0;
+
+    if(shipSwipeAnim>0){
+
+        shipSwipeAnim=
+            Math.max(
+                0,
+                shipSwipeAnim-.045
+            );
+
+        swipeOffset=
+            shipSwipeDirection*
+            (1-shipSwipeAnim)*
+            Math.min(H*.28,180)*
+            shipSwipeAnim*4;
+
+    }
+
+    const y=H/2+swipeOffset;
 
     const glow=
         ctx.createRadialGradient(
@@ -20193,6 +22701,8 @@ function enterPlanetPhase(){
         "show"
     );
 
+    closeStarMap();
+
     destinationLayer.innerHTML="";
 
     planetPhasePending=false;
@@ -20249,6 +22759,8 @@ function enterAsteroidField(
     destinationLayer.classList.remove(
         "show"
     );
+
+    closeStarMap();
 
     destinationLayer.innerHTML="";
 
@@ -20391,7 +22903,15 @@ function enterInterplanetary(){
 
     destinationLayer.innerHTML="";
 
-    createDestinationBubbles();
+    /*
+     * Route selection is now the unified star map in
+     * "destination" mode — the same zoomed-out view of real
+     * planets used everywhere else, with in-range worlds
+     * glowing — rather than a separate row of bubbles.
+     */
+    openStarMap("destination");
+
+    destinationShown=true;
 
     floatingText(
         "INTERPLANETARY SPACE",
@@ -20589,9 +23109,10 @@ function createDestinationBubbles(){
 
             bubble.innerHTML=
                 `
-                <span class="icon">
-                    ${planet.icon}
-                </span>
+                <canvas
+                    class="destination-canvas"
+                    width="92"
+                    height="92"></canvas>
 
                 <span class="name">
                     ${planet.name}
@@ -20608,12 +23129,45 @@ function createDestinationBubbles(){
                 </span>
                 `;
 
+            /*
+             * Paints the real planet (same renderer as the star
+             * map) once its canvas exists in the DOM, so the
+             * in-flight route choice matches the rest of the
+             * game's visual language instead of showing an
+             * emoji. Wrapped so one failure can't break the
+             * whole destination layer.
+             */
+            try{
+
+                drawMapPlanet(
+                    bubble.querySelector(
+                        ".destination-canvas"
+                    ),
+                    planet.id,
+                    !unlocked
+                );
+
+            }catch(error){
+
+                console.error(
+                    "Destination planet paint failed:",
+                    error
+                );
+
+            }
+
             if(
                 !unlocked
             ){
 
                 bubble.style.opacity=
                     ".4";
+
+            }else{
+
+                bubble.classList.add(
+                    "selectable"
+                );
 
             }
 
@@ -20695,6 +23249,8 @@ function chooseDestination(id){
     destinationLayer.classList.remove(
         "show"
     );
+
+    closeStarMap();
 
     destinationLayer.innerHTML="";
 
@@ -22435,8 +24991,13 @@ function draw(){
     }
 
 
+    /*
+     * The ship is now drawn on the planet screen too, not just
+     * in flight — you need to see the rocket sitting there in
+     * order to swipe it up to depart or down to land. Only a
+     * death-capsule sequence hides it.
+     */
     if(
-        worldState!=="planet" &&
         capsuleMode!==
         "death"
     ){
@@ -22878,6 +25439,8 @@ function endGame(){
     destinationLayer.classList.remove(
         "show"
     );
+
+    closeStarMap();
 
     const isNewRecord=
         score>highScore;
@@ -24090,6 +26653,372 @@ document
 );
 
 
+/* ---- Zoomed planet view controls ---- */
+
+document
+.getElementById(
+    "focusLaunchBtn"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        startGame();
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "focusMenuBtn"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        openPlanetDetail(
+            selectedStartPlanet
+        );
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "focusMapBtn"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        /*
+         * Opens the unified canvas star map rather than the old
+         * card-based map — same view the in-flight destination
+         * chooser uses, just in "navigate" mode.
+         */
+        openStarMap("navigate");
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "focusLeaderboardBtn"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        const lbBtn=
+            document.getElementById(
+                "startLeaderboardButton"
+            );
+
+        if(lbBtn){
+
+            lbBtn.click();
+
+        }
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "starMapCloseBtn"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        closeStarMap();
+
+    },
+    {passive:false}
+);
+
+/*
+ * Tapping a glowing planet on the star map either selects it as
+ * your launch point (navigate mode) or sets course for it
+ * (destination mode). Dim planets are inert.
+ */
+document
+.getElementById(
+    "starMapCanvas"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const canvas=
+            event.currentTarget;
+
+        const areas=
+            canvas._starHitAreas;
+
+        if(
+            !areas ||
+            !areas.length
+        )
+            return;
+
+        const rect=
+            canvas.getBoundingClientRect();
+
+        const px=
+            event.clientX-rect.left;
+
+        const py=
+            event.clientY-rect.top;
+
+        for(
+            const area of areas
+        ){
+
+            if(
+                Math.hypot(
+                    px-area.x,
+                    py-area.y
+                )>area.r
+            ){
+
+                continue;
+
+            }
+
+            if(!area.selectable){
+
+                return;
+
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            sound("click");
+
+            if(
+                starMapMode==="destination"
+            ){
+
+                closeStarMap();
+
+                chooseDestination(
+                    area.planetId
+                );
+
+                return;
+
+            }
+
+            closeStarMap();
+
+            selectStartPlanet(
+                area.planetId
+            );
+
+            return;
+
+        }
+
+    },
+    {passive:false}
+);
+
+/*
+ * Unified tap/drag handling for the zoomed planet view.
+ *
+ * The clean separation is: decide nothing on pointerdown, just
+ * remember what was under the finger. On pointerup, measure how
+ * far it moved — a small movement is a TAP (open that object's
+ * menu), a clear upward drag that STARTED on the ship is a SWIPE
+ * (launch). This is what stops a swipe-up on the rocket from
+ * being eaten by the tap handler, which previously fired
+ * instantly and opened the ship menu instead.
+ */
+(function(){
+
+    const focusCanvas=
+        document.getElementById(
+            "planetFocusCanvas"
+        );
+
+    if(!focusCanvas)
+        return;
+
+    let downX=0;
+    let downY=0;
+    let downTime=0;
+    let downArea=null;
+    let tracking=false;
+
+    const TAP_SLOP=14;
+
+    function areaAt(event){
+
+        const areas=
+            focusCanvas._focusHitAreas;
+
+        if(
+            !areas ||
+            !areas.length
+        )
+            return null;
+
+        const rect=
+            focusCanvas.getBoundingClientRect();
+
+        const px=
+            event.clientX-rect.left;
+
+        const py=
+            event.clientY-rect.top;
+
+        for(
+            const area of areas
+        ){
+
+            if(
+                Math.hypot(
+                    px-area.x,
+                    py-area.y
+                )<=area.r
+            ){
+
+                return area;
+
+            }
+
+        }
+
+        return null;
+
+    }
+
+    focusCanvas.addEventListener(
+        "pointerdown",
+        event=>{
+
+            downX=event.clientX;
+            downY=event.clientY;
+            downTime=Date.now();
+            downArea=areaAt(event);
+            tracking=true;
+
+        },
+        {passive:true}
+    );
+
+    focusCanvas.addEventListener(
+        "pointerup",
+        event=>{
+
+            if(!tracking)
+                return;
+
+            tracking=false;
+
+            const dx=
+                event.clientX-downX;
+
+            const dy=
+                event.clientY-downY;
+
+            const distance=
+                Math.hypot(dx,dy);
+
+            const duration=
+                Date.now()-downTime;
+
+            /*
+             * Barely moved → treat as a tap on whatever was
+             * under the finger when it went down.
+             */
+            if(distance<=TAP_SLOP){
+
+                if(!downArea)
+                    return;
+
+                sound("click");
+
+                if(downArea.tab){
+
+                    openPlanetDetail(
+                        selectedStartPlanet
+                    );
+
+                    planetDetailTab=
+                        downArea.tab;
+
+                    renderPlanetDetail(
+                        selectedStartPlanet
+                    );
+
+                    return;
+
+                }
+
+                startScreenView="map";
+
+                renderPlanetFocus();
+
+                renderPlanetMap();
+
+                return;
+
+            }
+
+            /*
+             * Clear upward drag starting on the ship → launch.
+             */
+            if(
+                downArea &&
+                downArea.swipeable &&
+                duration<=SWIPE_MAX_DURATION &&
+                dy<=-SWIPE_MIN_DISTANCE &&
+                Math.abs(dy)>Math.abs(dx)*1.2
+            ){
+
+                sound("click");
+
+                triggerShipSwipeAnim(-1);
+
+                startGame();
+
+            }
+
+        },
+        {passive:true}
+    );
+
+})();
+
+
 landButton.addEventListener(
     "pointerdown",
     event=>{
@@ -24120,6 +27049,168 @@ departButton.addEventListener(
         passive:false
     }
 );
+
+
+/* =========================================================
+   SWIPE GESTURES (launch / land / depart)
+========================================================= */
+
+/*
+ * Swiping the ship up launches or departs; swiping down lands.
+ * These are alternatives to the buttons, never replacements —
+ * the buttons stay exactly as they were for anyone who prefers
+ * them (or can't comfortably swipe).
+ */
+let swipeStartX=0;
+let swipeStartY=0;
+let swipeStartTime=0;
+let swipeTracking=false;
+
+const SWIPE_MIN_DISTANCE=60;
+const SWIPE_MAX_DURATION=800;
+
+/*
+ * A brief visual kick when a swipe fires, so the gesture feels
+ * like it physically moved the ship rather than just triggering
+ * a state change.
+ */
+let shipSwipeAnim=0;
+let shipSwipeDirection=0;
+
+function triggerShipSwipeAnim(direction){
+
+    shipSwipeAnim=1;
+
+    shipSwipeDirection=direction;
+
+}
+
+function handleSwipeGesture(dx,dy,duration){
+
+    if(
+        duration>SWIPE_MAX_DURATION
+    )
+        return false;
+
+    /*
+     * Must be a clearly vertical gesture — otherwise a sloppy
+     * horizontal drag could trigger a launch.
+     */
+    if(
+        Math.abs(dy)<SWIPE_MIN_DISTANCE ||
+        Math.abs(dy)<Math.abs(dx)*1.4
+    )
+        return false;
+
+    const up=
+        dy<0;
+
+    /*
+     * On the land/depart screen both actions are available at
+     * once, so the direction alone decides which fires — the old
+     * worldState branch here wrongly assumed "on a planet" meant
+     * landing was impossible, which is exactly why swipe-down
+     * did nothing. Whether each action is actually offered is
+     * already encoded in its button's visibility, so that's the
+     * only condition worth checking.
+     */
+    if(up){
+
+        if(
+            !departButton.classList.contains(
+                "hidden"
+            )
+        ){
+
+            triggerShipSwipeAnim(-1);
+
+            departPlanet();
+
+            return true;
+
+        }
+
+        return false;
+
+    }
+
+    if(
+        !landButton.classList.contains(
+            "hidden"
+        )
+    ){
+
+        triggerShipSwipeAnim(1);
+
+        landAtCurrentPlanet();
+
+        return true;
+
+    }
+
+    return false;
+
+}
+
+/*
+ * Deliberately NOT active during live asteroid-field play — this
+ * is only ever a "ship at rest" gesture. The guard below limits
+ * it to the land/depart screen (where phaseUI is showing), so a
+ * fast downward drag while tapping asteroids can never be read
+ * as a landing.
+ */
+canvas.addEventListener(
+    "pointerdown",
+    event=>{
+
+        if(
+            !phaseUI.classList.contains(
+                "show"
+            )
+        )
+            return;
+
+        swipeStartX=event.clientX;
+        swipeStartY=event.clientY;
+        swipeStartTime=Date.now();
+        swipeTracking=true;
+
+    },
+    {passive:true}
+);
+
+canvas.addEventListener(
+    "pointerup",
+    event=>{
+
+        if(!swipeTracking)
+            return;
+
+        swipeTracking=false;
+
+        if(
+            !phaseUI.classList.contains(
+                "show"
+            )
+        )
+            return;
+
+        handleSwipeGesture(
+            event.clientX-swipeStartX,
+            event.clientY-swipeStartY,
+            Date.now()-swipeStartTime
+        );
+
+    },
+    {passive:true}
+);
+
+/*
+ * Whole-screen swipe-up was replaced by the ship-specific
+ * gesture above — launching now requires actually dragging the
+ * rocket, so a stray upward swipe on empty space can't fire a
+ * mission by accident.
+ */
 
 
 empButton.addEventListener(
