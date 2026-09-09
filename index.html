@@ -6186,6 +6186,108 @@ function paintStructureDesignPreviews(){
 
 }
 
+/*
+ * Paints each pet's small preview canvas in the Pets tab —
+ * same species-and-energy renderer used on the planet surface,
+ * so a pet looks like itself whether you're seeing it wander
+ * around outside or checking in on it here.
+ */
+function paintPetPreviews(planetId,pets){
+
+    if(
+        typeof drawSpacePet===
+        "undefined"
+    )
+        return;
+
+    let anyCanvas=false;
+
+    pets.forEach(
+        (pet,petIndex)=>{
+
+            const canvas=
+                document.getElementById(
+                    "petPreview_"+
+                    planetId+"_"+
+                    petIndex
+                );
+
+            if(!canvas)
+                return;
+
+            anyCanvas=true;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            let seed=0;
+
+            for(
+                let i=0;
+                i<pet.id.length;
+                i++
+            ){
+
+                seed+=
+                    pet.id.charCodeAt(i);
+
+            }
+
+            try{
+
+                drawSpacePet(
+                    ctx2d,
+                    planetId,
+                    canvas.width/2,
+                    canvas.height/2+10,
+                    canvas.width*.42,
+                    pet.energy,
+                    seed
+                );
+
+            }catch(error){
+
+                console.error(
+                    "Pet preview draw failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+    /*
+     * Keeps animating (walk cycle, glow) only while the Pets tab
+     * for this exact planet is actually open — stops itself the
+     * moment that's no longer true, rather than running forever
+     * in the background.
+     */
+    if(
+        anyCanvas &&
+        planetDetailTab==="pets" &&
+        planetDetailId===planetId
+    ){
+
+        requestAnimationFrame(
+            ()=>
+                paintPetPreviews(
+                    planetId,
+                    pets
+                )
+        );
+
+    }
+
+}
+
 
 function renderStructureUpgradesHtml(planetId,structureId){
 
@@ -8218,6 +8320,327 @@ function drawSharedStars(c,width,height){
     }
 
     c.globalAlpha=1;
+
+}
+
+
+/*
+ * PET VISUALS
+ *
+ * A placeholder-but-real creature renderer: procedural, not
+ * hand-drawn, but genuinely distinct per planet and genuinely
+ * animated — proving the foundation (neon aesthetic, per-planet
+ * species, energy-driven glow, walk animation) rather than a
+ * static icon standing in for it.
+ */
+
+/*
+ * Derives a stable "species" for a planet from its id — body
+ * shape, leg count, and whether it has antennae/spikes — plus
+ * its actual palette, so pets read as belonging to their world
+ * (an icy Europa critter looks nothing like a volcanic Mars
+ * one) without needing hand-authored art per planet.
+ */
+function getPetSpeciesForPlanet(planetId){
+
+    let seed=0;
+
+    for(
+        let i=0;
+        i<planetId.length;
+        i++
+    ){
+
+        seed+=
+            planetId.charCodeAt(i)*
+            (i+1);
+
+    }
+
+    const palette=
+        getPlanetPalette(planetId);
+
+    const bodyShapes=
+        ["blob","spiky","long","round"];
+
+    const legCounts=[2,3,4];
+
+    return{
+        bodyColor:palette.light,
+        glowColor:palette.mid,
+        bodyShape:
+            bodyShapes[
+                seed%bodyShapes.length
+            ],
+        legCount:
+            legCounts[
+                Math.floor(seed/7)%
+                legCounts.length
+            ],
+        hasAntenna:
+            seed%3===0,
+        hasSpikes:
+            seed%5===0,
+        sizeMod:
+            .85+(seed%5)*.08
+    };
+
+}
+
+/*
+ * Draws one pet at (x,y) with the given on-screen size. energy
+ * (0-100) drives glow intensity — a well-fed pet genuinely
+ * glows brighter than a starving one. walkSeed offsets the leg
+ * and antenna animation per-pet so a group never moves in
+ * lockstep.
+ */
+function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
+
+    const species=
+        getPetSpeciesForPlanet(
+            planetId
+        );
+
+    const time=
+        performance.now()/1000;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    const effectiveSize=
+        size*species.sizeMod;
+
+    c.save();
+
+    c.translate(x,y);
+
+    const bob=
+        Math.sin(
+            time*4+walkSeed
+        )*effectiveSize*.07;
+
+    c.translate(0,bob);
+
+    const legPhase=
+        time*6+walkSeed;
+
+    c.strokeStyle=
+        species.glowColor;
+
+    c.lineWidth=
+        Math.max(1,effectiveSize*.07);
+
+    c.shadowBlur=
+        glow*.5;
+
+    c.shadowColor=
+        species.glowColor;
+
+    for(
+        let i=0;
+        i<species.legCount;
+        i++
+    ){
+
+        const spread=
+            effectiveSize*.55;
+
+        const lx=
+            species.legCount>1
+            ?-spread/2+
+             (
+                 spread/
+                 (species.legCount-1)
+             )*i
+            :0;
+
+        const swing=
+            Math.sin(
+                legPhase+
+                i*Math.PI
+            )*effectiveSize*.18;
+
+        c.beginPath();
+
+        c.moveTo(
+            lx,
+            effectiveSize*.28
+        );
+
+        c.lineTo(
+            lx+swing,
+            effectiveSize*.55
+        );
+
+        c.stroke();
+
+    }
+
+    c.fillStyle=
+        species.bodyColor;
+
+    c.lineWidth=
+        Math.max(1,effectiveSize*.06);
+
+    c.shadowBlur=glow;
+
+    c.beginPath();
+
+    if(species.bodyShape==="long"){
+
+        c.ellipse(
+            0,0,
+            effectiveSize*.6,
+            effectiveSize*.32,
+            0,0,Math.PI*2
+        );
+
+    }else if(species.bodyShape==="spiky"){
+
+        const spikes=7;
+
+        for(
+            let i=0;
+            i<spikes;
+            i++
+        ){
+
+            const ang=
+                (i/spikes)*Math.PI*2;
+
+            const r=
+                i%2===0
+                ?effectiveSize*.48
+                :effectiveSize*.3;
+
+            const px=
+                Math.cos(ang)*r;
+
+            const py=
+                Math.sin(ang)*r*.85;
+
+            if(i===0)
+                c.moveTo(px,py);
+            else
+                c.lineTo(px,py);
+
+        }
+
+        c.closePath();
+
+    }else{
+
+        c.ellipse(
+            0,0,
+            effectiveSize*.42,
+            effectiveSize*.38,
+            0,0,Math.PI*2
+        );
+
+    }
+
+    c.fill();
+
+    c.stroke();
+
+    if(species.hasSpikes && species.bodyShape!=="spiky"){
+
+        c.beginPath();
+
+        for(
+            let i=0;
+            i<3;
+            i++
+        ){
+
+            const sx=
+                -effectiveSize*.2+
+                effectiveSize*.2*i;
+
+            c.moveTo(
+                sx,
+                -effectiveSize*.3
+            );
+
+            c.lineTo(
+                sx,
+                -effectiveSize*.5
+            );
+
+        }
+
+        c.stroke();
+
+    }
+
+    if(species.hasAntenna){
+
+        const wag=
+            Math.sin(
+                time*3+walkSeed
+            )*effectiveSize*.15;
+
+        c.beginPath();
+
+        c.moveTo(
+            0,
+            -effectiveSize*.32
+        );
+
+        c.lineTo(
+            wag,
+            -effectiveSize*.58
+        );
+
+        c.stroke();
+
+        c.beginPath();
+
+        c.arc(
+            wag,
+            -effectiveSize*.58,
+            effectiveSize*.06,
+            0,Math.PI*2
+        );
+
+        c.fillStyle=
+            species.glowColor;
+
+        c.fill();
+
+    }
+
+    c.shadowBlur=
+        glow*.6;
+
+    c.fillStyle=
+        "#ffffff";
+
+    c.beginPath();
+
+    c.arc(
+        -effectiveSize*.14,
+        -effectiveSize*.04,
+        effectiveSize*.065,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        effectiveSize*.14,
+        -effectiveSize*.04,
+        effectiveSize*.065,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.restore();
 
 }
 
@@ -10428,19 +10851,12 @@ function drawPlanetFocusScene(){
             selectedStartPlanet
         );
 
-    if(focusPets.length){
-
-        surfaceItems.push({
-            kind:"pet",
-            icon:"🐾",
-            tab:"pets",
-            badge:
-                focusPets.length>1
-                ?String(focusPets.length)
-                :""
-        });
-
-    }
+    /*
+     * Pets are deliberately NOT part of surfaceItems — unlike a
+     * structure or the ship, each pet is drawn and animated
+     * individually in its own pass below, since they walk
+     * around rather than sitting fixed in one spot.
+     */
 
     if(
         surfaceItems.length &&
@@ -10480,6 +10896,14 @@ function drawPlanetFocusScene(){
          */
         const CENTRE_GAP=.13;
 
+        /*
+         * Filled in as each structure is placed, so the pet pass
+         * below can send a working or training pet toward the
+         * actual on-screen spot of whatever it's doing — the
+         * "walk toward what they're interacting with" behaviour.
+         */
+        const structureAngles={};
+
         surfaceItems.forEach(
             (item,index)=>{
 
@@ -10503,6 +10927,16 @@ function drawPlanetFocusScene(){
                  */
                 const angle=
                     -Math.PI/2+t;
+
+                if(
+                    item.kind==="structure"
+                ){
+
+                    structureAngles[
+                        item.structureId
+                    ]=angle;
+
+                }
 
                 const ix=
                     cx+
@@ -10711,6 +11145,151 @@ function drawPlanetFocusScene(){
 
             }
         );
+
+        /*
+         * Pets, drawn individually — each one wanders idly near
+         * its own spot unless it has a task, in which case it
+         * drifts toward wherever that task actually is on
+         * screen: a builder pet heads for whatever's under
+         * construction, a pilot pet heads for Pilot Training.
+         * That's what makes them read as doing something rather
+         * than just decorating the planet.
+         */
+        if(focusPets.length){
+
+            const activeBuild=
+                getBuildQueue(
+                    selectedStartPlanet
+                )[0];
+
+            focusPets.forEach(
+                (pet,petIndex)=>{
+
+                    let seed=0;
+
+                    for(
+                        let i=0;
+                        i<pet.id.length;
+                        i++
+                    ){
+
+                        seed+=
+                            pet.id.charCodeAt(i);
+
+                    }
+
+                    const petSide=
+                        petIndex%2===0
+                        ?-1
+                        :1;
+
+                    const petRank=
+                        Math.floor(
+                            petIndex/2
+                        );
+
+                    const idleT=
+                        petSide*
+                        (
+                            .34+
+                            petRank*.22
+                        );
+
+                    const idleAngle=
+                        -Math.PI/2+
+                        idleT;
+
+                    const wander=
+                        Math.sin(
+                            time*.8+seed
+                        )*.05;
+
+                    const role=
+                        pet.role || "builder";
+
+                    let targetAngle=
+                        null;
+
+                    if(
+                        role==="builder" &&
+                        activeBuild
+                    ){
+
+                        const targetId=
+                            activeBuild.type===
+                            "ship"
+                            ?"ship-factory"
+                            :activeBuild.structureId;
+
+                        if(
+                            structureAngles[
+                                targetId
+                            ]!==undefined
+                        ){
+
+                            targetAngle=
+                                structureAngles[
+                                    targetId
+                                ];
+
+                        }
+
+                    }else if(
+                        role==="pilot" &&
+                        structureAngles[
+                            "pilot-training"
+                        ]!==undefined
+                    ){
+
+                        targetAngle=
+                            structureAngles[
+                                "pilot-training"
+                            ];
+
+                    }
+
+                    const petAngle=
+                        targetAngle!==null
+                        ?targetAngle+wander*.4
+                        :idleAngle+wander;
+
+                    const px=
+                        cx+
+                        Math.cos(petAngle)*
+                        radius;
+
+                    const py=
+                        cy+
+                        Math.sin(petAngle)*
+                        radius;
+
+                    const petSize=
+                        Math.max(
+                            16,
+                            width*.05
+                        );
+
+                    drawSpacePet(
+                        c,
+                        selectedStartPlanet,
+                        px,
+                        py,
+                        petSize,
+                        pet.energy,
+                        seed
+                    );
+
+                    canvas._focusHitAreas.push({
+                        x:px,
+                        y:py,
+                        r:petSize*.9,
+                        tab:"pets"
+                    });
+
+                }
+            );
+
+        }
 
         c.restore();
 
@@ -13757,7 +14336,7 @@ function renderPlanetDetail(id){
     }else{
 
         pets.forEach(
-            pet=>{
+            (pet,petCardIndex)=>{
 
                 const energyColor=
                     pet.energy<=0
@@ -13769,12 +14348,22 @@ function renderPlanetDetail(id){
                 const role=
                     pet.role || "builder";
 
+                const petCanvasId=
+                    "petPreview_"+
+                    id+"_"+
+                    petCardIndex;
+
                 html+=
                     '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
-                    '<div style="display:flex;justify-content:space-between;">'+
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+                    '<div style="display:flex;align-items:center;gap:10px;">'+
+                    '<canvas id="'+petCanvasId+'" width="72" height="72" '+
+                    'style="display:block;background:rgba(0,0,0,.25);'+
+                    'border-radius:10px;flex-shrink:0;"></canvas>'+
                     '<span>🐾 Energy: '+
                     '<span style="color:'+energyColor+';">'+
                     Math.round(pet.energy)+'%</span></span>'+
+                    '</div>'+
                     '<button class="control-btn" style="width:auto;'+
                     'padding:7px 10px;" data-action="feed-pet" '+
                     'data-pet="'+pet.id+'" '+
@@ -14687,6 +15276,11 @@ function renderPlanetDetail(id){
         html;
 
     paintStructureDesignPreviews();
+
+    paintPetPreviews(
+        id,
+        getPets(id)
+    );
 
 }
 
