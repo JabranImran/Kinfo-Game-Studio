@@ -8776,6 +8776,49 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
     c.fill();
 
     /*
+     * Face group — cheeks, beak and eyes all move together on
+     * top of the body's own bob/waddle. Rather than swaying
+     * constantly on its own separate cycle, the face leans into
+     * whatever direction the body is CURRENTLY waddling — a
+     * genuine drift with the walking motion — and a slow
+     * per-pet "attention" cycle periodically eases that lean
+     * back to centre for a beat before picking it up again, so
+     * the pet isn't in constant motion, just varied.
+     */
+    const attentionPeriod=
+        5.5+(walkSeed%5)*.6;
+
+    const attentionPhase=
+        (
+            (
+                time*.55+
+                walkSeed*1.7
+            )%attentionPeriod
+        )/attentionPeriod;
+
+    const followAmount=
+        Math.cos(
+            attentionPhase*Math.PI*2
+        )*.5+.5;
+
+    const faceSwayX=
+        waddle*size*1.6*
+        followAmount;
+
+    const faceSwayY=
+        Math.sin(
+            time*3+walkSeed*1.7
+        )*size*.015*
+        followAmount;
+
+    c.save();
+
+    c.translate(
+        faceSwayX,
+        faceSwayY
+    );
+
+    /*
      * Cheeks.
      */
     c.shadowBlur=0;
@@ -8806,11 +8849,45 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
     c.globalAlpha/=.75;
 
     /*
-     * Beak — small triangle between the eyes.
+     * Beak — a short "chirp" cycle periodically opens it (two
+     * mandibles separating) rather than it staying one static
+     * triangle. walkSeed offsets the cycle so a group of
+     * penguins don't all chirp in unison.
      */
+    const chirpCycle=5.2;
+
+    const chirpDuration=.4;
+
+    const chirpCyclePos=
+        (
+            time*.9+
+            walkSeed*1.3
+        )%chirpCycle;
+
+    let beakOpen=0;
+
+    if(chirpCyclePos<chirpDuration){
+
+        beakOpen=
+            Math.sin(
+                (chirpCyclePos/chirpDuration)*
+                Math.PI
+            );
+
+    }
+
+    const beakGap=
+        beakOpen*size*.09;
+
     c.fillStyle=
         beakColor;
 
+    /*
+     * Upper mandible — fixed, always the same shape. Its apex
+     * meets the lower mandible's base exactly, so at rest
+     * (beakGap 0) the two pieces read as one solid triangle,
+     * identical to the original static beak.
+     */
     c.beginPath();
 
     c.moveTo(
@@ -8825,7 +8902,34 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
 
     c.lineTo(
         0,
-        -size*.02
+        -size*.05
+    );
+
+    c.closePath();
+
+    c.fill();
+
+    /*
+     * Lower mandible — its base sits exactly where the upper
+     * one ends, and its own tip extends further down as
+     * beakGap grows, which is what makes the beak look like
+     * it's opening/lengthening for a chirp.
+     */
+    c.beginPath();
+
+    c.moveTo(
+        -size*.06,
+        -size*.05
+    );
+
+    c.lineTo(
+        size*.06,
+        -size*.05
+    );
+
+    c.lineTo(
+        0,
+        -size*.02+beakGap
     );
 
     c.closePath();
@@ -8834,8 +8938,39 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
 
     /*
      * Eyes — big, glossy, chibi-sized, each with a small white
-     * sparkle so they read as alive rather than flat dots.
+     * sparkle so they read as alive rather than flat dots. A
+     * per-pet-phased blink cycle briefly flattens them, rather
+     * than them staying permanently wide open.
      */
+    const blinkCycle=3.6;
+
+    const blinkDuration=.16;
+
+    const blinkCyclePos=
+        (
+            time+
+            walkSeed*.7
+        )%blinkCycle;
+
+    let eyeOpenness=1;
+
+    if(blinkCyclePos<blinkDuration){
+
+        eyeOpenness=
+            1-Math.sin(
+                (blinkCyclePos/blinkDuration)*
+                Math.PI
+            );
+
+    }
+
+    const eyeRadiusX=
+        size*.095;
+
+    const eyeRadiusY=
+        eyeRadiusX*
+        Math.max(.12,eyeOpenness);
+
     c.shadowBlur=
         glow*.5;
 
@@ -8847,23 +8982,36 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
 
     c.beginPath();
 
-    c.arc(
+    c.ellipse(
         -size*.16,
         -size*.23,
-        size*.095,
-        0,Math.PI*2
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
     );
 
-    c.arc(
+    c.ellipse(
         size*.16,
         -size*.23,
-        size*.095,
-        0,Math.PI*2
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
     );
 
     c.fill();
 
     c.shadowBlur=0;
+
+    /*
+     * Floored rather than using eyeOpenness directly — right at
+     * the middle of a blink it can hit exactly 0, and dividing
+     * by that afterward would leave globalAlpha as Infinity for
+     * anything drawn before the next save/restore resets it.
+     */
+    const sparkleAlpha=
+        Math.max(.001,eyeOpenness);
+
+    c.globalAlpha*=sparkleAlpha;
 
     c.fillStyle=
         "#ffffff";
@@ -8885,6 +9033,10 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
     );
 
     c.fill();
+
+    c.globalAlpha/=sparkleAlpha;
+
+    c.restore();
 
     c.restore();
 
