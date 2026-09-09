@@ -94,6 +94,16 @@ body{
     padding:10px 12px;
 
     pointer-events:none;
+
+    /*
+     * Fades with launch/landing transitions rather than
+     * snapping in, matching the rest of the UI.
+     */
+    transition:opacity .3s ease;
+}
+
+#hud.flight-hidden{
+    opacity:0;
 }
 
 .hud-row{
@@ -2211,7 +2221,7 @@ and (max-height:500px){
 
         <canvas id="planetFocusCanvas"></canvas>
 
-        <div class="focus-logo">
+        <div class="focus-logo" id="focusLogo">
             ASTEROID<br>IMPACT
         </div>
 
@@ -2219,7 +2229,7 @@ and (max-height:500px){
 
         <div class="focus-hint" id="focusHint"></div>
 
-        <div class="focus-bottom">
+        <div class="focus-bottom" id="focusBottom">
 
             <div class="focus-launch-info" id="focusLaunchInfo"></div>
 
@@ -2922,6 +2932,18 @@ document.getElementById("game");
 
 const ctx =
 canvas.getContext("2d");
+
+/*
+ * Accessor for the main gameplay context. Exists so functions
+ * that can take an arbitrary target context (see
+ * drawPlanetSurface) can still default to this one without
+ * shadowing the `ctx` const in their own scope.
+ */
+function getMainCtx(){
+
+    return ctx;
+
+}
 
 const scoreEl =
 document.getElementById("score");
@@ -8133,6 +8155,67 @@ function isRoute(a,b){
  * asteroid ring. This is the one renderer every zoomed-out
  * planet in the game goes through.
  */
+/*
+ * Renders the global `stars` array onto any canvas context,
+ * scaled to that canvas's dimensions. Both the home screen and
+ * the star map use this so every view shares one starfield —
+ * identical positions and twinkle — which is what stops the
+ * background visibly swapping during a launch or landing.
+ */
+function drawSharedStars(c,width,height){
+
+    if(
+        !stars ||
+        !stars.length
+    ){
+
+        return;
+
+    }
+
+    /*
+     * The star array is generated against the gameplay canvas
+     * size, so positions are normalised and re-projected rather
+     * than assumed to match this canvas.
+     */
+    const scaleX=
+        W ? width/W : 1;
+
+    const scaleY=
+        H ? height/H : 1;
+
+    for(
+        const s of stars
+    ){
+
+        const alpha=
+            s.alpha+
+            Math.sin(
+                s.twinkle
+            )*.12;
+
+        c.globalAlpha=
+            Math.max(
+                .03,
+                alpha
+            );
+
+        c.fillStyle="#d5e9ff";
+
+        c.fillRect(
+            s.x*scaleX,
+            s.y*scaleY,
+            s.size,
+            s.size
+        );
+
+    }
+
+    c.globalAlpha=1;
+
+}
+
+
 function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
     options=options || {};
@@ -8151,9 +8234,20 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
     c.save();
 
+    /*
+     * Multiplies the caller's alpha rather than overwriting it,
+     * so a planet being faded out by a transition still fades —
+     * previously these assignments reset the alpha to a fixed
+     * value, which is why rings and glow stayed fully opaque
+     * while the body faded.
+     */
+    const baseAlpha=
+        c.globalAlpha;
+
     if(dim){
 
-        c.globalAlpha=.34;
+        c.globalAlpha=
+            baseAlpha*.34;
 
     }
 
@@ -8169,7 +8263,8 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
         c.save();
 
-        c.globalAlpha=pulse;
+        c.globalAlpha=
+            baseAlpha*pulse;
 
         c.shadowBlur=28;
 
@@ -8299,7 +8394,8 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
             c.save();
 
             c.globalAlpha=
-                behind ? .35 : .9;
+                baseAlpha*
+                (behind ? .35 : .9);
 
             c.shadowBlur=6;
 
@@ -8328,12 +8424,21 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
     drawRing(true);
 
     /*
-     * The body, lit from the upper-left.
+     * Lit from the same direction as the gameplay planet
+     * (lightAngle -0.75), so a world's highlight stays on the
+     * same side wherever it's drawn.
      */
+    const spaceLightAngle=
+        -0.75;
+
     const body=
         c.createRadialGradient(
-            cx-radius*.35,
-            cy-radius*.35,
+            cx+
+            Math.cos(spaceLightAngle)*
+            radius*.45,
+            cy+
+            Math.sin(spaceLightAngle)*
+            radius*.45,
             radius*.05,
             cx,
             cy,
@@ -8373,6 +8478,58 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
     );
 
     c.fill();
+
+    /*
+     * The planet's own hand-authored surface — continents,
+     * storms, ice, whatever that world has — drawn through the
+     * exact same function the land/depart screens use, clipped
+     * to the body so it wraps the sphere. This is what makes
+     * every planet in the game genuinely the same planet
+     * wherever it appears, instead of a bland sphere out here
+     * and a detailed one up close.
+     */
+    const planetForSurface=
+        getPlanet(planetId);
+
+    if(planetForSurface){
+
+        c.save();
+
+        c.beginPath();
+
+        c.arc(
+            cx,
+            cy,
+            radius,
+            0,
+            Math.PI*2
+        );
+
+        c.clip();
+
+        try{
+
+            drawPlanetSurface(
+                planetForSurface,
+                cx,
+                cy,
+                radius,
+                time,
+                c
+            );
+
+        }catch(error){
+
+            console.error(
+                "Planet surface draw failed:",
+                error
+            );
+
+        }
+
+        c.restore();
+
+    }
 
     /*
      * Neon rim light.
@@ -8538,35 +8695,7 @@ function drawStarMapScene(){
     const time=
         performance.now()/1000;
 
-    for(
-        let i=0;
-        i<110;
-        i++
-    ){
-
-        const sx=
-            ((i*97)%1000)/1000*width;
-
-        const sy=
-            ((i*61)%1000)/1000*height;
-
-        c.globalAlpha=
-            .3+
-            Math.abs(
-                Math.sin(time*.6+i)
-            )*.5;
-
-        c.fillStyle="#cfe4ff";
-
-        c.fillRect(
-            sx,sy,
-            i%7===0 ? 2 : 1.2,
-            i%7===0 ? 2 : 1.2
-        );
-
-    }
-
-    c.globalAlpha=1;
+    drawSharedStars(c,width,height);
 
     /*
      * Route lines, drawn under the planets.
@@ -8586,6 +8715,93 @@ function drawStarMapScene(){
 
     }
 
+    /*
+     * Each planet gets one junction node, offset from the world
+     * toward the average direction of everything it connects
+     * to. Every route through that planet passes through this
+     * single point, which is what turns a starburst of separate
+     * lines into a proper fork.
+     */
+    function junctionPos(p){
+
+        const pos=planetPos(p);
+
+        let sumX=0;
+        let sumY=0;
+        let count=0;
+
+        ROUTES.forEach(
+            route=>{
+
+                let otherId=null;
+
+                if(route[0]===p.id){
+
+                    otherId=route[1];
+
+                }else if(route[1]===p.id){
+
+                    otherId=route[0];
+
+                }
+
+                if(!otherId)
+                    return;
+
+                const other=
+                    getPlanet(otherId);
+
+                if(!other)
+                    return;
+
+                const op=
+                    planetPos(other);
+
+                sumX+=op.x-pos.x;
+
+                sumY+=op.y-pos.y;
+
+                count++;
+
+            }
+        );
+
+        if(!count){
+
+            return pos;
+
+        }
+
+        const dx=
+            sumX/count;
+
+        const dy=
+            sumY/count;
+
+        const length=
+            Math.hypot(dx,dy) || 1;
+
+        const offset=
+            Math.min(width,height)*.07;
+
+        return{
+            x:pos.x+(dx/length)*offset,
+            y:pos.y+(dy/length)*offset
+        };
+
+    }
+
+    /*
+     * Routes only exist while the map is actually readable —
+     * they fade in after the planets have arrived and out
+     * before they leave.
+     */
+    const routeAlpha=
+        Math.max(
+            0,
+            1-easeZoom(zoomProgress)*3
+        );
+
     ROUTES.forEach(
         route=>{
 
@@ -8604,7 +8820,13 @@ function drawStarMapScene(){
 
             c.save();
 
-            c.globalAlpha=.18;
+            /*
+             * Route lines fade in only once the planets are
+             * visible and out before they go, so they never
+             * hang in empty space during a zoom.
+             */
+            c.globalAlpha=
+                .18*routeAlpha;
 
             c.strokeStyle="#5aa8ff";
 
@@ -8613,6 +8835,28 @@ function drawStarMapScene(){
             c.beginPath();
 
             c.moveTo(pa.x,pa.y);
+
+            /*
+             * Routes leave a planet through a shared junction
+             * node rather than radiating straight out, so
+             * several routes from one world read as a fork —
+             * a Y — instead of a starburst of separate lines.
+             */
+            const junctionA=
+                junctionPos(a);
+
+            const junctionB=
+                junctionPos(b);
+
+            c.lineTo(
+                junctionA.x,
+                junctionA.y
+            );
+
+            c.lineTo(
+                junctionB.x,
+                junctionB.y
+            );
 
             c.lineTo(pb.x,pb.y);
 
@@ -8628,11 +8872,58 @@ function drawStarMapScene(){
 
     canvas._starHitAreas=[];
 
-    const radius=
+    const mapRadius=
         Math.max(
             16,
             Math.min(width,height)*.045
         );
+
+    updateZoom();
+
+    const zoom=
+        easeZoom(zoomProgress);
+
+    /*
+     * Where the zoom target ends up when fully zoomed in — the
+     * same geometry the focus view uses, so the transition
+     * lands exactly on that framing rather than approximately.
+     */
+    const focusRadius=
+        Math.max(
+            width*.95,
+            height*.62
+        );
+
+    /*
+     * In destination mode the camera converges on the SHIP's
+     * junction node rather than a planet's framing — you're
+     * flying from where you are, so pulling back from (and
+     * returning to) the vessel reads far more clearly than
+     * diving into a world you haven't chosen yet.
+     */
+    const destinationAnchor=
+        starMapMode==="destination"
+        ?(function(){
+
+            const here=
+                getPlanet(currentPlanetId);
+
+            return here
+                ?junctionPos(here)
+                :null;
+
+        })()
+        :null;
+
+    const focusCx=
+        destinationAnchor
+        ?destinationAnchor.x
+        :width/2;
+
+    const focusCy=
+        destinationAnchor
+        ?destinationAnchor.y
+        :height*.72+focusRadius;
 
     PLANETS.forEach(
         p=>{
@@ -8644,51 +8935,238 @@ function drawStarMapScene(){
                     p.id
                 );
 
-            drawSpacePlanet(
-                c,
-                p.id,
-                pos.x,
-                pos.y,
-                radius,
-                {
-                    dim:!selectable,
-                    highlight:selectable
+            const isZoomTarget=
+                p.id===zoomPlanetId;
+
+            let px=pos.x;
+            let py=pos.y;
+            let pr=mapRadius;
+            let alpha=1;
+
+            if(zoom>0){
+
+                if(isZoomTarget){
+
+                    /*
+                     * The planet being zoomed into travels from
+                     * its map spot to the focus framing,
+                     * growing as it goes.
+                     */
+                    px=
+                        pos.x+
+                        (focusCx-pos.x)*zoom;
+
+                    py=
+                        pos.y+
+                        (focusCy-pos.y)*zoom;
+
+                    pr=
+                        mapRadius+
+                        (focusRadius-mapRadius)*zoom;
+
+                }else{
+
+                    /*
+                     * Everything else drifts outward from the
+                     * target and fades, as though the camera is
+                     * flying past them.
+                     */
+                    const dx=
+                        pos.x-focusCx;
+
+                    const dy=
+                        pos.y-focusCy;
+
+                    px=
+                        pos.x+dx*zoom*1.4;
+
+                    py=
+                        pos.y+dy*zoom*1.4;
+
+                    pr=
+                        mapRadius*(1+zoom*.8);
+
+                    alpha=
+                        Math.max(
+                            0,
+                            1-zoom*1.6
+                        );
+
                 }
-            );
+
+            }
+
+            if(alpha<=0)
+                return;
 
             c.save();
 
-            c.globalAlpha=
-                selectable ? 1 : .45;
+            c.globalAlpha=alpha;
 
-            c.fillStyle=
-                selectable
-                ?"#e8f6ff"
-                :"#7f9ac0";
-
-            c.font=
-                "800 10px system-ui";
-
-            c.textAlign="center";
-
-            c.fillText(
-                p.name.toUpperCase(),
-                pos.x,
-                pos.y+radius*2.5
+            drawSpacePlanet(
+                c,
+                p.id,
+                px,
+                py,
+                pr,
+                {
+                    dim:
+                        !selectable &&
+                        zoom<.15,
+                    highlight:
+                        selectable &&
+                        zoom<.15
+                }
             );
 
             c.restore();
 
-            canvas._starHitAreas.push({
-                x:pos.x,
-                y:pos.y,
-                r:radius*1.9,
-                planetId:p.id,
-                selectable:selectable
-            });
+            /*
+             * Labels fade out as soon as the zoom starts —
+             * they belong to the map, not the close-up.
+             */
+            const labelAlpha=
+                Math.max(
+                    0,
+                    1-zoom*3
+                )*
+                (selectable ? 1 : .45);
+
+            if(labelAlpha>0){
+
+                c.save();
+
+                c.globalAlpha=labelAlpha;
+
+                c.fillStyle=
+                    selectable
+                    ?"#e8f6ff"
+                    :"#7f9ac0";
+
+                c.font=
+                    "800 10px system-ui";
+
+                c.textAlign="center";
+
+                c.fillText(
+                    p.name.toUpperCase(),
+                    px,
+                    py+pr*2.5
+                );
+
+                c.restore();
+
+            }
+
+            /*
+             * Hit areas are only meaningful while the map is
+             * actually readable — mid-zoom taps would otherwise
+             * land on planets that have visually flown away.
+             */
+            if(zoom<.15){
+
+                canvas._starHitAreas.push({
+                    x:px,
+                    y:py,
+                    r:pr*1.9,
+                    planetId:p.id,
+                    selectable:selectable
+                });
+
+            }
 
         }
     );
+
+    /*
+     * During destination select, show the ship sitting on the
+     * junction node of the world it just left — so you can see
+     * where you actually are, poised at the fork between the
+     * routes you're choosing from.
+     */
+    if(
+        starMapMode==="destination"
+    ){
+
+        const here=
+            getPlanet(currentPlanetId);
+
+        if(here){
+
+            const j=
+                junctionPos(here);
+
+            const shipAlpha=
+                Math.max(
+                    0,
+                    1-easeZoom(zoomProgress)*1.4
+                );
+
+            if(shipAlpha>0){
+
+                c.save();
+
+                c.globalAlpha=shipAlpha;
+
+                c.translate(j.x,j.y);
+
+                const bob=
+                    Math.sin(time*3)*1.5;
+
+                if(
+                    typeof shipCustomizer!==
+                    "undefined" &&
+                    shipCustomizer.shapes &&
+                    shipCustomizer.shapes.length
+                ){
+
+                    c.save();
+
+                    c.scale(.16,.16);
+
+                    c.translate(
+                        -200,
+                        -140-bob
+                    );
+
+                    c.shadowBlur=18;
+
+                    c.shadowColor="#5ce4ff";
+
+                    for(
+                        const shape of
+                        shipCustomizer.shapes
+                    ){
+
+                        shape.draw(c);
+
+                    }
+
+                    c.restore();
+
+                }else{
+
+                    c.shadowBlur=14;
+
+                    c.shadowColor="#5ce4ff";
+
+                    c.font="18px system-ui";
+
+                    c.textAlign="center";
+
+                    c.textBaseline="middle";
+
+                    c.fillText("🚀",0,bob);
+
+                }
+
+                c.restore();
+
+            }
+
+        }
+
+    }
 
 }
 
@@ -8723,12 +9201,247 @@ function starMapLoop(){
 
     }
 
+    /*
+     * The map's own chrome fades out as the camera zooms in, so
+     * "STAR MAP" and the close button don't hang over what is
+     * by then a close-up of a single world.
+     */
+    const chromeAlpha=
+        Math.max(
+            0,
+            1-easeZoom(zoomProgress)*2.5
+        );
+
+    [
+        "starMapTitle",
+        "starMapHint",
+        "starMapCloseBtn"
+    ].forEach(
+        elementId=>{
+
+            const node=
+                document.getElementById(
+                    elementId
+                );
+
+            if(node){
+
+                node.style.opacity=
+                    chromeAlpha;
+
+            }
+
+        }
+    );
+
     starMapRaf=
         requestAnimationFrame(
             starMapLoop
         );
 
 }
+
+/*
+ * Zoom transition state. The star map and the focused planet
+ * view are the same scene at two different zoom levels, so
+ * moving between them is a matter of interpolating position and
+ * radius rather than swapping screens.
+ *
+ * zoomProgress runs 0 (fully zoomed out on the star map) to 1
+ * (fully zoomed in on one planet). zoomTarget is where it's
+ * heading; zoomPlanetId is the world being zoomed in on.
+ */
+let zoomProgress=0;
+let zoomTarget=0;
+let zoomPlanetId=null;
+let zoomOnArrive=null;
+
+/*
+ * Flight animation. flightProgress runs 0 (ship resting on the
+ * planet, home-screen framing) to 1 (ship at screen centre,
+ * planet pushed down and shrunk — i.e. the land/depart
+ * framing). Launching plays it forwards, landing backwards.
+ *
+ * Deliberately separate from zoomProgress so map zooming and
+ * flight can't interfere with each other.
+ */
+let flightProgress=0;
+let flightTarget=0;
+let flightOnArrive=null;
+
+const FLIGHT_SPEED=.035;
+
+function startFlightOut(onArrive){
+
+    flightTarget=1;
+
+    flightOnArrive=onArrive || null;
+
+}
+
+function startFlightIn(onArrive){
+
+    flightTarget=0;
+
+    flightOnArrive=onArrive || null;
+
+}
+
+/*
+ * Launch: play the outward flight, then start the actual game
+ * once the ship has reached centre. The flight is reset to 0
+ * immediately afterwards so the home screen is already framed
+ * correctly whenever the player next returns to it.
+ */
+function launchWithAnimation(){
+
+    if(flightTarget===1)
+        return;
+
+    /*
+     * Hidden up-front rather than inside startGame(), because
+     * by then the HUD has already been painted visible for a
+     * frame — that was the flash before it faded in.
+     */
+    const hudEl=
+        document.getElementById("hud");
+
+    if(hudEl){
+
+        hudEl.classList.add(
+            "flight-hidden"
+        );
+
+    }
+
+    startFlightOut(
+        ()=>{
+
+            startGame();
+
+            flightProgress=0;
+
+            flightTarget=0;
+
+        }
+    );
+
+}
+
+function updateFlight(){
+
+    if(
+        flightProgress===flightTarget
+    ){
+
+        return;
+
+    }
+
+    if(
+        flightProgress<flightTarget
+    ){
+
+        flightProgress=
+            Math.min(
+                flightTarget,
+                flightProgress+FLIGHT_SPEED
+            );
+
+    }else{
+
+        flightProgress=
+            Math.max(
+                flightTarget,
+                flightProgress-FLIGHT_SPEED
+            );
+
+    }
+
+    if(
+        flightProgress===flightTarget &&
+        flightOnArrive
+    ){
+
+        const fn=flightOnArrive;
+
+        flightOnArrive=null;
+
+        fn();
+
+    }
+
+}
+
+const ZOOM_SPEED=.055;
+
+/*
+ * Smoothstep — eases in and out so the motion feels like a
+ * camera rather than a linear slide.
+ */
+function easeZoom(t){
+
+    return t*t*(3-2*t);
+
+}
+
+function startZoomIn(planetId,onArrive){
+
+    zoomPlanetId=planetId;
+
+    zoomTarget=1;
+
+    zoomOnArrive=onArrive || null;
+
+}
+
+function startZoomOut(){
+
+    zoomTarget=0;
+
+    zoomOnArrive=null;
+
+}
+
+function updateZoom(){
+
+    if(
+        zoomProgress<zoomTarget
+    ){
+
+        zoomProgress=
+            Math.min(
+                zoomTarget,
+                zoomProgress+ZOOM_SPEED
+            );
+
+        if(
+            zoomProgress>=1 &&
+            zoomOnArrive
+        ){
+
+            const fn=zoomOnArrive;
+
+            zoomOnArrive=null;
+
+            fn();
+
+        }
+
+    }else if(
+        zoomProgress>zoomTarget
+    ){
+
+        zoomProgress=
+            Math.max(
+                zoomTarget,
+                zoomProgress-ZOOM_SPEED
+            );
+
+    }
+
+}
+
 
 function openStarMap(mode){
 
@@ -8765,6 +9478,26 @@ function openStarMap(mode){
         :"";
 
     el.classList.remove("hidden");
+
+    /*
+     * Opening the map starts fully zoomed in, then pulls back —
+     * the exact reverse of tapping to zoom in, so the two
+     * directions feel like one continuous camera move.
+     *
+     * In destination mode there's deliberately no planet zoom
+     * target: the camera pulls back from the SHIP, so no world
+     * should be growing to fill the screen.
+     */
+    zoomPlanetId=
+        starMapMode==="destination"
+        ?null
+        :selectedStartPlanet;
+
+    zoomProgress=1;
+
+    zoomTarget=0;
+
+    zoomOnArrive=null;
 
     if(!starMapRaf){
 
@@ -9162,47 +9895,26 @@ function drawPlanetFocusScene(){
     );
 
     /*
-     * Starfield — seeded arithmetically rather than randomly so
-     * stars hold still between frames instead of shimmering.
+     * Draws the SAME starfield the gameplay canvas uses — same
+     * positions, same twinkle, same drift — so the background
+     * doesn't visibly change when handing over between the home
+     * screen and the field. One starfield, three views.
      */
-    for(
-        let i=0;
-        i<90;
-        i++
-    ){
+    drawSharedStars(c,width,height);
 
-        const sx=
-            (
-                (i*97)%1000
-            )/1000*width;
+    updateFlight();
 
-        const sy=
-            (
-                (i*61)%1000
-            )/1000*height;
-
-        const twinkle=
-            .35+
-            Math.abs(
-                Math.sin(
-                    time*.6+i
-                )
-            )*.5;
-
-        c.globalAlpha=twinkle;
-
-        c.fillStyle="#cfe4ff";
-
-        c.fillRect(
-            sx,
-            sy,
-            i%7===0 ? 2 : 1.2,
-            i%7===0 ? 2 : 1.2
-        );
-
-    }
-
-    c.globalAlpha=1;
+    /*
+     * Flight progress is resolved up-front because everything
+     * on this screen — background planets, surface objects, the
+     * focused world and the ship — fades or moves against it.
+     *
+     * During a launch the planet shrinks and rises away, ending
+     * at the land/depart framing; a landing plays the same
+     * interpolation in reverse.
+     */
+    const flight=
+        easeZoom(flightProgress);
 
     /*
      * Next-tier planets drifting in the upper background. Their
@@ -9216,90 +9928,159 @@ function drawPlanetFocusScene(){
 
     canvas._focusHitAreas=[];
 
-    nextTier.forEach(
-        (p,index)=>{
+    /*
+     * Background planets are rendered to an offscreen canvas and
+     * then composited in at the fade alpha, rather than each
+     * planet being drawn with a fade applied directly.
+     *
+     * This is the fix for the long-standing "rings and glow
+     * don't fade" bug: drawSpacePlanet() and the per-planet
+     * surface art contain many hardcoded globalAlpha values, and
+     * any one of them overrides a fade set by the caller.
+     * Compositing a finished layer sidesteps that entirely —
+     * whatever the drawing code does internally, the whole layer
+     * is faded as a single image, so nothing can escape it.
+     */
+    const backgroundAlpha=
+        Math.max(
+            0,
+            1-flight*1.8
+        );
 
-            const spread=
-                nextTier.length>1
-                ?index/(nextTier.length-1)
-                :.5;
+    if(
+        nextTier.length &&
+        backgroundAlpha>0
+    ){
 
-            const px=
-                width*(.2+spread*.6);
+        if(!canvas._bgLayer){
 
-            const py=
-                height*.19+
-                Math.sin(
-                    time*.35+index
-                )*6;
-
-            const pr=
-                Math.max(
-                    13,
-                    width*.038
+            canvas._bgLayer=
+                document.createElement(
+                    "canvas"
                 );
-
-            const palette=
-                getPlanetPalette(p.id);
-
-            const unlockedNext=
-                p.requirement<=highScore;
-
-            c.save();
-
-            c.globalAlpha=
-                unlockedNext ? .75 : .3;
-
-            const grad=
-                c.createRadialGradient(
-                    px-pr*.35,
-                    py-pr*.35,
-                    pr*.05,
-                    px,
-                    py,
-                    pr*1.05
-                );
-
-            grad.addColorStop(
-                0,
-                palette.light
-            );
-
-            grad.addColorStop(
-                .45,
-                palette.mid
-            );
-
-            grad.addColorStop(
-                1,
-                palette.dark
-            );
-
-            c.fillStyle=grad;
-
-            c.beginPath();
-
-            c.arc(
-                px,
-                py,
-                pr,
-                0,
-                Math.PI*2
-            );
-
-            c.fill();
-
-            c.restore();
-
-            canvas._focusHitAreas.push({
-                x:px,
-                y:py,
-                r:pr+10,
-                planetId:p.id
-            });
 
         }
-    );
+
+        const layer=
+            canvas._bgLayer;
+
+        if(
+            layer.width!==canvas.width ||
+            layer.height!==canvas.height
+        ){
+
+            layer.width=canvas.width;
+
+            layer.height=canvas.height;
+
+        }
+
+        const lc=
+            layer.getContext("2d");
+
+        lc.setTransform(
+            1,0,0,1,0,0
+        );
+
+        lc.clearRect(
+            0,
+            0,
+            layer.width,
+            layer.height
+        );
+
+        /*
+         * Matches the main context's DPR scaling so coordinates
+         * line up between the layer and the screen.
+         */
+        lc.setTransform(
+            dpr,0,0,dpr,0,0
+        );
+
+        nextTier.forEach(
+            (p,index)=>{
+
+                const spread=
+                    nextTier.length>1
+                    ?index/(nextTier.length-1)
+                    :.5;
+
+                const px=
+                    width*(.2+spread*.6);
+
+                const py=
+                    height*.19+
+                    Math.sin(
+                        time*.35+index
+                    )*6;
+
+                const pr=
+                    Math.max(
+                        13,
+                        width*.038
+                    );
+
+                const unlockedNext=
+                    p.requirement<=highScore;
+
+                lc.save();
+
+                lc.globalAlpha=
+                    unlockedNext ? .8 : .35;
+
+                drawSpacePlanet(
+                    lc,
+                    p.id,
+                    px,
+                    py,
+                    pr,
+                    {}
+                );
+
+                lc.restore();
+
+                canvas._focusHitAreas.push({
+                    x:px,
+                    y:py,
+                    r:pr+10,
+                    planetId:p.id
+                });
+
+            }
+        );
+
+        /*
+         * The whole layer composited at the fade alpha — one
+         * operation nothing inside can override.
+         */
+        c.save();
+
+        c.globalAlpha=
+            backgroundAlpha;
+
+        c.setTransform(
+            1,0,0,1,0,0
+        );
+
+        c.drawImage(
+            layer,
+            0,
+            0
+        );
+
+        c.restore();
+
+        /*
+         * Restores the DPR transform the rest of this function
+         * draws under — using the same `dpr` the context was set
+         * up with, rather than re-deriving it, so the two can't
+         * drift apart.
+         */
+        c.setTransform(
+            dpr,0,0,dpr,0,0
+        );
+
+    }
 
     /*
      * The focused planet — huge, filling the bottom of the
@@ -9314,17 +10095,51 @@ function drawPlanetFocusScene(){
     if(!planet)
         return;
 
-    const radius=
+    const homeRadius=
         Math.max(
             width*.95,
             height*.62
         );
 
+    /*
+     * The launch has to land EXACTLY on the gameplay planet's
+     * framing, otherwise the handover looks like two different
+     * objects — one sliding away and another appearing. These
+     * mirror drawPlanetBackground()'s settled values precisely.
+     */
+    const departRadius=
+        clamp(
+            Math.min(width,height)*.34,
+            105,
+            250
+        );
+
+    const radius=
+        homeRadius+
+        (departRadius-homeRadius)*flight;
+
     const cx=
         width/2;
 
+    const homeCy=
+        height*.72+homeRadius;
+
+    const departCy=
+        height*.80;
+
+    /*
+     * The planet's CENTRE rises as it shrinks — the world
+     * falling away beneath the ship — rather than sliding down
+     * off-screen. Eased more gently than the ship (flight^0.75)
+     * so the planet visibly lags behind it, which is what sells
+     * the sense of distance opening up between them.
+     */
+    const planetEase=
+        Math.pow(flight,.75);
+
     const cy=
-        height*.72+radius;
+        homeCy+
+        (departCy-homeCy)*planetEase;
 
     const palette=
         getPlanetPalette(
@@ -9334,29 +10149,43 @@ function drawPlanetFocusScene(){
     /*
      * Atmosphere halo along the horizon.
      */
+    /*
+     * Atmosphere bloom — matched exactly to the gameplay
+     * planet's (same getPlanetAtmosphere colour, same
+     * 0.72→1.45 falloff and stops) so the glow doesn't visibly
+     * change shape or hue during the launch handover.
+     */
     c.save();
+
+    const focusAtmosphere=
+        getPlanetAtmosphere(
+            planet.id
+        );
 
     const halo=
         c.createRadialGradient(
             cx,
             cy,
-            radius*.97,
+            radius*.72,
             cx,
             cy,
-            radius*1.1
+            radius*1.45
         );
 
     halo.addColorStop(
         0,
-        palette.mid
+        focusAtmosphere+"00"
+    );
+
+    halo.addColorStop(
+        .72,
+        focusAtmosphere+"22"
     );
 
     halo.addColorStop(
         1,
-        "rgba(0,0,0,0)"
+        focusAtmosphere+"00"
     );
-
-    c.globalAlpha=.55;
 
     c.fillStyle=halo;
 
@@ -9365,7 +10194,7 @@ function drawPlanetFocusScene(){
     c.arc(
         cx,
         cy,
-        radius*1.1,
+        radius*1.45,
         0,
         Math.PI*2
     );
@@ -9374,10 +10203,29 @@ function drawPlanetFocusScene(){
 
     c.restore();
 
+    /*
+     * Light direction matched exactly to the gameplay planet
+     * (lightAngle -0.75, offset radius*.45) — these were
+     * mirrored before, so the highlight visibly flipped from
+     * one side to the other during a launch.
+     */
+    const focusLightAngle=
+        -0.75;
+
+    const focusLightX=
+        cx+
+        Math.cos(focusLightAngle)*
+        radius*.45;
+
+    const focusLightY=
+        cy+
+        Math.sin(focusLightAngle)*
+        radius*.45;
+
     const body=
         c.createRadialGradient(
-            cx-radius*.3,
-            cy-radius*.42,
+            focusLightX,
+            focusLightY,
             radius*.04,
             cx,
             cy,
@@ -9417,6 +10265,47 @@ function drawPlanetFocusScene(){
     );
 
     c.fill();
+
+    /*
+     * Same hand-authored surface as everywhere else, clipped to
+     * the body — so the world you're hovering over up close is
+     * visibly the same one you saw on the star map.
+     */
+    c.save();
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.clip();
+
+    try{
+
+        drawPlanetSurface(
+            planet,
+            cx,
+            cy,
+            radius,
+            time,
+            c
+        );
+
+    }catch(error){
+
+        console.error(
+            "Focus planet surface draw failed:",
+            error
+        );
+
+    }
+
+    c.restore();
 
     /*
      * A thin bright rim along the horizon line sells the
@@ -9482,34 +10371,28 @@ function drawPlanetFocusScene(){
 
     }
 
+    /*
+     * The ship is deliberately NOT part of the surface-items
+     * arc — it's drawn separately below at true gameplay size,
+     * always centred on the top of the planet. That keeps the
+     * vessel's scale consistent between the home screen and
+     * actual play, and keeps it as the focal point.
+     */
+    /*
+     * Earth's free starter ship isn't a docked record, so a
+     * plain ship-list check showed no vessel there even though
+     * one is genuinely available to launch. Using the same
+     * candidate list the launch itself uses keeps the picture
+     * honest — if you can fly from here, you can see the ship.
+     */
     const focusShips=
         selectedStartPlanet==="earth"
-        ?(planetSave.ships.earth || [])
+        ?getEarthLaunchCandidates()
         :(
             getShips(
                 selectedStartPlanet
             ) || []
         );
-
-    if(focusShips.length){
-
-        surfaceItems.push({
-            kind:"ship",
-            icon:"🚀",
-            tab:"ships",
-            /*
-             * Draws the player's actual Ship Builder design
-             * rather than a generic rocket emoji — same saved
-             * key the builder and gameplay renderer both use.
-             */
-            designKey:"customShip",
-            badge:
-                focusShips.length>1
-                ?String(focusShips.length)
-                :""
-        });
-
-    }
 
     const focusPets=
         getPets(
@@ -9530,7 +10413,23 @@ function drawPlanetFocusScene(){
 
     }
 
-    if(surfaceItems.length){
+    if(
+        surfaceItems.length &&
+        flight<.95
+    ){
+
+        /*
+         * Surface objects fade out as the ship departs — by the
+         * time you're in the land/depart framing the planet is
+         * too small and distant to show its buildings.
+         */
+        c.save();
+
+        c.globalAlpha=
+            Math.max(
+                0,
+                1-flight*1.6
+            );
 
         /*
          * Spread across a shallow arc centred on the top of the
@@ -9543,13 +10442,30 @@ function drawPlanetFocusScene(){
                 .16*surfaceItems.length
             );
 
+        /*
+         * The centre of the planet's peak is reserved for the
+         * ship, so surface objects are pushed out to either
+         * side of it — alternating left/right and stepping
+         * outward — rather than being spread evenly across the
+         * middle where they'd sit behind the vessel.
+         */
+        const CENTRE_GAP=.13;
+
         surfaceItems.forEach(
             (item,index)=>{
 
+                const side=
+                    index%2===0 ? -1 : 1;
+
+                const rank=
+                    Math.floor(index/2);
+
                 const t=
-                    surfaceItems.length>1
-                    ?index/(surfaceItems.length-1)-.5
-                    :0;
+                    side*
+                    (
+                        CENTRE_GAP+
+                        rank*arcSpan*.55
+                    );
 
                 /*
                  * -PI/2 is the top of the circle in canvas
@@ -9557,8 +10473,7 @@ function drawPlanetFocusScene(){
                  * closest to the camera.
                  */
                 const angle=
-                    -Math.PI/2+
-                    t*arcSpan;
+                    -Math.PI/2+t;
 
                 const ix=
                     cx+
@@ -9768,6 +10683,102 @@ function drawPlanetFocusScene(){
             }
         );
 
+        c.restore();
+
+    }
+
+
+    /*
+     * The ship, drawn last so it sits above everything, at the
+     * exact same scale it appears at during gameplay and
+     * centred on the top of the planet. flightProgress slides it
+     * from the surface up to screen-centre during a launch (and
+     * back down during a landing), which is what makes the
+     * transition read as the vessel actually flying.
+     */
+    if(focusShips.length){
+
+        const surfaceY=
+            cy-radius;
+
+        const centreY=
+            height*.5;
+
+        const shipY=
+            surfaceY+
+            (centreY-surfaceY)*
+            easeZoom(flightProgress);
+
+        canvas._shipHitArea={
+            x:cx,
+            y:shipY,
+            r:Math.max(38,width*.11)
+        };
+
+        c.save();
+
+        c.translate(cx,shipY);
+
+        const pulse=
+            Math.sin(time*3)*1.5;
+
+        if(
+            typeof shipCustomizer!=="undefined" &&
+            shipCustomizer.shapes &&
+            shipCustomizer.shapes.length
+        ){
+
+            /*
+             * Identical transform to drawCustomShipShapes() in
+             * gameplay, so the vessel is genuinely the same size
+             * here as it is in the field.
+             */
+            c.save();
+
+            c.scale(.55,.55);
+
+            c.translate(-200,-140-pulse);
+
+            c.shadowBlur=18;
+
+            c.shadowColor="#5ce4ff";
+
+            for(
+                const shape of shipCustomizer.shapes
+            ){
+
+                shape.draw(c);
+
+            }
+
+            c.shadowBlur=0;
+
+            c.restore();
+
+        }else{
+
+            c.shadowBlur=16;
+
+            c.shadowColor="#5ce4ff";
+
+            c.font="34px system-ui";
+
+            c.textAlign="center";
+
+            c.textBaseline="middle";
+
+            c.fillText("\uD83D\uDE80",0,pulse);
+
+            c.shadowBlur=0;
+
+        }
+
+        c.restore();
+
+    }else{
+
+        canvas._shipHitArea=null;
+
     }
 
 }
@@ -9797,6 +10808,46 @@ function planetFocusLoop(){
         );
 
     }
+
+    /*
+     * All the home-screen chrome fades out as the ship departs
+     * and back in as it lands, so the buttons and title glide
+     * away with the motion instead of popping out of existence
+     * the instant the transition ends.
+     */
+    const chromeAlpha=
+        Math.max(
+            0,
+            1-easeZoom(flightProgress)*1.8
+        );
+
+    [
+        "focusLogo",
+        "focusPlanetName",
+        "focusHint",
+        "focusBottom"
+    ].forEach(
+        elementId=>{
+
+            const node=
+                document.getElementById(
+                    elementId
+                );
+
+            if(node){
+
+                node.style.opacity=
+                    chromeAlpha;
+
+                node.style.pointerEvents=
+                    chromeAlpha<.3
+                    ?"none"
+                    :"";
+
+            }
+
+        }
+    );
 
     planetFocusRaf=
         requestAnimationFrame(
@@ -18369,6 +19420,105 @@ function drawPlayer(){
    BEAUTIFUL PLANET BACKGROUND
 ========================================================= */
 
+/*
+ * Planet approach/depart animation on the GAMEPLAY canvas.
+ * These are purely visual — no gameplay logic reads them, and
+ * they only ever run while worldState is "planet" (i.e. between
+ * asteroid waves), so a live field is never interrupted.
+ */
+let planetApproachProgress=1;
+let planetApproachTarget=1;
+let planetDepartProgress=0;
+let planetDepartTarget=0;
+let planetDepartOnArrive=null;
+
+const PLANET_APPROACH_SPEED=.03;
+
+function startPlanetApproach(){
+
+    planetApproachProgress=0;
+
+    planetApproachTarget=1;
+
+    planetDepartProgress=0;
+
+    planetDepartTarget=0;
+
+}
+
+function startPlanetDepart(onArrive){
+
+    planetDepartTarget=1;
+
+    planetDepartOnArrive=onArrive || null;
+
+}
+
+function updatePlanetApproach(){
+
+    if(
+        planetApproachProgress<
+        planetApproachTarget
+    ){
+
+        planetApproachProgress=
+            Math.min(
+                planetApproachTarget,
+                planetApproachProgress+
+                PLANET_APPROACH_SPEED
+            );
+
+    }
+
+    if(
+        planetDepartProgress===
+        planetDepartTarget
+    ){
+
+        return;
+
+    }
+
+    if(
+        planetDepartProgress<
+        planetDepartTarget
+    ){
+
+        planetDepartProgress=
+            Math.min(
+                planetDepartTarget,
+                planetDepartProgress+
+                PLANET_APPROACH_SPEED
+            );
+
+    }else{
+
+        planetDepartProgress=
+            Math.max(
+                planetDepartTarget,
+                planetDepartProgress-
+                PLANET_APPROACH_SPEED
+            );
+
+    }
+
+    if(
+        planetDepartProgress===
+        planetDepartTarget &&
+        planetDepartOnArrive
+    ){
+
+        const fn=planetDepartOnArrive;
+
+        planetDepartOnArrive=null;
+
+        fn();
+
+    }
+
+}
+
+
 function drawPlanetBackground(){
 
     const planet=
@@ -18389,18 +19539,40 @@ function drawPlanetBackground(){
             H
         );
 
+    updatePlanetApproach();
+
+    /*
+     * approachProgress runs 0 (planet small and high, as if far
+     * off) to 1 (settled into the land/depart framing), and
+     * departProgress runs 0→1 to shrink it away again. Purely
+     * visual: gameplay never reads these.
+     */
+    const approach=
+        easeZoom(planetApproachProgress);
+
+    const depart=
+        easeZoom(planetDepartProgress);
+
     /*
      * Larger planets on mobile,
      * while retaining some space around
      * the planetary UI.
      */
 
-    const radius=
+    const settledRadius=
         clamp(
             minDimension*.34,
             105,
             250
         );
+
+    const radius=
+        settledRadius*
+        (
+            .25+
+            .75*approach
+        )*
+        (1-depart);
 
     /*
      * Planet position.
@@ -18413,8 +19585,20 @@ function drawPlanetBackground(){
     const x=
         W/2;
 
-    const y=
+    const settledY=
         H*.80;
+
+    /*
+     * Comes in from high up and descends into place, then drops
+     * away again on departure.
+     */
+    const y=
+        H*.28+
+        (settledY-H*.28)*approach+
+        H*.35*depart;
+
+    if(radius<=1)
+        return;
 
 
     /*
@@ -18800,8 +19984,18 @@ function drawPlanetSurface(
     x,
     y,
     radius,
-    t
+    t,
+    targetCtx
 ){
+
+    /*
+     * Defaults to the main gameplay canvas, but accepts any
+     * context so the same hand-authored planet surfaces can be
+     * drawn onto the star map's canvas too — one definition of
+     * what each world looks like, used everywhere.
+     */
+    const ctx=
+        targetCtx || getMainCtx();
 
     const id=
         planet.id;
@@ -18951,7 +20145,7 @@ function drawPlanetSurface(
 
         ctx.save();
 
-        ctx.globalAlpha=.18;
+        ctx.globalAlpha*=.18;
 
         ctx.strokeStyle="#ffcf9a";
 
@@ -19060,7 +20254,7 @@ function drawPlanetSurface(
 
         ctx.save();
 
-        ctx.globalAlpha=.22;
+        ctx.globalAlpha*=.22;
 
         ctx.strokeStyle="#ffdf8a";
 
@@ -19120,7 +20314,7 @@ function drawPlanetSurface(
 
         ctx.save();
 
-        ctx.globalAlpha=.24;
+        ctx.globalAlpha*=.24;
 
         ctx.strokeStyle="#a9c8ff";
 
@@ -19193,7 +20387,7 @@ function drawPlanetSurface(
 
         ctx.save();
 
-        ctx.globalAlpha=.28;
+        ctx.globalAlpha*=.28;
 
         ctx.strokeStyle="#f2b9ff";
 
@@ -19245,7 +20439,7 @@ function drawPlanetSurface(
 
         ctx.save();
 
-        ctx.globalAlpha=.45;
+        ctx.globalAlpha*=.45;
 
         for(
             let i=0;
@@ -19355,7 +20549,7 @@ function drawPlanetSurface(
 
         }
 
-        ctx.globalAlpha=.4;
+        ctx.globalAlpha*=.4;
 
         ctx.fillStyle="#fff2a0";
 
@@ -19416,7 +20610,7 @@ function drawPlanetSurface(
          * Crystal facets.
          */
 
-        ctx.globalAlpha=.45;
+        ctx.globalAlpha*=.45;
 
         for(
             let i=0;
@@ -19492,7 +20686,7 @@ function drawPlanetSurface(
                 ?"#7df5ff"
                 :"#d68cff";
 
-            ctx.globalAlpha=.42;
+            ctx.globalAlpha*=.42;
 
             ctx.lineWidth=
                 radius*.018;
@@ -22650,7 +23844,7 @@ function fireIncineratorBeam(targetX,targetY){
 
 }
 
-function enterPlanetPhase(){
+function enterPlanetPhase(skipApproach){
 
     if(
         !running ||
@@ -22660,6 +23854,32 @@ function enterPlanetPhase(){
 
     worldState=
         "planet";
+
+    /*
+     * Arriving at a world: the planet grows in from high up and
+     * settles into the land/depart framing, so approaching
+     * genuinely looks like flying toward it.
+     *
+     * Skipped when handing over from a launch, where the home
+     * screen has already animated the planet down to exactly
+     * this framing — replaying the approach there would make it
+     * visibly jump and re-zoom.
+     */
+    if(skipApproach){
+
+        planetApproachProgress=1;
+
+        planetApproachTarget=1;
+
+        planetDepartProgress=0;
+
+        planetDepartTarget=0;
+
+    }else{
+
+        startPlanetApproach();
+
+    }
 
     worldTimer=0;
 
@@ -23454,7 +24674,20 @@ function landAtCurrentPlanet(){
     selectedStartPlanet=
         currentPlanetId;
 
+    /*
+     * Landing is the launch played backwards: the home screen
+     * opens already at the flight-out framing (ship at centre,
+     * planet small and high — exactly where the land/depart
+     * screen left it), then animates back in so the ship
+     * descends to the surface as the world grows beneath it.
+     */
+    flightProgress=1;
+
+    flightTarget=1;
+
     renderPlanetMap();
+
+    startFlightIn();
 
     floatingText(
         "SHIP LANDED",
@@ -23479,9 +24712,56 @@ function departPlanet(){
     )
         return;
 
+    /*
+     * Play the planet shrinking away first, then run the real
+     * departure once it finishes. Guarded against re-entry so a
+     * second tap mid-animation can't queue two departures.
+     */
+    if(planetDepartTarget===1)
+        return;
+
     phaseUI.classList.remove(
         "show"
     );
+
+    startPlanetDepart(
+        ()=>{
+
+            /*
+             * The reset is deferred to the next tick because
+             * updatePlanetApproach() fires this callback at the
+             * TOP of drawPlanetBackground() — resetting
+             * planetDepartProgress synchronously here meant the
+             * very same frame then drew the planet back at full
+             * size, which was the flash. Entering the field
+             * first changes worldState so that frame is never
+             * drawn at all.
+             */
+            completeDeparture();
+
+            setTimeout(
+                ()=>{
+
+                    planetDepartProgress=0;
+
+                    planetDepartTarget=0;
+
+                },
+                0
+            );
+
+        }
+    );
+
+}
+
+function completeDeparture(){
+
+    if(
+        !running ||
+        gameOver
+    )
+        return;
 
     /*
      * The ship is leaving dock. Release its record from this
@@ -26108,6 +27388,21 @@ function startGame(){
     worldState=
         "planet";
 
+    /*
+     * The launch animation has already walked the planet down
+     * to exactly this framing on the home screen, so start
+     * settled rather than replaying the approach — otherwise
+     * the handover reads as one planet leaving and a different
+     * one zooming in.
+     */
+    planetApproachProgress=1;
+
+    planetApproachTarget=1;
+
+    planetDepartProgress=0;
+
+    planetDepartTarget=0;
+
     planetPhasePending=false;
 
     planetPhaseCompleted=true;
@@ -26141,8 +27436,52 @@ function startGame(){
         "hidden"
     );
 
-    phaseUI.classList.add(
+    /*
+     * Held back until the launch flight has finished, then
+     * faded in by its own CSS transition — otherwise the
+     * land/depart panel pops in while the ship is still
+     * mid-transition. The HUD fades in alongside it.
+     */
+    phaseUI.classList.remove(
         "show"
+    );
+
+    const hudEl=
+        document.getElementById("hud");
+
+    if(hudEl){
+
+        hudEl.classList.add(
+            "flight-hidden"
+        );
+
+    }
+
+    setTimeout(
+        ()=>{
+
+            if(
+                running &&
+                !gameOver &&
+                worldState==="planet"
+            ){
+
+                phaseUI.classList.add(
+                    "show"
+                );
+
+            }
+
+            if(hudEl){
+
+                hudEl.classList.remove(
+                    "flight-hidden"
+                );
+
+            }
+
+        },
+        260
     );
 
     phaseTitle.textContent=
@@ -26666,7 +28005,7 @@ document
         event.preventDefault();
         event.stopPropagation();
 
-        startGame();
+        launchWithAnimation();
 
     },
     {passive:false}
@@ -26728,16 +28067,25 @@ document
 
         sound("click");
 
-        const lbBtn=
-            document.getElementById(
-                "startLeaderboardButton"
-            );
+        /*
+         * Performs the leaderboard-open logic directly rather
+         * than forwarding a synthetic .click() to the old
+         * button — that button listens for "pointerdown", which
+         * .click() never fires, so the forwarding approach did
+         * nothing at all.
+         */
+        startScreen.classList.add(
+            "hidden"
+        );
 
-        if(lbBtn){
+        leaderboardScreen.classList.remove(
+            "hidden"
+        );
 
-            lbBtn.click();
-
-        }
+        loadLeaderboard(
+            mainLeaderboard,
+            mainLeaderboardStatus
+        );
 
     },
     {passive:false}
@@ -26822,24 +28170,53 @@ document
 
             sound("click");
 
+            /*
+             * Zoom into the tapped world first, then act once
+             * the camera arrives — so the transition reads as
+             * flying to that planet rather than a cut.
+             */
             if(
                 starMapMode==="destination"
             ){
 
-                closeStarMap();
+                /*
+                 * Zooms back toward the ship (no planet target)
+                 * rather than diving into the chosen world —
+                 * the camera returns to the vessel, which then
+                 * flies the route itself.
+                 */
+                startZoomIn(
+                    null,
+                    ()=>{
 
-                chooseDestination(
-                    area.planetId
+                        closeStarMap();
+
+                        startZoomOut();
+
+                        chooseDestination(
+                            area.planetId
+                        );
+
+                    }
                 );
 
                 return;
 
             }
 
-            closeStarMap();
+            startZoomIn(
+                area.planetId,
+                ()=>{
 
-            selectStartPlanet(
-                area.planetId
+                    closeStarMap();
+
+                    startZoomOut();
+
+                    selectStartPlanet(
+                        area.planetId
+                    );
+
+                }
             );
 
             return;
@@ -26881,15 +28258,6 @@ document
 
     function areaAt(event){
 
-        const areas=
-            focusCanvas._focusHitAreas;
-
-        if(
-            !areas ||
-            !areas.length
-        )
-            return null;
-
         const rect=
             focusCanvas.getBoundingClientRect();
 
@@ -26898,6 +28266,38 @@ document
 
         const py=
             event.clientY-rect.top;
+
+        /*
+         * The ship is checked first and tracked separately from
+         * the surface-item areas, since it's now drawn on its
+         * own at gameplay scale rather than as part of that arc.
+         */
+        const ship=
+            focusCanvas._shipHitArea;
+
+        if(
+            ship &&
+            Math.hypot(
+                px-ship.x,
+                py-ship.y
+            )<=ship.r
+        ){
+
+            return{
+                tab:"ships",
+                swipeable:true
+            };
+
+        }
+
+        const areas=
+            focusCanvas._focusHitAreas;
+
+        if(
+            !areas ||
+            !areas.length
+        )
+            return null;
 
         for(
             const area of areas
@@ -26983,11 +28383,12 @@ document
 
                 }
 
-                startScreenView="map";
-
-                renderPlanetFocus();
-
-                renderPlanetMap();
+                /*
+                 * A background (next-tier) planet was tapped —
+                 * open the unified canvas star map rather than
+                 * the retired card-based one.
+                 */
+                openStarMap("navigate");
 
                 return;
 
@@ -27006,9 +28407,13 @@ document
 
                 sound("click");
 
-                triggerShipSwipeAnim(-1);
-
-                startGame();
+                /*
+                 * Play the launch flight first — ship rises to
+                 * centre while the planet drops and shrinks —
+                 * then hand off to the actual game once the
+                 * animation lands.
+                 */
+                launchWithAnimation();
 
             }
 
@@ -29355,6 +30760,11 @@ class ShapeObject {
                 const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1);
                 const coreColor = this.outlineColor || '#ffffff';
 
+                // Multiplied against whatever alpha the caller set, so a
+                // thruster fades along with its ship during transitions
+                // instead of staying fully opaque.
+                const baseAlpha = ctx.globalAlpha;
+
                 // Bright nozzle dot at the mount point
                 ctx.shadowBlur = 14;
                 ctx.shadowColor = coreColor;
@@ -29368,7 +30778,7 @@ class ShapeObject {
                 outerGrad.addColorStop(0, this.color);
                 outerGrad.addColorStop(0.55, this.color);
                 outerGrad.addColorStop(1, 'rgba(0,0,0,0)');
-                ctx.globalAlpha = 0.85;
+                ctx.globalAlpha = baseAlpha * 0.85;
                 ctx.fillStyle = outerGrad;
                 ctx.shadowBlur = 20;
                 ctx.shadowColor = this.color;
@@ -29380,7 +30790,7 @@ class ShapeObject {
                 ctx.fill();
 
                 // Brighter inner core, shorter and narrower, in the outline color
-                ctx.globalAlpha = 1;
+                ctx.globalAlpha = baseAlpha;
                 const innerLength = flameLength * 0.6;
                 const innerWidth = flameWidth * 0.45;
                 const innerGrad = ctx.createLinearGradient(0, 0, 0, innerLength);
@@ -29395,7 +30805,7 @@ class ShapeObject {
                 ctx.closePath();
                 ctx.fill();
 
-                ctx.globalAlpha = 1;
+                ctx.globalAlpha = baseAlpha;
                 break;
             }
         }
