@@ -6092,9 +6092,15 @@ function paintStructureDesignPreviews(){
     )
         return;
 
+    /*
+     * "shop" isn't in STRUCTURES — it's not a buildable
+     * structure, it's just always present on every planet — but
+     * it uses the exact same design system, so it's included
+     * here alongside the real structures.
+     */
     for(
-        const structureId in
-        STRUCTURES
+        const structureId of
+        ["shop","stock",...Object.keys(STRUCTURES)]
     ){
 
         const canvas=
@@ -9146,10 +9152,8 @@ function drawStarMapScene(){
 
                 }else{
 
-                    c.shadowBlur=14;
-
-                    c.shadowColor="#5ce4ff";
-
+                    // No shadowBlur — matches the other flat
+                    // emoji fallbacks.
                     c.font="18px system-ui";
 
                     c.textAlign="center";
@@ -10344,6 +10348,31 @@ function drawPlanetFocusScene(){
      */
     const surfaceItems=[];
 
+    /*
+     * The shop is always present — every planet has one, it's
+     * never "built" — so unlike the loop below it isn't gated on
+     * hasStructure. It reuses the exact same structure-design
+     * lookup (kind:"structure" + structureId), so a saved shop
+     * design shows here automatically.
+     */
+    surfaceItems.push({
+        kind:"structure",
+        structureId:"shop",
+        icon:"🛒",
+        tab:"shop"
+    });
+
+    /*
+     * Same reasoning for Planet Stock — always there, not a
+     * built structure, but designable the same way.
+     */
+    surfaceItems.push({
+        kind:"structure",
+        structureId:"stock",
+        icon:"📦",
+        tab:"stock"
+    });
+
     for(
         const structureId in
         STRUCTURES
@@ -10617,11 +10646,13 @@ function drawPlanetFocusScene(){
 
                 if(!drewCustomDesign){
 
-                    c.shadowBlur=16;
-
-                    c.shadowColor=
-                        "rgba(120,200,255,.8)";
-
+                    /*
+                     * No shadowBlur here — a soft drop shadow
+                     * behind a flat emoji reads as a muddy halo,
+                     * not the crisp neon glow the rest of the
+                     * game uses. Left plain; the ring/planet glow
+                     * around it already carries the aesthetic.
+                     */
                     c.font=
                         iconSize+
                         "px system-ui";
@@ -10635,8 +10666,6 @@ function drawPlanetFocusScene(){
                         0,
                         -iconSize*.18
                     );
-
-                    c.shadowBlur=0;
 
                 }
 
@@ -10767,10 +10796,8 @@ function drawPlanetFocusScene(){
 
         }else{
 
-            c.shadowBlur=16;
-
-            c.shadowColor="#5ce4ff";
-
+            // No shadowBlur — flat emoji, same reasoning as the
+            // structure/pet icons above.
             c.font="34px system-ui";
 
             c.textAlign="center";
@@ -10778,8 +10805,6 @@ function drawPlanetFocusScene(){
             c.textBaseline="middle";
 
             c.fillText("\uD83D\uDE80",0,pulse);
-
-            c.shadowBlur=0;
 
         }
 
@@ -12822,6 +12847,12 @@ function renderPlanetDetail(id){
 
     }
 
+    html+=
+        renderStructureDesignerHtml(
+            "shop",
+            "Shop"
+        );
+
     }
 
 
@@ -13682,6 +13713,12 @@ function renderPlanetDetail(id){
 
     html+=
         '</div>';
+
+    html+=
+        renderStructureDesignerHtml(
+            "stock",
+            "Planet Stock"
+        );
 
     }
 
