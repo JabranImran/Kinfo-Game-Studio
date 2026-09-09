@@ -10747,7 +10747,17 @@ function drawPlanetFocusScene(){
                 const shape of shipCustomizer.shapes
             ){
 
-                shape.draw(c);
+                /*
+                 * The engine is cold while the ship just sits on
+                 * the home screen planet, and lights up the
+                 * instant launch begins — flightProgress starts
+                 * rising the moment startFlightOut() fires, so
+                 * this needs no extra state of its own.
+                 */
+                shape.draw(
+                    c,
+                    flightProgress>0
+                );
 
             }
 
@@ -30662,7 +30672,7 @@ class ShapeObject {
         return base * this.scale;
     }
 
-    draw(ctx) {
+    draw(ctx, flameActive = true) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate((this.rotation * Math.PI) / 180);
@@ -30753,17 +30763,33 @@ class ShapeObject {
                 // mechanical pulse, and each thruster's phase is seeded
                 // from its own id so multiple thrusters on one ship never
                 // flicker in perfect unison.
-                const phase = this.id * 1000;
-                const time = performance.now();
-                const flicker = 0.82 + Math.sin(time * 0.014 + phase) * 0.12 + Math.sin(time * 0.037 + phase * 1.7) * 0.06;
-                const flameLength = 46 * this.scale * flicker;
-                const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1);
                 const coreColor = this.outlineColor || '#ffffff';
 
                 // Multiplied against whatever alpha the caller set, so a
                 // thruster fades along with its ship during transitions
                 // instead of staying fully opaque.
                 const baseAlpha = ctx.globalAlpha;
+
+                if (!flameActive) {
+                    // Resting: just the cold nozzle, no exhaust — this is
+                    // what shows while the ship sits on the home screen
+                    // planet, before launch is pressed.
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = coreColor;
+                    ctx.globalAlpha = baseAlpha * 0.45;
+                    ctx.fillStyle = coreColor;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 4 * this.scale, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = baseAlpha;
+                    break;
+                }
+
+                const phase = this.id * 1000;
+                const time = performance.now();
+                const flicker = 0.82 + Math.sin(time * 0.014 + phase) * 0.12 + Math.sin(time * 0.037 + phase * 1.7) * 0.06;
+                const flameLength = 46 * this.scale * flicker;
+                const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1);
 
                 // Bright nozzle dot at the mount point
                 ctx.shadowBlur = 14;
