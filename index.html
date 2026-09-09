@@ -6561,7 +6561,7 @@ function renderStructureUpgradesHtml(planetId,structureId){
  */
 const PET_ROSTER_BY_PLANET={
 
-    earth:["penguin","cat"]
+    earth:["penguin","cat","gorilla"]
 
 };
 
@@ -9539,6 +9539,554 @@ function drawCatPet(c,x,y,size,energy,walkSeed){
 }
 
 /*
+ * GORILLA — deliberately NOT the fused single-egg silhouette
+ * the penguin and cat use. A genuinely separate round head
+ * sitting on a wider, chunkier body reads as gorilla in a way
+ * one smooth oval never would: big shoulders, a heavy brow
+ * ridge, round ears, a pale face shield, and stubby limbs in a
+ * knuckle-walking stance. Warm amber neon against dark fur,
+ * rather than the icy/pink tones of the other two.
+ */
+function drawGorillaPet(c,x,y,size,energy,walkSeed){
+
+    const time=
+        performance.now()/1000;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    const furColor=
+        "#6e6062";
+
+    const faceColor=
+        "#e9e4db";
+
+    const bellyColor=
+        "#ddd7cd";
+
+    const neonColor=
+        "#f0b86e";
+
+    c.save();
+
+    c.translate(x,y);
+
+    /*
+     * Slower, heavier motion than the penguin/cat — a gorilla
+     * shouldn't waddle daintily.
+     */
+    const bob=
+        Math.sin(
+            time*3+walkSeed
+        )*size*.04;
+
+    c.translate(0,bob);
+
+    const waddle=
+        Math.sin(
+            time*3.5+walkSeed
+        )*.055;
+
+    c.rotate(waddle);
+
+    /*
+     * Feet — four stub feet in a knuckle-walking row, drawn
+     * first so the body and arms overlap their tops.
+     */
+    c.fillStyle=
+        faceColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.04);
+
+    c.shadowBlur=
+        glow*.3;
+
+    c.shadowColor=
+        neonColor;
+
+    [-.34,-.13,.13,.34].forEach(
+        fx=>{
+
+            c.beginPath();
+
+            c.ellipse(
+                size*fx,
+                size*.58,
+                size*.1,
+                size*.08,
+                0,0,Math.PI*2
+            );
+
+            c.fill();
+
+            c.stroke();
+
+        }
+    );
+
+    /*
+     * Arms — big bulky shoulder-to-ground shapes on either
+     * side, wider and heavier than the penguin's flippers,
+     * giving the knuckle-walking silhouette.
+     */
+    const armSway=
+        Math.sin(
+            time*3+walkSeed
+        )*.05;
+
+    [-1,1].forEach(
+        side=>{
+
+            c.save();
+
+            c.translate(
+                side*size*.46,
+                size*.18
+            );
+
+            c.rotate(side*armSway);
+
+            c.beginPath();
+
+            c.ellipse(
+                0,0,
+                size*.16,
+                size*.34,
+                0,0,Math.PI*2
+            );
+
+            c.fillStyle=
+                furColor;
+
+            c.strokeStyle=
+                neonColor;
+
+            c.lineWidth=
+                Math.max(1,size*.045);
+
+            c.shadowBlur=
+                glow*.6;
+
+            c.shadowColor=
+                neonColor;
+
+            c.fill();
+
+            c.stroke();
+
+            c.restore();
+
+        }
+    );
+
+    /*
+     * Body — wide and chunky, sitting BELOW the head rather
+     * than fused with it, which is what actually reads as
+     * gorilla rather than egg-with-a-face.
+     */
+    c.fillStyle=
+        furColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.05);
+
+    c.shadowBlur=glow;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.24,
+        size*.5,
+        size*.36,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Belly patch and chest line.
+     */
+    c.shadowBlur=
+        glow*.3;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.4,
+        size*.22,
+        size*.2,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        bellyColor;
+
+    c.fill();
+
+    c.shadowBlur=0;
+
+    c.globalAlpha*=.5;
+
+    c.strokeStyle=
+        furColor;
+
+    c.lineWidth=
+        Math.max(1,size*.025);
+
+    c.beginPath();
+
+    c.moveTo(
+        -size*.24,
+        size*.06
+    );
+
+    c.quadraticCurveTo(
+        0,size*.13,
+        size*.24,size*.06
+    );
+
+    c.stroke();
+
+    c.globalAlpha/=.5;
+
+    /*
+     * Head — a genuinely separate round shape overlapping the
+     * top of the body.
+     */
+    c.fillStyle=
+        furColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.05);
+
+    c.shadowBlur=glow;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        -size*.24,
+        size*.36,
+        size*.4,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Ears — round, with a paler inner circle, tucked to the
+     * sides of the head.
+     */
+    [-1,1].forEach(
+        side=>{
+
+            c.beginPath();
+
+            c.arc(
+                side*size*.34,
+                -size*.2,
+                size*.11,
+                0,Math.PI*2
+            );
+
+            c.fillStyle=
+                furColor;
+
+            c.shadowBlur=
+                glow*.5;
+
+            c.fill();
+
+            c.stroke();
+
+            c.beginPath();
+
+            c.arc(
+                side*size*.34,
+                -size*.2,
+                size*.055,
+                0,Math.PI*2
+            );
+
+            c.fillStyle=
+                faceColor;
+
+            c.shadowBlur=0;
+
+            c.fill();
+
+        }
+    );
+
+    /*
+     * Face shield — the pale rounded face sitting on the lower
+     * half of the head.
+     */
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        -size*.14,
+        size*.26,
+        size*.24,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        faceColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.035);
+
+    c.shadowBlur=
+        glow*.4;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Face group — brow ridge, eyes, nose and mouth, swaying
+     * with the same slow attention cycle as the other species:
+     * leaning into the current waddle, resting forward every
+     * so often.
+     */
+    const attentionPeriod=
+        6+(walkSeed%5)*.6;
+
+    const attentionPhase=
+        (
+            (
+                time*.5+
+                walkSeed*1.7
+            )%attentionPeriod
+        )/attentionPeriod;
+
+    const followAmount=
+        Math.cos(
+            attentionPhase*Math.PI*2
+        )*.5+.5;
+
+    const faceSwayX=
+        waddle*size*1.3*
+        followAmount;
+
+    const faceSwayY=
+        Math.sin(
+            time*2.6+walkSeed*1.7
+        )*size*.012*
+        followAmount;
+
+    c.save();
+
+    c.translate(
+        faceSwayX,
+        -size*.14+faceSwayY
+    );
+
+    /*
+     * Brow ridge — the heavy horizontal bar that most reads as
+     * "gorilla" in the reference art.
+     */
+    c.shadowBlur=0;
+
+    c.fillStyle=
+        furColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.03);
+
+    c.shadowBlur=
+        glow*.35;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.moveTo(
+        -size*.2,
+        -size*.02
+    );
+
+    c.quadraticCurveTo(
+        0,-size*.1,
+        size*.2,-size*.02
+    );
+
+    c.quadraticCurveTo(
+        0,size*.02,
+        -size*.2,-size*.02
+    );
+
+    c.closePath();
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Eyes — small dots under the brow, blinking on the same
+     * per-pet-phased cycle used elsewhere.
+     */
+    const blinkCycle=3.6;
+
+    const blinkDuration=.16;
+
+    const blinkCyclePos=
+        (
+            time+
+            walkSeed*.7
+        )%blinkCycle;
+
+    let eyeOpenness=1;
+
+    if(blinkCyclePos<blinkDuration){
+
+        eyeOpenness=
+            1-Math.sin(
+                (blinkCyclePos/blinkDuration)*
+                Math.PI
+            );
+
+    }
+
+    const eyeRadiusX=
+        size*.04;
+
+    const eyeRadiusY=
+        eyeRadiusX*
+        Math.max(.15,eyeOpenness);
+
+    c.shadowBlur=0;
+
+    c.fillStyle=
+        "#191316";
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.1,
+        size*.02,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.1,
+        size*.02,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Nose — two small dots.
+     */
+    c.beginPath();
+
+    c.arc(
+        -size*.035,
+        size*.08,
+        size*.018,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.035,
+        size*.08,
+        size*.018,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Mouth — a small rectangle that flattens/widens slightly
+     * on the same kind of slow cycle the other species use for
+     * their mouths, rather than a static line.
+     */
+    const chirpCycle=
+        5.8;
+
+    const chirpDuration=
+        .35;
+
+    const chirpCyclePos=
+        (
+            time*.8+
+            walkSeed*1.3
+        )%chirpCycle;
+
+    let mouthOpen=0;
+
+    if(chirpCyclePos<chirpDuration){
+
+        mouthOpen=
+            Math.sin(
+                (chirpCyclePos/chirpDuration)*
+                Math.PI
+            );
+
+    }
+
+    c.fillStyle=
+        "#3a2f30";
+
+    c.fillRect(
+        -size*.045,
+        size*.13,
+        size*.09,
+        size*.02+mouthOpen*size*.03
+    );
+
+    c.restore();
+
+    c.restore();
+
+}
+
+/*
  * Draws one pet at (x,y) with the given on-screen size. energy
  * (0-100) drives glow intensity — a well-fed pet genuinely
  * glows brighter than a starving one. walkSeed offsets the leg
@@ -9563,6 +10111,17 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
     if(species==="cat"){
 
         drawCatPet(
+            c,x,y,size,
+            energy,walkSeed
+        );
+
+        return;
+
+    }
+
+    if(species==="gorilla"){
+
+        drawGorillaPet(
             c,x,y,size,
             energy,walkSeed
         );
