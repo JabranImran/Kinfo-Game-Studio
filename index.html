@@ -3389,6 +3389,7 @@ function defaultPlanetSave(){
                     id:"pet_earth_starter",
                     energy:100,
                     role:"builder",
+                    species:"penguin",
                     rangeLevel:1,
                     enduranceLevel:1,
                     survivalLevel:1,
@@ -3860,6 +3861,7 @@ function loadPlanetSave(){
                         {
                             id:"pet_earth_starter",
                             energy:100,
+                            species:"penguin",
                             trainingLevel:1
                         }
                     ];
@@ -3891,6 +3893,25 @@ function loadPlanetSave(){
 
                                 pet.role=
                                     "builder";
+
+                            }
+
+                            /*
+                             * Existing pets from before named
+                             * species existed get one assigned
+                             * now, picked from their own
+                             * planet's roster — a stable,
+                             * one-time choice, not re-rolled on
+                             * every load.
+                             */
+                            if(
+                                !pet.species
+                            ){
+
+                                pet.species=
+                                    pickRandomPetSpecies(
+                                        petPlanetId2
+                                    );
 
                             }
 
@@ -4979,6 +5000,16 @@ function buyPet(planetId){
 
     }
 
+    /*
+     * Species is picked once, at purchase, from whatever's in
+     * this planet's roster — "buy pet" is a genuine surprise,
+     * not a choice of appearance.
+     */
+    const newSpecies=
+        pickRandomPetSpecies(
+            planetId
+        );
+
     planetSave.pets[
         planetId
     ].push({
@@ -4991,6 +5022,7 @@ function buyPet(planetId){
             ),
         energy:100,
         role:"builder",
+        species:newSpecies,
         rangeLevel:1,
         enduranceLevel:1,
         survivalLevel:1,
@@ -5000,7 +5032,10 @@ function buyPet(planetId){
     savePlanetProgress();
 
     showShipToast(
-        "Pet purchased!"
+        newSpecies==="procedural"
+        ?"Pet purchased!"
+        :"Pet purchased — a "+
+          newSpecies+"!"
     );
 
     renderPlanetDetail(
@@ -6249,7 +6284,8 @@ function paintPetPreviews(planetId,pets){
                     canvas.height/2+10,
                     canvas.width*.42,
                     pet.energy,
-                    seed
+                    seed,
+                    pet.species
                 );
 
             }catch(error){
@@ -6281,6 +6317,94 @@ function paintPetPreviews(planetId,pets){
                 paintPetPreviews(
                     planetId,
                     pets
+                )
+        );
+
+    }
+
+}
+
+/*
+ * Paints the "Pet Styles Here" gallery — one representative,
+ * full-energy sample of each species this planet's roster can
+ * actually produce, so buying a pet is an informed surprise
+ * rather than a total unknown.
+ */
+function paintPetSpeciesGallery(planetId){
+
+    if(
+        typeof drawSpacePet===
+        "undefined"
+    )
+        return;
+
+    const roster=
+        getPetRosterForPlanet(
+            planetId
+        );
+
+    let anyCanvas=false;
+
+    roster.forEach(
+        (speciesId,speciesIndex)=>{
+
+            const canvas=
+                document.getElementById(
+                    "petSpeciesPreview_"+
+                    planetId+"_"+
+                    speciesIndex
+                );
+
+            if(!canvas)
+                return;
+
+            anyCanvas=true;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            try{
+
+                drawSpacePet(
+                    ctx2d,
+                    planetId,
+                    canvas.width/2,
+                    canvas.height/2+8,
+                    canvas.width*.42,
+                    100,
+                    speciesIndex*7,
+                    speciesId
+                );
+
+            }catch(error){
+
+                console.error(
+                    "Pet species gallery draw failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+    if(
+        anyCanvas &&
+        planetDetailTab==="pets" &&
+        planetDetailId===planetId
+    ){
+
+        requestAnimationFrame(
+            ()=>
+                paintPetSpeciesGallery(
+                    planetId
                 )
         );
 
@@ -6423,6 +6547,23 @@ function renderStructureUpgradesHtml(planetId,structureId){
 
 }
 
+
+/*
+ * Which named pet species each planet can produce when a pet is
+ * bought there — declared here (rather than down with the rest
+ * of the pet-visuals code) specifically because loadPlanetSave()
+ * is invoked immediately below, and its save-migration pass
+ * reaches into this via pickRandomPetSpecies(). That's a `const`
+ * referenced before its own declaration line would otherwise
+ * have run — exactly the class of bug documented elsewhere in
+ * this file as the "hasPilotTraining" bug, so it's called out
+ * explicitly here to stop it recurring.
+ */
+const PET_ROSTER_BY_PLANET={
+
+    earth:["penguin"]
+
+};
 
 let planetSave=
     loadPlanetSave();
@@ -8327,6 +8468,48 @@ function drawSharedStars(c,width,height){
 /*
  * PET VISUALS
  *
+ * NAMED PET SPECIES
+ *
+ * Beyond the generic per-planet procedural creature, planets can
+ * have a roster of specific, hand-designed species — a real
+ * character rather than an algorithm's guess. Buying a pet picks
+ * randomly from whatever's in that planet's roster; a planet
+ * with no roster entry just keeps using the procedural fallback,
+ * so this is purely additive.
+ *
+ * PET_ROSTER_BY_PLANET itself lives much earlier in the file
+ * (search for its definition) — save-migration code that runs
+ * at load time reaches into it, and that runs before this
+ * section of the script would otherwise have executed.
+ */
+
+function getPetRosterForPlanet(planetId){
+
+    return(
+        PET_ROSTER_BY_PLANET[
+            planetId
+        ] || ["procedural"]
+    );
+
+}
+
+function pickRandomPetSpecies(planetId){
+
+    const roster=
+        getPetRosterForPlanet(
+            planetId
+        );
+
+    return roster[
+        Math.floor(
+            Math.random()*
+            roster.length
+        )
+    ];
+
+}
+
+/*
  * A placeholder-but-real creature renderer: procedural, not
  * hand-drawn, but genuinely distinct per planet and genuinely
  * animated — proving the foundation (neon aesthetic, per-planet
@@ -8388,15 +8571,348 @@ function getPetSpeciesForPlanet(planetId){
 }
 
 /*
+ * PENGUIN — the first named, hand-designed species. Chibi
+ * proportions: one big rounded body with the head fused into
+ * it, a dark hooded back/head, a pale belly panel, oversized
+ * glossy eyes with a sparkle highlight, blushed cheeks, and a
+ * small warm-coloured beak and feet. Colours lean icy-neon
+ * rather than flat cartoon flat colour, to stay in the same
+ * aesthetic as everything else in the game.
+ */
+function drawPenguinPet(c,x,y,size,energy,walkSeed){
+
+    const time=
+        performance.now()/1000;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    const hoodColor=
+        "#3c4a6c";
+
+    const bellyColor=
+        "#f2f7ff";
+
+    const beakColor=
+        "#ffb199";
+
+    const cheekColor=
+        "#ffb3c6";
+
+    const neonColor=
+        "#7fd8ff";
+
+    c.save();
+
+    c.translate(x,y);
+
+    const bob=
+        Math.sin(
+            time*4+walkSeed
+        )*size*.05;
+
+    c.translate(0,bob);
+
+    const waddle=
+        Math.sin(
+            time*5+walkSeed
+        )*.09;
+
+    c.rotate(waddle);
+
+    /*
+     * Feet — small warm ovals peeking from under the body,
+     * drawn first so the body overlaps their tops.
+     */
+    c.fillStyle=
+        beakColor;
+
+    c.shadowBlur=
+        glow*.35;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.17,
+        size*.58,
+        size*.12,
+        size*.07,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.17,
+        size*.58,
+        size*.12,
+        size*.07,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Flippers — small waddling ovals on either side, behind
+     * the main body.
+     */
+    const flipperSwing=
+        Math.sin(
+            time*5+walkSeed
+        )*.22;
+
+    c.save();
+
+    c.translate(
+        -size*.48,
+        size*.02
+    );
+
+    c.rotate(flipperSwing);
+
+    c.beginPath();
+
+    c.ellipse(
+        0,0,
+        size*.11,
+        size*.26,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        hoodColor;
+
+    c.shadowBlur=
+        glow*.5;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fill();
+
+    c.restore();
+
+    c.save();
+
+    c.translate(
+        size*.48,
+        size*.02
+    );
+
+    c.rotate(-flipperSwing);
+
+    c.beginPath();
+
+    c.ellipse(
+        0,0,
+        size*.11,
+        size*.26,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.restore();
+
+    /*
+     * Main body — one rounded silhouette covering head and
+     * back together (the chibi "no neck" proportions), with a
+     * crisp neon outline.
+     */
+    c.fillStyle=
+        hoodColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.05);
+
+    c.shadowBlur=glow;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,0,
+        size*.52,
+        size*.58,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Belly — pale panel sitting lower and slightly forward on
+     * the body.
+     */
+    c.shadowBlur=
+        glow*.35;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.14,
+        size*.33,
+        size*.4,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        bellyColor;
+
+    c.fill();
+
+    /*
+     * Cheeks.
+     */
+    c.shadowBlur=0;
+
+    c.globalAlpha*=.75;
+
+    c.fillStyle=
+        cheekColor;
+
+    c.beginPath();
+
+    c.arc(
+        -size*.21,
+        -size*.01,
+        size*.08,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.21,
+        -size*.01,
+        size*.08,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.globalAlpha/=.75;
+
+    /*
+     * Beak — small triangle between the eyes.
+     */
+    c.fillStyle=
+        beakColor;
+
+    c.beginPath();
+
+    c.moveTo(
+        -size*.07,
+        -size*.13
+    );
+
+    c.lineTo(
+        size*.07,
+        -size*.13
+    );
+
+    c.lineTo(
+        0,
+        -size*.02
+    );
+
+    c.closePath();
+
+    c.fill();
+
+    /*
+     * Eyes — big, glossy, chibi-sized, each with a small white
+     * sparkle so they read as alive rather than flat dots.
+     */
+    c.shadowBlur=
+        glow*.5;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fillStyle=
+        "#0b0c16";
+
+    c.beginPath();
+
+    c.arc(
+        -size*.16,
+        -size*.23,
+        size*.095,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.16,
+        -size*.23,
+        size*.095,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.shadowBlur=0;
+
+    c.fillStyle=
+        "#ffffff";
+
+    c.beginPath();
+
+    c.arc(
+        -size*.19,
+        -size*.26,
+        size*.028,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.13,
+        -size*.26,
+        size*.028,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.restore();
+
+}
+
+/*
  * Draws one pet at (x,y) with the given on-screen size. energy
  * (0-100) drives glow intensity — a well-fed pet genuinely
  * glows brighter than a starving one. walkSeed offsets the leg
  * and antenna animation per-pet so a group never moves in
- * lockstep.
+ * lockstep. species picks a specific hand-designed creature
+ * (e.g. "penguin") when the pet has one; otherwise falls back
+ * to the generic per-planet procedural creature.
  */
-function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
+function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
 
-    const species=
+    if(species==="penguin"){
+
+        drawPenguinPet(
+            c,x,y,size,
+            energy,walkSeed
+        );
+
+        return;
+
+    }
+
+    const speciesInfo=
         getPetSpeciesForPlanet(
             planetId
         );
@@ -8414,7 +8930,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
         3+energyRatio*16;
 
     const effectiveSize=
-        size*species.sizeMod;
+        size*speciesInfo.sizeMod;
 
     c.save();
 
@@ -8431,7 +8947,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
         time*6+walkSeed;
 
     c.strokeStyle=
-        species.glowColor;
+        speciesInfo.glowColor;
 
     c.lineWidth=
         Math.max(1,effectiveSize*.07);
@@ -8440,11 +8956,11 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
         glow*.5;
 
     c.shadowColor=
-        species.glowColor;
+        speciesInfo.glowColor;
 
     for(
         let i=0;
-        i<species.legCount;
+        i<speciesInfo.legCount;
         i++
     ){
 
@@ -8452,11 +8968,11 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
             effectiveSize*.55;
 
         const lx=
-            species.legCount>1
+            speciesInfo.legCount>1
             ?-spread/2+
              (
                  spread/
-                 (species.legCount-1)
+                 (speciesInfo.legCount-1)
              )*i
             :0;
 
@@ -8483,7 +8999,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
     }
 
     c.fillStyle=
-        species.bodyColor;
+        speciesInfo.bodyColor;
 
     c.lineWidth=
         Math.max(1,effectiveSize*.06);
@@ -8492,7 +9008,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
 
     c.beginPath();
 
-    if(species.bodyShape==="long"){
+    if(speciesInfo.bodyShape==="long"){
 
         c.ellipse(
             0,0,
@@ -8501,7 +9017,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
             0,0,Math.PI*2
         );
 
-    }else if(species.bodyShape==="spiky"){
+    }else if(speciesInfo.bodyShape==="spiky"){
 
         const spikes=7;
 
@@ -8549,7 +9065,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
 
     c.stroke();
 
-    if(species.hasSpikes && species.bodyShape!=="spiky"){
+    if(speciesInfo.hasSpikes && speciesInfo.bodyShape!=="spiky"){
 
         c.beginPath();
 
@@ -8579,7 +9095,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
 
     }
 
-    if(species.hasAntenna){
+    if(speciesInfo.hasAntenna){
 
         const wag=
             Math.sin(
@@ -8610,7 +9126,7 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed){
         );
 
         c.fillStyle=
-            species.glowColor;
+            speciesInfo.glowColor;
 
         c.fill();
 
@@ -11276,7 +11792,8 @@ function drawPlanetFocusScene(){
                         py,
                         petSize,
                         pet.energy,
-                        seed
+                        seed,
+                        pet.species
                     );
 
                     canvas._focusHitAreas.push({
@@ -14547,6 +15064,51 @@ function renderPlanetDetail(id){
         '>Buy Pet ('+petCost+' 🪙)</button>'+
         '</div>';
 
+    /*
+     * Gallery of the pet styles this planet can actually produce
+     * — a preview of what "Buy Pet" might hand you, not just a
+     * surprise every time.
+     */
+    const petRoster=
+        getPetRosterForPlanet(id);
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        'Pet Styles Here</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+
+    petRoster.forEach(
+        (speciesId,speciesIndex)=>{
+
+            const galleryCanvasId=
+                "petSpeciesPreview_"+
+                id+"_"+
+                speciesIndex;
+
+            html+=
+                '<div style="display:flex;flex-direction:column;'+
+                'align-items:center;gap:4px;width:64px;">'+
+                '<canvas id="'+galleryCanvasId+'" width="64" height="64" '+
+                'style="display:block;background:rgba(0,0,0,.25);'+
+                'border-radius:10px;"></canvas>'+
+                '<span style="font-size:9px;color:#8fa7c7;'+
+                'text-align:center;text-transform:capitalize;">'+
+                (
+                    speciesId==="procedural"
+                    ?"Native"
+                    :speciesId
+                )+
+                '</span>'+
+                '</div>';
+
+        }
+    );
+
+    html+=
+        '</div>'+
+        '</div>';
+
     }
 
 
@@ -15280,6 +15842,10 @@ function renderPlanetDetail(id){
     paintPetPreviews(
         id,
         getPets(id)
+    );
+
+    paintPetSpeciesGallery(
+        id
     );
 
 }
