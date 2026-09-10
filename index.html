@@ -10652,6 +10652,50 @@ function drawRexPet(c,x,y,size,energy,walkSeed){
  * (e.g. "penguin") when the pet has one; otherwise falls back
  * to the generic per-planet procedural creature.
  */
+/*
+ * Extracts what the ship-builder "window" shape needs to show
+ * the first pet in a ship's cargo hold — its species, energy,
+ * and a stable per-pet seed for the walk/blink animation. Only
+ * ever built from a REAL docked ship's cargoPets; returns null
+ * for a ship with nothing aboard (or no ship at all), which the
+ * window shape treats as "show an empty frame."
+ */
+function getCargoPetPreviewInfo(ship){
+
+    if(
+        !ship ||
+        !Array.isArray(ship.cargoPets) ||
+        !ship.cargoPets.length
+    ){
+
+        return null;
+
+    }
+
+    const pet=
+        ship.cargoPets[0];
+
+    let seed=0;
+
+    for(
+        let i=0;
+        i<pet.id.length;
+        i++
+    ){
+
+        seed+=
+            pet.id.charCodeAt(i);
+
+    }
+
+    return{
+        species:pet.species,
+        energy:pet.energy,
+        seed:seed
+    };
+
+}
+
 function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
 
     if(species==="penguin"){
@@ -11864,12 +11908,26 @@ function drawStarMapScene(){
 
                     c.shadowColor="#5ce4ff";
 
+                    /*
+                     * Same in-flight cargo as gameplay and the
+                     * land/depart screen — this is the ship
+                     * you're actually flying.
+                     */
+                    const starMapCargoPetInfo=
+                        getCargoPetPreviewInfo({
+                            cargoPets:currentShipCargoPets
+                        });
+
                     for(
                         const shape of
                         shipCustomizer.shapes
                     ){
 
-                        shape.draw(c);
+                        shape.draw(
+                            c,
+                            true,
+                            starMapCargoPetInfo
+                        );
 
                     }
 
@@ -13661,6 +13719,16 @@ function drawPlanetFocusScene(){
 
             c.shadowColor="#5ce4ff";
 
+            /*
+             * The first actually-docked ship's real cargo, so a
+             * window shape shows whatever pet is genuinely
+             * aboard rather than a placeholder.
+             */
+            const focusCargoPetInfo=
+                getCargoPetPreviewInfo(
+                    focusShips[0]
+                );
+
             for(
                 const shape of shipCustomizer.shapes
             ){
@@ -13674,7 +13742,8 @@ function drawPlanetFocusScene(){
                  */
                 shape.draw(
                     c,
-                    flightProgress>0
+                    flightProgress>0,
+                    focusCargoPetInfo
                 );
 
             }
@@ -22197,11 +22266,25 @@ function drawCustomShipShapes(
     ctx.shadowColor=
         "#5ce4ff";
 
+    /*
+     * currentShipCargoPets is the actual in-flight cargo for
+     * THIS ship, so a window shape shows the real pet riding
+     * along, not a placeholder.
+     */
+    const cargoPetInfo=
+        getCargoPetPreviewInfo({
+            cargoPets:currentShipCargoPets
+        });
+
     for(
         const shape of shipCustomizer.shapes
     ){
 
-        shape.draw(ctx);
+        shape.draw(
+            ctx,
+            true,
+            cargoPetInfo
+        );
 
     }
 
@@ -33657,12 +33740,12 @@ class ShapeObject {
     hitRadius() {
         const base = {
             circle: 25, square: 35, triangle: 28, rectangle: 29,
-            hexagon: 25, pentagon: 25, diamond: 35, 'emp-cube': 21, custom: 32, thruster: 20
+            hexagon: 25, pentagon: 25, diamond: 35, 'emp-cube': 21, custom: 32, thruster: 20, window: 24
         }[this.type] || 30;
         return base * this.scale;
     }
 
-    draw(ctx, flameActive = true) {
+    draw(ctx, flameActive = true, cargoPet = null) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate((this.rotation * Math.PI) / 180);
@@ -33824,6 +33907,65 @@ class ShapeObject {
                 ctx.globalAlpha = baseAlpha;
                 break;
             }
+            case 'window': {
+                // A circular porthole. Shows whatever pet is riding in
+                // this ship's cargo (first one, if any) peeking through —
+                // cargoPet is only ever populated by the actual gameplay
+                // and home-screen ship renderers, which know a REAL
+                // ship's cargo; the builder preview always passes none,
+                // so it just shows an empty frame while you design.
+                const windowRadius = 22 * this.scale;
+
+                ctx.beginPath();
+                ctx.arc(0, 0, windowRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(8,16,34,0.6)';
+                ctx.fill();
+
+                ctx.lineWidth = Math.max(2, windowRadius * 0.16);
+                ctx.strokeStyle = this.outlineColor || 'rgba(100,190,255,0.5)';
+                ctx.shadowBlur = 14;
+                ctx.shadowColor = this.outlineColor || 'rgba(100,190,255,0.5)';
+                ctx.stroke();
+
+                if (cargoPet && typeof drawSpacePet === 'function') {
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, windowRadius * 0.8, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.shadowBlur = 0;
+
+                    try {
+                        drawSpacePet(
+                            ctx,
+                            cargoPet.planetId || 'earth',
+                            0,
+                            windowRadius * 0.18,
+                            windowRadius * 0.92,
+                            cargoPet.energy,
+                            cargoPet.seed || 0,
+                            cargoPet.species
+                        );
+                    } catch (error) {
+                        console.error('Cargo window pet draw failed:', error);
+                    }
+
+                    ctx.restore();
+
+                }
+
+                // Glass highlight — a soft pale arc so the porthole
+                // reads as glass rather than a flat painted circle,
+                // sitting on top of whatever's drawn inside it.
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(-windowRadius * 0.32, -windowRadius * 0.34, windowRadius * 0.36, Math.PI * 1.1, Math.PI * 1.7);
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                ctx.lineWidth = Math.max(1, windowRadius * 0.09);
+                ctx.stroke();
+
+                break;
+            }
         }
 
         ctx.restore();
@@ -33895,7 +34037,7 @@ const shipCustomizer = {
     setupEventListeners() {
         const canvas = document.getElementById('customPreview');
 
-        ['circle', 'square', 'triangle', 'rectangle', 'hexagon', 'pentagon', 'diamond', 'thruster'].forEach(shape => {
+        ['circle', 'square', 'triangle', 'rectangle', 'hexagon', 'pentagon', 'diamond', 'thruster', 'window'].forEach(shape => {
             const btn = document.createElement('button');
             btn.className = 'shape-btn';
             btn.type = 'button';
@@ -33993,7 +34135,7 @@ const shipCustomizer = {
     },
 
     getShapeEmoji(type) {
-        const emojis = { circle: '●', square: '▪', triangle: '▲', rectangle: '▬', hexagon: '⬡', pentagon: '⬠', diamond: '◆', thruster: '🔥' };
+        const emojis = { circle: '●', square: '▪', triangle: '▲', rectangle: '▬', hexagon: '⬡', pentagon: '⬠', diamond: '◆', thruster: '🔥', window: '⭘' };
         return emojis[type] || '○';
     },
 
