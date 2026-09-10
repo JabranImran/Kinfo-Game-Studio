@@ -6275,6 +6275,19 @@ function paintPetPreviews(planetId,pets){
 
             }
 
+            /*
+             * Same "actually building something right now" check
+             * as the planet surface, just without needing a
+             * surface position — this is a flat preview, not a
+             * placed sprite.
+             */
+            const isPetWorking=
+                (pet.role || "builder")===
+                "builder" &&
+                !!getBuildQueue(
+                    planetId
+                )[0];
+
             try{
 
                 drawSpacePet(
@@ -6285,7 +6298,9 @@ function paintPetPreviews(planetId,pets){
                     canvas.width*.42,
                     pet.energy,
                     seed,
-                    pet.species
+                    pet.species,
+                    isPetWorking,
+                    "builder"
                 );
 
             }catch(error){
@@ -10696,7 +10711,231 @@ function getCargoPetPreviewInfo(ship){
 
 }
 
-function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
+/*
+ * PET ACTIVITY OVERLAY — a hammer and an optional hat, shown on
+ * top of ANY species while that pet is actually working on
+ * something (a build in progress). Species-agnostic on purpose:
+ * every pet, current or future, gets this for free rather than
+ * each one needing its own version drawn in.
+ *
+ * PET_HATS is a small registry rather than a single hardcoded
+ * hat, specifically so a future hat is just one more entry here
+ * plus a draw function — nothing about drawSpacePet or the
+ * overlay itself needs to change to add one.
+ */
+const PET_HATS={
+
+    builder:{
+        name:"Builder's Hat",
+        draw:drawBuilderHat
+    }
+
+};
+
+function drawBuilderHat(c,size,glow){
+
+    const hatColor=
+        "#ffcc4d";
+
+    const brimColor=
+        "#f0b83c";
+
+    const neonColor=
+        "#fff2b0";
+
+    c.save();
+
+    c.translate(
+        0,
+        -size*.56
+    );
+
+    c.beginPath();
+
+    c.ellipse(
+        0,size*.05,
+        size*.3,size*.075,
+        0,0,Math.PI*2
+    );
+
+    c.fillStyle=
+        brimColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.025);
+
+    c.shadowBlur=
+        glow*.4;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fill();
+
+    c.stroke();
+
+    c.beginPath();
+
+    c.arc(
+        0,size*.02,
+        size*.23,
+        Math.PI,0
+    );
+
+    c.closePath();
+
+    c.fillStyle=
+        hatColor;
+
+    c.shadowBlur=
+        glow*.5;
+
+    c.fill();
+
+    c.stroke();
+
+    c.restore();
+
+}
+
+/*
+ * The hammer swings on its own rhythm, independent of hats —
+ * "working" always means a hammer, a hat (when one's equipped)
+ * rides along on top of whatever species it's placed on.
+ */
+function drawWorkingHammer(c,size,walkSeed,glow){
+
+    const time=
+        performance.now()/1000;
+
+    const swingPhase=
+        time*7+walkSeed*3;
+
+    const swing=
+        Math.max(
+            0,
+            Math.sin(swingPhase)
+        );
+
+    c.save();
+
+    c.translate(
+        size*.4,
+        -size*.02
+    );
+
+    c.rotate(
+        -.35-swing*1.1
+    );
+
+    c.strokeStyle=
+        "#8a5a34";
+
+    c.lineWidth=
+        Math.max(1.4,size*.045);
+
+    c.beginPath();
+
+    c.moveTo(0,0);
+
+    c.lineTo(0,-size*.34);
+
+    c.stroke();
+
+    c.save();
+
+    c.translate(0,-size*.4);
+
+    c.rotate(-Math.PI/2);
+
+    c.fillStyle=
+        "#9aa4ad";
+
+    c.strokeStyle=
+        "#eaf6ff";
+
+    c.lineWidth=
+        Math.max(1,size*.03);
+
+    c.shadowBlur=
+        glow*.35;
+
+    c.shadowColor=
+        "#eaf6ff";
+
+    c.fillRect(
+        -size*.06,
+        -size*.13,
+        size*.12,
+        size*.26
+    );
+
+    c.strokeRect(
+        -size*.06,
+        -size*.13,
+        size*.12,
+        size*.26
+    );
+
+    c.restore();
+
+    c.shadowBlur=0;
+
+    c.restore();
+
+}
+
+function drawPetActivityOverlay(c,x,y,size,energy,walkSeed,hatId){
+
+    const time=
+        performance.now()/1000;
+
+    /*
+     * Recomputes the same gentle bob most species use internally
+     * so the overlay rides along with the body rather than
+     * floating independently — not pixel-perfect for every
+     * species' own bob timing, but close enough that it reads
+     * as attached.
+     */
+    const bob=
+        Math.sin(
+            time*4+walkSeed
+        )*size*.05;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    c.save();
+
+    c.translate(x,y+bob);
+
+    drawWorkingHammer(
+        c,size,walkSeed,glow
+    );
+
+    const hat=
+        PET_HATS[hatId];
+
+    if(hat){
+
+        hat.draw(c,size,glow);
+
+    }
+
+    c.restore();
+
+}
+
+function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatId){
 
     if(species==="penguin"){
 
@@ -10705,42 +10944,28 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
             energy,walkSeed
         );
 
-        return;
-
-    }
-
-    if(species==="cat"){
+    }else if(species==="cat"){
 
         drawCatPet(
             c,x,y,size,
             energy,walkSeed
         );
 
-        return;
-
-    }
-
-    if(species==="gorilla"){
+    }else if(species==="gorilla"){
 
         drawGorillaPet(
             c,x,y,size,
             energy,walkSeed
         );
 
-        return;
-
-    }
-
-    if(species==="rex"){
+    }else if(species==="rex"){
 
         drawRexPet(
             c,x,y,size,
             energy,walkSeed
         );
 
-        return;
-
-    }
+    }else{
 
     const speciesInfo=
         getPetSpeciesForPlanet(
@@ -10987,6 +11212,17 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species){
     c.fill();
 
     c.restore();
+
+    }
+
+    if(isWorking){
+
+        drawPetActivityOverlay(
+            c,x,y,size,
+            energy,walkSeed,hatId
+        );
+
+    }
 
 }
 
@@ -13636,6 +13872,17 @@ function drawPlanetFocusScene(){
                             width*.065
                         );
 
+                    /*
+                     * Only a builder actively heading for a real
+                     * build gets the hammer-and-hat treatment —
+                     * not an idle builder, and not a pilot
+                     * (who's training, not building).
+                     */
+                    const isPetWorking=
+                        role==="builder" &&
+                        !!activeBuild &&
+                        targetAngle!==null;
+
                     drawSpacePet(
                         c,
                         selectedStartPlanet,
@@ -13644,7 +13891,9 @@ function drawPlanetFocusScene(){
                         petSize,
                         pet.energy,
                         seed,
-                        pet.species
+                        pet.species,
+                        isPetWorking,
+                        "builder"
                     );
 
                     canvas._focusHitAreas.push({
