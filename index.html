@@ -542,9 +542,28 @@ body{
     pointer-events:none;
 }
 
+/*
+ * Sits between the title and the background planets — the only
+ * top-of-screen control now that Star Map has been folded into
+ * simply tapping a background planet.
+ *
+ * top is deliberately well below the logo's own box: at up to
+ * 52px per line across two lines, "ASTEROID IMPACT" can reach
+ * roughly 20% down on its own before this button even starts,
+ * so anything much higher than this genuinely overlapped it on
+ * narrower/taller screens.
+ */
+.focus-leaderboard-top{
+    position:absolute;
+    top:24%;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:1;
+}
+
 .focus-planet-name{
     position:absolute;
-    top:34%;
+    top:60%;
     left:0;
     right:0;
     text-align:center;
@@ -556,16 +575,71 @@ body{
     pointer-events:none;
 }
 
-.focus-hint{
+/*
+ * A temporary speech-bubble tip — hidden by default, and
+ * animated in/out via opacity + a small vertical settle rather
+ * than popping. `top` is set per-tip in JS, so each one can
+ * point at roughly the right part of the screen (structures,
+ * the ship, a distant planet) instead of always sitting in one
+ * fixed spot.
+ */
+.focus-tip{
     position:absolute;
-    top:39.5%;
     left:0;
     right:0;
-    text-align:center;
-    font-size:10px;
-    letter-spacing:1px;
-    color:#6d8fb8;
+    display:flex;
+    justify-content:center;
     pointer-events:none;
+    opacity:0;
+    transform:translateY(6px);
+    /*
+     * No transition declared here — showNextHomeTip() and
+     * hideHomeTip() set opacity/transform/transition all
+     * directly via inline style, in an explicit order, so the
+     * timing can never be ambiguous the way relying on a CSS
+     * class swap to pick between two different transition
+     * durations could be.
+     */
+}
+
+.focus-tip-text{
+    max-width:78%;
+    padding:10px 16px;
+    border-radius:14px;
+    border:1.5px solid rgba(130,220,255,.75);
+    background:rgba(6,14,32,.8);
+    backdrop-filter:blur(7px);
+    color:#d8f2ff;
+    font-size:11px;
+    font-weight:700;
+    text-align:center;
+    line-height:1.4;
+    text-shadow:0 0 8px rgba(130,220,255,.7);
+    box-shadow:
+        0 0 16px rgba(90,210,255,.55),
+        0 0 34px rgba(90,210,255,.3),
+        inset 0 0 10px rgba(90,210,255,.1);
+    animation:focusTipGlowPulse 2.2s ease-in-out infinite;
+}
+
+/*
+ * A gentle breathing glow while the bubble is up — matches the
+ * pulsing neon look used on selectable planets and structures
+ * elsewhere, rather than a flat static box.
+ */
+@keyframes focusTipGlowPulse{
+    0%,100%{
+        box-shadow:
+            0 0 16px rgba(90,210,255,.55),
+            0 0 34px rgba(90,210,255,.3),
+            inset 0 0 10px rgba(90,210,255,.1);
+    }
+    50%{
+        box-shadow:
+            0 0 22px rgba(90,210,255,.8),
+            0 0 46px rgba(90,210,255,.45),
+            inset 0 0 14px rgba(90,210,255,.18);
+    }
 }
 
 .focus-bottom{
@@ -2225,9 +2299,20 @@ and (max-height:500px){
             ASTEROID<br>IMPACT
         </div>
 
+        <button class="focus-btn focus-leaderboard-top" id="focusLeaderboardBtn">
+            🏆 Leaderboard
+        </button>
+
         <div class="focus-planet-name" id="focusPlanetName"></div>
 
-        <div class="focus-hint" id="focusHint"></div>
+        <!--
+            Replaces the old permanent "Tap anything..." caption —
+            this only appears briefly, pointing at one specific
+            thing, after the player's been idle for a while.
+        -->
+        <div class="focus-tip hidden" id="focusTip">
+            <div class="focus-tip-text" id="focusTipText"></div>
+        </div>
 
         <div class="focus-bottom" id="focusBottom">
 
@@ -2241,14 +2326,6 @@ and (max-height:500px){
 
                 <button class="focus-btn" id="focusMenuBtn">
                     🪐 Planet Menu
-                </button>
-
-                <button class="focus-btn" id="focusMapBtn">
-                    🗺 Star Map
-                </button>
-
-                <button class="focus-btn" id="focusLeaderboardBtn">
-                    🏆 Leaderboard
                 </button>
 
             </div>
@@ -13031,8 +13108,16 @@ function drawPlanetFocusScene(){
                 const px=
                     width*(.2+spread*.6);
 
+                /*
+                 * Vertically centred in the actual available
+                 * "sky" — the band between the leaderboard
+                 * button and the top of the main planet's dome
+                 * (which always starts at height*.72, regardless
+                 * of screen size) — rather than hugging close to
+                 * the top of that space.
+                 */
                 const py=
-                    height*.19+
+                    height*.46+
                     Math.sin(
                         time*.35+index
                     )*6;
@@ -14025,6 +14110,195 @@ function drawPlanetFocusScene(){
 
 }
 
+/*
+ * HOME SCREEN TIPS
+ *
+ * A short, rotating set of contextual tips that pop up as a
+ * speech bubble only after the player's been idle for a while —
+ * the declutter alternative to a permanent caption always
+ * sitting on screen. Each tip names roughly where on screen to
+ * anchor the bubble, so it reads as pointing at the thing it's
+ * talking about.
+ */
+const HOME_SCREEN_TIPS=[
+    {
+        text:"Tap the structures on the planet to open them",
+        top:"50%"
+    },
+    {
+        text:"Tap your ship to check on it — or swipe it up to launch",
+        top:"56%"
+    },
+    {
+        text:"Tap a distant world to open the star map",
+        top:"32%"
+    },
+    {
+        text:"Tap a pet to see its energy, role and training",
+        top:"60%"
+    }
+];
+
+const HOME_TIP_IDLE_DELAY=7000;
+
+const HOME_TIP_SHOW_DURATION=4500;
+
+let homeTipLastInteraction=
+    performance.now();
+
+let homeTipIndex=0;
+
+let homeTipVisible=false;
+
+let homeTipHideTimer=null;
+
+function resetHomeIdleTimer(){
+
+    homeTipLastInteraction=
+        performance.now();
+
+    hideHomeTip(true);
+
+}
+
+function hideHomeTip(fast){
+
+    const el=
+        document.getElementById(
+            "focusTip"
+        );
+
+    if(el){
+
+        /*
+         * Set explicitly and in this exact order (transition
+         * duration BEFORE the opacity/transform change) rather
+         * than relying on a CSS class swap — which transition
+         * duration "wins" when a class toggle changes the
+         * transition property itself is inconsistent across
+         * browsers. Setting it directly here removes that
+         * ambiguity entirely.
+         */
+        el.style.transition=
+            fast
+            ?"opacity .3s ease, transform .3s ease"
+            :"opacity 1.8s ease, transform 1.8s ease";
+
+        el.style.opacity="0";
+
+        el.style.transform=
+            "translateY(6px)";
+
+    }
+
+    homeTipVisible=false;
+
+    clearTimeout(
+        homeTipHideTimer
+    );
+
+}
+
+function showNextHomeTip(){
+
+    const tip=
+        HOME_SCREEN_TIPS[
+            homeTipIndex%
+            HOME_SCREEN_TIPS.length
+        ];
+
+    homeTipIndex++;
+
+    const el=
+        document.getElementById(
+            "focusTip"
+        );
+
+    const textEl=
+        document.getElementById(
+            "focusTipText"
+        );
+
+    if(
+        !el ||
+        !textEl
+    )
+        return;
+
+    textEl.textContent=
+        tip.text;
+
+    el.style.top=
+        tip.top;
+
+    el.classList.remove(
+        "hidden"
+    );
+
+    /*
+     * Force to fully-hidden first, with transitions off, then
+     * force a reflow before fading in — guarantees the fade-in
+     * always starts from a clean 0, rather than potentially
+     * animating from whatever opacity a just-finished fade-out
+     * left it at.
+     */
+    el.style.transition=
+        "none";
+
+    el.style.opacity="0";
+
+    el.style.transform=
+        "translateY(6px)";
+
+    void el.offsetWidth;
+
+    el.style.transition=
+        "opacity .35s ease, transform .35s ease";
+
+    el.style.opacity="1";
+
+    el.style.transform=
+        "translateY(0)";
+
+    homeTipVisible=true;
+
+    homeTipHideTimer=
+        setTimeout(
+            ()=>{
+
+                hideHomeTip(false);
+
+                homeTipLastInteraction=
+                    performance.now();
+
+            },
+            HOME_TIP_SHOW_DURATION
+        );
+
+}
+
+/*
+ * Checked once a frame from the focus render loop — cheap, and
+ * means the tip system needs no timers of its own running in
+ * the background while the player isn't even looking at this
+ * screen.
+ */
+function updateHomeIdleTip(){
+
+    if(homeTipVisible)
+        return;
+
+    if(
+        performance.now()-
+        homeTipLastInteraction<
+        HOME_TIP_IDLE_DELAY
+    )
+        return;
+
+    showNextHomeTip();
+
+}
+
 function planetFocusLoop(){
 
     if(
@@ -14051,6 +14325,19 @@ function planetFocusLoop(){
 
     }
 
+    try{
+
+        updateHomeIdleTip();
+
+    }catch(error){
+
+        console.error(
+            "Home idle tip failed:",
+            error
+        );
+
+    }
+
     /*
      * All the home-screen chrome fades out as the ship departs
      * and back in as it lands, so the buttons and title glide
@@ -14066,7 +14353,6 @@ function planetFocusLoop(){
     [
         "focusLogo",
         "focusPlanetName",
-        "focusHint",
         "focusBottom"
     ].forEach(
         elementId=>{
@@ -14090,6 +14376,34 @@ function planetFocusLoop(){
 
         }
     );
+
+    /*
+     * The tip bubble is deliberately NOT in the list above — it
+     * manages its own opacity entirely (showNextHomeTip and
+     * hideHomeTip), and this loop runs every single frame, so
+     * including it here was unconditionally forcing its opacity
+     * back to chromeAlpha (effectively 1 whenever not actively
+     * launching) on the very next frame after every fade-out —
+     * which is exactly why it never appeared to disappear. It's
+     * still swept away during an actual launch, just via its own
+     * multiplier below rather than being managed here.
+     */
+    const tipEl=
+        document.getElementById(
+            "focusTip"
+        );
+
+    if(tipEl){
+
+        tipEl.style.opacity=
+            Math.min(
+                Number(
+                    tipEl.style.opacity
+                ) || 0,
+                chromeAlpha
+            );
+
+    }
 
     planetFocusRaf=
         requestAnimationFrame(
@@ -14119,6 +14433,24 @@ function renderPlanetFocus(){
     const showFocus=
         startScreenView==="focus";
 
+    /*
+     * A fresh idle countdown starts each time this screen
+     * actually becomes visible (landing, closing the planet
+     * menu, returning from the map) — otherwise a tip could
+     * fire almost immediately on arrival if the player had
+     * simply been away for a while.
+     */
+    if(
+        showFocus &&
+        focusEl.classList.contains(
+            "hidden"
+        )
+    ){
+
+        resetHomeIdleTimer();
+
+    }
+
     focusEl.classList.toggle(
         "hidden",
         !showFocus
@@ -14144,21 +14476,6 @@ function renderPlanetFocus(){
         planet
         ?planet.name.toUpperCase()
         :"";
-
-    const nextTier=
-        getNextTierPlanets(
-            selectedStartPlanet
-        );
-
-    document.getElementById(
-        "focusHint"
-    ).textContent=
-        "Tap anything on the surface to open it"+
-        (
-            nextTier.length
-            ?" · tap a distant world for the star map"
-            :""
-        );
 
     /*
      * Reuses the existing launch-preview logic so the focus view
@@ -31326,6 +31643,25 @@ document
 
 /* ---- Zoomed planet view controls ---- */
 
+/*
+ * Resets the idle-tip timer on ANY interaction anywhere on the
+ * page. Deliberately unconditional — no "is the home screen
+ * even showing" guard — since resetHomeIdleTimer() is cheap and
+ * harmless to call at any time (it just updates a timestamp and
+ * tries to hide an element that may already be hidden), and
+ * removing the guard removes any possibility that a subtly
+ * wrong condition was ever the reason this didn't fire.
+ * Global rather than scoped to #planetFocus, and on the capture
+ * phase, so nothing downstream (stopPropagation calls in the
+ * more specific handlers) can prevent it from seeing the touch
+ * first.
+ */
+document.addEventListener(
+    "pointerdown",
+    resetHomeIdleTimer,
+    {passive:true,capture:true}
+);
+
 document
 .getElementById(
     "focusLaunchBtn"
@@ -31333,6 +31669,8 @@ document
 .addEventListener(
     "pointerdown",
     event=>{
+
+        resetHomeIdleTimer();
 
         event.preventDefault();
         event.stopPropagation();
@@ -31351,6 +31689,8 @@ document
     "pointerdown",
     event=>{
 
+        resetHomeIdleTimer();
+
         event.preventDefault();
         event.stopPropagation();
 
@@ -31364,35 +31704,13 @@ document
 
 document
 .getElementById(
-    "focusMapBtn"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        sound("click");
-
-        /*
-         * Opens the unified canvas star map rather than the old
-         * card-based map — same view the in-flight destination
-         * chooser uses, just in "navigate" mode.
-         */
-        openStarMap("navigate");
-
-    },
-    {passive:false}
-);
-
-document
-.getElementById(
     "focusLeaderboardBtn"
 )
 .addEventListener(
     "pointerdown",
     event=>{
+
+        resetHomeIdleTimer();
 
         event.preventDefault();
         event.stopPropagation();
@@ -31655,6 +31973,8 @@ document
     focusCanvas.addEventListener(
         "pointerdown",
         event=>{
+
+            resetHomeIdleTimer();
 
             downX=event.clientX;
             downY=event.clientY;
