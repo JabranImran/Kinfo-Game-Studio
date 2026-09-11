@@ -28248,13 +28248,23 @@ function landAtCurrentPlanet(){
     /*
      * Earth's docked list would otherwise fill up with
      * meaningless "0 score, 0 coins" clutter every time someone
-     * does a quick fresh run and lands with nothing to show for
-     * it — genuinely indistinguishable from just launching
-     * fresh again, so there's nothing worth keeping.
+     * does a genuinely free run (via the FRESH_EARTH placeholder)
+     * and lands with nothing to show for it.
+     *
+     * Gated on currentShipWasFresh specifically, NOT on the
+     * ship's stats being zero — a real, previously-purchased
+     * ship that's simply launched and landed straight back down
+     * also has zero score/coins/materials at that point, and is
+     * indistinguishable from the free case by stats alone. That
+     * was the actual bug: a paid-for ship was being deleted the
+     * moment it was landed without playing, because it looked
+     * "empty" by the same test that correctly identifies the
+     * free ship.
      */
     if(
         currentPlanetId===
-        "earth"
+        "earth" &&
+        currentShipWasFresh
     ){
 
         const earthShip=
@@ -30469,6 +30479,18 @@ let currentShipHasDualPerk=false;
 let currentShipPerk2=null;
 
 /*
+ * True only when THIS flight genuinely started from the free
+ * "FRESH_EARTH" placeholder — never a real docked record to
+ * begin with. Used at landing to decide whether an empty ship
+ * is safe to discard: a real purchased ship that simply hasn't
+ * scored anything yet (e.g. launched and landed immediately)
+ * must never be pruned just because its stats happen to be
+ * zero — that's indistinguishable from "worthless" by stats
+ * alone, which was exactly the bug.
+ */
+let currentShipWasFresh=false;
+
+/*
  * Pets riding along in cargo for this flight — a snapshot taken
  * at launch, since loading/unloading only ever happens while
  * docked. Lost entirely if the ship doesn't survive; there's no
@@ -30626,9 +30648,13 @@ function startGame(){
 
             currentShipId=null;
 
+            currentShipWasFresh=true;
+
             launchScore=0;
 
         }else{
+
+            currentShipWasFresh=false;
 
             removeShip(
                 "earth",
@@ -30781,6 +30807,9 @@ function startGame(){
 
         currentShipId=
             ship.id;
+
+        currentShipWasFresh=
+            false;
 
         launchScore=
             Number(
