@@ -715,12 +715,12 @@ body{
     bottom:auto;
     height:58vh;
     /*
-     * Softer than the shared .overlay's default — the whole
-     * point of the change below is a live starfield showing
-     * through here, matching the home screen, rather than a
-     * flat dark panel.
+     * No background of its own at all now — the canvas beneath
+     * paints the exact same gradient + stars as the home screen,
+     * so an extra tint on top of that would just darken it away
+     * from matching. The canvas IS the backdrop here.
      */
-    background:rgba(3,7,18,.62);
+    background:none;
 }
 
 #planetDetailCanvas{
@@ -8547,6 +8547,39 @@ function isRoute(a,b){
  * planet in the game goes through.
  */
 /*
+ * The same deep-space gradient used behind the home screen and
+ * the star map — extracted here so Planet Detail's own backdrop
+ * can use the literal same fill rather than an approximation,
+ * which is what actually makes it look like a continuation of
+ * the same sky instead of a differently-coloured box sitting
+ * on top of it.
+ */
+function drawSpaceGradientBackdrop(c,width,height){
+
+    const backdrop=
+        c.createLinearGradient(
+            0,0,0,height
+        );
+
+    backdrop.addColorStop(
+        0,
+        "#01030c"
+    );
+
+    backdrop.addColorStop(
+        1,
+        "#050b1e"
+    );
+
+    c.fillStyle=backdrop;
+
+    c.fillRect(
+        0,0,width,height
+    );
+
+}
+
+/*
  * Renders the global `stars` array onto any canvas context,
  * scaled to that canvas's dimensions. Both the home screen and
  * the star map use this so every view shares one starfield —
@@ -11807,25 +11840,8 @@ function drawStarMapScene(){
         dpr,0,0,dpr,0,0
     );
 
-    const backdrop=
-        c.createLinearGradient(
-            0,0,0,height
-        );
-
-    backdrop.addColorStop(
-        0,
-        "#01030c"
-    );
-
-    backdrop.addColorStop(
-        1,
-        "#050b1e"
-    );
-
-    c.fillStyle=backdrop;
-
-    c.fillRect(
-        0,0,width,height
+    drawSpaceGradientBackdrop(
+        c,width,height
     );
 
     const time=
@@ -13015,31 +13031,8 @@ function drawPlanetFocusScene(){
     /*
      * Deep space backdrop.
      */
-    const backdrop=
-        c.createLinearGradient(
-            0,
-            0,
-            0,
-            height
-        );
-
-    backdrop.addColorStop(
-        0,
-        "#01030c"
-    );
-
-    backdrop.addColorStop(
-        1,
-        "#050b1e"
-    );
-
-    c.fillStyle=backdrop;
-
-    c.fillRect(
-        0,
-        0,
-        width,
-        height
+    drawSpaceGradientBackdrop(
+        c,width,height
     );
 
     /*
@@ -15991,8 +15984,14 @@ function drawPlanetDetailBackdrop(){
         dpr,0,0,dpr,0,0
     );
 
-    c.clearRect(
-        0,0,width,height
+    /*
+     * Same gradient AND same stars as the home screen behind
+     * it, not just stars on a flat tint — this is what actually
+     * makes the menu read as sitting above the same sky rather
+     * than a differently-coloured box overlapping it.
+     */
+    drawSpaceGradientBackdrop(
+        c,width,height
     );
 
     drawSharedStars(
@@ -16052,12 +16051,6 @@ function openPlanetDetail(id){
 
     planetDetailTab="vault";
 
-    if(!planetDetailBackdropRaf){
-
-        planetDetailBackdropLoop();
-
-    }
-
     /*
      * The overlay must always actually open, even if something
      * inside the render throws — previously a single rendering
@@ -16103,6 +16096,22 @@ function openPlanetDetail(id){
     ).classList.remove(
         "hidden"
     );
+
+    /*
+     * Started here — AFTER the "hidden" class is actually
+     * removed, not before. The loop's own visibility check
+     * (does #planetDetail still have "hidden"?) would otherwise
+     * see the overlay as still hidden on this very first call,
+     * immediately stop itself, and never run again — which is
+     * exactly why the backdrop never appeared: the loop began
+     * and ended in the same tick, before the overlay was ever
+     * actually visible.
+     */
+    if(!planetDetailBackdropRaf){
+
+        planetDetailBackdropLoop();
+
+    }
 
 }
 
@@ -34426,21 +34435,19 @@ function loop(time){
    INITIALISE
 ========================================================= */
 
-resize();
-
-bestScoreEl.textContent=
-    highScore.toLocaleString();
-
-updateHUD();
-
-renderPlanetMap();
-
-lastTime=
-    performance.now();
-
-requestAnimationFrame(
-    loop
-);
+/*
+ * Deliberately NOT run here — moved to the very end of the
+ * script instead (see just before the closing script tag).
+ * renderPlanetMap()
+ * eventually reaches code that references the ShapeObject class
+ * (for drawing the player's ship and any custom structure
+ * designs), and that class isn't declared until further down
+ * this file. Running this bootstrap block here meant it fired
+ * before ShapeObject's own declaration line had executed —
+ * a "Cannot access before initialization" error on every load,
+ * the exact class of bug documented elsewhere in this file
+ * (see the hasPilotTraining and PET_ROSTER_BY_PLANET fixes).
+ */
 
 
 /* =========================================================
@@ -35248,6 +35255,33 @@ document
     {
         passive:false
     }
+);
+
+
+/* =========================================================
+   INITIALISE
+========================================================= */
+
+/*
+ * Runs here — after everything above it, including the
+ * ShapeObject class and shipCustomizer — rather than up where
+ * the "INITIALISE" section header originally sat. See the note
+ * left there for why.
+ */
+resize();
+
+bestScoreEl.textContent=
+    highScore.toLocaleString();
+
+updateHUD();
+
+renderPlanetMap();
+
+lastTime=
+    performance.now();
+
+requestAnimationFrame(
+    loop
 );
 
 </script>
