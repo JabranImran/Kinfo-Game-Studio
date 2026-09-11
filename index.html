@@ -623,6 +623,30 @@ body{
 }
 
 /*
+ * Same glowing-bubble aesthetic as the home screen's idle tips,
+ * but a full-width banner rather than a floating centred pill —
+ * this one sits inline at the top of the planet menu's content
+ * instead of hovering over a specific spot on screen.
+ */
+.planet-menu-tip{
+    margin:0 0 12px;
+    padding:9px 14px;
+    border-radius:12px;
+    border:1.5px solid rgba(130,220,255,.75);
+    background:rgba(6,14,32,.8);
+    color:#d8f2ff;
+    font-size:10px;
+    font-weight:600;
+    line-height:1.45;
+    text-shadow:0 0 8px rgba(130,220,255,.5);
+    box-shadow:
+        0 0 14px rgba(90,210,255,.4),
+        inset 0 0 8px rgba(90,210,255,.08);
+    opacity:0;
+    animation:focusTipGlowPulse 2.2s ease-in-out infinite;
+}
+
+/*
  * A gentle breathing glow while the bubble is up — matches the
  * pulsing neon look used on selectable planets and structures
  * elsewhere, rather than a flat static box.
@@ -1905,6 +1929,69 @@ and (max-height:500px){
     color:#ffd700;
 }
 
+/*
+ * One-liner shop/perk rows — collapsed by default (icon, name,
+ * an abbreviated requirement or stock note, and a clear buy
+ * button), expanding on tap to reveal the full description.
+ * Tapping the buy button itself never triggers the expand —
+ * the click-delegation system resolves to the nearest ancestor
+ * WITH data-action, so the button's own "buy"/"buy-perk"
+ * action always wins over the row's "toggle-shop-row" beneath
+ * it.
+ */
+.shop-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:10px 12px;
+    border-radius:10px;
+    background:rgba(100,190,255,.08);
+    border:1px solid rgba(100,190,255,.22);
+    cursor:pointer;
+    touch-action:manipulation;
+}
+
+.shop-row-main{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    flex:1;
+    min-width:0;
+}
+
+.shop-row-name{
+    font-weight:700;
+    font-size:11px;
+    color:#bcecff;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.shop-row-meta{
+    font-size:9px;
+    color:#8fa7c7;
+    white-space:nowrap;
+    flex-shrink:0;
+}
+
+.shop-row-caret{
+    font-size:9px;
+    color:#5c7ba0;
+    flex-shrink:0;
+}
+
+.shop-row-detail{
+    padding:10px 12px;
+    margin:-6px 0 12px;
+    border-radius:0 0 10px 10px;
+    background:rgba(0,0,0,.2);
+    font-size:10px;
+    color:#8fa7c7;
+    line-height:1.5;
+}
+
 .remove-btn{
     padding:7px 12px;
     background:rgba(255,68,68,.15);
@@ -2608,6 +2695,18 @@ and (max-height:500px){
             ✕
 
         </button>
+
+        <!--
+            A rotating explanatory tip, shown only after the
+            player's been idle inside this menu for a while —
+            same declutter approach as the home screen's idle
+            tips, so the rules (bank safety, sell pricing, pet
+            labour) don't need permanent text boxes taking up
+            space in every tab.
+        -->
+        <div class="planet-menu-tip hidden" id="planetMenuTip">
+            <div id="planetMenuTipText"></div>
+        </div>
 
         <div id="planetDetailContent"></div>
 
@@ -15965,6 +16064,15 @@ let expandedShipPilotId=null;
 let expandedShipCargoId=null;
 
 /*
+ * Which one-liner Shop/Perk row (if any) is currently expanded
+ * to show its full description — "item" or "perk". Reset
+ * whenever the planet menu opens or the tab changes, same as
+ * expandedEquipShipId, so switching planets never leaves a
+ * stale row expanded on the wrong one.
+ */
+let expandedShopRowId=null;
+
+/*
  * Which optional build toggles are currently checked for the
  * NEXT ship queued at whichever planet is open — resets after
  * each build so it never silently carries over between visits.
@@ -15975,6 +16083,189 @@ let shipBuildToggles={
 };
 let pilotAssignmentPetId=null;
 
+/*
+ * PLANET MENU TIPS
+ *
+ * The declutter counterpart to the home screen's idle tips —
+ * explanatory text that used to sit as permanent boxes in the
+ * Vault and Pets tabs now only appears after the player's been
+ * idle inside this menu for a while, and disappears the moment
+ * they interact with anything.
+ */
+const PLANET_MENU_TIPS=[
+    "Coins deposited in the Vault are safe — only bank "+
+    "balance can be spent in the Shop. Coins still on a "+
+    "ship are lost if that ship is destroyed mid-flight.",
+    "Anything sold in the Vault sells for more the further "+
+    "a planet is from home — and selling a planet's own "+
+    "material also feeds that planet's perk in the Shop tab.",
+    "Pets do the actual labour — more working pets (energy "+
+    "above 0) means faster builds. Feed them to keep their "+
+    "energy up."
+];
+
+const PLANET_MENU_TIP_IDLE_DELAY=6000;
+
+const PLANET_MENU_TIP_SHOW_DURATION=5000;
+
+let planetMenuTipLastInteraction=
+    performance.now();
+
+let planetMenuTipIndex=0;
+
+let planetMenuTipVisible=false;
+
+let planetMenuTipHideTimer=null;
+
+let planetMenuTipCheckInterval=null;
+
+function resetPlanetMenuIdleTimer(){
+
+    planetMenuTipLastInteraction=
+        performance.now();
+
+    hidePlanetMenuTip(true);
+
+}
+
+function hidePlanetMenuTip(fast){
+
+    const el=
+        document.getElementById(
+            "planetMenuTip"
+        );
+
+    if(el){
+
+        el.style.transition=
+            fast
+            ?"opacity .3s ease"
+            :"opacity 1.8s ease";
+
+        el.style.opacity="0";
+
+    }
+
+    planetMenuTipVisible=false;
+
+    clearTimeout(
+        planetMenuTipHideTimer
+    );
+
+}
+
+function showNextPlanetMenuTip(){
+
+    if(!planetDetailId)
+        return;
+
+    const tip=
+        PLANET_MENU_TIPS[
+            planetMenuTipIndex%
+            PLANET_MENU_TIPS.length
+        ];
+
+    planetMenuTipIndex++;
+
+    const el=
+        document.getElementById(
+            "planetMenuTip"
+        );
+
+    const textEl=
+        document.getElementById(
+            "planetMenuTipText"
+        );
+
+    if(
+        !el ||
+        !textEl
+    )
+        return;
+
+    textEl.textContent=
+        tip;
+
+    el.classList.remove(
+        "hidden"
+    );
+
+    el.style.transition=
+        "none";
+
+    el.style.opacity="0";
+
+    void el.offsetWidth;
+
+    el.style.transition=
+        "opacity .35s ease";
+
+    el.style.opacity="1";
+
+    planetMenuTipVisible=true;
+
+    planetMenuTipHideTimer=
+        setTimeout(
+            ()=>{
+
+                hidePlanetMenuTip(false);
+
+                planetMenuTipLastInteraction=
+                    performance.now();
+
+            },
+            PLANET_MENU_TIP_SHOW_DURATION
+        );
+
+}
+
+/*
+ * The planet menu has no continuous render loop the way the
+ * home screen does, so idle-checking here runs on a plain
+ * interval instead of inside a requestAnimationFrame loop —
+ * started when the menu opens, and stops itself the moment the
+ * menu is no longer open.
+ */
+function startPlanetMenuTipChecking(){
+
+    if(planetMenuTipCheckInterval)
+        return;
+
+    planetMenuTipCheckInterval=
+        setInterval(
+            ()=>{
+
+                if(!planetDetailId){
+
+                    clearInterval(
+                        planetMenuTipCheckInterval
+                    );
+
+                    planetMenuTipCheckInterval=
+                        null;
+
+                    return;
+
+                }
+
+                if(planetMenuTipVisible)
+                    return;
+
+                if(
+                    performance.now()-
+                    planetMenuTipLastInteraction<
+                    PLANET_MENU_TIP_IDLE_DELAY
+                )
+                    return;
+
+                showNextPlanetMenuTip();
+
+            },
+            1000
+        );
+
+}
+
 function openPlanetDetail(id){
 
     initAudio();
@@ -15984,6 +16275,12 @@ function openPlanetDetail(id){
     planetDetailId=id;
 
     planetDetailTab="vault";
+
+    expandedShopRowId=null;
+
+    resetPlanetMenuIdleTimer();
+
+    startPlanetMenuTipChecking();
 
     /*
      * The overlay must always actually open, even if something
@@ -16044,6 +16341,10 @@ function closePlanetDetail(){
     planetDetailId=null;
 
     expandedEquipShipId=null;
+
+    expandedShopRowId=null;
+
+    hidePlanetMenuTip(true);
 
 }
 
@@ -16226,12 +16527,7 @@ function renderPlanetDetail(id){
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">Planet Bank</div>'+
-        '<div class="metric-callout">'+
-        'Coins deposited here are safe — only bank balance can '+
-        'be spent in the Shop tab. Coins still on a ship are '+
-        'lost if that ship is ever destroyed mid-flight.'+
-        '</div>'+
-        '<div class="selected-shape-info" style="margin-top:10px;">'+
+        '<div class="selected-shape-info">'+
         '<span>🏦 Bank balance</span>'+
         '<strong>'+bank.toLocaleString()+' 🪙</strong>'+
         '</div>'+
@@ -16265,18 +16561,19 @@ function renderPlanetDetail(id){
         const affordable=
             bank>=shopItem.cost;
 
+        const itemExpanded=
+            expandedShopRowId===
+            "item";
+
         html+=
             '<div class="customizer-section">'+
             '<div class="customizer-section-title">Shop</div>'+
-            '<div class="selected-shape-info" style="align-items:flex-start;">'+
-            '<span>'+
-            '<strong>'+shopItem.icon+' '+shopItem.name+'</strong>'+
-            '<div class="selected-shape-core" style="color:#8fa7c7;font-size:10px;margin-top:4px;max-width:260px;">'+
-            shopItem.description+
+            '<div class="shop-row" data-action="toggle-shop-row" data-row="item">'+
+            '<div class="shop-row-main">'+
+            '<span>'+shopItem.icon+'</span>'+
+            '<span class="shop-row-name">'+shopItem.name+'</span>'+
+            '<span class="shop-row-meta">Stock '+stock+'</span>'+
             '</div>'+
-            '<div class="selected-shape-core" style="color:#70ddff;margin-top:6px;">'+
-            'In stock: '+stock+'</div>'+
-            '</span>'+
             '<button class="remove-btn" style="background:'+
             (
                 affordable
@@ -16303,6 +16600,13 @@ function renderPlanetDetail(id){
             )+
             '>Buy '+shopItem.cost+' 🪙</button>'+
             '</div>'+
+            (
+                itemExpanded
+                ?'<div class="shop-row-detail">'+
+                 shopItem.description+
+                 '</div>'
+                :''
+            )+
             '</div>';
 
     }else{
@@ -16356,80 +16660,90 @@ function renderPlanetDetail(id){
             perkAvailableHere>0 &&
             bank>=perk.buyCost;
 
+        const perkExpanded=
+            expandedShopRowId===
+            "perk";
+
         html+=
             '<div class="customizer-section">'+
             '<div class="customizer-section-title">Perk</div>'+
-            '<div class="metric-callout">'+
-            'Selling '+unlockMaterialInfo.icon+' '+
-            unlockMaterialInfo.name+' in the Vault tab '+
-            'doesn\'t buy this directly — it just makes another '+
-            'unit available to buy with coins. Owned units can '+
-            'be equipped onto any ship docked here.'+
-            '</div>'+
-            '<div class="selected-shape-info" style="align-items:flex-start;">'+
+            '<div class="shop-row" data-action="toggle-shop-row" data-row="perk">'+
+            '<div class="shop-row-main">'+
             '<span>'+
-            '<strong>'+
             (
-                unlocked
-                ?perk.icon+' '+perk.name
-                :'🔒 '+perk.icon+' '+perk.name
+                perkAvailableHere>0
+                ?perk.icon
+                :'🔒'
             )+
-            '</strong>'+
-            '<div class="selected-shape-core" style="color:#8fa7c7;font-size:10px;margin-top:4px;max-width:260px;">'+
-            perk.description+
-            '</div>'+
-            '<div class="selected-shape-core" style="color:#70ddff;margin-top:6px;">'+
-            (
-                unlocked
-                ?'Owned: '+perkStockHere+
-                 ' · Available to buy: '+perkAvailableHere+
-                 ' · '
-                :''
-            )+
-            'Progress to next: '+soldSoFar+'/'+
-            perk.unlockAmount+' '+unlockMaterialInfo.name+
-            ' sold</div>'+
             '</span>'+
+            '<span class="shop-row-name">'+perk.name+'</span>'+
+            '<span class="shop-row-meta">'+
+            unlockMaterialInfo.icon+' '+
+            soldSoFar+'/'+perk.unlockAmount+
+            '</span>'+
+            '</div>'+
             (
                 perkAvailableHere>0
                 ?'<button class="remove-btn" style="background:'+
-                (
-                    canBuyPerk
-                    ?'rgba(110,220,255,.18)'
-                    :'rgba(255,255,255,.05)'
-                )+
-                ';border-color:'+
-                (
-                    canBuyPerk
-                    ?'rgba(110,220,255,.45)'
-                    :'rgba(255,255,255,.12)'
-                )+
-                ';color:'+
-                (
-                    canBuyPerk
-                    ?'#bcecff'
-                    :'#5c7ba0'
-                )+
-                ';" data-action="buy-perk" data-perk="'+
-                perk.id+'" '+
-                (
-                    canBuyPerk
-                    ?''
-                    :'disabled'
-                )+
-                '>Buy '+perk.buyCost+' 🪙</button>'
-                :''
+                 (
+                     canBuyPerk
+                     ?'rgba(110,220,255,.18)'
+                     :'rgba(255,255,255,.05)'
+                 )+
+                 ';border-color:'+
+                 (
+                     canBuyPerk
+                     ?'rgba(110,220,255,.45)'
+                     :'rgba(255,255,255,.12)'
+                 )+
+                 ';color:'+
+                 (
+                     canBuyPerk
+                     ?'#bcecff'
+                     :'#5c7ba0'
+                 )+
+                 ';" data-action="buy-perk" data-perk="'+
+                 perk.id+'" '+
+                 (
+                     canBuyPerk
+                     ?''
+                     :'disabled'
+                 )+
+                 '>Buy '+perk.buyCost+' 🪙</button>'
+                :'<button class="remove-btn" style="background:'+
+                 'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
+                 'color:#5c7ba0;" disabled>🔒 Locked</button>'
             )+
             '</div>'+
+            (
+                perkExpanded
+                ?'<div class="shop-row-detail">'+
+                 perk.description+
+                 '<div style="margin-top:8px;color:#70ddff;">'+
+                 (
+                     unlocked
+                     ?'Owned: '+perkStockHere+
+                      ' · Available to buy: '+perkAvailableHere+
+                      ' · '
+                     :''
+                 )+
+                 'Progress to next: '+soldSoFar+'/'+
+                 perk.unlockAmount+' '+unlockMaterialInfo.name+
+                 ' sold'+
+                 '</div>'+
+                 '<div style="margin-top:8px;">'+
+                 'Selling '+unlockMaterialInfo.icon+' '+
+                 unlockMaterialInfo.name+' in the Vault tab '+
+                 'doesn\'t buy this directly — it just makes another '+
+                 'unit available to buy with coins. Owned units can '+
+                 'be equipped onto any ship docked here.'+
+                 '</div>'+
+                 '</div>'
+                :''
+            )+
             '</div>';
 
     }
-
-    html+=
-        renderStructureDesignerHtml(
-            "shop",
-            "Shop"
-        );
 
     }
 
@@ -16533,8 +16847,10 @@ function renderPlanetDetail(id){
                     ' carried</span>'+
                     '</div>'+
                     '<button class="control-btn" data-action="deposit" data-ship="'+
-                    ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
-                    'Deposit all to bank</button>'+
+                    ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
+                    'display:flex;align-items:center;gap:5px;">'+
+                    '<span>🪙</span><span style="opacity:.5;">→</span>'+
+                    '<span>🏦</span><span>Save to Vault</span></button>'+
                     (
                         Object.keys(
                             ship.materials || {}
@@ -16568,8 +16884,10 @@ function renderPlanetDetail(id){
                         ).join("")+
                         '</div>'+
                         '<button class="control-btn" data-action="deposit-materials" data-ship="'+
-                        ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
-                        'Deposit materials to bank</button>'
+                        ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
+                        'display:flex;align-items:center;gap:5px;">'+
+                        '<span>📦</span><span style="opacity:.5;">→</span>'+
+                        '<span>🏦</span><span>Save to Vault</span></button>'
                         :''
                     )+
                     (
@@ -17241,16 +17559,11 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        'Planet Stock'+
-        '</div>'+
-        '<div class="metric-callout">'+
-        'Anything swapped off a ship, or any material deposited '+
-        'here, can be sold. Sell price scales with distance — '+
-        computeSellPrice(id)+
-        ' 🪙 each at '+planet.name+'. Selling a planet\'s own '+
-        'material also feeds that planet\'s perk — see the '+
-        'Shop tab.'+
+        '<div class="customizer-section-title" style="display:flex;'+
+        'justify-content:space-between;align-items:center;">'+
+        '<span>Planet Stock</span>'+
+        '<span style="font-size:9px;color:#70ddff;font-weight:700;">'+
+        'Sells '+computeSellPrice(id)+' 🪙 each</span>'+
         '</div>';
 
     if(
@@ -17333,14 +17646,7 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">🐾 Pets</div>'+
-        '<div class="metric-callout">'+
-        'Pets are what actually do the labour — more working '+
-        'pets (energy above 0) means faster ship and structure '+
-        'builds here. Energy drains slowly over time and needs '+
-        'feeding to recover. Each additional pet costs more than '+
-        'the last.'+
-        '</div>';
+        '<div class="customizer-section-title">🐾 Pets</div>';
 
     if(!pets.length){
 
@@ -17706,6 +18012,208 @@ function renderPlanetDetail(id){
 
     }
 
+    /*
+     * The "not yet built" state for any structure — one compact
+     * row (icon, name, an abbreviated requirement, and a clear
+     * button) that expands on tap into the full description,
+     * material-by-material progress, and the working-pet note.
+     * Shared by all three structures rather than repeated three
+     * times, since the pattern was identical anyway.
+     */
+    function renderStructureShopRow(structureId,buildLabel){
+
+        const structure=
+            STRUCTURES[structureId];
+
+        const unlocked=
+            isStructureUnlocked(
+                id,
+                structureId
+            );
+
+        const rowKey=
+            "structure-"+structureId;
+
+        const rowExpanded=
+            expandedShopRowId===
+            rowKey;
+
+        let abbrevMeta="";
+
+        if(!unlocked){
+
+            abbrevMeta=
+                structure.buildMaterials.map(
+                    req=>{
+
+                        const info=
+                            MATERIALS[
+                                req.materialId
+                            ] ||
+                            MATERIALS["aether-dust"];
+
+                        const sold=
+                            getSoldProgress(
+                                id,
+                                req.materialId
+                            );
+
+                        return info.icon+' '+
+                            Math.min(sold,req.amount)+
+                            '/'+req.amount;
+
+                    }
+                ).join(' · ');
+
+        }
+
+        let rowHtml=
+            '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
+            rowKey+'">'+
+            '<div class="shop-row-main">'+
+            '<span>'+
+            (
+                unlocked
+                ?structure.icon
+                :'🔒'
+            )+
+            '</span>'+
+            '<span class="shop-row-name">'+structure.name+'</span>'+
+            (
+                unlocked
+                ?''
+                :'<span class="shop-row-meta">'+abbrevMeta+'</span>'
+            )+
+            '</div>';
+
+        if(!unlocked){
+
+            rowHtml+=
+                '<button class="remove-btn" style="background:'+
+                'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
+                'color:#5c7ba0;" disabled>🔒 Locked</button>';
+
+        }else{
+
+            const structureCost=
+                computeStructureBuildCost(
+                    structureId
+                );
+
+            const canBuild=
+                workingPetsHere>0 &&
+                bank>=structureCost;
+
+            rowHtml+=
+                '<button class="remove-btn" style="background:'+
+                (
+                    canBuild
+                    ?'rgba(110,220,255,.18)'
+                    :'rgba(255,255,255,.05)'
+                )+
+                ';border-color:'+
+                (
+                    canBuild
+                    ?'rgba(110,220,255,.45)'
+                    :'rgba(255,255,255,.12)'
+                )+
+                ';color:'+
+                (
+                    canBuild
+                    ?'#bcecff'
+                    :'#5c7ba0'
+                )+
+                ';" data-action="build-structure" data-structure="'+
+                structureId+'" '+
+                (
+                    canBuild
+                    ?''
+                    :'disabled'
+                )+
+                '>'+buildLabel+' '+structureCost+' 🪙</button>';
+
+        }
+
+        rowHtml+=
+            '</div>';
+
+        if(rowExpanded){
+
+            rowHtml+=
+                '<div class="shop-row-detail">'+
+                structure.description;
+
+            if(!unlocked){
+
+                rowHtml+=
+                    '<div style="margin-top:8px;">'+
+                    'Sell these materials in the Vault tab to '+
+                    'unlock this structure for purchase — a '+
+                    'one-time unlock, not spent when you '+
+                    'actually build it.'+
+                    '</div>';
+
+                structure.buildMaterials.forEach(
+                    req=>{
+
+                        const info=
+                            MATERIALS[
+                                req.materialId
+                            ] ||
+                            MATERIALS["aether-dust"];
+
+                        const sold=
+                            getSoldProgress(
+                                id,
+                                req.materialId
+                            );
+
+                        rowHtml+=
+                            '<div class="selected-shape-info" style="margin-top:6px;">'+
+                            '<span>'+info.icon+' '+info.name+
+                            ' sold</span>'+
+                            '<span style="opacity:.7;font-size:10px;'+
+                            'color:'+
+                            (
+                                sold>=req.amount
+                                ?'#8dffb0'
+                                :'#ff8d8d'
+                            )+
+                            ';">'+
+                            Math.min(sold,req.amount)+'/'+
+                            req.amount+
+                            '</span>'+
+                            '</div>';
+
+                    }
+                );
+
+            }else{
+
+                rowHtml+=
+                    '<div style="margin-top:8px;">'+
+                    '🐾 Working pet stationed here: '+
+                    (
+                        workingPetsHere>0
+                        ?'Yes ('+workingPetsHere+')'
+                        :'None — required to build (a pet '+
+                         'with 0 energy doesn\'t count until fed)'
+                    )+
+                    ' · Build time: '+
+                    structure.buildDurationSeconds+'s'+
+                    '</div>';
+
+            }
+
+            rowHtml+=
+                '</div>';
+
+        }
+
+        return rowHtml;
+
+    }
+
     if(showShipFactory){
 
     html+=
@@ -17875,99 +18383,11 @@ function renderPlanetDetail(id){
 
     }else{
 
-        const structure=
-            STRUCTURES["ship-factory"];
-
-        const unlocked=
-            isStructureUnlocked(
-                id,
-                "ship-factory"
-            );
-
         html+=
-            '<div class="metric-callout">'+
-            structure.description+
-            '</div>';
-
-        if(!unlocked){
-
-            html+=
-                '<div class="metric-note">'+
-                'Sell these materials in the Vault tab to '+
-                'unlock this factory for purchase — a one-time '+
-                'unlock, not spent when you actually build it.'+
-                '</div>';
-
-            structure.buildMaterials.forEach(
-                req=>{
-
-                    const info=
-                        MATERIALS[
-                            req.materialId
-                        ] ||
-                        MATERIALS["aether-dust"];
-
-                    const sold=
-                        getSoldProgress(
-                            id,
-                            req.materialId
-                        );
-
-                    html+=
-                        '<div class="selected-shape-info">'+
-                        '<span>'+info.icon+' '+info.name+
-                        ' sold</span>'+
-                        '<span style="opacity:.7;font-size:10px;'+
-                        'color:'+
-                        (
-                            sold>=req.amount
-                            ?'#8dffb0'
-                            :'#ff8d8d'
-                        )+
-                        ';">'+
-                        Math.min(sold,req.amount)+'/'+
-                        req.amount+
-                        '</span>'+
-                        '</div>';
-
-                }
+            renderStructureShopRow(
+                "ship-factory",
+                "Build Factory"
             );
-
-        }else{
-
-            const structureCost=
-                computeStructureBuildCost(
-                    "ship-factory"
-                );
-
-            const canBuild=
-                workingPetsHere>0 &&
-                bank>=structureCost;
-
-            html+=
-                '<div class="metric-note">'+
-                '🐾 Working pet stationed here: '+
-                (
-                    workingPetsHere>0
-                    ?'Yes ('+workingPetsHere+')'
-                    :'None — required to build (a pet '+
-                     'with 0 energy doesn\'t count until fed)'
-                )+
-                '</div>';
-
-            html+=
-                '<button class="big-button secondary-button" '+
-                'style="margin-top:10px;" data-action="build-structure" '+
-                'data-structure="ship-factory" '+
-                (
-                    canBuild
-                    ?''
-                    :'disabled'
-                )+
-                '>Build Factory ('+structureCost+' 🪙, '+
-                structure.buildDurationSeconds+'s)</button>';
-
-        }
 
     }
 
@@ -18080,99 +18500,11 @@ function renderPlanetDetail(id){
 
     }else{
 
-        const structure=
-            STRUCTURES["pilot-training"];
-
-        const unlocked=
-            isStructureUnlocked(
-                id,
-                "pilot-training"
-            );
-
         html+=
-            '<div class="metric-callout">'+
-            structure.description+
-            '</div>';
-
-        if(!unlocked){
-
-            html+=
-                '<div class="metric-note">'+
-                'Sell these materials in the Vault tab to '+
-                'unlock this structure for purchase — a one-time '+
-                'unlock, not spent when you actually build it.'+
-                '</div>';
-
-            structure.buildMaterials.forEach(
-                req=>{
-
-                    const info=
-                        MATERIALS[
-                            req.materialId
-                        ] ||
-                        MATERIALS["aether-dust"];
-
-                    const sold=
-                        getSoldProgress(
-                            id,
-                            req.materialId
-                        );
-
-                    html+=
-                        '<div class="selected-shape-info">'+
-                        '<span>'+info.icon+' '+info.name+
-                        ' sold</span>'+
-                        '<span style="opacity:.7;font-size:10px;'+
-                        'color:'+
-                        (
-                            sold>=req.amount
-                            ?'#8dffb0'
-                            :'#ff8d8d'
-                        )+
-                        ';">'+
-                        Math.min(sold,req.amount)+'/'+
-                        req.amount+
-                        '</span>'+
-                        '</div>';
-
-                }
+            renderStructureShopRow(
+                "pilot-training",
+                "Build"
             );
-
-        }else{
-
-            const structureCost=
-                computeStructureBuildCost(
-                    "pilot-training"
-                );
-
-            const canBuildPilotTraining=
-                workingPetsHere>0 &&
-                bank>=structureCost;
-
-            html+=
-                '<div class="metric-note">'+
-                '🐾 Working pet stationed here: '+
-                (
-                    workingPetsHere>0
-                    ?'Yes ('+workingPetsHere+')'
-                    :'None — required to build (a pet '+
-                     'with 0 energy doesn\'t count until fed)'
-                )+
-                '</div>';
-
-            html+=
-                '<button class="big-button secondary-button" '+
-                'style="margin-top:10px;" data-action="build-structure" '+
-                'data-structure="pilot-training" '+
-                (
-                    canBuildPilotTraining
-                    ?''
-                    :'disabled'
-                )+
-                '>Build ('+structureCost+' 🪙, '+
-                structure.buildDurationSeconds+'s)</button>';
-
-        }
 
     }
 
@@ -18232,104 +18564,33 @@ function renderPlanetDetail(id){
 
     }else{
 
-        const structure=
-            STRUCTURES["bio-dome"];
-
-        const unlocked=
-            isStructureUnlocked(
-                id,
-                "bio-dome"
-            );
-
         html+=
-            '<div class="metric-callout">'+
-            structure.description+
-            '</div>';
-
-        if(!unlocked){
-
-            html+=
-                '<div class="metric-note">'+
-                'Sell these materials in the Vault tab to '+
-                'unlock this structure for purchase — a one-time '+
-                'unlock, not spent when you actually build it.'+
-                '</div>';
-
-            structure.buildMaterials.forEach(
-                req=>{
-
-                    const info=
-                        MATERIALS[
-                            req.materialId
-                        ] ||
-                        MATERIALS["aether-dust"];
-
-                    const sold=
-                        getSoldProgress(
-                            id,
-                            req.materialId
-                        );
-
-                    html+=
-                        '<div class="selected-shape-info">'+
-                        '<span>'+info.icon+' '+info.name+
-                        ' sold</span>'+
-                        '<span style="opacity:.7;font-size:10px;'+
-                        'color:'+
-                        (
-                            sold>=req.amount
-                            ?'#8dffb0'
-                            :'#ff8d8d'
-                        )+
-                        ';">'+
-                        Math.min(sold,req.amount)+'/'+
-                        req.amount+
-                        '</span>'+
-                        '</div>';
-
-                }
+            renderStructureShopRow(
+                "bio-dome",
+                "Build"
             );
-
-        }else{
-
-            const structureCost=
-                computeStructureBuildCost(
-                    "bio-dome"
-                );
-
-            const canBuildBioDome=
-                workingPetsHere>0 &&
-                bank>=structureCost;
-
-            html+=
-                '<div class="metric-note">'+
-                '🐾 Working pet stationed here: '+
-                (
-                    workingPetsHere>0
-                    ?'Yes ('+workingPetsHere+')'
-                    :'None — required to build (a pet '+
-                     'with 0 energy doesn\'t count until fed)'
-                )+
-                '</div>';
-
-            html+=
-                '<button class="big-button secondary-button" '+
-                'style="margin-top:10px;" data-action="build-structure" '+
-                'data-structure="bio-dome" '+
-                (
-                    canBuildBioDome
-                    ?''
-                    :'disabled'
-                )+
-                '>Build ('+structureCost+' 🪙, '+
-                structure.buildDurationSeconds+'s)</button>';
-
-        }
 
     }
 
     html+=
         '</div>';
+
+    }
+
+    /*
+     * The Shop's own customise-this-structure button — moved to
+     * genuinely the LAST thing in the Shop tab, after every
+     * item, the perk, AND all three not-yet-built structures,
+     * rather than sitting in the middle of the list above the
+     * structures.
+     */
+    if(showShop){
+
+        html+=
+            renderStructureDesignerHtml(
+                "shop",
+                "Shop"
+            );
 
     }
 
@@ -18592,6 +18853,25 @@ document
                 shipId
                 ?null
                 :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="toggle-shop-row"
+        ){
+
+            const rowId=
+                target.getAttribute(
+                    "data-row"
+                );
+
+            expandedShopRowId=
+                expandedShopRowId===
+                rowId
+                ?null
+                :rowId;
 
             renderPlanetDetail(
                 planetDetailId
@@ -31759,6 +32039,17 @@ document
 document.addEventListener(
     "pointerdown",
     resetHomeIdleTimer,
+    {passive:true,capture:true}
+);
+
+/*
+ * Same technique, same reasoning, for the planet menu's own
+ * idle tips — a global capture-phase listener rather than one
+ * scoped to #planetDetail, learned directly from the bug above.
+ */
+document.addEventListener(
+    "pointerdown",
+    resetPlanetMenuIdleTimer,
     {passive:true,capture:true}
 );
 
