@@ -643,6 +643,7 @@ body{
         0 0 14px rgba(90,210,255,.4),
         inset 0 0 8px rgba(90,210,255,.08);
     opacity:0;
+    pointer-events:none;
     animation:focusTipGlowPulse 2.2s ease-in-out infinite;
 }
 
@@ -16137,12 +16138,46 @@ function hidePlanetMenuTip(fast){
 
     if(el){
 
-        el.style.transition=
-            fast
-            ?"opacity .3s ease"
-            :"opacity 1.8s ease";
+        if(fast){
 
-        el.style.opacity="0";
+            /*
+             * A tap-dismiss goes straight to display:none —
+             * deliberately not an opacity transition. A running
+             * fade can be caught mid-way by another tap, or by
+             * the next idle-check tick landing during the
+             * transition, and either can leave it settled at a
+             * partial opacity that reads as "stuck dim" rather
+             * than actually gone. Removing it from layout
+             * entirely has no partial state to get caught in.
+             */
+            el.style.transition=
+                "none";
+
+            el.style.opacity="0";
+
+            el.classList.add(
+                "hidden"
+            );
+
+        }else{
+
+            el.style.transition=
+                "opacity 1.8s ease";
+
+            el.style.opacity="0";
+
+            setTimeout(
+                ()=>{
+
+                    el.classList.add(
+                        "hidden"
+                    );
+
+                },
+                1800
+            );
+
+        }
 
     }
 
@@ -16408,15 +16443,15 @@ function renderPlanetDetail(id){
         planet.name.toUpperCase()+
         '</div>';
 
-    html+=
-        '<div class="subtitle" style="text-align:center;margin-bottom:16px;">'+
-        (
-            id==="earth"
-            ?"Home world — launches are always free here"
-            :planet.requirement.toLocaleString()+
-             " pts to unlock"
-        )+
-        '</div>';
+    if(id!=="earth"){
+
+        html+=
+            '<div class="subtitle" style="text-align:center;margin-bottom:16px;">'+
+            planet.requirement.toLocaleString()+
+            " pts to unlock"+
+            '</div>';
+
+    }
 
     /*
      * Tab bar. Structure tabs only appear once that structure is
@@ -17590,8 +17625,13 @@ function renderPlanetDetail(id){
                     ' <span style="opacity:.6;font-size:9px;">×'+
                     count+'</span></span>'+
                     '<button class="remove-btn" data-action="sell-item" '+
-                    'data-item="'+itemId+'">Sell '+
-                    computeSellPrice(id)+' 🪙</button>'+
+                    'style="display:flex;align-items:center;gap:5px;" '+
+                    'data-item="'+itemId+'">'+
+                    '<span>'+info.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🪙</span>'+
+                    '<span>'+computeSellPrice(id)+'</span>'+
+                    '</button>'+
                     '</div>';
 
             }
@@ -17610,8 +17650,13 @@ function renderPlanetDetail(id){
                     ' <span style="opacity:.6;font-size:9px;">×'+
                     count+'</span></span>'+
                     '<button class="remove-btn" data-action="sell-material" '+
-                    'data-material="'+materialId+'">Sell '+
-                    computeSellPrice(id)+' 🪙</button>'+
+                    'style="display:flex;align-items:center;gap:5px;" '+
+                    'data-material="'+materialId+'">'+
+                    '<span>'+info.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🪙</span>'+
+                    '<span>'+computeSellPrice(id)+'</span>'+
+                    '</button>'+
                     '</div>';
 
             }
