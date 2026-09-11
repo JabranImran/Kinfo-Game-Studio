@@ -700,6 +700,52 @@ body{
 
 
 /* =========================================================
+   PLANET DETAIL — top-half sheet, not full-screen
+========================================================= */
+
+/*
+ * Deliberately only covers roughly the top half of the screen
+ * rather than the shared .overlay's full inset:0 — the planet
+ * itself (and whatever's happening on its surface) stays
+ * visible underneath the whole time the menu is open, rather
+ * than being hidden behind it.
+ */
+#planetDetail{
+    align-items:flex-start;
+    bottom:auto;
+    height:58vh;
+    /*
+     * Softer than the shared .overlay's default — the whole
+     * point of the change below is a live starfield showing
+     * through here, matching the home screen, rather than a
+     * flat dark panel.
+     */
+    background:rgba(3,7,18,.62);
+}
+
+#planetDetailCanvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    pointer-events:none;
+}
+
+#planetDetail .card{
+    /*
+     * Explicit rather than a percentage against the flex
+     * parent — deducts roughly this overlay's own top+bottom
+     * padding so the card's own scroll region fits cleanly
+     * inside the reduced height instead of overflowing it
+     * before scrolling kicks in.
+     */
+    max-height:calc(58vh - 36px);
+    position:relative;
+}
+
+
+/* =========================================================
    PLANET MAP
 ========================================================= */
 
@@ -2554,6 +2600,8 @@ and (max-height:500px){
 <div
     class="overlay hidden"
     id="planetDetail">
+
+    <canvas id="planetDetailCanvas"></canvas>
 
     <div class="card customizer-card">
 
@@ -13467,14 +13515,17 @@ function drawPlanetFocusScene(){
     });
 
     /*
-     * Same reasoning for Planet Stock — always there, not a
-     * built structure, but designable the same way.
+     * Same reasoning for the Vault (bank + sellable stock) —
+     * always there, not a built structure, but designable the
+     * same way. Keeps the internal id "stock" for its saved
+     * design/storage key so an existing custom design isn't
+     * orphaned by the Overview+Stock merge into one tab.
      */
     surfaceItems.push({
         kind:"structure",
         structureId:"stock",
-        icon:"📦",
-        tab:"stock"
+        icon:"🏦",
+        tab:"vault"
     });
 
     for(
@@ -15812,7 +15863,7 @@ let planetDetailId=null;
  * than per-planet: opening any planet starts on Overview, which
  * keeps the mental model simple.
  */
-let planetDetailTab="overview";
+let planetDetailTab="vault";
 
 /*
  * Which specific docked ship will actually launch, when a
@@ -15877,6 +15928,120 @@ let shipBuildToggles={
 };
 let pilotAssignmentPetId=null;
 
+let planetDetailBackdropRaf=null;
+
+/*
+ * Paints the same shared starfield used on the home screen and
+ * star map onto Planet Detail's own backdrop canvas — this is
+ * what replaces the flat dark panel with a genuinely moving sky
+ * behind the menu.
+ */
+function drawPlanetDetailBackdrop(){
+
+    const canvas=
+        document.getElementById(
+            "planetDetailCanvas"
+        );
+
+    if(!canvas)
+        return;
+
+    const width=
+        canvas.clientWidth;
+
+    const height=
+        canvas.clientHeight;
+
+    if(
+        !width ||
+        !height
+    )
+        return;
+
+    const dpr=
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    if(
+        canvas.width!==
+        Math.floor(width*dpr)
+    ){
+
+        canvas.width=
+            Math.floor(width*dpr);
+
+    }
+
+    if(
+        canvas.height!==
+        Math.floor(height*dpr)
+    ){
+
+        canvas.height=
+            Math.floor(height*dpr);
+
+    }
+
+    const c=
+        canvas.getContext("2d");
+
+    c.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+
+    c.clearRect(
+        0,0,width,height
+    );
+
+    drawSharedStars(
+        c,width,height
+    );
+
+}
+
+function planetDetailBackdropLoop(){
+
+    const el=
+        document.getElementById(
+            "planetDetail"
+        );
+
+    if(
+        !el ||
+        el.classList.contains(
+            "hidden"
+        )
+    ){
+
+        planetDetailBackdropRaf=
+            null;
+
+        return;
+
+    }
+
+    try{
+
+        drawPlanetDetailBackdrop();
+
+    }catch(error){
+
+        console.error(
+            "Planet detail backdrop failed:",
+            error
+        );
+
+    }
+
+    planetDetailBackdropRaf=
+        requestAnimationFrame(
+            planetDetailBackdropLoop
+        );
+
+}
+
 function openPlanetDetail(id){
 
     initAudio();
@@ -15885,7 +16050,13 @@ function openPlanetDetail(id){
 
     planetDetailId=id;
 
-    planetDetailTab="overview";
+    planetDetailTab="vault";
+
+    if(!planetDetailBackdropRaf){
+
+        planetDetailBackdropLoop();
+
+    }
 
     /*
      * The overlay must always actually open, even if something
@@ -16025,9 +16196,8 @@ function renderPlanetDetail(id){
      * uncluttered bar that grows as you develop the world.
      */
     const availableTabs=[
-        {id:"overview",label:"🏦 Overview"},
+        {id:"vault",label:"🏦 Vault"},
         {id:"shop",label:"🛒 Shop"},
-        {id:"stock",label:"📦 Stock"},
         {id:"ships",label:"🚀 Ships"},
         {id:"pets",label:"🐾 Pets"}
     ];
@@ -16078,7 +16248,7 @@ function renderPlanetDetail(id){
         )
     ){
 
-        planetDetailTab="overview";
+        planetDetailTab="vault";
 
     }
 
@@ -16109,14 +16279,11 @@ function renderPlanetDetail(id){
     const tab=
         planetDetailTab;
 
-    const showOverview=
-        tab==="overview";
+    const showVault=
+        tab==="vault";
 
     const showShop=
         tab==="shop";
-
-    const showStock=
-        tab==="stock";
 
     const showShips=
         tab==="ships";
@@ -16127,7 +16294,7 @@ function renderPlanetDetail(id){
 
     /* -------- Bank -------- */
 
-    if(showOverview){
+    if(showVault){
 
     html+=
         '<div class="customizer-section">'+
@@ -16145,9 +16312,8 @@ function renderPlanetDetail(id){
 
     }
 
-    /* -------- Material Bank (declared for every tab, since Stock,
-       Ships and the structure tabs all read it — only the Overview
-       summary below is gated) -------- */
+    /* -------- Material Bank (declared for every tab, since Vault,
+       Ships and the structure tabs all read it) -------- */
 
     const materialBank=
         (
@@ -16161,45 +16327,6 @@ function renderPlanetDetail(id){
         ).filter(
             ([,count]) => count>0
         );
-
-    if(showOverview){
-
-        html+=
-            '<div class="customizer-section">'+
-            '<div class="customizer-section-title">Materials Banked</div>';
-
-        if(!materialBankEntries.length){
-
-            html+=
-                '<div class="metric-note">'+
-                'No materials banked here yet — deposit them '+
-                'from a docked ship in the Ships tab.'+
-                '</div>';
-
-        }else{
-
-            materialBankEntries.forEach(
-                ([materialId,count])=>{
-
-                    const info=
-                        MATERIALS[materialId] ||
-                        MATERIALS["aether-dust"];
-
-                    html+=
-                        '<div class="selected-shape-info">'+
-                        '<span>'+info.icon+' '+info.name+'</span>'+
-                        '<strong>'+count+'</strong>'+
-                        '</div>';
-
-                }
-            );
-
-        }
-
-        html+=
-            '</div>';
-
-    }
 
 
     /* -------- Shop -------- */
@@ -16307,7 +16434,7 @@ function renderPlanetDetail(id){
             '<div class="customizer-section-title">Perk</div>'+
             '<div class="metric-callout">'+
             'Selling '+unlockMaterialInfo.icon+' '+
-            unlockMaterialInfo.name+' in Planet Stock above '+
+            unlockMaterialInfo.name+' in the Vault tab '+
             'doesn\'t buy this directly — it just makes another '+
             'unit available to buy with coins. Owned units can '+
             'be equipped onto any ship docked here.'+
@@ -17156,9 +17283,10 @@ function renderPlanetDetail(id){
 
     /* -------- Planet stock (sellable — items and materials
        together, since selling either one works identically and
-       both can feed a perk's stock) -------- */
+       both can feed a perk's stock) — part of the Vault tab,
+       alongside the bank balance above -------- */
 
-    if(showStock){
+    if(showVault){
 
     const stockEntries=
         Object.entries(
@@ -17179,7 +17307,8 @@ function renderPlanetDetail(id){
         'here, can be sold. Sell price scales with distance — '+
         computeSellPrice(id)+
         ' 🪙 each at '+planet.name+'. Selling a planet\'s own '+
-        'material also feeds that planet\'s perk — see below.'+
+        'material also feeds that planet\'s perk — see the '+
+        'Shop tab.'+
         '</div>';
 
     if(
@@ -17241,7 +17370,7 @@ function renderPlanetDetail(id){
     html+=
         renderStructureDesignerHtml(
             "stock",
-            "Planet Stock"
+            "Vault"
         );
 
     }
@@ -17822,7 +17951,7 @@ function renderPlanetDetail(id){
 
             html+=
                 '<div class="metric-note">'+
-                'Sell these materials in Planet Stock above to '+
+                'Sell these materials in the Vault tab to '+
                 'unlock this factory for purchase — a one-time '+
                 'unlock, not spent when you actually build it.'+
                 '</div>';
@@ -18027,7 +18156,7 @@ function renderPlanetDetail(id){
 
             html+=
                 '<div class="metric-note">'+
-                'Sell these materials in Planet Stock above to '+
+                'Sell these materials in the Vault tab to '+
                 'unlock this structure for purchase — a one-time '+
                 'unlock, not spent when you actually build it.'+
                 '</div>';
@@ -18179,7 +18308,7 @@ function renderPlanetDetail(id){
 
             html+=
                 '<div class="metric-note">'+
-                'Sell these materials in Planet Stock above to '+
+                'Sell these materials in the Vault tab to '+
                 'unlock this structure for purchase — a one-time '+
                 'unlock, not spent when you actually build it.'+
                 '</div>';
