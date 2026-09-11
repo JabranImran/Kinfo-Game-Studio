@@ -28,6 +28,33 @@ content="Asteroid Impact">
 
 <style>
 
+/*
+ * STATE COLOUR LANGUAGE
+ *
+ * One consistent meaning per colour, used everywhere something
+ * is ready, in progress, or needs attention — pets, ships,
+ * structures, materials — rather than each screen picking its
+ * own shade. Defined as custom properties so every use stays in
+ * sync, plus matching utility classes for anywhere a plain
+ * class is cleaner than inlining var(...) by hand.
+ *
+ *   --state-good     ready / complete / healthy / affordable
+ *   --state-warn     getting low / in progress / needs a look
+ *   --state-bad      empty / broken / blocked / can't afford
+ *   --state-info     neutral information, no judgement attached
+ */
+:root{
+    --state-good:#8dffb0;
+    --state-warn:#ffd76b;
+    --state-bad:#ff8d8d;
+    --state-info:#70ddff;
+}
+
+.state-good{color:var(--state-good) !important;}
+.state-warn{color:var(--state-warn) !important;}
+.state-bad{color:var(--state-bad) !important;}
+.state-info{color:var(--state-info) !important;}
+
 *{
     box-sizing:border-box;
     -webkit-tap-highlight-color:transparent;
@@ -1993,6 +2020,28 @@ and (max-height:500px){
     line-height:1.5;
 }
 
+/*
+ * A transaction's icon physically travelling from where it
+ * happened toward the top of the screen — coins sold, materials
+ * deposited, anything moving into the vault. Fixed-position and
+ * appended straight to body so it's never affected by the
+ * re-render that happens the moment the underlying action fires
+ * (the planet menu's content gets wiped and rebuilt immediately;
+ * this element lives entirely outside that).
+ */
+.fly-icon{
+    position:fixed;
+    z-index:200;
+    font-size:20px;
+    line-height:1;
+    pointer-events:none;
+    text-shadow:0 0 10px rgba(120,200,255,.6);
+    transition:
+        transform .75s cubic-bezier(.2,.65,.3,1),
+        opacity .75s ease;
+    will-change:transform,opacity;
+}
+
 .remove-btn{
     padding:7px 12px;
     background:rgba(255,68,68,.15);
@@ -2038,6 +2087,119 @@ and (max-height:500px){
 .ship-toast.show{
     opacity:1;
     transform:translateX(-50%) translateY(0);
+}
+
+/*
+ * MILESTONE FLOURISH — a bigger, celebratory moment for things
+ * worth pausing on: a structure finishing construction, a new
+ * pet species discovered, a first mission completed. Deliberately
+ * distinct from the small toast above — this dims the screen and
+ * takes a real beat, rather than a quiet corner notification.
+ */
+.milestone-flourish{
+    position:fixed;
+    inset:0;
+    z-index:300;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(1,3,10,0);
+    pointer-events:none;
+    transition:background .4s ease;
+}
+
+.milestone-flourish.show{
+    background:rgba(1,3,10,.72);
+    pointer-events:auto;
+}
+
+.milestone-flourish-card{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:8px;
+    padding:20px;
+    transform:scale(.5);
+    opacity:0;
+    transition:
+        transform .5s cubic-bezier(.34,1.56,.64,1),
+        opacity .3s ease;
+}
+
+.milestone-flourish.show .milestone-flourish-card{
+    transform:scale(1);
+    opacity:1;
+}
+
+.milestone-flourish-burst{
+    position:absolute;
+    width:220px;
+    height:220px;
+    border-radius:50%;
+    background:
+        radial-gradient(
+            circle,
+            rgba(120,220,255,.35),
+            transparent 70%
+        );
+    animation:milestoneBurstPulse 1.6s ease-out infinite;
+    pointer-events:none;
+}
+
+@keyframes milestoneBurstPulse{
+    0%{
+        transform:scale(.6);
+        opacity:.8;
+    }
+    100%{
+        transform:scale(1.5);
+        opacity:0;
+    }
+}
+
+.milestone-flourish-icon{
+    position:relative;
+    font-size:64px;
+    line-height:1;
+    filter:drop-shadow(0 0 20px rgba(120,220,255,.8));
+    animation:milestoneIconBob 1.8s ease-in-out infinite;
+}
+
+@keyframes milestoneIconBob{
+    0%,100%{
+        transform:translateY(0);
+    }
+    50%{
+        transform:translateY(-6px);
+    }
+}
+
+.milestone-flourish-title{
+    position:relative;
+    font-size:16px;
+    font-weight:900;
+    letter-spacing:1px;
+    color:#eaf6ff;
+    text-shadow:0 0 16px rgba(90,190,255,.7);
+    text-align:center;
+    max-width:280px;
+}
+
+.milestone-flourish-subtitle{
+    position:relative;
+    font-size:11px;
+    color:#9fd0ff;
+    text-align:center;
+    max-width:260px;
+}
+
+.milestone-flourish-hint{
+    position:relative;
+    font-size:9px;
+    color:#5c7ba0;
+    text-align:center;
+    margin-top:4px;
 }
 
 
@@ -3620,6 +3782,15 @@ function defaultPlanetSave(){
         },
 
         /*
+         * The starter penguin means "penguin" is already known
+         * from the very start — otherwise the first purchased
+         * pet that happens to also be a penguin would wrongly
+         * trigger a "new species discovered" flourish for a
+         * species the player already had.
+         */
+        discoveredSpecies:["penguin"],
+
+        /*
          * Timestamp of the last time each planet's pet energy
          * was drained against real elapsed time —
          * planetSave.petEnergyResolved[planetId].
@@ -4134,6 +4305,40 @@ function loadPlanetSave(){
                                     pickRandomPetSpecies(
                                         petPlanetId2
                                     );
+
+                            }
+
+                            /*
+                             * Retroactively marks whatever
+                             * species this existing pet already
+                             * is as "discovered" — otherwise a
+                             * player who's had a cat for ages
+                             * could still see a "new species
+                             * discovered" flourish the next time
+                             * they happen to buy another cat,
+                             * for a species they've actually
+                             * had all along.
+                             */
+                            if(
+                                !saved.discoveredSpecies
+                            ){
+
+                                saved.discoveredSpecies=
+                                    [];
+
+                            }
+
+                            if(
+                                pet.species!==
+                                "procedural" &&
+                                !saved.discoveredSpecies.includes(
+                                    pet.species
+                                )
+                            ){
+
+                                saved.discoveredSpecies.push(
+                                    pet.species
+                                );
 
                             }
 
@@ -5255,6 +5460,26 @@ function buyPet(planetId){
             planetId
         );
 
+    if(!planetSave.discoveredSpecies){
+
+        planetSave.discoveredSpecies=[];
+
+    }
+
+    const isFirstOfSpecies=
+        newSpecies!=="procedural" &&
+        !planetSave.discoveredSpecies.includes(
+            newSpecies
+        );
+
+    if(isFirstOfSpecies){
+
+        planetSave.discoveredSpecies.push(
+            newSpecies
+        );
+
+    }
+
     planetSave.pets[
         planetId
     ].push({
@@ -5277,12 +5502,28 @@ function buyPet(planetId){
 
     savePlanetProgress();
 
-    showShipToast(
-        newSpecies==="procedural"
-        ?"Pet purchased!"
-        :"Pet purchased — a "+
-          newSpecies+"!"
-    );
+    if(isFirstOfSpecies){
+
+        showMilestoneFlourish(
+            SPECIES_FLOURISH_ICONS[
+                newSpecies
+            ] || "🐾",
+            "New species discovered!",
+            SPECIES_DISPLAY_NAMES[
+                newSpecies
+            ] || newSpecies
+        );
+
+    }else{
+
+        showShipToast(
+            newSpecies==="procedural"
+            ?"Pet purchased!"
+            :"Pet purchased — a "+
+              newSpecies+"!"
+        );
+
+    }
 
     renderPlanetDetail(
         planetId
@@ -6826,6 +7067,27 @@ const PET_ROSTER_BY_PLANET={
 
     kepler:["rex"]
 
+};
+
+/*
+ * Display name and a recognisable stock emoji for each named
+ * species — used only for the "new species discovered"
+ * milestone flourish, which can't render the actual procedural
+ * creature (it's just a text/emoji slot), so a close real-world
+ * equivalent stands in for the reveal moment.
+ */
+const SPECIES_DISPLAY_NAMES={
+    penguin:"Penguin",
+    cat:"Cat",
+    gorilla:"Gorilla",
+    rex:"T-Rex"
+};
+
+const SPECIES_FLOURISH_ICONS={
+    penguin:"🐧",
+    cat:"🐱",
+    gorilla:"🦍",
+    rex:"🦖"
 };
 
 let planetSave=
@@ -10997,6 +11259,61 @@ function getCargoPetPreviewInfo(ship){
 }
 
 /*
+ * A soft pulsing glow drawn behind the ship's own shapes when
+ * it's carrying a pet — a "something's alive in there" cue that
+ * shows up regardless of whether the design happens to include
+ * a window. Drawn in the same local coordinate space as the
+ * ship shapes themselves, so it inherits the caller's existing
+ * translate/scale and always sits centred on the hull.
+ */
+function drawCargoAura(ctx,cargoPet){
+
+    if(!cargoPet)
+        return;
+
+    const time=
+        performance.now()/1000;
+
+    const pulse=
+        .5+Math.sin(time*2)*.5;
+
+    const radius=
+        55+pulse*12;
+
+    ctx.save();
+
+    ctx.globalAlpha*=
+        .2+pulse*.15;
+
+    const grad=
+        ctx.createRadialGradient(
+            0,0,0,
+            0,0,radius
+        );
+
+    grad.addColorStop(
+        0,"rgba(150,255,190,.55)"
+    );
+
+    grad.addColorStop(
+        1,"rgba(150,255,190,0)"
+    );
+
+    ctx.fillStyle=grad;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,0,radius,0,Math.PI*2
+    );
+
+    ctx.fill();
+
+    ctx.restore();
+
+}
+
+/*
  * PET ACTIVITY OVERLAY — a hammer and an optional hat, shown on
  * top of ANY species while that pet is actually working on
  * something (a build in progress). Species-agnostic on purpose:
@@ -12422,6 +12739,11 @@ function drawStarMapScene(){
                             cargoPets:currentShipCargoPets
                         });
 
+                    drawCargoAura(
+                        c,
+                        starMapCargoPetInfo
+                    );
+
                     for(
                         const shape of
                         shipCustomizer.shapes
@@ -12430,7 +12752,8 @@ function drawStarMapScene(){
                         shape.draw(
                             c,
                             true,
-                            starMapCargoPetInfo
+                            starMapCargoPetInfo,
+                            currentShipPerk
                         );
 
                     }
@@ -13177,26 +13500,73 @@ function drawPlanetFocusScene(){
     );
 
     /*
-     * Draws the SAME starfield the gameplay canvas uses — same
-     * positions, same twinkle, same drift — so the background
-     * doesn't visibly change when handing over between the home
-     * screen and the field. One starfield, three views.
-     */
-    drawSharedStars(c,width,height);
-
-    updateFlight();
-
-    /*
      * Flight progress is resolved up-front because everything
      * on this screen — background planets, surface objects, the
      * focused world and the ship — fades or moves against it.
      *
      * During a launch the planet shrinks and rises away, ending
      * at the land/depart framing; a landing plays the same
-     * interpolation in reverse.
+     * interpolation in reverse. Moved ahead of the starfield
+     * draw below (it used to sit after) purely so its value is
+     * available in time to fade the parallax effect out during
+     * a transition — nothing about the flight math itself
+     * changed.
      */
+    updateFlight();
+
     const flight=
         easeZoom(flightProgress);
+
+    /*
+     * PARALLAX — driven by the same device-tilt/mouse-drift
+     * values the gameplay field already tracks (see
+     * deviceTiltX/mouseDriftX), reused here rather than adding
+     * a second input system. Different layers move by different
+     * amounts to sell actual depth: the starfield (furthest)
+     * barely shifts, the planet and everything standing on it
+     * (nearest, and rigidly connected — they need to move
+     * together or surface objects would visibly separate from
+     * the ground) shifts the most. Fades to zero during a
+     * launch/landing transition so it never fights the camera
+     * motion already happening then.
+     */
+    const parallaxInputX=
+        deviceTiltX+mouseDriftX;
+
+    const parallaxInputY=
+        deviceTiltY+mouseDriftY;
+
+    const parallaxScale=
+        14*(1-flight);
+
+    const starParallaxX=
+        parallaxInputX*parallaxScale*.3;
+
+    const starParallaxY=
+        parallaxInputY*parallaxScale*.3;
+
+    const planetParallaxX=
+        parallaxInputX*parallaxScale;
+
+    const planetParallaxY=
+        parallaxInputY*parallaxScale*.6;
+
+    /*
+     * Draws the SAME starfield the gameplay canvas uses — same
+     * positions, same twinkle, same drift — so the background
+     * doesn't visibly change when handing over between the home
+     * screen and the field. One starfield, three views.
+     */
+    c.save();
+
+    c.translate(
+        starParallaxX,
+        starParallaxY
+    );
+
+    drawSharedStars(c,width,height);
+
+    c.restore();
 
     /*
      * Next-tier planets drifting in the upper background. Their
@@ -13341,7 +13711,12 @@ function drawPlanetFocusScene(){
 
         /*
          * The whole layer composited at the fade alpha — one
-         * operation nothing inside can override.
+         * operation nothing inside can override. Offset by the
+         * mid-depth parallax amount (between the barely-moving
+         * starfield and the nearer main planet) — scaled by dpr
+         * since this composite step runs under the identity
+         * transform, in device pixels rather than the CSS
+         * pixels the rest of this function works in.
          */
         c.save();
 
@@ -13354,8 +13729,8 @@ function drawPlanetFocusScene(){
 
         c.drawImage(
             layer,
-            0,
-            0
+            planetParallaxX*.6*dpr,
+            planetParallaxY*.6*dpr
         );
 
         c.restore();
@@ -13409,7 +13784,8 @@ function drawPlanetFocusScene(){
         (departRadius-homeRadius)*flight;
 
     const cx=
-        width/2;
+        width/2+
+        planetParallaxX;
 
     const homeCy=
         height*.72+homeRadius;
@@ -13429,7 +13805,8 @@ function drawPlanetFocusScene(){
 
     const cy=
         homeCy+
-        (departCy-homeCy)*planetEase;
+        (departCy-homeCy)*planetEase+
+        planetParallaxY;
 
     const palette=
         getPlanetPalette(
@@ -14261,6 +14638,11 @@ function drawPlanetFocusScene(){
                     focusShips[0]
                 );
 
+            drawCargoAura(
+                c,
+                focusCargoPetInfo
+            );
+
             for(
                 const shape of shipCustomizer.shapes
             ){
@@ -14275,7 +14657,10 @@ function drawPlanetFocusScene(){
                 shape.draw(
                     c,
                     flightProgress>0,
-                    focusCargoPetInfo
+                    focusCargoPetInfo,
+                    focusShips[0]
+                    ?focusShips[0].perk
+                    :null
                 );
 
             }
@@ -15206,13 +15591,22 @@ function resolveBuildQueue(planetId){
                 ][build.structureId]=
                     {level:1};
 
-                showShipToast(
+                showMilestoneFlourish(
+                    (
+                        STRUCTURES[
+                            build.structureId
+                        ] || {icon:"🏗"}
+                    ).icon,
                     (
                         STRUCTURES[
                             build.structureId
                         ] || {name:"Structure"}
-                    ).name+
-                    " completed!"
+                    ).name+" completed!",
+                    "Now built at "+
+                    (
+                        getPlanet(planetId) ||
+                        {name:planetId}
+                    ).name
                 );
 
             }
@@ -16905,13 +17299,19 @@ function renderPlanetDetail(id){
                                     MATERIALS[materialId] ||
                                     MATERIALS["aether-dust"];
 
+                                const cap=
+                                    MATERIAL_CAP+
+                                    (ship.materialCapBonus || 0);
+
                                 return(
-                                    '<span>'+info.icon+' '+
-                                    count+'/'+
+                                    '<span'+
                                     (
-                                        MATERIAL_CAP+
-                                        (ship.materialCapBonus || 0)
+                                        count>=cap
+                                        ?' class="state-good"'
+                                        :''
                                     )+
+                                    '>'+info.icon+' '+
+                                    count+'/'+cap+
                                     '</span>'
                                 );
 
@@ -17446,7 +17846,15 @@ function renderPlanetDetail(id){
                             '<button class="control-btn" data-action="toggle-ship-cargo" '+
                             'data-ship="'+ship.id+'" style="width:auto;padding:7px 10px;'+
                             'align-self:flex-start;display:flex;align-items:center;gap:6px;">'+
-                            '<span>Cargo: '+
+                            '<span'+
+                            (
+                                cargoPets.length &&
+                                cargoPets.length===
+                                cargoCap
+                                ?' class="state-good"'
+                                :''
+                            )+
+                            '>Cargo: '+
                             (
                                 cargoPets.length
                                 ?cargoPets.length+'/'+cargoCap+' 🐾'
@@ -18238,12 +18646,20 @@ function renderPlanetDetail(id){
                 rowHtml+=
                     '<div style="margin-top:8px;">'+
                     '🐾 Working pet stationed here: '+
+                    '<span class="'+
+                    (
+                        workingPetsHere>0
+                        ?'state-good'
+                        :'state-bad'
+                    )+
+                    '">'+
                     (
                         workingPetsHere>0
                         ?'Yes ('+workingPetsHere+')'
                         :'None — required to build (a pet '+
                          'with 0 energy doesn\'t count until fed)'
                     )+
+                    '</span>'+
                     ' · Build time: '+
                     structure.buildDurationSeconds+'s'+
                     '</div>';
@@ -18304,7 +18720,15 @@ function renderPlanetDetail(id){
         html+=
             '<div class="metric-callout">'+
             '🐾 '+petsHere+' pet(s) stationed here ('+
-            workingPetsHere+' currently working) — more '+
+            '<span class="'+
+            (
+                workingPetsHere>0
+                ?'state-good'
+                :'state-bad'
+            )+
+            '">'+workingPetsHere+' currently working'+
+            '</span>'+
+            ') — more '+
             'working pets means faster builds. Current build '+
             'time: '+shipDuration+'s.'+
             '</div>';
@@ -18396,7 +18820,7 @@ function renderPlanetDetail(id){
                 build=>{
 
                     html+=
-                        '<div class="metric-note">'+
+                        '<div class="metric-note state-warn">'+
                         '🏗 Ship under construction — '+
                         formatRemaining(build)+
                         '</div>';
@@ -18421,7 +18845,7 @@ function renderPlanetDetail(id){
     }else if(structureBuild){
 
         html+=
-            '<div class="metric-note">'+
+            '<div class="metric-note state-warn">'+
             '🏗 Factory under construction — '+
             formatRemaining(structureBuild)+
             '</div>';
@@ -18538,7 +18962,7 @@ function renderPlanetDetail(id){
     }else if(pilotTrainingBuild){
 
         html+=
-            '<div class="metric-note">'+
+            '<div class="metric-note state-warn">'+
             '🏗 Under construction — '+
             formatRemaining(pilotTrainingBuild)+
             '</div>';
@@ -18602,7 +19026,7 @@ function renderPlanetDetail(id){
     }else if(bioDomeBuild){
 
         html+=
-            '<div class="metric-note">'+
+            '<div class="metric-note state-warn">'+
             '🏗 Under construction — '+
             formatRemaining(bioDomeBuild)+
             '</div>';
@@ -18745,6 +19169,8 @@ document
 
         if(action==="deposit"){
 
+            flyIconFrom(target,"🪙");
+
             depositShipCoins(
                 planetDetailId,
                 shipId
@@ -18753,6 +19179,8 @@ document
         }else if(
             action==="deposit-materials"
         ){
+
+            flyIconFrom(target,"📦");
 
             depositShipMaterials(
                 planetDetailId,
@@ -18975,6 +19403,11 @@ document
                     "data-item"
                 );
 
+            flyIconFrom(
+                target,
+                getItemInfo(itemId).icon
+            );
+
             sellItemStock(
                 planetDetailId,
                 itemId
@@ -18988,6 +19421,14 @@ document
                 target.getAttribute(
                     "data-material"
                 );
+
+            flyIconFrom(
+                target,
+                (
+                    MATERIALS[materialId] ||
+                    MATERIALS["aether-dust"]
+                ).icon
+            );
 
             sellMaterialStock(
                 planetDetailId,
@@ -23238,6 +23679,11 @@ function drawCustomShipShapes(
             cargoPets:currentShipCargoPets
         });
 
+    drawCargoAura(
+        ctx,
+        cargoPetInfo
+    );
+
     for(
         const shape of shipCustomizer.shapes
     ){
@@ -23245,7 +23691,8 @@ function drawCustomShipShapes(
         shape.draw(
             ctx,
             true,
-            cargoPetInfo
+            cargoPetInfo,
+            currentShipPerk
         );
 
     }
@@ -28706,6 +29153,28 @@ function landAtCurrentPlanet(){
      */
     selectedLaunchShipId=
         currentShipId;
+
+    /*
+     * A real first-mission milestone — checked BEFORE the
+     * counter below increments, and gated on an actual score
+     * rather than just "this is landing #1", since an instant
+     * launch-and-land with nothing to show for it (the exact
+     * scenario the Earth-ship pruning above exists for)
+     * shouldn't be dressed up as a triumphant first mission.
+     */
+    if(
+        planetSave.landingsCount===0 &&
+        score>0
+    ){
+
+        showMilestoneFlourish(
+            "🚀",
+            "First mission complete!",
+            score.toLocaleString()+
+            " points — welcome back"
+        );
+
+    }
 
     planetSave.landingsCount++;
 
@@ -34719,6 +35188,20 @@ function loop(time){
  */
 
 
+/*
+ * A colour accent per equipped perk, used only for the small
+ * spark particles a thruster shows when a ship has one active —
+ * a visible "this ship is running something special" cue,
+ * without overriding whatever colours the player actually chose
+ * for the flame itself.
+ */
+const PERK_THRUSTER_COLORS={
+    "coin-magnet":"#ffd76b",
+    "refinery-core":"#ff9d5c",
+    "overcharge-coil":"#7fe0ff"
+};
+
+
 /* =========================================================
    SHIP BUILDER
 ========================================================= */
@@ -34748,7 +35231,7 @@ class ShapeObject {
         return base * this.scale;
     }
 
-    draw(ctx, flameActive = true, cargoPet = null) {
+    draw(ctx, flameActive = true, cargoPet = null, shipPerkId = null) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate((this.rotation * Math.PI) / 180);
@@ -34906,6 +35389,31 @@ class ShapeObject {
                 ctx.quadraticCurveTo(0, innerLength * 0.6, innerWidth / 2, 0);
                 ctx.closePath();
                 ctx.fill();
+
+                // Perk spark accent — small particles in the equipped
+                // perk's colour drifting up through the flame, on top of
+                // whatever colours the player actually chose. Purely
+                // additive: no perk equipped means no sparks, same
+                // flame as before.
+                if (shipPerkId && PERK_THRUSTER_COLORS[shipPerkId]) {
+                    const sparkColor = PERK_THRUSTER_COLORS[shipPerkId];
+                    ctx.globalAlpha = baseAlpha;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = sparkColor;
+                    ctx.fillStyle = sparkColor;
+                    for (let i = 0; i < 3; i++) {
+                        const sparkPhase = phase + i * 700;
+                        const sparkT = ((time * 0.003 + sparkPhase * 0.001) % 1 + 1) % 1;
+                        const sparkY = sparkT * flameLength;
+                        const sparkSpread = (flameWidth / 2) * (1 - sparkT) * 0.6;
+                        const sparkX = Math.sin(time * 0.006 + sparkPhase) * sparkSpread;
+                        const sparkAlpha = baseAlpha * (1 - sparkT) * 0.9;
+                        ctx.globalAlpha = sparkAlpha;
+                        ctx.beginPath();
+                        ctx.arc(sparkX, sparkY, 1.6 * this.scale, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
 
                 ctx.globalAlpha = baseAlpha;
                 break;
@@ -35482,6 +35990,88 @@ const shipCustomizer = {
 
 let shipToastTimer = null;
 
+/*
+ * Spawns one icon at sourceEl's on-screen position and animates
+ * it up and away, fading out — used for anything "becoming"
+ * something else at a glance: an item selling for coins, a
+ * material moving into the vault. Deliberately doesn't try to
+ * track a literal destination element (the vault balance may
+ * not even be the visible tab when this fires, e.g. depositing
+ * from the Ships tab), so it always arcs toward the top of the
+ * screen rather than a specific target — a consistent,
+ * always-correct direction rather than a precise but fragile one.
+ * Multiple calls in quick succession each get their own
+ * independent element, so a multi-sell doesn't clip.
+ */
+function flyIconFrom(sourceEl,icon){
+
+    if(!sourceEl)
+        return;
+
+    const rect=
+        sourceEl.getBoundingClientRect();
+
+    const startX=
+        rect.left+rect.width/2;
+
+    const startY=
+        rect.top+rect.height/2;
+
+    const el=
+        document.createElement("div");
+
+    el.className="fly-icon";
+
+    el.textContent=icon;
+
+    el.style.left=startX+"px";
+
+    el.style.top=startY+"px";
+
+    el.style.transform=
+        "translate(-50%,-50%) scale(1)";
+
+    el.style.opacity="1";
+
+    document.body.appendChild(el);
+
+    const driftX=
+        (Math.random()*50-25);
+
+    requestAnimationFrame(
+        ()=>
+            requestAnimationFrame(
+                ()=>{
+
+                    el.style.left=
+                        (startX+driftX)+"px";
+
+                    el.style.top=
+                        Math.max(
+                            40,
+                            startY-160
+                        )+"px";
+
+                    el.style.transform=
+                        "translate(-50%,-50%) scale(.35)";
+
+                    el.style.opacity="0";
+
+                }
+            )
+    );
+
+    setTimeout(
+        ()=>{
+
+            el.remove();
+
+        },
+        800
+    );
+
+}
+
 function showShipToast(message) {
     let toast = document.getElementById('shipToast');
     if (!toast) {
@@ -35496,6 +36086,110 @@ function showShipToast(message) {
     shipToastTimer = setTimeout(() => {
         toast.classList.remove('show');
     }, 1800);
+}
+
+let milestoneFlourishTimer=null;
+
+/*
+ * A bigger, one-time celebratory moment — structure completed,
+ * new pet species discovered, first mission ever finished.
+ * Created lazily on first use, same pattern as the toast above.
+ * Auto-dismisses after a few seconds, or the player can tap
+ * anywhere to skip ahead.
+ */
+function showMilestoneFlourish(icon,title,subtitle){
+
+    let el=
+        document.getElementById(
+            "milestoneFlourish"
+        );
+
+    if(!el){
+
+        el=
+            document.createElement("div");
+
+        el.id=
+            "milestoneFlourish";
+
+        el.className=
+            "milestone-flourish";
+
+        el.innerHTML=
+            '<div class="milestone-flourish-card">'+
+            '<div class="milestone-flourish-burst"></div>'+
+            '<div class="milestone-flourish-icon" id="milestoneFlourishIcon"></div>'+
+            '<div class="milestone-flourish-title" id="milestoneFlourishTitle"></div>'+
+            '<div class="milestone-flourish-subtitle" id="milestoneFlourishSubtitle"></div>'+
+            '<div class="milestone-flourish-hint">Tap to continue</div>'+
+            '</div>';
+
+        el.addEventListener(
+            "pointerdown",
+            ()=>{
+
+                hideMilestoneFlourish();
+
+            }
+        );
+
+        document.body.appendChild(el);
+
+    }
+
+    document.getElementById(
+        "milestoneFlourishIcon"
+    ).textContent=icon;
+
+    document.getElementById(
+        "milestoneFlourishTitle"
+    ).textContent=title;
+
+    document.getElementById(
+        "milestoneFlourishSubtitle"
+    ).textContent=
+        subtitle || "";
+
+    sound("click");
+
+    requestAnimationFrame(
+        ()=>
+            el.classList.add(
+                "show"
+            )
+    );
+
+    clearTimeout(
+        milestoneFlourishTimer
+    );
+
+    milestoneFlourishTimer=
+        setTimeout(
+            hideMilestoneFlourish,
+            3200
+        );
+
+}
+
+function hideMilestoneFlourish(){
+
+    const el=
+        document.getElementById(
+            "milestoneFlourish"
+        );
+
+    if(el){
+
+        el.classList.remove(
+            "show"
+        );
+
+    }
+
+    clearTimeout(
+        milestoneFlourishTimer
+    );
+
 }
 
 shipCustomizer.init();
