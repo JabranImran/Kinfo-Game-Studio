@@ -715,21 +715,19 @@ body{
     bottom:auto;
     height:58vh;
     /*
-     * No background of its own at all now — the canvas beneath
-     * paints the exact same gradient + stars as the home screen,
-     * so an extra tint on top of that would just darken it away
-     * from matching. The canvas IS the backdrop here.
+     * Fully transparent — no background, no blur. The home
+     * screen underneath (#planetFocus) keeps rendering live the
+     * entire time this menu is open, so rather than recreating
+     * an approximation of that scene on a second canvas here
+     * (which is what caused the mismatched "seam" — stars and a
+     * gradient, but none of the actual planet, structures, ship
+     * or pets that were really there), this just gets out of
+     * the way and lets the real thing show through directly.
+     * It's not a copy of the screen underneath; it IS the
+     * screen underneath.
      */
     background:none;
-}
-
-#planetDetailCanvas{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
-    display:block;
-    pointer-events:none;
+    backdrop-filter:none;
 }
 
 #planetDetail .card{
@@ -741,7 +739,6 @@ body{
      * before scrolling kicks in.
      */
     max-height:calc(58vh - 36px);
-    position:relative;
 }
 
 
@@ -2601,8 +2598,6 @@ and (max-height:500px){
     class="overlay hidden"
     id="planetDetail">
 
-    <canvas id="planetDetailCanvas"></canvas>
-
     <div class="card customizer-card">
 
         <button
@@ -3515,6 +3510,7 @@ function defaultPlanetSave(){
                     energy:100,
                     role:"builder",
                     species:"penguin",
+                    homePlanetId:"earth",
                     rangeLevel:1,
                     enduranceLevel:1,
                     survivalLevel:1,
@@ -3987,6 +3983,7 @@ function loadPlanetSave(){
                             id:"pet_earth_starter",
                             energy:100,
                             species:"penguin",
+                            homePlanetId:"earth",
                             trainingLevel:1
                         }
                     ];
@@ -4037,6 +4034,29 @@ function loadPlanetSave(){
                                     pickRandomPetSpecies(
                                         petPlanetId2
                                     );
+
+                            }
+
+                            /*
+                             * Existing pets from before homes
+                             * were tracked get theirs assumed as
+                             * wherever they're currently sitting
+                             * docked — the best available guess,
+                             * since a pet sitting on a planet
+                             * with no other record almost always
+                             * either started there or has
+                             * already been formally moved there.
+                             * Pets caught mid-transport in a
+                             * ship's cargo are handled
+                             * separately below, since there's no
+                             * planet to assume for those.
+                             */
+                            if(
+                                !pet.homePlanetId
+                            ){
+
+                                pet.homePlanetId=
+                                    petPlanetId2;
 
                             }
 
@@ -5148,6 +5168,7 @@ function buyPet(planetId){
         energy:100,
         role:"builder",
         species:newSpecies,
+        homePlanetId:planetId,
         rangeLevel:1,
         enduranceLevel:1,
         survivalLevel:1,
@@ -8339,20 +8360,13 @@ function loadPetToCargo(planetId,shipId,petId){
 }
 
 /*
- * Unloading only works if THIS planet has a Bio Dome — that's
- * the whole point of the structure, giving a planet the
- * infrastructure to actually house a pet that didn't
- * originate there.
+ * Unloading works either at a pet's own home planet (returning
+ * it needs no special infrastructure) or, for any other planet,
+ * only if that planet has a Bio Dome — the actual point of the
+ * structure being to give a planet the infrastructure to house
+ * a pet that didn't originate there.
  */
 function unloadPetFromCargo(planetId,shipId,petId){
-
-    if(
-        !hasStructure(
-            planetId,
-            "bio-dome"
-        )
-    )
-        return;
 
     const ship=
         (
@@ -8381,6 +8395,19 @@ function unloadPetFromCargo(planetId,shipId,petId){
 
     const pet=
         ship.cargoPets[petIndex];
+
+    const isHomePlanet=
+        pet.homePlanetId===
+        planetId;
+
+    if(
+        !isHomePlanet &&
+        !hasStructure(
+            planetId,
+            "bio-dome"
+        )
+    )
+        return;
 
     ship.cargoPets.splice(
         petIndex,
@@ -12463,6 +12490,20 @@ function launchWithAnimation(){
         return;
 
     /*
+     * The planet menu sits in its own overlay, independent of
+     * the home screen buttons beneath it — so it's entirely
+     * possible to have it open and still reach Launch Mission,
+     * which used to leave the menu floating on screen through
+     * the whole flight. Closing it here is the same tidy-up as
+     * landing already does.
+     */
+    if(planetDetailId){
+
+        closePlanetDetail();
+
+    }
+
+    /*
      * Hidden up-front rather than inside startGame(), because
      * by then the HUD has already been painted visible for a
      * frame — that was the flash before it faded in.
@@ -13818,7 +13859,20 @@ function drawPlanetFocusScene(){
                      * not the crisp neon glow the rest of the
                      * game uses. Left plain; the ring/planet glow
                      * around it already carries the aesthetic.
+                     *
+                     * fillStyle IS explicitly set, though — left
+                     * unset, canvas text rendering can inherit
+                     * whatever colour the LAST thing drawn used
+                     * (often a near-black planet body/rim tone),
+                     * and on some browsers/canvas engines emoji
+                     * glyphs don't reliably render with their own
+                     * embedded colour and fall back to respecting
+                     * fillStyle — which is exactly what turns them
+                     * into solid black silhouettes.
                      */
+                    c.fillStyle=
+                        "#ffffff";
+
                     c.font=
                         iconSize+
                         "px system-ui";
@@ -15921,126 +15975,6 @@ let shipBuildToggles={
 };
 let pilotAssignmentPetId=null;
 
-let planetDetailBackdropRaf=null;
-
-/*
- * Paints the same shared starfield used on the home screen and
- * star map onto Planet Detail's own backdrop canvas — this is
- * what replaces the flat dark panel with a genuinely moving sky
- * behind the menu.
- */
-function drawPlanetDetailBackdrop(){
-
-    const canvas=
-        document.getElementById(
-            "planetDetailCanvas"
-        );
-
-    if(!canvas)
-        return;
-
-    const width=
-        canvas.clientWidth;
-
-    const height=
-        canvas.clientHeight;
-
-    if(
-        !width ||
-        !height
-    )
-        return;
-
-    const dpr=
-        Math.min(
-            window.devicePixelRatio || 1,
-            2
-        );
-
-    if(
-        canvas.width!==
-        Math.floor(width*dpr)
-    ){
-
-        canvas.width=
-            Math.floor(width*dpr);
-
-    }
-
-    if(
-        canvas.height!==
-        Math.floor(height*dpr)
-    ){
-
-        canvas.height=
-            Math.floor(height*dpr);
-
-    }
-
-    const c=
-        canvas.getContext("2d");
-
-    c.setTransform(
-        dpr,0,0,dpr,0,0
-    );
-
-    /*
-     * Same gradient AND same stars as the home screen behind
-     * it, not just stars on a flat tint — this is what actually
-     * makes the menu read as sitting above the same sky rather
-     * than a differently-coloured box overlapping it.
-     */
-    drawSpaceGradientBackdrop(
-        c,width,height
-    );
-
-    drawSharedStars(
-        c,width,height
-    );
-
-}
-
-function planetDetailBackdropLoop(){
-
-    const el=
-        document.getElementById(
-            "planetDetail"
-        );
-
-    if(
-        !el ||
-        el.classList.contains(
-            "hidden"
-        )
-    ){
-
-        planetDetailBackdropRaf=
-            null;
-
-        return;
-
-    }
-
-    try{
-
-        drawPlanetDetailBackdrop();
-
-    }catch(error){
-
-        console.error(
-            "Planet detail backdrop failed:",
-            error
-        );
-
-    }
-
-    planetDetailBackdropRaf=
-        requestAnimationFrame(
-            planetDetailBackdropLoop
-        );
-
-}
-
 function openPlanetDetail(id){
 
     initAudio();
@@ -16096,22 +16030,6 @@ function openPlanetDetail(id){
     ).classList.remove(
         "hidden"
     );
-
-    /*
-     * Started here — AFTER the "hidden" class is actually
-     * removed, not before. The loop's own visibility check
-     * (does #planetDetail still have "hidden"?) would otherwise
-     * see the overlay as still hidden on this very first call,
-     * immediately stop itself, and never run again — which is
-     * exactly why the backdrop never appeared: the loop began
-     * and ended in the same tick, before the overlay was ever
-     * actually visible.
-     */
-    if(!planetDetailBackdropRaf){
-
-        planetDetailBackdropLoop();
-
-    }
 
 }
 
@@ -17202,6 +17120,21 @@ function renderPlanetDetail(id){
                                 cargoPets.forEach(
                                     pet=>{
 
+                                        /*
+                                         * A pet can always come
+                                         * home to the planet it
+                                         * started at, Bio Dome
+                                         * or not — the Dome is
+                                         * only the infrastructure
+                                         * needed to house a pet
+                                         * that's NOT originally
+                                         * from here.
+                                         */
+                                        const canUnloadHere=
+                                            hasBioDomeHere ||
+                                            pet.homePlanetId===
+                                            id;
+
                                         cargoInner+=
                                             '<button class="shape-btn" style="width:100%;'+
                                             'display:flex;align-items:center;justify-content:space-between;'+
@@ -17209,14 +17142,14 @@ function renderPlanetDetail(id){
                                             'data-action="unload-pet" data-ship="'+
                                             ship.id+'" data-pet="'+pet.id+'" '+
                                             (
-                                                hasBioDomeHere
+                                                canUnloadHere
                                                 ?''
                                                 :'disabled'
                                             )+
                                             '>🐾 Energy '+Math.round(pet.energy)+
                                             '% <span style="opacity:.6;font-size:9px;">'+
                                             (
-                                                hasBioDomeHere
+                                                canUnloadHere
                                                 ?'Unload here'
                                                 :'Needs a Bio Dome here'
                                             )+
