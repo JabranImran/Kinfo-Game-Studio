@@ -883,6 +883,10 @@ body{
     text-shadow:0 2px 10px rgba(0,0,0,.9);
     line-height:1.5;
     max-width:340px;
+    width:100%;
+    max-height:22vh;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
 }
 
 .focus-actions{
@@ -2832,8 +2836,6 @@ and (max-height:500px){
 
         <div class="focus-bottom" id="focusBottom">
 
-            <div class="focus-launch-info" id="focusLaunchInfo"></div>
-
             <div class="focus-actions">
 
                 <button class="focus-btn primary" id="focusLaunchBtn">
@@ -2841,6 +2843,8 @@ and (max-height:500px){
                 </button>
 
             </div>
+
+            <div class="focus-launch-info" id="focusLaunchInfo"></div>
 
         </div>
 
@@ -16516,6 +16520,82 @@ function getHeartsLabel(ship){
 
 }
 
+function getShipMaterialTotal(ship){
+
+    if(!ship.materials)
+        return 0;
+
+    return Object.values(
+        ship.materials
+    ).reduce(
+        (a,b) => a+b,
+        0
+    );
+
+}
+
+/*
+ * One consistent ship-select button, showing everything at a
+ * glance (score, coins, equipped ability, wave, hearts,
+ * material carried) rather than needing a separate summary line
+ * above the list just for whichever one happens to be chosen —
+ * the chosen one is already visually obvious (the highlighted
+ * border and the ▶ marker), so duplicating its details in prose
+ * above the list was pure redundancy.
+ */
+function renderShipSelectButton(ship,isChosen){
+
+    const materialTotal=
+        ship.isFresh
+        ?0
+        :getShipMaterialTotal(ship);
+
+    return(
+        '<button data-action="pick-launch-ship" '+
+        'data-ship="'+ship.id+'" '+
+        'style="text-align:left;padding:8px 10px;'+
+        'border-radius:8px;font-size:9px;width:100%;'+
+        'border:1px solid '+
+        (
+            isChosen
+            ?"rgba(110,220,255,.5)"
+            :"rgba(255,255,255,.12)"
+        )+
+        ';background:'+
+        (
+            isChosen
+            ?"rgba(110,220,255,.14)"
+            :"rgba(255,255,255,.03)"
+        )+
+        ';color:'+
+        (
+            isChosen
+            ?"#bcecff"
+            :"#8fa7c7"
+        )+
+        ';cursor:pointer;">'+
+        (isChosen ? "▶ " : "")+
+        (
+            ship.isFresh
+            ?"Fresh ship (∞) · "+
+             getHeartsLabel(ship)
+            :ship.score.toLocaleString()+
+             " pts · 🪙"+
+             (ship.coins || 0)+
+             " · "+getEquippedLabel(ship)+
+             " · Wave "+(ship.wave || 1)+
+             " · "+getHeartsLabel(ship)+
+             (
+                 materialTotal>0
+                 ?" · 📦"+materialTotal
+                 :""
+             )
+        )+
+        '</button>'
+    );
+
+}
+
 /*
  * Picks which docked ship launch will actually use: whatever
  * the player explicitly selected (if it's still valid for this
@@ -17026,29 +17106,42 @@ function getEarthLaunchCandidates(){
      * has to come from a factory, paid for and waited on like
      * anywhere else — this is what stops a player dodging
      * Earth forever to keep farming free ships.
+     *
+     * It's now created as a REAL, persisted ship the moment
+     * that condition is true — via the exact same createShip()
+     * every paid ship goes through — rather than a lightweight
+     * virtual stand-in. That's what makes it genuinely equal to
+     * a freshly bought ship: equip screens, cargo, perks, and
+     * everything else all read from real fields that actually
+     * exist on it, instead of silently doing nothing on a
+     * placeholder object that was never a real docked record.
+     * Only fires once — the very next call sees this ship
+     * already sitting in getShips("earth"), so the zero-ships
+     * condition below is no longer true and nothing duplicates.
      */
-    const candidates=[
-        ...real
-    ];
-
     if(
+        !real.length &&
         !getTotalPlayerShipCount() &&
         !getTotalQueuedShipCount()
     ){
 
-        candidates.unshift({
-            id:"FRESH_EARTH",
-            score:0,
-            coins:0,
-            equipment:"emp",
-            wave:1,
-            lives:3,
-            isFresh:true
-        });
+        const freshShip=
+            createShip(
+                "earth",
+                0,
+                0,
+                "emp",
+                1,
+                3
+            );
+
+        freshShip.isFresh=true;
+
+        return[freshShip];
 
     }
 
-    return candidates;
+    return[...real];
 
 }
 
@@ -17065,6 +17158,83 @@ function resolveEarthLaunchChoice(){
         ) ||
         candidates[0]
     );
+
+}
+
+/*
+ * Which planet the Home Screen should open on when the app
+ * first loads — previously always Earth, which could land a
+ * returning player on a world with nothing docked there at all,
+ * unable to do anything but browse away from it immediately.
+ * Prefers wherever they actually left off (if that planet still
+ * has a ship sitting there), then falls back to whichever planet
+ * holds their single highest-scoring ship, and only resorts to
+ * Earth — where the free ship guarantees SOMETHING is always
+ * launchable — if genuinely nothing else qualifies.
+ */
+function resolveDefaultStartPlanet(){
+
+    const lastPlanet=
+        planetSave.lastSelectedPlanet;
+
+    if(lastPlanet){
+
+        if(lastPlanet==="earth")
+            return "earth";
+
+        const lastPlanetShips=
+            getShips(lastPlanet);
+
+        if(
+            lastPlanetShips &&
+            lastPlanetShips.length
+        ){
+
+            return lastPlanet;
+
+        }
+
+    }
+
+    let bestPlanetId=null;
+
+    let bestScore=-1;
+
+    for(
+        const planetId in
+        (planetSave.ships || {})
+    ){
+
+        const ships=
+            planetSave.ships[
+                planetId
+            ];
+
+        if(!Array.isArray(ships))
+            continue;
+
+        ships.forEach(
+            ship=>{
+
+                if(
+                    ship.score>
+                    bestScore
+                ){
+
+                    bestScore=
+                        ship.score;
+
+                    bestPlanetId=
+                        planetId;
+
+                }
+
+            }
+        );
+
+    }
+
+    return bestPlanetId || "earth";
 
 }
 
@@ -17136,10 +17306,10 @@ function renderLaunchPreview(){
                 :null;
 
             el.innerHTML=
-                "🏭 No ship ready here yet"+
+                "\uD83C\uDFED No ship ready here yet"+
                 (
                     remaining!==null
-                    ?" — "+remaining+
+                    ?" \u2014 "+remaining+
                      "s left on the current build."
                     :"."
                 );
@@ -17151,80 +17321,16 @@ function renderLaunchPreview(){
         const chosen=
             resolveEarthLaunchChoice();
 
-        let earthHtml=
-            chosen.isFresh
-            ?"🚀 <b>Fresh ship</b> — starts clean, no prior "+
-             "score, coins, or equipment."
-            :"🚀 Launching <b>"+
-             chosen.score.toLocaleString()+
-             " pt ship</b> — 🪙"+
-             (chosen.coins || 0).toLocaleString()+
-             " · "+getEquippedLabel(chosen)+
-             " · Wave "+(chosen.wave || 1)+
-             " · "+getHeartsLabel(chosen);
-
-        if(candidates.length>1){
-
-            earthHtml+=
-                "<div style=\"margin-top:8px;"+
-                "display:flex;flex-direction:column;gap:5px;\">"+
-                "<span style=\"opacity:.7;font-size:9px;\">"+
-                "Earth also has "+
-                (candidates.length-1)+
-                " landed ship(s) — tap one to launch it "+
-                "instead:</span>";
-
-            candidates.forEach(
-                ship=>{
-
-                    const isChosen=
-                        ship.id===chosen.id;
-
-                    earthHtml+=
-                        "<button data-action=\"pick-launch-ship\" "+
-                        "data-ship=\""+ship.id+"\" "+
-                        "style=\"text-align:left;padding:6px 8px;"+
-                        "border-radius:8px;font-size:9px;"+
-                        "border:1px solid "+
-                        (
-                            isChosen
-                            ?"rgba(110,220,255,.5)"
-                            :"rgba(255,255,255,.12)"
-                        )+
-                        ";background:"+
-                        (
-                            isChosen
-                            ?"rgba(110,220,255,.14)"
-                            :"rgba(255,255,255,.03)"
-                        )+
-                        ";color:"+
-                        (
-                            isChosen
-                            ?"#bcecff"
-                            :"#8fa7c7"
-                        )+
-                        ";cursor:pointer;\">"+
-                        (isChosen ? "▶ " : "")+
-                        (
-                            ship.isFresh
-                            ?"Fresh ship (∞)"
-                            :ship.score.toLocaleString()+
-                             " pts · 🪙"+
-                             (ship.coins || 0)+
-                             " · "+getEquippedLabel(ship)
-                        )+
-                        "</button>";
-
-                }
-            );
-
-            earthHtml+=
-                "</div>";
-
-        }
-
         el.innerHTML=
-            earthHtml;
+            '<div style="display:flex;flex-direction:column;gap:5px;">'+
+            candidates.map(
+                ship=>
+                    renderShipSelectButton(
+                        ship,
+                        ship.id===chosen.id
+                    )
+            ).join('')+
+            '</div>';
 
         return;
 
@@ -17247,73 +17353,16 @@ function renderLaunchPreview(){
     const chosen=
         resolveLaunchShip(ships);
 
-    let html=
-        "🚀 Launching <b>"+
-        chosen.score.toLocaleString()+
-        " pt ship</b> — "+
-        "🪙"+
-        (chosen.coins || 0).toLocaleString()+
-        " · "+getEquippedLabel(chosen)+
-        " · Wave "+
-        (chosen.wave || 1)+" · "+
-        getHeartsLabel(chosen);
-
-    if(ships.length>1){
-
-        html+=
-            "<div style=\"margin-top:8px;"+
-            "display:flex;flex-direction:column;gap:5px;\">"+
-            "<span style=\"opacity:.7;font-size:9px;\">"+
-            ships.length+" ships docked here — tap one to "+
-            "choose which one launches:</span>";
-
-        ships.forEach(
-            ship=>{
-
-                const isChosen=
-                    ship.id===chosen.id;
-
-                html+=
-                    "<button data-action=\"pick-launch-ship\" "+
-                    "data-ship=\""+ship.id+"\" "+
-                    "style=\"text-align:left;padding:6px 8px;"+
-                    "border-radius:8px;font-size:9px;"+
-                    "border:1px solid "+
-                    (
-                        isChosen
-                        ?"rgba(110,220,255,.5)"
-                        :"rgba(255,255,255,.12)"
-                    )+
-                    ";background:"+
-                    (
-                        isChosen
-                        ?"rgba(110,220,255,.14)"
-                        :"rgba(255,255,255,.03)"
-                    )+
-                    ";color:"+
-                    (
-                        isChosen
-                        ?"#bcecff"
-                        :"#8fa7c7"
-                    )+
-                    ";cursor:pointer;\">"+
-                    (isChosen ? "▶ " : "")+
-                    ship.score.toLocaleString()+
-                    " pts · 🪙"+
-                    (ship.coins || 0)+
-                    " · "+getEquippedLabel(ship)+
-                    "</button>";
-
-            }
-        );
-
-        html+=
-            "</div>";
-
-    }
-
     el.innerHTML=
-        html;
+        '<div style="display:flex;flex-direction:column;gap:5px;">'+
+        ships.map(
+            ship=>
+                renderShipSelectButton(
+                    ship,
+                    ship.id===chosen.id
+                )
+        ).join('')+
+        '</div>';
 
 }
 
@@ -17417,6 +17466,16 @@ function selectStartPlanet(id){
     }
 
     selectedStartPlanet=id;
+
+    /*
+     * Persisted so a fresh app open can return here directly
+     * (see resolveDefaultStartPlanet) rather than always
+     * defaulting to Earth regardless of where the player
+     * actually left off.
+     */
+    planetSave.lastSelectedPlanet=id;
+
+    savePlanetProgress();
 
     selectedLaunchShipId=null;
 
@@ -18455,40 +18514,6 @@ function renderPlanetDetail(id){
 
         ships.forEach(
             ship=>{
-
-                /*
-                 * The free Earth ship isn't a real docked record
-                 * (see FRESH_EARTH in getEarthLaunchCandidates) —
-                 * it only exists as this synthetic placeholder so
-                 * it's visible and launchable, but there's
-                 * nothing in planetSave for deposit/equip/cargo/
-                 * perk actions to actually operate on. Shown as
-                 * its own simple card with just a preview and a
-                 * label, rather than the full interactive ship
-                 * card whose buttons would silently do nothing.
-                 */
-                if(ship.isFresh){
-
-                    const freshCanvasId=
-                        "shipPreview_"+
-                        id+"_"+
-                        ship.id;
-
-                    html+=
-                        '<div class="selected-shape-info" style="gap:10px;">'+
-                        '<canvas id="'+freshCanvasId+'" width="72" height="72" '+
-                        'style="display:block;background:rgba(0,0,0,.25);'+
-                        'border-radius:10px;flex-shrink:0;"></canvas>'+
-                        '<span style="font-size:11px;color:#8fa7c7;">'+
-                        '🚀 Free starter ship — ready to launch, no '+
-                        'prior score, coins, or equipment yet. Nothing '+
-                        'to deposit or equip until it actually flies.'+
-                        '</span>'+
-                        '</div>';
-
-                    return;
-
-                }
 
                 /*
                  * Defensive normalization: every ship should
@@ -33399,91 +33424,92 @@ function startGame(){
 
         }
 
-        if(earthChoice.isFresh){
+        /*
+         * The free ship is now a genuinely real, persisted ship
+         * (see getEarthLaunchCandidates) rather than a virtual
+         * stand-in, so it goes through EXACTLY the same removal
+         * and field-reading path as any other docked ship below
+         * — no more special-cased branch that skipped
+         * removeShip() and left it sitting in both "docked" and
+         * "currently flying" at once. isFresh now only matters
+         * for currentShipWasFresh, which the landing-side
+         * pruning logic still uses to decide whether an empty
+         * result is worth cleaning up.
+         */
+        currentShipWasFresh=
+            !!earthChoice.isFresh;
 
-            currentShipId=null;
+        removeShip(
+            "earth",
+            earthChoice.id
+        );
 
-            currentShipWasFresh=true;
+        currentShipId=
+            earthChoice.id;
 
-            launchScore=0;
+        launchScore=
+            Number(
+                earthChoice.score
+            ) || 0;
 
-        }else{
+        launchCoins=
+            Number(
+                earthChoice.coins
+            ) || 0;
 
-            currentShipWasFresh=false;
-
-            removeShip(
-                "earth",
-                earthChoice.id
+        launchMaterials=
+            clampMaterials(
+                earthChoice.materials ||
+                {}
             );
 
-            currentShipId=
-                earthChoice.id;
+        launchEquipment=
+            earthChoice.equipment ||
+            "emp";
 
-            launchScore=
+        launchPerk=
+            earthChoice.perk ||
+            null;
+
+        launchMaterialCapBonus=
+            earthChoice.materialCapBonus ||
+            0;
+
+        launchHasDualPerk=
+            !!earthChoice.hasDualPerk;
+
+        launchPerk2=
+            earthChoice.perk2 ||
+            null;
+
+        launchCargoPets=
+            Array.isArray(
+                earthChoice.cargoPets
+            )
+            ?earthChoice.cargoPets
+            :[];
+
+        launchCargoPetCapacity=
+            Math.max(
+                1,
+                Math.floor(
+                    earthChoice.cargoPetCapacity
+                ) || 1
+            );
+
+        launchWave=
+            Number(
+                earthChoice.wave
+            ) || 1;
+
+        launchLives=
+            clamp(
                 Number(
-                    earthChoice.score
-                ) || 0;
-
-            launchCoins=
-                Number(
-                    earthChoice.coins
-                ) || 0;
-
-            launchMaterials=
-                clampMaterials(
-                    earthChoice.materials ||
-                    {}
-                );
-
-            launchEquipment=
-                earthChoice.equipment ||
-                "emp";
-
-            launchPerk=
-                earthChoice.perk ||
-                null;
-
-            launchMaterialCapBonus=
-                earthChoice.materialCapBonus ||
-                0;
-
-            launchHasDualPerk=
-                !!earthChoice.hasDualPerk;
-
-            launchPerk2=
-                earthChoice.perk2 ||
-                null;
-
-            launchCargoPets=
-                Array.isArray(
-                    earthChoice.cargoPets
-                )
-                ?earthChoice.cargoPets
-                :[];
-
-            launchCargoPetCapacity=
-                Math.max(
-                    1,
-                    Math.floor(
-                        earthChoice.cargoPetCapacity
-                    ) || 1
-                );
-
-            launchWave=
-                Number(
-                    earthChoice.wave
-                ) || 1;
-
-            launchLives=
-                clamp(
-                    Number(
-                        earthChoice.lives
-                    ) || 3,
-                    1,
-                    3
-                );
-
-        }
+                    earthChoice.lives
+                ) || 3,
+                1,
+                3
+            );
 
         selectedLaunchShipId=
             null;
@@ -38420,6 +38446,9 @@ bestScoreEl.textContent=
     highScore.toLocaleString();
 
 updateHUD();
+
+selectedStartPlanet=
+    resolveDefaultStartPlanet();
 
 renderPlanetMap();
 
