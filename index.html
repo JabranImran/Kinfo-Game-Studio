@@ -5494,15 +5494,12 @@ function setPetRole(planetId,petId,role){
     ){
 
         if(
-            getBank(planetId)<
-            PET_PILOT_ASSIGNMENT_FEE
+            !spendCoins(
+                planetId,
+                PET_PILOT_ASSIGNMENT_FEE
+            )
         )
             return;
-
-        addToBank(
-            planetId,
-            -PET_PILOT_ASSIGNMENT_FEE
-        );
 
         addRankPoints(
             10,"Assigned a pilot"
@@ -5682,14 +5679,9 @@ function buyPet(planetId){
         computePetCost(planetId);
 
     if(
-        getBank(planetId)<cost
+        !spendCoins(planetId,cost)
     )
         return;
-
-    addToBank(
-        planetId,
-        -cost
-    );
 
     if(!planetSave.pets){
 
@@ -5809,15 +5801,12 @@ function feedPet(planetId,petId){
         return;
 
     if(
-        getBank(planetId)<
-        PET_FOOD_COST
+        !spendCoins(
+            planetId,
+            PET_FOOD_COST
+        )
     )
         return;
-
-    addToBank(
-        planetId,
-        -PET_FOOD_COST
-    );
 
     pet.energy=
         Math.min(
@@ -5947,14 +5936,9 @@ function trainPetStat(planetId,petId,statName){
         );
 
     if(
-        getBank(planetId)<cost
+        !spendCoins(planetId,cost)
     )
         return;
-
-    addToBank(
-        planetId,
-        -cost
-    );
 
     pet[fieldName]=
         currentLevel+1;
@@ -6728,15 +6712,12 @@ function buyStructureUpgrade(planetId,upgradeId){
         return;
 
     if(
-        getBank(planetId)<
-        upgrade.buyCost
+        !spendCoins(
+            planetId,
+            upgrade.buyCost
+        )
     )
         return;
-
-    addToBank(
-        planetId,
-        -upgrade.buyCost
-    );
 
     if(!planetSave.purchasedUpgrades){
 
@@ -7376,7 +7357,9 @@ function renderStructureUpgradesHtml(planetId,structureId){
             }else if(unlocked){
 
                 const canBuy=
-                    getBank(planetId)>=
+                    getTotalAvailableCoins(
+                        planetId
+                    )>=
                     upgrade.buyCost;
 
                 sectionHtml+=
@@ -8916,6 +8899,368 @@ function addToMaterialBank(planetId,materialId,amount){
 
 }
 
+/*
+ * SHIP-BACKED SPENDING
+ *
+ * Coins and materials sitting on a docked ship are real
+ * resources at this planet, just not deposited yet -- for the
+ * player's convenience, any purchase here can draw on them
+ * automatically when the planet's own bank/material store comes
+ * up short, rather than forcing a manual deposit first. Bank
+ * storage is always drained first (it's the "already settled"
+ * pile); ships are only touched for whatever's left over, taken
+ * ship by ship in docking order.
+ */
+function getTotalDockedCoins(planetId){
+
+    return(
+        getShips(planetId) || []
+    ).reduce(
+        (sum,ship) =>
+            sum+(ship.coins || 0),
+        0
+    );
+
+}
+
+function getTotalAvailableCoins(planetId){
+
+    return(
+        getBank(planetId)+
+        getTotalDockedCoins(planetId)
+    );
+
+}
+
+/*
+ * Attempts to spend `amount` coins at planetId, bank first then
+ * ships. Returns true and actually deducts only if the combined
+ * total covers it in full -- never a partial spend.
+ */
+function spendCoins(planetId,amount){
+
+    if(amount<=0)
+        return true;
+
+    if(
+        getTotalAvailableCoins(planetId)<
+        amount
+    )
+        return false;
+
+    let remaining=amount;
+
+    const bankTake=
+        Math.min(
+            getBank(planetId),
+            remaining
+        );
+
+    if(bankTake>0){
+
+        addToBank(
+            planetId,
+            -bankTake
+        );
+
+        remaining-=bankTake;
+
+    }
+
+    if(remaining>0){
+
+        const ships=
+            getShips(planetId) || [];
+
+        for(const ship of ships){
+
+            if(remaining<=0)
+                break;
+
+            const shipTake=
+                Math.min(
+                    ship.coins || 0,
+                    remaining
+                );
+
+            if(shipTake>0){
+
+                ship.coins-=
+                    shipTake;
+
+                remaining-=
+                    shipTake;
+
+            }
+
+        }
+
+        savePlanetProgress();
+
+    }
+
+    return true;
+
+}
+
+function getTotalDockedMaterial(planetId,materialId){
+
+    return(
+        getShips(planetId) || []
+    ).reduce(
+        (sum,ship) =>
+            sum+
+            (
+                (ship.materials || {})[
+                    materialId
+                ] || 0
+            ),
+        0
+    );
+
+}
+
+function getTotalAvailableMaterial(planetId,materialId){
+
+    const bankAmount=
+        (
+            (
+                planetSave.materialBanks ||
+                {}
+            )[planetId] || {}
+        )[materialId] || 0;
+
+    return(
+        bankAmount+
+        getTotalDockedMaterial(
+            planetId,
+            materialId
+        )
+    );
+
+}
+
+function spendMaterial(planetId,materialId,amount){
+
+    if(amount<=0)
+        return true;
+
+    if(
+        getTotalAvailableMaterial(
+            planetId,
+            materialId
+        )<amount
+    )
+        return false;
+
+    let remaining=amount;
+
+    const bankAmount=
+        (
+            (
+                planetSave.materialBanks ||
+                {}
+            )[planetId] || {}
+        )[materialId] || 0;
+
+    const bankTake=
+        Math.min(
+            bankAmount,
+            remaining
+        );
+
+    if(bankTake>0){
+
+        addToMaterialBank(
+            planetId,
+            materialId,
+            -bankTake
+        );
+
+        remaining-=bankTake;
+
+    }
+
+    if(remaining>0){
+
+        const ships=
+            getShips(planetId) || [];
+
+        for(const ship of ships){
+
+            if(remaining<=0)
+                break;
+
+            if(!ship.materials)
+                continue;
+
+            const shipAmount=
+                ship.materials[
+                    materialId
+                ] || 0;
+
+            const shipTake=
+                Math.min(
+                    shipAmount,
+                    remaining
+                );
+
+            if(shipTake>0){
+
+                ship.materials[
+                    materialId
+                ]=
+                    shipAmount-
+                    shipTake;
+
+                remaining-=
+                    shipTake;
+
+            }
+
+        }
+
+        savePlanetProgress();
+
+    }
+
+    return true;
+
+}
+
+/*
+ * Aggregate totals across every docked ship at a planet, by
+ * material id -- used to build the Vault tab's "Ships' Stock"
+ * section without each caller re-summing the fleet itself.
+ */
+function getDockedMaterialTotals(planetId){
+
+    const totals={};
+
+    (
+        getShips(planetId) || []
+    ).forEach(
+        ship=>{
+
+            if(!ship.materials)
+                return;
+
+            for(
+                const materialId in
+                ship.materials
+            ){
+
+                const amount=
+                    ship.materials[
+                        materialId
+                    ];
+
+                if(amount>0){
+
+                    totals[materialId]=
+                        (
+                            totals[
+                                materialId
+                            ] || 0
+                        )+amount;
+
+                }
+
+            }
+
+        }
+    );
+
+    return totals;
+
+}
+
+/*
+ * Sweeps every docked ship's coins into the bank at once -- the
+ * bulk version of a single ship's own "Save to Vault" button, for
+ * the Vault tab's aggregate section.
+ */
+function depositAllShipCoins(planetId){
+
+    const ships=
+        getShips(planetId) || [];
+
+    let total=0;
+
+    ships.forEach(
+        ship=>{
+
+            if(ship.coins>0){
+
+                total+=ship.coins;
+
+                ship.coins=0;
+
+            }
+
+        }
+    );
+
+    if(total>0){
+
+        addToBank(
+            planetId,
+            total
+        );
+
+    }
+
+}
+
+/*
+ * Same idea for materials -- sweeps ONE material id off every
+ * docked ship into the bank, since the aggregate section shows
+ * (and lets the player save) one material row at a time rather
+ * than an all-or-nothing dump.
+ */
+function depositAllShipMaterial(planetId,materialId){
+
+    const ships=
+        getShips(planetId) || [];
+
+    let total=0;
+
+    ships.forEach(
+        ship=>{
+
+            if(!ship.materials)
+                return;
+
+            const amount=
+                ship.materials[
+                    materialId
+                ] || 0;
+
+            if(amount>0){
+
+                total+=amount;
+
+                ship.materials[
+                    materialId
+                ]=0;
+
+            }
+
+        }
+    );
+
+    if(total>0){
+
+        addToMaterialBank(
+            planetId,
+            materialId,
+            total
+        );
+
+    }
+
+}
+
 function depositShipMaterials(planetId,shipId){
 
     const ship=
@@ -9104,15 +9449,12 @@ function buyShopItem(planetId){
         return;
 
     if(
-        getBank(planetId)<
-        item.cost
+        !spendCoins(
+            planetId,
+            item.cost
+        )
     )
         return;
-
-    addToBank(
-        planetId,
-        -item.cost
-    );
 
     addItemStock(
         planetId,
@@ -9603,15 +9945,12 @@ function buyPerk(planetId,perkId){
         return;
 
     if(
-        getBank(planetId)<
-        perk.buyCost
+        !spendCoins(
+            planetId,
+            perk.buyCost
+        )
     )
         return;
-
-    addToBank(
-        planetId,
-        -perk.buyCost
-    );
 
     addPerkAvailable(
         planetId,
@@ -17239,14 +17578,9 @@ function queueShipBuild(planetId,options){
         cost+=4;
 
     if(
-        getBank(planetId)<cost
+        !spendCoins(planetId,cost)
     )
         return;
-
-    addToBank(
-        planetId,
-        -cost
-    );
 
     if(!planetSave.buildQueue){
 
@@ -17346,14 +17680,9 @@ function buildStructure(planetId,structureId){
         );
 
     if(
-        getBank(planetId)<cost
+        !spendCoins(planetId,cost)
     )
         return;
-
-    addToBank(
-        planetId,
-        -cost
-    );
 
     if(!planetSave.buildQueue){
 
@@ -18780,6 +19109,97 @@ function renderPlanetDetail(id){
         )+
         '</div>';
 
+    /*
+     * Ships' Stock — everything sitting on docked ships,
+     * totalled across the fleet, shown so it's genuinely usable
+     * without a manual deposit first (buyShopItem and friends
+     * already draw on it automatically via spendCoins/
+     * spendMaterial). The Save to Vault buttons here are purely
+     * for the player's own bookkeeping — consolidating into the
+     * bank isn't required for any of it to spend correctly.
+     */
+    const shipCoinTotal=
+        getTotalDockedCoins(id);
+
+    const shipMaterialTotals=
+        getDockedMaterialTotals(id);
+
+    const shipMaterialEntries=
+        Object.entries(
+            shipMaterialTotals
+        ).filter(
+            ([,amount]) => amount>0
+        );
+
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        'Ships\' Stock</div>';
+
+    if(
+        shipCoinTotal<=0 &&
+        !shipMaterialEntries.length
+    ){
+
+        html+=
+            '<div style="font-size:10px;color:#5c7ba0;'+
+            'padding:4px 0;">Nothing stocked on docked '+
+            'ships here yet — coins and materials your '+
+            'ships bring back show up here, and already '+
+            'spend automatically if the bank runs '+
+            'short.</div>';
+
+    }
+
+    if(shipCoinTotal>0){
+
+        html+=
+            '<div class="selected-shape-info">'+
+            '<span>🪙 Coins on ships</span>'+
+            '<strong>'+
+            shipCoinTotal.toLocaleString()+
+            ' 🪙</strong>'+
+            '</div>'+
+            '<button class="control-btn" '+
+            'data-action="deposit-all-ship-coins" '+
+            'style="width:auto;padding:7px 10px;'+
+            'margin-bottom:8px;display:flex;'+
+            'align-items:center;gap:5px;">'+
+            '<span>🪙</span><span style="opacity:.5;">→</span>'+
+            '<span>🏦</span><span>Save to Vault</span>'+
+            '</button>';
+
+    }
+
+    shipMaterialEntries.forEach(
+        ([materialId,amount])=>{
+
+            const info=
+                MATERIALS[materialId] ||
+                MATERIALS["aether-dust"];
+
+            html+=
+                '<div class="selected-shape-info">'+
+                '<span>'+info.icon+' '+info.name+
+                ' on ships <span style="opacity:.6;'+
+                'font-size:9px;">×'+amount+'</span></span>'+
+                '<button class="control-btn" '+
+                'data-action="deposit-all-ship-material" '+
+                'data-material="'+materialId+'" '+
+                'style="width:auto;padding:7px 10px;'+
+                'display:flex;align-items:center;gap:5px;">'+
+                '<span>'+info.icon+'</span>'+
+                '<span style="opacity:.5;">→</span>'+
+                '<span>🏦</span>'+
+                '</button>'+
+                '</div>';
+
+        }
+    );
+
+    html+=
+        '</div>';
+
     }
 
     /* -------- Material Bank (declared for every tab, since Vault,
@@ -18806,7 +19226,8 @@ function renderPlanetDetail(id){
     if(shopItem){
 
         const affordable=
-            bank>=shopItem.cost;
+            getTotalAvailableCoins(id)>=
+            shopItem.cost;
 
         const itemExpanded=
             expandedShopRowId===
@@ -18905,7 +19326,8 @@ function renderPlanetDetail(id){
 
         const canBuyPerk=
             perkAvailableHere>0 &&
-            bank>=perk.buyCost;
+            getTotalAvailableCoins(id)>=
+            perk.buyCost;
 
         const perkExpanded=
             expandedShopRowId===
@@ -20088,7 +20510,8 @@ function renderPlanetDetail(id){
         computePetCost(id);
 
     const canAffordPet=
-        bank>=petCost;
+        getTotalAvailableCoins(id)>=
+        petCost;
 
     html+=
         '<div class="customizer-section">'+
@@ -20137,7 +20560,8 @@ function renderPlanetDetail(id){
                     'data-pet="'+pet.id+'" '+
                     (
                         pet.energy>=100 ||
-                        bank<PET_FOOD_COST
+                        getTotalAvailableCoins(id)<
+                        PET_FOOD_COST
                         ?'disabled'
                         :''
                     )+
@@ -20167,7 +20591,8 @@ function renderPlanetDetail(id){
                         'data-role="pilot" '+
                         (
                             role!=="pilot" &&
-                            bank<PET_PILOT_ASSIGNMENT_FEE
+                            getTotalAvailableCoins(id)<
+                            PET_PILOT_ASSIGNMENT_FEE
                             ?'disabled'
                             :''
                         )+
@@ -20239,7 +20664,8 @@ function renderPlanetDetail(id){
                                 statKey+'" '+
                                 (
                                     maxed ||
-                                    bank<trainCost
+                                    getTotalAvailableCoins(id)<
+                                    trainCost
                                     ?'disabled'
                                     :''
                                 )+
@@ -20548,7 +20974,8 @@ function renderPlanetDetail(id){
 
             const canBuild=
                 workingPetsHere>0 &&
-                bank>=structureCost;
+                getTotalAvailableCoins(id)>=
+                structureCost;
 
             rowHtml+=
                 '<button class="remove-btn" style="background:'+
@@ -20708,7 +21135,8 @@ function renderPlanetDetail(id){
             computeShipBuildDuration(id);
 
         const canAfford=
-            bank>=shipCost;
+            getTotalAvailableCoins(id)>=
+            shipCost;
 
         html+=
             '<div class="metric-callout">'+
@@ -21216,6 +21644,46 @@ document
                 pickerKey
                 ?null
                 :pickerKey;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="deposit-all-ship-coins"
+        ){
+
+            depositAllShipCoins(
+                planetDetailId
+            );
+
+            flyIconFrom(target,"🪙");
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="deposit-all-ship-material"
+        ){
+
+            const materialId=
+                target.getAttribute(
+                    "data-material"
+                );
+
+            depositAllShipMaterial(
+                planetDetailId,
+                materialId
+            );
+
+            flyIconFrom(
+                target,
+                (
+                    MATERIALS[materialId] ||
+                    MATERIALS["aether-dust"]
+                ).icon
+            );
 
             renderPlanetDetail(
                 planetDetailId
@@ -21732,8 +22200,10 @@ document
                 unlockCount;
 
             if(
-                getBank(planetDetailId)<
-                cost
+                !spendCoins(
+                    planetDetailId,
+                    cost
+                )
             ){
 
                 showShipToast(
@@ -21742,11 +22212,6 @@ document
                 );
 
             }else{
-
-                addToBank(
-                    planetDetailId,
-                    -cost
-                );
 
                 planetSave.shipStyleUnlockCount=
                     unlockCount+1;
