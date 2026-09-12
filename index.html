@@ -16631,6 +16631,148 @@ let expandedShipCargoId=null;
 let expandedShopRowId=null;
 
 /*
+ * SHIP PICKER — a reusable "which ship should this go to" list,
+ * shared by sending coins, sending a material, and equipping an
+ * item or perk, rather than three separate pickers. Only one
+ * can be open at a time, keyed by a string identifying what's
+ * being sent ("coins", "material-<id>", "equip-<itemId>",
+ * "equip-perk"). Reset alongside the other expand states so it
+ * never survives a tab switch or a re-open on a different
+ * planet.
+ */
+let expandedShipPickerKey=null;
+
+/*
+ * Renders the ship-picker list itself — each docked ship shown
+ * with its own small live preview (the same drawSpacePet-style
+ * canvas approach used for the Ships tab cards), tapping one
+ * performs pickAction immediately. Deliberately visual rather
+ * than a plain text dropdown, per the request to show ships
+ * "like they are shown on the Home Screen" — a real picture of
+ * the actual ship, not a name in a list.
+ */
+function renderShipPickerHtml(planetId,ships,pickerKey,pickAction,extraAttrs){
+
+    if(!ships.length){
+
+        return(
+            '<div style="font-size:10px;color:#5c7ba0;'+
+            'padding:8px;">No ships docked here to send '+
+            'this to.</div>'
+        );
+
+    }
+
+    return(
+        '<div style="display:flex;flex-direction:column;gap:6px;'+
+        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);'+
+        'margin-top:6px;">'+
+        ships.map(
+            ship=>{
+
+                const canvasId=
+                    "pickerShipPreview_"+
+                    planetId+"_"+
+                    pickerKey+"_"+
+                    ship.id;
+
+                return(
+                    '<button class="shape-btn" style="width:100%;'+
+                    'display:flex;align-items:center;gap:10px;'+
+                    'padding:6px 10px;text-align:left;" '+
+                    'data-action="'+pickAction+'" '+
+                    'data-ship="'+ship.id+'" '+
+                    (extraAttrs || '')+'>'+
+                    '<canvas id="'+canvasId+'" width="40" height="40" '+
+                    'style="display:block;background:rgba(0,0,0,.3);'+
+                    'border-radius:8px;flex-shrink:0;"></canvas>'+
+                    '<span style="flex:1;">'+
+                    ship.score.toLocaleString()+' pts</span>'+
+                    '</button>'
+                );
+
+            }
+        ).join('')+
+        '</div>'
+    );
+
+}
+
+/*
+ * Paints the small preview canvases inside an open ship picker —
+ * a lighter one-shot version of paintShipPreviews (no self-loop
+ * or cargo/perk detail), since a picker is a brief selection
+ * moment rather than something worth continuously animating.
+ */
+function paintShipPickerPreviews(planetId,ships,pickerKey){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    ships.forEach(
+        ship=>{
+
+            const canvas=
+                document.getElementById(
+                    "pickerShipPreview_"+
+                    planetId+"_"+
+                    pickerKey+"_"+
+                    ship.id
+                );
+
+            if(!canvas)
+                return;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,0,
+                canvas.width,
+                canvas.height
+            );
+
+            try{
+
+                ctx2d.save();
+
+                ctx2d.translate(
+                    canvas.width/2,
+                    canvas.height/2
+                );
+
+                ctx2d.scale(.09,.09);
+
+                ctx2d.translate(-200,-140);
+
+                shipCustomizer.shapes.forEach(
+                    shape=>{
+
+                        shape.draw(ctx2d,false);
+
+                    }
+                );
+
+                ctx2d.restore();
+
+            }catch(error){
+
+                console.error(
+                    "Ship picker preview failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+}
+
+/*
  * Which optional build toggles are currently checked for the
  * NEXT ship queued at whichever planet is open — resets after
  * each build so it never silently carries over between visits.
@@ -16870,6 +17012,8 @@ function openPlanetDetail(id){
 
     expandedShopRowId=null;
 
+    expandedShipPickerKey=null;
+
     resetPlanetMenuIdleTimer();
 
     startPlanetMenuTipChecking();
@@ -16935,6 +17079,8 @@ function closePlanetDetail(){
     expandedEquipShipId=null;
 
     expandedShopRowId=null;
+
+    expandedShipPickerKey=null;
 
     hidePlanetMenuTip(true);
 
@@ -17116,6 +17262,10 @@ function renderPlanetDetail(id){
 
     if(showVault){
 
+    const vaultCoinPickerOpen=
+        expandedShipPickerKey===
+        "coins";
+
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">Planet Bank</div>'+
@@ -17123,6 +17273,36 @@ function renderPlanetDetail(id){
         '<span>🏦 Bank balance</span>'+
         '<strong>'+bank.toLocaleString()+' 🪙</strong>'+
         '</div>'+
+        (
+            bank>0
+            ?'<button class="control-btn" data-action="toggle-ship-picker" '+
+             'data-picker="coins" style="width:auto;padding:7px 10px;'+
+             'margin-top:8px;display:flex;align-items:center;gap:5px;">'+
+             '<span>🪙</span><span style="opacity:.5;">→</span>'+
+             '<span>🚀</span><span>Send to Ship</span>'+
+             '<span style="opacity:.6;">'+
+             (vaultCoinPickerOpen ? "▲" : "▼")+
+             '</span></button>'+
+             (
+                 vaultCoinPickerOpen
+                 ?'<div class="slider-group" style="margin:8px 0 0;">'+
+                  '<label class="slider-label">Amount</label>'+
+                  '<input type="range" class="slider-input" '+
+                  'min="0" max="'+bank+'" value="0" step="1" '+
+                  'data-action="coin-picker-slider">'+
+                  '<span class="slider-value" id="coinPickerReadout">0</span>'+
+                  '</div>'+
+                  renderShipPickerHtml(
+                      id,
+                      ships,
+                      "coins",
+                      "pick-ship-coins",
+                      ''
+                  )
+                 :''
+             )
+            :''
+        )+
         '</div>';
 
     }
@@ -17335,6 +17515,40 @@ function renderPlanetDetail(id){
             )+
             '</div>';
 
+        if(perkStockHere>0){
+
+            const perkEquipPickerKey=
+                "equip-perk";
+
+            const perkEquipPickerOpen=
+                expandedShipPickerKey===
+                perkEquipPickerKey;
+
+            html+=
+                '<button class="control-btn" data-action="toggle-ship-picker" '+
+                'data-picker="'+perkEquipPickerKey+'" '+
+                'style="width:auto;padding:7px 10px;margin-top:8px;'+
+                'display:flex;align-items:center;gap:5px;">'+
+                '<span>'+perk.icon+'</span>'+
+                '<span style="opacity:.5;">→</span>'+
+                '<span>🚀</span><span>Equip to Ship</span>'+
+                '<span style="opacity:.6;">'+
+                (perkEquipPickerOpen ? "▲" : "▼")+
+                '</span></button>'+
+                (
+                    perkEquipPickerOpen
+                    ?renderShipPickerHtml(
+                        id,
+                        ships,
+                        perkEquipPickerKey,
+                        "pick-ship-equip-perk",
+                        'data-perk="'+perk.id+'"'
+                    )
+                    :''
+                );
+
+        }
+
     }
 
     }
@@ -17498,89 +17712,6 @@ function renderPlanetDetail(id){
                         'display:flex;align-items:center;gap:5px;">'+
                         '<span>📦</span><span style="opacity:.5;">→</span>'+
                         '<span>🏦</span><span>Save to Vault</span></button>'
-                        :''
-                    )+
-                    (
-                        Object.entries(
-                            materialBank
-                        ).filter(
-                            ([materialId,bankCount]) =>
-                                bankCount>0 &&
-                                (
-                                    ship.materials[
-                                        materialId
-                                    ] || 0
-                                )<MATERIAL_CAP+
-                                (ship.materialCapBonus || 0)
-                        ).length
-                        ?'<div style="display:flex;flex-direction:column;gap:6px;'+
-                        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
-                        '<span style="font-size:9px;color:#8fa7c7;">'+
-                        'Withdraw from planet bank:</span>'+
-                        Object.entries(
-                            materialBank
-                        ).filter(
-                            ([materialId,bankCount]) =>
-                                bankCount>0 &&
-                                (
-                                    ship.materials[
-                                        materialId
-                                    ] || 0
-                                )<MATERIAL_CAP+
-                                (ship.materialCapBonus || 0)
-                        ).map(
-                            ([materialId,bankCount])=>{
-
-                                const info=
-                                    MATERIALS[materialId] ||
-                                    MATERIALS["aether-dust"];
-
-                                const room=
-                                    MATERIAL_CAP+
-                                    (ship.materialCapBonus || 0)-
-                                    (
-                                        ship.materials[
-                                            materialId
-                                        ] || 0
-                                    );
-
-                                const grab=
-                                    Math.min(
-                                        bankCount,
-                                        room
-                                    );
-
-                                return(
-                                    '<button class="control-btn" style="width:100%;'+
-                                    'display:flex;justify-content:space-between;'+
-                                    'padding:7px 10px;" data-action="withdraw-material" '+
-                                    'data-ship="'+ship.id+'" data-material="'+
-                                    materialId+'">'+
-                                    '<span>'+info.icon+' '+info.name+'</span>'+
-                                    '<span style="opacity:.7;">+'+grab+
-                                    ' (bank has '+bankCount+')</span>'+
-                                    '</button>'
-                                );
-
-                            }
-                        ).join("")+
-                        '</div>'
-                        :''
-                    )+
-                    (
-                        bank>0
-                        ?'<div class="slider-group" style="margin-bottom:0;">'+
-                        '<label class="slider-label">Withdraw</label>'+
-                        '<input type="range" class="slider-input" '+
-                        'min="0" max="'+bank+'" value="0" step="1" '+
-                        'data-action="withdraw-slider" data-ship="'+
-                        ship.id+'">'+
-                        '<span class="slider-value" data-withdraw-readout="'+
-                        ship.id+'">0</span>'+
-                        '</div>'+
-                        '<button class="control-btn" data-action="withdraw" data-ship="'+
-                        ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;">'+
-                        'Confirm withdrawal</button>'
                         :''
                     )+
                     '<button class="control-btn" data-action="toggle-equip" data-ship="'+
@@ -18202,11 +18333,27 @@ function renderPlanetDetail(id){
                 const info=
                     getItemInfo(itemId);
 
+                const equipPickerKey=
+                    "equip-"+itemId;
+
+                const equipPickerOpen=
+                    expandedShipPickerKey===
+                    equipPickerKey;
+
                 html+=
                     '<div class="selected-shape-info">'+
                     '<span>'+info.icon+' '+info.name+
                     ' <span style="opacity:.6;font-size:9px;">×'+
                     count+'</span></span>'+
+                    '<div style="display:flex;gap:6px;">'+
+                    '<button class="control-btn" data-action="toggle-ship-picker" '+
+                    'data-picker="'+equipPickerKey+'" '+
+                    'style="width:auto;padding:7px 10px;'+
+                    'display:flex;align-items:center;gap:5px;">'+
+                    '<span>'+info.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🚀</span>'+
+                    '</button>'+
                     '<button class="remove-btn" data-action="sell-item" '+
                     'style="display:flex;align-items:center;gap:5px;" '+
                     'data-item="'+itemId+'">'+
@@ -18215,7 +18362,19 @@ function renderPlanetDetail(id){
                     '<span>🪙</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
                     '</button>'+
-                    '</div>';
+                    '</div>'+
+                    '</div>'+
+                    (
+                        equipPickerOpen
+                        ?renderShipPickerHtml(
+                            id,
+                            ships,
+                            equipPickerKey,
+                            "pick-ship-equip-item",
+                            'data-item="'+itemId+'"'
+                        )
+                        :''
+                    );
 
             }
         );
@@ -18227,11 +18386,27 @@ function renderPlanetDetail(id){
                     MATERIALS[materialId] ||
                     MATERIALS["aether-dust"];
 
+                const sendPickerKey=
+                    "material-"+materialId;
+
+                const sendPickerOpen=
+                    expandedShipPickerKey===
+                    sendPickerKey;
+
                 html+=
                     '<div class="selected-shape-info">'+
                     '<span>'+info.icon+' '+info.name+
                     ' <span style="opacity:.6;font-size:9px;">×'+
                     count+'</span></span>'+
+                    '<div style="display:flex;gap:6px;">'+
+                    '<button class="control-btn" data-action="toggle-ship-picker" '+
+                    'data-picker="'+sendPickerKey+'" '+
+                    'style="width:auto;padding:7px 10px;'+
+                    'display:flex;align-items:center;gap:5px;">'+
+                    '<span>'+info.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🚀</span>'+
+                    '</button>'+
                     '<button class="remove-btn" data-action="sell-material" '+
                     'style="display:flex;align-items:center;gap:5px;" '+
                     'data-material="'+materialId+'">'+
@@ -18240,7 +18415,19 @@ function renderPlanetDetail(id){
                     '<span>🪙</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
                     '</button>'+
-                    '</div>';
+                    '</div>'+
+                    '</div>'+
+                    (
+                        sendPickerOpen
+                        ?renderShipPickerHtml(
+                            id,
+                            ships,
+                            sendPickerKey,
+                            "pick-ship-material",
+                            'data-material="'+materialId+'"'
+                        )
+                        :''
+                    );
 
             }
         );
@@ -19253,6 +19440,16 @@ function renderPlanetDetail(id){
         ships
     );
 
+    if(expandedShipPickerKey){
+
+        paintShipPickerPreviews(
+            id,
+            ships,
+            expandedShipPickerKey
+        );
+
+    }
+
     paintPetSpeciesGallery(
         id
     );
@@ -19269,20 +19466,14 @@ document
 
         if(
             !event.target.matches(
-                'input[data-action="withdraw-slider"]'
+                'input[data-action="coin-picker-slider"]'
             )
         )
             return;
 
-        const shipId=
-            event.target.getAttribute(
-                "data-ship"
-            );
-
         const readout=
-            document.querySelector(
-                '[data-withdraw-readout="'+
-                shipId+'"]'
+            document.getElementById(
+                "coinPickerReadout"
             );
 
         if(readout){
@@ -19368,29 +19559,34 @@ document
             );
 
         }else if(
-            action==="withdraw-material"
+            action==="toggle-ship-picker"
         ){
 
-            const materialId=
+            const pickerKey=
                 target.getAttribute(
-                    "data-material"
+                    "data-picker"
                 );
 
-            withdrawMaterialToShip(
-                planetDetailId,
-                shipId,
-                materialId
+            expandedShipPickerKey=
+                expandedShipPickerKey===
+                pickerKey
+                ?null
+                :pickerKey;
+
+            renderPlanetDetail(
+                planetDetailId
             );
 
         }else if(
-            action==="withdraw"
+            action==="pick-ship-coins"
         ){
 
             const slider=
                 document.querySelector(
-                    'input[data-action="withdraw-slider"][data-ship="'+
-                    shipId+'"]'
+                    'input[data-action="coin-picker-slider"]'
                 );
+
+            flyIconFrom(target,"🪙");
 
             withdrawToShip(
                 planetDetailId,
@@ -19398,6 +19594,84 @@ document
                 slider
                 ?slider.value
                 :0
+            );
+
+            expandedShipPickerKey=null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="pick-ship-material"
+        ){
+
+            const materialId=
+                target.getAttribute(
+                    "data-material"
+                );
+
+            flyIconFrom(
+                target,
+                (
+                    MATERIALS[materialId] ||
+                    MATERIALS["aether-dust"]
+                ).icon
+            );
+
+            withdrawMaterialToShip(
+                planetDetailId,
+                shipId,
+                materialId
+            );
+
+            expandedShipPickerKey=null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="pick-ship-equip-item"
+        ){
+
+            const itemId=
+                target.getAttribute(
+                    "data-item"
+                );
+
+            equipItemAt(
+                planetDetailId,
+                shipId,
+                itemId
+            );
+
+            expandedShipPickerKey=null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="pick-ship-equip-perk"
+        ){
+
+            const perkId=
+                target.getAttribute(
+                    "data-perk"
+                );
+
+            equipPerkAt(
+                planetDetailId,
+                shipId,
+                perkId || null,
+                1
+            );
+
+            expandedShipPickerKey=null;
+
+            renderPlanetDetail(
+                planetDetailId
             );
 
         }else if(
