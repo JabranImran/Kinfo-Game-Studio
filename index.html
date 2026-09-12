@@ -741,9 +741,29 @@ body{
 }
 
 .focus-btn.primary{
-    border-color:rgba(120,220,255,.7);
-    background:rgba(40,120,210,.55);
+    /*
+     * Now the single action in this row (Planet Menu was
+     * removed — every tab it opened is reachable by tapping the
+     * planet directly), so it's sized to be the obvious, unmissable
+     * thing to press rather than sharing visual weight with a
+     * second button.
+     */
+    width:100%;
+    padding:18px 16px;
+    font-size:16px;
+    letter-spacing:1px;
+    border-radius:16px;
+    border-color:rgba(120,220,255,.8);
+    background:
+        linear-gradient(
+            180deg,
+            rgba(70,160,255,.65),
+            rgba(35,110,200,.65)
+        );
     color:#ffffff;
+    box-shadow:
+        0 0 24px rgba(90,180,255,.4),
+        0 8px 20px rgba(0,0,0,.35);
 }
 
 .focus-btn:disabled{
@@ -2614,11 +2634,7 @@ and (max-height:500px){
             <div class="focus-actions">
 
                 <button class="focus-btn primary" id="focusLaunchBtn">
-                    Launch Mission
-                </button>
-
-                <button class="focus-btn" id="focusMenuBtn">
-                    🪐 Planet Menu
+                    🚀 Launch Mission
                 </button>
 
             </div>
@@ -6819,6 +6835,122 @@ function paintPetPreviews(planetId,pets){
                 paintPetPreviews(
                     planetId,
                     pets
+                )
+        );
+
+    }
+
+}
+
+/*
+ * Paints each docked ship's actual design into its small preview
+ * canvas in the Ships tab — the same shipCustomizer.shapes every
+ * other view uses, just scaled down to fit, with that specific
+ * ship's own cargo and perk (so a ship carrying a pet shows it
+ * through its window, and a ship with a perk equipped shows the
+ * matching thruster sparks) rather than a generic stand-in.
+ * Engine drawn cold (flameActive false) since these are resting,
+ * docked ships, not mid-flight.
+ */
+function paintShipPreviews(planetId,ships){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    let anyCanvas=false;
+
+    ships.forEach(
+        ship=>{
+
+            const canvas=
+                document.getElementById(
+                    "shipPreview_"+
+                    planetId+"_"+
+                    ship.id
+                );
+
+            if(!canvas)
+                return;
+
+            anyCanvas=true;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            const cargoPetInfo=
+                getCargoPetPreviewInfo(
+                    ship
+                );
+
+            try{
+
+                ctx2d.save();
+
+                ctx2d.translate(
+                    canvas.width/2,
+                    canvas.height/2
+                );
+
+                ctx2d.scale(.16,.16);
+
+                ctx2d.translate(
+                    -200,
+                    -140
+                );
+
+                drawCargoAura(
+                    ctx2d,
+                    cargoPetInfo
+                );
+
+                shipCustomizer.shapes.forEach(
+                    shape=>{
+
+                        shape.draw(
+                            ctx2d,
+                            false,
+                            cargoPetInfo,
+                            ship.perk
+                        );
+
+                    }
+                );
+
+                ctx2d.restore();
+
+            }catch(error){
+
+                console.error(
+                    "Ship preview draw failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+    if(
+        anyCanvas &&
+        planetDetailTab==="ships" &&
+        planetDetailId===planetId
+    ){
+
+        requestAnimationFrame(
+            ()=>
+                paintShipPreviews(
+                    planetId,
+                    ships
                 )
         );
 
@@ -14002,6 +14134,26 @@ function drawPlanetFocusScene(){
     c.restore();
 
     /*
+     * Moved up from further below — needed here now so the
+     * always-present fallback Fleet/Pets icons (added right
+     * after the shop/vault ones) can know whether a real ship
+     * or pet is already on the surface to tap instead.
+     */
+    const focusShips=
+        selectedStartPlanet==="earth"
+        ?getEarthLaunchCandidates()
+        :(
+            getShips(
+                selectedStartPlanet
+            ) || []
+        );
+
+    const focusPets=
+        getPets(
+            selectedStartPlanet
+        );
+
+    /*
      * Surface objects — structures, the launch-ready ship, and
      * pets, positioned along the planet's visible upper curve.
      * Each is placed at an angle around the sphere and drawn
@@ -14039,6 +14191,37 @@ function drawPlanetFocusScene(){
         tab:"vault"
     });
 
+    /*
+     * Fallback icons — only shown when there's nothing else on
+     * the surface that already opens these tabs (a real ship or
+     * a real pet). Without these, a planet with zero docked
+     * ships or zero pets would have no way at all to reach the
+     * Ships or Pets tab now that the separate Planet Menu button
+     * is gone — buying your first pet, or checking Ships with
+     * none currently docked, both depend on this.
+     */
+    if(!focusShips.length){
+
+        surfaceItems.push({
+            kind:"structure",
+            structureId:"fleet-fallback",
+            icon:"🚀",
+            tab:"ships"
+        });
+
+    }
+
+    if(!focusPets.length){
+
+        surfaceItems.push({
+            kind:"structure",
+            structureId:"pets-fallback",
+            icon:"🐾",
+            tab:"pets"
+        });
+
+    }
+
     for(
         const structureId in
         STRUCTURES
@@ -14073,26 +14256,6 @@ function drawPlanetFocusScene(){
      * vessel's scale consistent between the home screen and
      * actual play, and keeps it as the focal point.
      */
-    /*
-     * Earth's free starter ship isn't a docked record, so a
-     * plain ship-list check showed no vessel there even though
-     * one is genuinely available to launch. Using the same
-     * candidate list the launch itself uses keeps the picture
-     * honest — if you can fly from here, you can see the ship.
-     */
-    const focusShips=
-        selectedStartPlanet==="earth"
-        ?getEarthLaunchCandidates()
-        :(
-            getShips(
-                selectedStartPlanet
-            ) || []
-        );
-
-    const focusPets=
-        getPets(
-            selectedStartPlanet
-        );
 
     /*
      * Pets are deliberately NOT part of surfaceItems — unlike a
@@ -17265,8 +17428,18 @@ function renderPlanetDetail(id){
                     expandedEquipShipId===
                     ship.id;
 
+                const shipCanvasId=
+                    "shipPreview_"+
+                    id+"_"+
+                    ship.id;
+
                 html+=
                     '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
+                    '<div style="display:flex;align-items:center;gap:10px;">'+
+                    '<canvas id="'+shipCanvasId+'" width="72" height="72" '+
+                    'style="display:block;background:rgba(0,0,0,.25);'+
+                    'border-radius:10px;flex-shrink:0;"></canvas>'+
+                    '<div style="flex:1;display:flex;flex-direction:column;gap:4px;">'+
                     '<div style="display:flex;justify-content:space-between;">'+
                     '<span><strong>'+
                     ship.score.toLocaleString()+
@@ -17274,6 +17447,8 @@ function renderPlanetDetail(id){
                     '<span>🪙 '+
                     ship.coins.toLocaleString()+
                     ' carried</span>'+
+                    '</div>'+
+                    '</div>'+
                     '</div>'+
                     '<button class="control-btn" data-action="deposit" data-ship="'+
                     ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
@@ -19071,6 +19246,11 @@ function renderPlanetDetail(id){
     paintPetPreviews(
         id,
         getPets(id)
+    );
+
+    paintShipPreviews(
+        id,
+        ships
     );
 
     paintPetSpeciesGallery(
@@ -32581,27 +32761,6 @@ document
         event.stopPropagation();
 
         launchWithAnimation();
-
-    },
-    {passive:false}
-);
-
-document
-.getElementById(
-    "focusMenuBtn"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        resetHomeIdleTimer();
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        openPlanetDetail(
-            selectedStartPlanet
-        );
 
     },
     {passive:false}
