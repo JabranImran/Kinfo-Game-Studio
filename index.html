@@ -5491,6 +5491,10 @@ function setPetRole(planetId,petId,role){
             -PET_PILOT_ASSIGNMENT_FEE
         );
 
+        addRankPoints(
+            10,"Assigned a pilot"
+        );
+
         showShipToast(
             "Pilot training fee paid — "+
             PET_PILOT_ASSIGNMENT_FEE+" 🪙"
@@ -7658,6 +7662,376 @@ function getRankInfo(){
 }
 
 /*
+ * Counts genuine economy engagement this session — feeding,
+ * training, buying, building, upgrading, selling — specifically
+ * EXCLUDING the mission-score and high-score rank contributions,
+ * so it stays a distinct signal from the purely-gameplay ones
+ * the AI/retention models already track. Declared here, ahead
+ * of addRankPoints() which increments it, rather than down with
+ * the other session counters further below — this file has hit
+ * real "referenced before its declaration line ran" bugs before
+ * from assuming a `let` used inside an early function would
+ * always be safe just because the function itself isn't called
+ * until later.
+ */
+let sessionEconomyActions=0;
+
+/*
+ * HEART-LOSS RATE TRACKING
+ *
+ * Raw timestamps of every heart lost this run, and of every
+ * ability activation — kept as plain arrays (not pre-summarized
+ * counters) specifically so effectiveness can be measured as a
+ * genuine before/after comparison around a specific moment,
+ * which a running total can't give you after the fact. Reset
+ * per run (in startGame()), since "did that ability just help"
+ * only makes sense within the run it was actually used in.
+ */
+let heartLossTimestamps=[];
+
+let abilityUseTimestamps=[];
+
+/*
+ * Hearts lost per minute over a trailing window — a continuous,
+ * fine-grained difficulty read, in contrast to the AI window's
+ * own coarse "did a death happen this 5-second window, yes or
+ * no". Kept as its own function (not folded into aiWindow)
+ * since it needs to answer at ANY moment, not just once per
+ * window boundary.
+ */
+function computeHeartLossRate(windowSeconds=45){
+
+    const now=
+        Date.now();
+
+    const cutoff=
+        now-windowSeconds*1000;
+
+    const recentLosses=
+        heartLossTimestamps.filter(
+            t => t>=cutoff
+        );
+
+    return(
+        recentLosses.length/
+        (windowSeconds/60)
+    );
+
+}
+
+function countHeartLossesInRange(start,end){
+
+    return heartLossTimestamps.filter(
+        t => t>=start && t<end
+    ).length;
+
+}
+
+/*
+ * ABILITY EFFECTIVENESS — a targeted, single-purpose loop
+ * measuring something the big linear difficulty model genuinely
+ * can't: whether using this SPECIFIC ability, at this SPECIFIC
+ * moment, actually changed what happened next. Deliberately
+ * separate from that model rather than one more input folded
+ * into it — a linear model can only ever weigh inputs
+ * independently, it can't discover "using the ability right
+ * before a heart loss means something different than using it
+ * mid-cruise" on its own. This answers exactly that, directly.
+ *
+ * Compares heart-loss rate in the EVAL_WINDOW before a use
+ * against the EVAL_WINDOW after it. If the after rate isn't
+ * meaningfully lower, that's read as "this charged in time but
+ * didn't help enough" and nudges the SAME chargeRateCorrection
+ * dial recordDeathCharge() already uses — a second, independent
+ * vote on the same knob, not a competing one.
+ */
+const ABILITY_EVAL_WINDOW=20000;
+
+function evaluateAbilityEffectiveness(){
+
+    const now=
+        Date.now();
+
+    abilityUseTimestamps.forEach(
+        use=>{
+
+            if(use.evaluated)
+                return;
+
+            if(
+                now-use.time<
+                ABILITY_EVAL_WINDOW
+            )
+                return;
+
+            use.evaluated=true;
+
+            const beforeCount=
+                countHeartLossesInRange(
+                    use.time-
+                    ABILITY_EVAL_WINDOW,
+                    use.time
+                );
+
+            const afterCount=
+                countHeartLossesInRange(
+                    use.time,
+                    use.time+
+                    ABILITY_EVAL_WINDOW
+                );
+
+            /*
+             * Only acts when the "before" picture actually
+             * showed some danger (at least one heart lost in
+             * that stretch) — using an ability during a
+             * perfectly calm run and nothing happening
+             * afterward either isn't evidence the ability is
+             * weak, it's just evidence nothing was threatening
+             * to begin with.
+             */
+            if(
+                beforeCount>0 &&
+                afterCount>=beforeCount
+            ){
+
+                if(
+                    !aiModel.chargeRateCorrection[
+                        use.item
+                    ]
+                ){
+
+                    aiModel.chargeRateCorrection[
+                        use.item
+                    ]=1;
+
+                }
+
+                aiModel.chargeRateCorrection[
+                    use.item
+                ]=
+                    clamp(
+                        aiModel.chargeRateCorrection[
+                            use.item
+                        ]+.03,
+                        .7,
+                        1.6
+                    );
+
+                saveAIModel();
+
+            }
+
+        }
+    );
+
+    if(abilityUseTimestamps.length>40){
+
+        abilityUseTimestamps=
+            abilityUseTimestamps.slice(
+                -40
+            );
+
+    }
+
+}
+
+
+/*
+ * SAFE EXPERIMENTATION
+ *
+ * Bounded risk-taking: temporarily nudges one specific tunable
+ * parameter (right now, the equipped ability's charge-rate
+ * correction — the same dial the two measurements above already
+ * vote on) and watches whether heart-loss rate actually responds,
+ * rather than only ever reacting to what already happened. Gated
+ * on more than one heart specifically because the stated worst
+ * case — losing a heart — genuinely can't end the run outright
+ * while that gate holds, which is what makes this safe to try at
+ * all. Only one experiment runs at a time, and it's abandoned
+ * immediately (not just at the end) if the player drops to their
+ * last heart mid-experiment, since the safety gate needs to keep
+ * holding for the WHOLE experiment, not just at the moment it
+ * started.
+ */
+let activeExperiment=null;
+
+const EXPERIMENT_CHANCE_PER_CHECK=.015;
+
+const EXPERIMENT_DURATION=25000;
+
+/*
+ * A temporary window, set on the world clock, during which a
+ * heart-drop's odds run higher than normal — the compensation
+ * for an experiment that made things measurably worse. See
+ * computeHeartDropChance() for how it's actually applied.
+ */
+let heartDropBoostUntil=0;
+
+function maybeStartExperiment(){
+
+    if(activeExperiment)
+        return;
+
+    if(lives<=1)
+        return;
+
+    if(
+        aiModel.experimentCooldown>0
+    )
+        return;
+
+    if(
+        Math.random()>
+        EXPERIMENT_CHANCE_PER_CHECK
+    )
+        return;
+
+    const item=
+        currentShipEquipment ||
+        "emp";
+
+    const original=
+        aiModel.chargeRateCorrection[
+            item
+        ] || 1;
+
+    const testValue=
+        clamp(
+            original+
+            (
+                Math.random()>.5
+                ?.15
+                :-.15
+            ),
+            .7,
+            1.6
+        );
+
+    activeExperiment={
+        item:item,
+        original:original,
+        testValue:testValue,
+        startTime:Date.now(),
+        baselineRate:
+            computeHeartLossRate(30)
+    };
+
+    aiModel.chargeRateCorrection[
+        item
+    ]=testValue;
+
+    aiModel.experimentCooldown=6;
+
+}
+
+function checkExperimentOutcome(){
+
+    if(!activeExperiment)
+        return;
+
+    /*
+     * The safety gate has to hold for the FULL experiment, not
+     * just at the start — dropping to one heart mid-experiment
+     * ends it immediately and reverts, regardless of how much
+     * time has actually elapsed.
+     */
+    if(lives<=1){
+
+        aiModel.chargeRateCorrection[
+            activeExperiment.item
+        ]=
+            activeExperiment.original;
+
+        heartDropBoostUntil=
+            worldTimer+60;
+
+        activeExperiment=null;
+
+        saveAIModel();
+
+        return;
+
+    }
+
+    const elapsed=
+        Date.now()-
+        activeExperiment.startTime;
+
+    if(elapsed<EXPERIMENT_DURATION)
+        return;
+
+    const testRate=
+        computeHeartLossRate(25);
+
+    if(
+        testRate>
+        activeExperiment.baselineRate+.5
+    ){
+
+        /*
+         * Made things measurably worse — revert fully, and
+         * open the compensation window: for the next minute,
+         * a heart drop is more likely if the player is down
+         * to one, since the game just took a chance on them
+         * that didn't pay off.
+         */
+        aiModel.chargeRateCorrection[
+            activeExperiment.item
+        ]=
+            activeExperiment.original;
+
+        heartDropBoostUntil=
+            worldTimer+60;
+
+    }else{
+
+        /*
+         * Neutral or better — commit to it, but only halfway,
+         * rather than jumping straight to the full tested
+         * value off a single 25-second sample.
+         */
+        aiModel.chargeRateCorrection[
+            activeExperiment.item
+        ]=
+            clamp(
+                (
+                    activeExperiment.original+
+                    activeExperiment.testValue
+                )/2,
+                .7,
+                1.6
+            );
+
+    }
+
+    activeExperiment=null;
+
+    saveAIModel();
+
+}
+
+/*
+ * Base rare chance of a heart drop replacing a normal coin drop
+ * when the player is down to their last heart — a small
+ * fairness net independent of experimentation, plus the
+ * temporary boost above when an experiment has just cost them
+ * one.
+ */
+function computeHeartDropChance(){
+
+    if(lives!==1)
+        return 0;
+
+    const boosted=
+        worldTimer<
+        heartDropBoostUntil;
+
+    return boosted ? .12 : .03;
+
+}
+
+
+/*
  * The single entry point every engagement/score/penalty hook
  * below goes through — updates the persisted engagement total,
  * remembers a short history for the expanded detail view, saves,
@@ -7669,6 +8043,16 @@ function addRankPoints(amount,reason){
 
     if(!amount)
         return;
+
+    if(
+        amount>0 &&
+        reason!=="Mission complete" &&
+        reason!=="New high score!"
+    ){
+
+        sessionEconomyActions++;
+
+    }
 
     if(
         typeof planetSave.rankPoints!==
@@ -16197,6 +16581,10 @@ function resolveBuildQueue(planetId){
                     null
                 );
 
+                addRankPoints(
+                    30,"Built a ship"
+                );
+
                 showShipToast(
                     "New ship built at "+
                     (
@@ -21374,17 +21762,29 @@ class Asteroid{
         const difficultyBoost=
             computeSpeedMultiplier();
 
-        this.vx=
-            dx/length*
+        const rawSpeed=
             baseSpeed*
             difficultyBoost*
             this.type.speed;
 
+        /*
+         * this.speed is kept as the actual post-cap magnitude —
+         * used for the speed-based kill bonus and for the AI's
+         * incoming-hit tracking, so both read the real velocity
+         * a rock is moving at rather than recomputing it.
+         */
+        this.speed=
+            applyRelativisticSpeedCap(
+                rawSpeed
+            );
+
+        this.vx=
+            dx/length*
+            this.speed;
+
         this.vy=
             dy/length*
-            baseSpeed*
-            difficultyBoost*
-            this.type.speed;
+            this.speed;
 
         this.vertices=[];
 
@@ -21496,21 +21896,31 @@ class Asteroid{
                     this.vy
                 );
 
-            const maxSpeed=220;
+            /*
+             * Same relativistic-style ceiling as every other
+             * rock, applied here instead of the old fixed 220 —
+             * one coherent, ML-tunable speed limit for the whole
+             * game rather than this one special case answering
+             * to a different, hardcoded rule.
+             */
+            const cappedSpeed=
+                applyRelativisticSpeedCap(
+                    currentSpeed
+                );
 
             if(
-                currentSpeed>maxSpeed
+                currentSpeed>0
             ){
 
                 this.vx=
                     this.vx/
                     currentSpeed*
-                    maxSpeed;
+                    cappedSpeed;
 
                 this.vy=
                     this.vy/
                     currentSpeed*
-                    maxSpeed;
+                    cappedSpeed;
 
             }
 
@@ -22021,11 +22431,12 @@ class Asteroid{
  */
 class CoinPickup{
 
-    constructor(x,y,value){
+    constructor(x,y,value,isHeart=false){
 
         this.x=x;
         this.y=y;
         this.value=value;
+        this.isHeart=isHeart;
 
         this.radius=13;
 
@@ -22104,13 +22515,19 @@ class CoinPickup{
         ctx.shadowBlur=14;
 
         ctx.shadowColor=
-            "#ffd76b";
+            this.isHeart
+            ?"#ff6b8a"
+            :"#ffd76b";
 
         ctx.fillStyle=
-            "#ffe28a";
+            this.isHeart
+            ?"#ff8fa8"
+            :"#ffe28a";
 
         ctx.strokeStyle=
-            "#a97a1a";
+            this.isHeart
+            ?"#a3123f"
+            :"#a97a1a";
 
         ctx.lineWidth=2;
 
@@ -22135,10 +22552,14 @@ class CoinPickup{
         );
 
         ctx.fillStyle=
-            "#8a5c10";
+            this.isHeart
+            ?"#5c0f24"
+            :"#8a5c10";
 
         ctx.font=
-            "bold 13px system-ui";
+            this.isHeart
+            ?"13px system-ui"
+            :"bold 13px system-ui";
 
         ctx.textAlign=
             "center";
@@ -22147,7 +22568,9 @@ class CoinPickup{
             "middle";
 
         ctx.fillText(
-            this.value,
+            this.isHeart
+            ?"❤"
+            :this.value,
             0,
             1
         );
@@ -22322,6 +22745,31 @@ class MaterialPickup{
  * a little more when they do.
  */
 function rollCoinDrop(asteroid){
+
+    /*
+     * Checked first, and returns early on a hit — a heart drop
+     * REPLACES the normal coin roll for this asteroid rather
+     * than stacking with it, per the request ("instead of a
+     * coin"). Only ever rolls at all when lives===1, per
+     * computeHeartDropChance() itself.
+     */
+    if(
+        Math.random()<
+        computeHeartDropChance()
+    ){
+
+        coinPickups.push(
+            new CoinPickup(
+                asteroid.x,
+                asteroid.y,
+                0,
+                true
+            )
+        );
+
+        return;
+
+    }
 
     const isCoinRich=
         asteroid.special===
@@ -23894,11 +24342,33 @@ function detonateAsteroid(
 
     }else{
 
+        /*
+         * Faster rocks pay out more — up to +50% at the actual
+         * speed ceiling, scaling smoothly down to no bonus at
+         * all for a slow one. Read from this.speed (the real
+         * post-relativistic-cap magnitude set at spawn/update),
+         * normalized against the SAME cap so the bonus always
+         * reflects "how close to the current ceiling", which
+         * moves with the ML's own difficulty dial rather than a
+         * fixed number that would drift out of proportion as
+         * the cap itself gets tuned.
+         */
+        const speedRatio=
+            clamp(
+                (asteroid.speed || 0)/
+                getAsteroidSpeedCap(),
+                0,1
+            );
+
+        const speedBonus=
+            1+speedRatio*.5;
+
         earned=
             Math.round(
                 basePoints*
                 combo*
                 asteroid.type.multiplier*
+                speedBonus*
                 (
                     asteroid.special===
                     "elite"
@@ -24518,6 +24988,43 @@ function checkPlayerCollisions(){
             asteroids.splice(
                 i,
                 1
+            );
+
+            /*
+             * Captures exactly what the player was actually
+             * facing when they lost a heart: this rock's real
+             * speed and true direction of travel, and how many
+             * OTHER rocks were sharing the screen with it at
+             * that exact moment — a genuine "was this a fair
+             * hit or an overcrowded one" signal, fed into the
+             * AI model's feature vector below rather than just
+             * logged and forgotten.
+             */
+            aiWindow.hitCount++;
+
+            heartLossTimestamps.push(
+                Date.now()
+            );
+
+            aiWindow.hitSpeedSum+=
+                clamp(
+                    (a.speed || 0)/
+                    getAsteroidSpeedCap(),
+                    0,1
+                );
+
+            aiWindow.hitCrowdingSum+=
+                clamp(
+                    asteroids.length/
+                    14,
+                    0,1
+                );
+
+            aiWindow.hitAngles.push(
+                Math.atan2(
+                    a.vy,
+                    a.vx
+                )
             );
 
             explosions.push(
@@ -26420,7 +26927,7 @@ let empBurstRemaining=0;
 const AI_MODEL_KEY=
     "asteroidImpactAIModel";
 
-const AI_FEATURE_COUNT=9;
+const AI_FEATURE_COUNT=11;
 const AI_INTERVAL=5;
 const AI_LEARNING_RATE=.06;
 
@@ -26438,13 +26945,39 @@ function defaultAIModel(){
 
     return{
 
-        w:[0,0,0,0,0,0,0,0,0],
+        w:[0,0,0,0,0,0,0,0,0,0,0],
         b:0,
         difficulty:1,
         rewardHistory:[],
         skillEstimate:0,
         skillSamples:0,
         experimentCooldown:0,
+
+        /*
+         * PACE — deliberately separate from difficulty. Difficulty
+         * governs DANGER (speed ceiling, size mix, damage-adjacent
+         * intensity); pace governs DENSITY (how often something
+         * new appears). A player can face a fast, aggressive field
+         * of easy rocks, or a slow trickle of dangerous ones —
+         * these are genuinely different axes, and conflating them
+         * (as spawn interval answering to the SAME difficulty dial
+         * used to) meant the only way to make the game feel more
+         * active early on was to also make it more lethal, which
+         * isn't what a slow-feeling build-up actually needs fixed.
+         * Starts above neutral (1.25, not 1) so a fresh install
+         * opens with a genuinely busier field from the first
+         * wave, rather than easing into that from 1 the slow way.
+         */
+        pace:1.25,
+
+        /*
+         * Timestamp of the most recent death, used to detect
+         * rapid repeated deaths (a strong, unambiguous "this is
+         * too hard right now" signal) — kept here so it survives
+         * exactly as long as the rest of the model does, across
+         * sessions, rather than resetting every reload.
+         */
+        lastDeathTime:0,
 
         /*
          * Charge percentage (0..1) each equipped ability was
@@ -26556,6 +27089,24 @@ function loadAIModel(){
                 }
 
                 if(
+                    typeof parsed.pace!==
+                    "number"
+                ){
+
+                    parsed.pace=1.25;
+
+                }
+
+                if(
+                    typeof parsed.lastDeathTime!==
+                    "number"
+                ){
+
+                    parsed.lastDeathTime=0;
+
+                }
+
+                if(
                     !parsed.deathChargeHistory ||
                     typeof parsed.deathChargeHistory!==
                     "object"
@@ -26627,7 +27178,29 @@ let aiWindow={
     coinsLost:0,
     itemUses:0,
     materialsCollected:0,
-    materialsLost:0
+    materialsLost:0,
+
+    /*
+     * Per-hit tracking (a heart lost, not necessarily a death) —
+     * speed and crowding are pre-normalized 0..1 at capture time
+     * (see the capture site) so this window can just sum them
+     * and divide by hitCount for a mean; angles are kept raw,
+     * in radians, since a mean angle needs proper circular
+     * averaging rather than a plain sum.
+     */
+    hitCount:0,
+    hitSpeedSum:0,
+    hitCrowdingSum:0,
+    hitAngles:[],
+
+    /*
+     * Ambient crowding — sampled continuously (not just at the
+     * moment of a hit) so the model has a read on field density
+     * even during a clean run with zero hits, which the hit-only
+     * numbers above could never provide by themselves.
+     */
+    crowdingSampleSum:0,
+    crowdingSamples:0
 
 };
 
@@ -26690,17 +27263,36 @@ function difficultyIntensity(){
  */
 function computeSpawnInterval(){
 
+    /*
+     * Faster floor and a steeper early ramp than before (was
+     * 1.6 down to a .65 floor over ~27 waves) — the actual fix
+     * for "the build-up feels slow": there's simply more to
+     * destroy from wave 1 onward now, independent of danger.
+     */
     const baseSpawnInterval=
         Math.max(
-            .65,
-            1.6-
-            wave*.035
+            .45,
+            1.1-
+            wave*.055
         );
 
+    /*
+     * PACE is now the primary authority over spawn rate — see
+     * its own comment in defaultAIModel() for why it's kept
+     * separate from difficulty. Difficulty still contributes a
+     * much smaller secondary term (sqrt-dampened) so a
+     * struggling player pushed hard on danger doesn't ALSO get
+     * hit with a much busier field on top of that from the old
+     * coupling, while a thriving player still gets some added
+     * pace from difficulty climbing.
+     */
     return clamp(
         baseSpawnInterval/
-        aiModel.difficulty,
-        .5,
+        clamp(aiModel.pace,.7,2.2)/
+        Math.sqrt(
+            clamp(aiModel.difficulty,.8,1.4)
+        ),
+        .3,
         2.2
     );
 
@@ -26738,6 +27330,130 @@ function computeSpeedMultiplier(){
             1.25
         )*
         screenSpeedFactor;
+
+}
+
+/*
+ * The asteroid speed "ceiling", in the same physical spirit as
+ * relativistic mass: pushing velocity higher costs progressively
+ * more, with a hard asymptote nothing can cross no matter how
+ * much difficulty, wave, or an individual rock's own type would
+ * otherwise want to add. Modelled with tanh() rather than a
+ * plain clamp specifically because a clamp is a hard, visible
+ * cutoff — every rock above it moves at literally the same
+ * speed — while tanh() saturates smoothly, so rocks pushing
+ * toward the ceiling still read as distinctly faster than ones
+ * comfortably under it, right up until they're genuinely
+ * indistinguishable near the limit itself.
+ *
+ * The ceiling's own value is what's actually tunable by the ML
+ * — it scales with the SAME learned difficulty dial everything
+ * else in this file already answers to, so a model that's
+ * decided this player can handle more intensity raises the roof
+ * a struggling player never has to worry about hitting.
+ */
+function getAsteroidSpeedCap(){
+
+    const difficultyNorm=
+        clamp(
+            (
+                aiModel.difficulty-.8
+            )/
+            (1.25-.8),
+            0,1
+        );
+
+    return 95+
+        difficultyNorm*70;
+
+}
+
+function applyRelativisticSpeedCap(rawSpeed){
+
+    const cap=
+        getAsteroidSpeedCap();
+
+    return cap*
+        Math.tanh(
+            rawSpeed/cap
+        );
+
+}
+
+/*
+ * Diagnostic only, for the AI Metrics tab — checks whether hits
+ * this window are clustering from one direction far more than a
+ * fair spawn spread would produce. Buckets each hit's true angle
+ * of travel into 8 compass-style directions and reports whichever
+ * bucket is heaviest; a genuinely even spread lands each hit in
+ * one of 8 bins roughly 12.5% of the time, so a bucket running
+ * well above that says the field is coming from somewhere
+ * specific more than chance alone explains — worth a look at the
+ * spawn algorithm itself, which this doesn't attempt to fix,
+ * only surface.
+ */
+function computeHitDirectionBias(){
+
+    const angles=
+        aiWindow.hitAngles || [];
+
+    if(angles.length<3){
+
+        return null;
+
+    }
+
+    const bucketNames=[
+        "→","↘","↓","↙",
+        "←","↖","↑","↗"
+    ];
+
+    const buckets=
+        new Array(8).fill(0);
+
+    angles.forEach(
+        angle=>{
+
+            const normalized=
+                (
+                    (angle+Math.PI*2)%
+                    (Math.PI*2)
+                );
+
+            const bucketIndex=
+                Math.floor(
+                    normalized/
+                    (Math.PI/4)
+                )%8;
+
+            buckets[bucketIndex]++;
+
+        }
+    );
+
+    let maxIndex=0;
+
+    for(
+        let i=1;
+        i<buckets.length;
+        i++
+    ){
+
+        if(buckets[i]>buckets[maxIndex]){
+
+            maxIndex=i;
+
+        }
+
+    }
+
+    return{
+        direction:bucketNames[maxIndex],
+        share:
+            buckets[maxIndex]/
+            angles.length,
+        sampleSize:angles.length
+    };
 
 }
 
@@ -27452,6 +28168,33 @@ function updateAIDifficulty(dt){
             1
         );
 
+    /*
+     * The two new "was this fair" signals — both already
+     * normalized 0..1 at the point they're captured (see the
+     * hit-tracking site and the ambient sampler), so this
+     * window just needs a straight mean. Defaulting to 0 when
+     * there's no data yet this window (a clean run, or before
+     * the very first sample) reads as "nothing concerning
+     * happened", which is the correct neutral reading for both.
+     */
+    const hitQuality=
+        aiWindow.hitCount
+        ?clamp(
+            aiWindow.hitSpeedSum/
+            aiWindow.hitCount,
+            0,1
+        )
+        :0;
+
+    const ambientCrowding=
+        aiWindow.crowdingSamples
+        ?clamp(
+            aiWindow.crowdingSampleSum/
+            aiWindow.crowdingSamples,
+            0,1
+        )
+        :0;
+
     const x=[
         killRate,
         deathOccurred,
@@ -27461,7 +28204,9 @@ function updateAIDifficulty(dt){
         screenScale,
         tapRate,
         retentionEstimate,
-        coinEngagement
+        coinEngagement,
+        hitQuality,
+        ambientCrowding
     ];
 
     /*
@@ -27612,10 +28357,43 @@ function updateAIDifficulty(dt){
     aiModel.difficulty=
         clamp(
             aiModel.difficulty+
-            nudge*.1*
+            nudge*.15*
             nudgeMultiplier,
             .7,
             difficultyCeiling
+        );
+
+    /*
+     * PACE updates on its own, separate rule — driven directly
+     * by ambient crowding rather than the full reward vector
+     * above, since pace is answering a different question
+     * ("does the field feel busy enough") than difficulty is
+     * ("is this dangerous in the right amount"). Target sits
+     * around .45 — busy without being a wall — and a death this
+     * window pulls pace back down regardless of how empty the
+     * field was reading, since piling more targets on top of a
+     * player who's currently struggling is exactly backwards.
+     */
+    const crowdingTarget=.45;
+
+    const crowdingError=
+        crowdingTarget-ambientCrowding;
+
+    let paceNudge=
+        crowdingError*.4;
+
+    if(deathOccurred){
+
+        paceNudge-=.12;
+
+    }
+
+    aiModel.pace=
+        clamp(
+            aiModel.pace+
+            paceNudge,
+            .7,
+            2.2
         );
 
     /*
@@ -27806,6 +28584,12 @@ function updateAIDifficulty(dt){
     aiWindow.empUses=0;
     aiWindow.taps=0;
     aiWindow.coinsCollected=0;
+    aiWindow.hitCount=0;
+    aiWindow.hitSpeedSum=0;
+    aiWindow.hitCrowdingSum=0;
+    aiWindow.hitAngles=[];
+    aiWindow.crowdingSampleSum=0;
+    aiWindow.crowdingSamples=0;
 
 }
 
@@ -27837,7 +28621,7 @@ const RETENTION_MODEL_KEY=
 const SESSION_LOG_KEY=
     "asteroidImpactSessionLog";
 
-const RETENTION_FEATURE_COUNT=7;
+const RETENTION_FEATURE_COUNT=8;
 const RETENTION_LEARNING_RATE=.15;
 const RETENTION_WINDOW_DAYS=7;
 const SESSION_LOG_LIMIT=20;
@@ -27859,7 +28643,7 @@ function defaultRetentionModel(){
 
     return{
 
-        w:[0,0,0,0,0,0,0],
+        w:[0,0,0,0,0,0,0,0],
         b:0,
         pending:null,
         lastLabel:null,
@@ -28127,6 +28911,23 @@ function buildRetentionFeatures(){
             1
         );
 
+    /*
+     * Economy engagement — feeding, training, buying, building,
+     * upgrading, selling, all this session — distinct from
+     * engagementNorm above (which is pure tap rate). The
+     * requested bridge between "how much are they engaging with
+     * the economy" and retention: a player deep in the
+     * management side is a plausible return signal in its own
+     * right, separate from how fast they're tapping in the
+     * field.
+     */
+    const economyEngagementNorm=
+        clamp(
+            sessionEconomyActions/5,
+            0,
+            1
+        );
+
     return[
         scoreRelative,
         isNewHigh,
@@ -28134,7 +28935,8 @@ function buildRetentionFeatures(){
         waveNorm,
         difficultyNorm,
         engagementNorm,
-        tryAgainNorm
+        tryAgainNorm,
+        economyEngagementNorm
     ];
 
 }
@@ -28497,6 +29299,13 @@ function activateEMP(){
         EMP_BURST_POINT_CAP;
 
     aiWindow.empUses++;
+
+    abilityUseTimestamps.push({
+        time:Date.now(),
+        item:
+            currentShipEquipment ||
+            "emp"
+    });
 
     sound("emp");
 
@@ -30399,6 +31208,29 @@ function update(dt){
 
     worldTimer+=dt;
 
+    /*
+     * Ambient crowding sample — every tick, not just at hit
+     * moments, so the model has a density reading even across a
+     * completely clean run. Normalized against 14 as a rough
+     * "field feels genuinely packed" reference point, same
+     * denominator used at the hit-tracking site so both draw
+     * from the same scale.
+     */
+    aiWindow.crowdingSamples++;
+
+    aiWindow.crowdingSampleSum+=
+        clamp(
+            asteroids.length/
+            14,
+            0,1
+        );
+
+    evaluateAbilityEffectiveness();
+
+    maybeStartExperiment();
+
+    checkExperimentOutcome();
+
 
     if(
         empCooldown>0
@@ -32257,6 +33089,53 @@ function endGame(){
 
     closeStarMap();
 
+    /*
+     * FRUSTRATION — an unambiguous "this is too hard right now"
+     * signal that doesn't wait for the normal 5-second learning
+     * window: this run ending quickly AND the previous one also
+     * having ended recently means the player is dying repeatedly
+     * in quick succession, not just unlucky once. Responds
+     * immediately and directly (both danger and pace ease off
+     * together, since a rapid-death spiral is exactly the wrong
+     * moment to be precious about which axis caused it) rather
+     * than waiting for the gradual, evidence-weighing nudge the
+     * rest of the model uses for everything else.
+     */
+    const now=
+        Date.now();
+
+    const survivedBriefly=
+        worldTimer<15;
+
+    const diedRecently=
+        (now-aiModel.lastDeathTime)<
+        90000;
+
+    if(
+        survivedBriefly &&
+        diedRecently
+    ){
+
+        aiModel.difficulty=
+            clamp(
+                aiModel.difficulty-.12,
+                .7,
+                1.4
+            );
+
+        aiModel.pace=
+            clamp(
+                aiModel.pace-.25,
+                .7,
+                2.2
+            );
+
+        saveAIModel();
+
+    }
+
+    aiModel.lastDeathTime=now;
+
     const isNewRecord=
         score>highScore;
 
@@ -32856,6 +33735,12 @@ function startGame(){
     aiWindow.itemUses=0;
     aiWindow.materialsCollected=0;
     aiWindow.materialsLost=0;
+    aiWindow.hitCount=0;
+    aiWindow.hitSpeedSum=0;
+    aiWindow.hitCrowdingSum=0;
+    aiWindow.hitAngles=[];
+    aiWindow.crowdingSampleSum=0;
+    aiWindow.crowdingSamples=0;
 
     sessionStartTime=
         Date.now();
@@ -33230,6 +34115,34 @@ function handlePointer(event){
             )<=
             c.radius+18
         ){
+
+            if(c.isHeart){
+
+                lives=
+                    Math.min(
+                        lives+1,
+                        3
+                    );
+
+                coinPickups.splice(
+                    i,
+                    1
+                );
+
+                floatingText(
+                    "+1 ❤",
+                    p.x,
+                    p.y,
+                    "#ff8d8d"
+                );
+
+                sound(
+                    "click"
+                );
+
+                continue;
+
+            }
 
             const awarded=
                 Math.round(
@@ -34885,6 +35798,31 @@ function renderAIMetrics(){
         'you\'re outgrowing your own normal, not some fixed bar.'+
         '</div>';
 
+    html+=
+        '<div class="metric-callout">'+
+        'Pace runs separately at <b>'+
+        aiModel.pace.toFixed(2)+'×</b> density — how OFTEN '+
+        'something new appears, tuned independently from how '+
+        'dangerous it is once it does. A rapid pair of quick '+
+        'deaths also triggers an immediate correction to both, '+
+        'rather than waiting for the next 5-second check.'+
+        '</div>';
+
+    const hitBias=
+        computeHitDirectionBias();
+
+    if(hitBias){
+
+        html+=
+            '<div class="metric-note">'+
+            '🎯 Recent hits skew '+hitBias.direction+
+            ' ('+(hitBias.share*100).toFixed(0)+
+            '% of last '+hitBias.sampleSize+
+            ') — diagnostic only, not yet acted on.'+
+            '</div>';
+
+    }
+
     const outMix=
         computeSizeMix();
 
@@ -34899,6 +35837,16 @@ function renderAIMetrics(){
                 1
             ),
             computeSpawnInterval().toFixed(2)+"s/rock"
+        )+
+        metricRow(
+            "Pace (density, separate from danger)",
+            clamp(
+                (aiModel.pace-.7)/
+                (2.2-.7),
+                0,
+                1
+            ),
+            aiModel.pace.toFixed(2)+"×"
         )+
         metricRow(
             "Speed multiplier",
