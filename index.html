@@ -588,6 +588,176 @@ body{
     z-index:1;
 }
 
+/*
+ * RANK CIRCLE — sits just below the leaderboard button. The
+ * progress ring itself is a plain SVG circle with a dashed
+ * stroke offset to show fraction-of-the-way-to-next-tier;
+ * simpler and crisper at small sizes than trying to fake the
+ * same thing with conic-gradient backgrounds.
+ */
+.rank-circle-wrap{
+    position:absolute;
+    top:30%;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:1;
+    width:64px;
+    height:64px;
+    cursor:pointer;
+    touch-action:manipulation;
+}
+
+.rank-circle-svg{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    transform:rotate(-90deg);
+}
+
+.rank-circle-bg{
+    fill:rgba(8,18,40,.65);
+    stroke:rgba(120,200,255,.18);
+    stroke-width:5;
+}
+
+.rank-circle-progress{
+    fill:none;
+    stroke:#7fe0ff;
+    stroke-width:5;
+    stroke-linecap:round;
+    stroke-dasharray:213.6;
+    stroke-dashoffset:213.6;
+    filter:drop-shadow(0 0 4px rgba(120,220,255,.7));
+    transition:stroke-dashoffset .6s ease, stroke .3s ease;
+}
+
+.rank-circle-label{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+}
+
+.rank-circle-tier{
+    font-size:8px;
+    font-weight:900;
+    letter-spacing:.4px;
+    color:#eaf6ff;
+    text-shadow:0 0 6px rgba(120,200,255,.6);
+    text-align:center;
+    line-height:1.1;
+}
+
+.rank-circle-sub{
+    font-size:7px;
+    color:#8fd0ff;
+    opacity:.8;
+}
+
+/*
+ * The "+N"/"-N" flash — floats up from the circle and fades,
+ * coloured by whether the change was an increase or decrease.
+ * Reset via a fresh element rather than reusing one with a
+ * restarted animation, since restarting a still-running CSS
+ * animation on the same element is unreliable across browsers.
+ */
+.rank-circle-flash{
+    position:absolute;
+    left:50%;
+    top:-4px;
+    transform:translateX(-50%);
+    font-size:12px;
+    font-weight:900;
+    pointer-events:none;
+    opacity:0;
+    white-space:nowrap;
+}
+
+.rank-circle-flash.show{
+    animation:rankFlashFloat 1.4s ease-out forwards;
+}
+
+@keyframes rankFlashFloat{
+    0%{
+        opacity:0;
+        transform:translateX(-50%) translateY(0);
+    }
+    15%{
+        opacity:1;
+    }
+    100%{
+        opacity:0;
+        transform:translateX(-50%) translateY(-26px);
+    }
+}
+
+.rank-detail{
+    position:absolute;
+    top:calc(30% + 72px);
+    left:50%;
+    transform:translateX(-50%);
+    z-index:1;
+    width:min(280px,84%);
+    padding:12px 14px;
+    border-radius:14px;
+    border:1.5px solid rgba(130,220,255,.5);
+    background:rgba(6,14,32,.9);
+    backdrop-filter:blur(7px);
+    box-shadow:0 0 20px rgba(90,190,255,.25);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .3s ease, transform .3s ease;
+}
+
+.rank-detail.show{
+    opacity:1;
+    pointer-events:auto;
+}
+
+.rank-detail-title{
+    font-size:12px;
+    font-weight:900;
+    color:#eaf6ff;
+    text-align:center;
+    margin-bottom:8px;
+}
+
+.rank-detail-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:10px;
+    color:#a9d4f0;
+    padding:4px 0;
+    border-bottom:1px solid rgba(120,200,255,.12);
+}
+
+.rank-detail-next{
+    font-size:9px;
+    color:#8fa7c7;
+    text-align:center;
+    margin-top:8px;
+}
+
+.rank-detail-history{
+    margin-top:8px;
+    max-height:120px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+}
+
+.rank-history-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:9px;
+    color:#7d95b5;
+}
+
 .focus-planet-name{
     position:absolute;
     top:60%;
@@ -2615,6 +2785,39 @@ and (max-height:500px){
         <button class="focus-btn focus-leaderboard-top" id="focusLeaderboardBtn">
             🏆 Leaderboard
         </button>
+
+        <!--
+            Rank circle — a live read on progress toward the next
+            rank tier, tap to expand for the full breakdown. Kept
+            outside #focusPlanetName/#focusTip's normal-flow area
+            since it needs to sit at a fixed spot regardless of
+            what tab or state the rest of the screen is in.
+        -->
+        <div class="rank-circle-wrap" id="rankCircleWrap">
+
+            <svg class="rank-circle-svg" viewBox="0 0 80 80">
+                <circle class="rank-circle-bg" cx="40" cy="40" r="34"></circle>
+                <circle class="rank-circle-progress" id="rankCircleProgress" cx="40" cy="40" r="34"></circle>
+            </svg>
+
+            <div class="rank-circle-label">
+                <div class="rank-circle-tier" id="rankCircleTier">Cadet</div>
+                <div class="rank-circle-sub" id="rankCircleSub">0</div>
+            </div>
+
+            <div class="rank-circle-flash" id="rankCircleFlash"></div>
+
+        </div>
+
+        <div class="rank-detail hidden" id="rankDetail">
+
+            <div class="rank-detail-title" id="rankDetailTitle"></div>
+            <div class="rank-detail-row" id="rankDetailSkillRow"></div>
+            <div class="rank-detail-row" id="rankDetailEngagementRow"></div>
+            <div class="rank-detail-next" id="rankDetailNext"></div>
+            <div class="rank-detail-history" id="rankDetailHistory"></div>
+
+        </div>
 
         <div class="focus-planet-name" id="focusPlanetName"></div>
 
@@ -5416,6 +5619,29 @@ function resolvePetEnergy(planetId){
             pet.lastEnergyCheck=
                 now;
 
+            /*
+                * Only fires on the actual transition into zero
+                * (was positive, just hit exactly 0) — not every
+                * time this function happens to run while a pet
+                * is already sitting at 0, which would otherwise
+                * repeatedly penalise the same depletion event
+                * every time the planet menu is simply reopened.
+                * Feeding it back above 0 and letting it drain
+                * out again is a genuinely new event, so it can
+                * fire again after that.
+                */
+            if(
+                before>0 &&
+                pet.energy===0
+            ){
+
+                addRankPoints(
+                    -15,
+                    "A pet ran out of energy"
+                );
+
+            }
+
             if(pet.energy!==before){
 
                 changed=true;
@@ -5518,6 +5744,8 @@ function buyPet(planetId){
 
     savePlanetProgress();
 
+    addRankPoints(8,"Bought a pet");
+
     if(isFirstOfSpecies){
 
         showMilestoneFlourish(
@@ -5582,6 +5810,8 @@ function feedPet(planetId,petId){
         );
 
     savePlanetProgress();
+
+    addRankPoints(2,"Fed a pet");
 
     renderPlanetDetail(
         planetId
@@ -5713,6 +5943,8 @@ function trainPetStat(planetId,petId,statName){
         currentLevel+1;
 
     savePlanetProgress();
+
+    addRankPoints(5,"Trained a pet");
 
     showShipToast(
         "Pilot's "+statName+
@@ -6513,6 +6745,8 @@ function buyStructureUpgrade(planetId,upgradeId){
 
     savePlanetProgress();
 
+    addRankPoints(15,"Upgraded a structure");
+
     showShipToast(
         upgrade.name+" purchased!"
     );
@@ -7222,6 +7456,30 @@ const SPECIES_FLOURISH_ICONS={
     rex:"🦖"
 };
 
+/*
+ * RANK SYSTEM
+ *
+ * Total rank points = a skill BASE (drawn from aiModel's own
+ * difficulty-adjusted skill estimate, 0-1, scaled up here) PLUS
+ * an ENGAGEMENT total the player builds up across everything
+ * they actually do — playing missions, feeding and training
+ * pets, buying them, building and upgrading structures, selling,
+ * shopping. Letting a pet run out of energy subtracts from it.
+ * Global across the whole save, not per-planet, since rank is
+ * about the player, not any one world.
+ */
+const RANK_SKILL_BASE_SCALE=400;
+
+const RANK_TIERS=[
+    {name:"Cadet",threshold:0},
+    {name:"Pilot",threshold:150},
+    {name:"Voyager",threshold:400},
+    {name:"Navigator",threshold:800},
+    {name:"Commander",threshold:1400},
+    {name:"Ace",threshold:2200},
+    {name:"Legend",threshold:3200}
+];
+
 let planetSave=
     loadPlanetSave();
 
@@ -7234,6 +7492,158 @@ function savePlanetProgress(
         SAVE_KEY,
         JSON.stringify(data)
     );
+
+}
+
+/*
+ * The skill portion of rank — pulled live from aiModel's own
+ * difficulty-adjusted estimate rather than copied into
+ * planetSave, so it always reflects the model's current read on
+ * the player and never goes stale relative to it.
+ */
+function getSkillRankBase(){
+
+    if(
+        typeof aiModel===
+        "undefined" ||
+        !aiModel
+    )
+        return 0;
+
+    return(
+        (aiModel.skillEstimate || 0)*
+        RANK_SKILL_BASE_SCALE
+    );
+
+}
+
+function getTotalRankPoints(){
+
+    return(
+        getSkillRankBase()+
+        (planetSave.rankPoints || 0)
+    );
+
+}
+
+/*
+ * Resolves total points into a tier, how far into it the player
+ * is, and how many points stand between here and the next one
+ * (null at the final tier).
+ */
+function getRankInfo(){
+
+    const total=
+        getTotalRankPoints();
+
+    let tierIndex=0;
+
+    for(
+        let i=0;
+        i<RANK_TIERS.length;
+        i++
+    ){
+
+        if(total>=RANK_TIERS[i].threshold){
+
+            tierIndex=i;
+
+        }
+
+    }
+
+    const tier=
+        RANK_TIERS[tierIndex];
+
+    const nextTier=
+        RANK_TIERS[tierIndex+1] ||
+        null;
+
+    const progress=
+        nextTier
+        ?clamp(
+            (total-tier.threshold)/
+            (nextTier.threshold-tier.threshold),
+            0,1
+        )
+        :1;
+
+    return{
+        total:Math.round(total),
+        tier:tier,
+        tierIndex:tierIndex,
+        nextTier:nextTier,
+        progress:progress,
+        pointsToNext:
+            nextTier
+            ?Math.max(
+                0,
+                Math.round(
+                    nextTier.threshold-total
+                )
+            )
+            :0
+    };
+
+}
+
+/*
+ * The single entry point every engagement/score/penalty hook
+ * below goes through — updates the persisted engagement total,
+ * remembers a short history for the expanded detail view, saves,
+ * and (if the rank UI is present) triggers the little "+N"/"-N"
+ * flash and re-renders the circle so the change is felt
+ * immediately rather than only showing up next time it's opened.
+ */
+function addRankPoints(amount,reason){
+
+    if(!amount)
+        return;
+
+    if(
+        typeof planetSave.rankPoints!==
+        "number"
+    ){
+
+        planetSave.rankPoints=0;
+
+    }
+
+    planetSave.rankPoints+=amount;
+
+    if(!Array.isArray(planetSave.rankHistory)){
+
+        planetSave.rankHistory=[];
+
+    }
+
+    planetSave.rankHistory.unshift({
+        amount:amount,
+        reason:reason,
+        time:Date.now()
+    });
+
+    planetSave.rankHistory=
+        planetSave.rankHistory.slice(0,20);
+
+    savePlanetProgress();
+
+    if(typeof renderRankCircle==="function"){
+
+        try{
+
+            renderRankCircle(amount);
+
+        }catch(error){
+
+            console.error(
+                "Rank circle render failed:",
+                error
+            );
+
+        }
+
+    }
 
 }
 
@@ -7959,6 +8369,8 @@ function buyShopItem(planetId){
         1
     );
 
+    addRankPoints(3,"Bought from shop");
+
     showShipToast(
         item.name+" purchased!"
     );
@@ -8507,6 +8919,8 @@ function sellItemStock(planetId,itemId){
         1
     );
 
+    addRankPoints(1,"Sold an item");
+
     showShipToast(
         "Sold for "+price+" 🪙"
     );
@@ -8556,6 +8970,8 @@ function sellMaterialStock(planetId,materialId){
         materialId,
         1
     );
+
+    addRankPoints(1,"Sold a material");
 
     showShipToast(
         "Sold for "+price+" 🪙"
@@ -15754,6 +16170,10 @@ function resolveBuildQueue(planetId){
                 ][build.structureId]=
                     {level:1};
 
+                addRankPoints(
+                    25,"Built a structure"
+                );
+
                 showMilestoneFlourish(
                     (
                         STRUCTURES[
@@ -17108,7 +17528,7 @@ function renderPlanetDetail(id){
 
     const ships=
         id==="earth"
-        ?(planetSave.ships.earth || [])
+        ?getEarthLaunchCandidates()
         :getShips(id) || [];
 
     const bank=
@@ -17561,7 +17981,7 @@ function renderPlanetDetail(id){
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
-        'Docked Ships ('+ships.length+')'+
+        'Ships Here ('+ships.length+')'+
         '</div>'+
         '<button class="control-btn" style="width:100%;margin-bottom:10px;" '+
         'data-action="customize-ship">🛠 Customize Ship Design</button>';
@@ -17577,6 +17997,40 @@ function renderPlanetDetail(id){
 
         ships.forEach(
             ship=>{
+
+                /*
+                 * The free Earth ship isn't a real docked record
+                 * (see FRESH_EARTH in getEarthLaunchCandidates) —
+                 * it only exists as this synthetic placeholder so
+                 * it's visible and launchable, but there's
+                 * nothing in planetSave for deposit/equip/cargo/
+                 * perk actions to actually operate on. Shown as
+                 * its own simple card with just a preview and a
+                 * label, rather than the full interactive ship
+                 * card whose buttons would silently do nothing.
+                 */
+                if(ship.isFresh){
+
+                    const freshCanvasId=
+                        "shipPreview_"+
+                        id+"_"+
+                        ship.id;
+
+                    html+=
+                        '<div class="selected-shape-info" style="gap:10px;">'+
+                        '<canvas id="'+freshCanvasId+'" width="72" height="72" '+
+                        'style="display:block;background:rgba(0,0,0,.25);'+
+                        'border-radius:10px;flex-shrink:0;"></canvas>'+
+                        '<span style="font-size:11px;color:#8fa7c7;">'+
+                        '🚀 Free starter ship — ready to launch, no '+
+                        'prior score, coins, or equipment yet. Nothing '+
+                        'to deposit or equip until it actually flies.'+
+                        '</span>'+
+                        '</div>';
+
+                    return;
+
+                }
 
                 /*
                  * Defensive normalization: every ship should
@@ -29634,6 +30088,23 @@ function landAtCurrentPlanet(){
 
     runLandingsCount++;
 
+    /*
+     * Every completed mission adds to rank, scaled by the score
+     * actually earned — a bigger run genuinely counts for more,
+     * per the request that "more points, more increase". No
+     * floor other than zero: a 0-score landing (nothing survived
+     * or nothing scored) adds nothing, but never subtracts —
+     * only the pet-energy penalty elsewhere does that.
+     */
+    if(score>0){
+
+        addRankPoints(
+            Math.round(score*.1),
+            "Mission complete"
+        );
+
+    }
+
     savePlanetProgress();
 
 
@@ -33074,6 +33545,25 @@ document
             mainLeaderboard,
             mainLeaderboardStatus
         );
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "rankCircleWrap"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        resetHomeIdleTimer();
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        toggleRankDetail();
 
     },
     {passive:false}
@@ -36524,6 +37014,224 @@ function showShipToast(message) {
 let milestoneFlourishTimer=null;
 
 /*
+ * Updates the rank circle's ring and label to the current
+ * totals, and — when called with a nonzero flashAmount (from
+ * addRankPoints) — spawns a floating "+N"/"-N" indicator so a
+ * change is felt the moment it happens rather than only visible
+ * next time the circle's checked. A fresh element per flash
+ * rather than reusing one, since restarting an in-progress CSS
+ * animation on the same element is unreliable across browsers.
+ */
+function renderRankCircle(flashAmount){
+
+    const info=
+        getRankInfo();
+
+    const tierEl=
+        document.getElementById(
+            "rankCircleTier"
+        );
+
+    const subEl=
+        document.getElementById(
+            "rankCircleSub"
+        );
+
+    const progressEl=
+        document.getElementById(
+            "rankCircleProgress"
+        );
+
+    if(
+        !tierEl ||
+        !subEl ||
+        !progressEl
+    )
+        return;
+
+    tierEl.textContent=
+        info.tier.name;
+
+    subEl.textContent=
+        info.nextTier
+        ?info.pointsToNext+" to go"
+        :"MAX";
+
+    const circumference=213.6;
+
+    progressEl.style.strokeDashoffset=
+        circumference*(1-info.progress);
+
+    if(flashAmount){
+
+        const wrap=
+            document.getElementById(
+                "rankCircleWrap"
+            );
+
+        if(wrap){
+
+            const flash=
+                document.createElement("div");
+
+            flash.className=
+                "rank-circle-flash show";
+
+            flash.textContent=
+                (flashAmount>0 ? "+" : "")+
+                Math.round(flashAmount);
+
+            flash.style.color=
+                flashAmount>0
+                ?"#8dffb0"
+                :"#ff8d8d";
+
+            wrap.appendChild(flash);
+
+            setTimeout(
+                ()=>flash.remove(),
+                1500
+            );
+
+        }
+
+    }
+
+    const detailEl=
+        document.getElementById(
+            "rankDetail"
+        );
+
+    if(
+        detailEl &&
+        detailEl.classList.contains(
+            "show"
+        )
+    ){
+
+        renderRankDetail();
+
+    }
+
+}
+
+function renderRankDetail(){
+
+    const info=
+        getRankInfo();
+
+    const skillBase=
+        Math.round(
+            getSkillRankBase()
+        );
+
+    const engagement=
+        Math.round(
+            planetSave.rankPoints || 0
+        );
+
+    document.getElementById(
+        "rankDetailTitle"
+    ).textContent=
+        info.tier.name+" — "+
+        info.total+" pts";
+
+    document.getElementById(
+        "rankDetailSkillRow"
+    ).innerHTML=
+        "<span>🧠 Skill base</span><span>"+
+        skillBase+"</span>";
+
+    document.getElementById(
+        "rankDetailEngagementRow"
+    ).innerHTML=
+        "<span>⚡ Engagement</span><span>"+
+        engagement+"</span>";
+
+    document.getElementById(
+        "rankDetailNext"
+    ).textContent=
+        info.nextTier
+        ?info.pointsToNext+
+         " points to "+
+         info.nextTier.name
+        :"Highest rank reached!";
+
+    const historyEl=
+        document.getElementById(
+            "rankDetailHistory"
+        );
+
+    const history=
+        planetSave.rankHistory || [];
+
+    historyEl.innerHTML=
+        history.length
+        ?history.map(
+            h=>
+                '<div class="rank-history-row">'+
+                '<span>'+h.reason+'</span>'+
+                '<span style="color:'+
+                (
+                    h.amount>0
+                    ?"#8dffb0"
+                    :"#ff8d8d"
+                )+
+                ';">'+
+                (h.amount>0 ? "+" : "")+
+                h.amount+
+                '</span></div>'
+        ).join('')
+        :'<div style="font-size:9px;color:#5c7ba0;'+
+         'text-align:center;">No activity yet</div>';
+
+}
+
+function toggleRankDetail(){
+
+    const detailEl=
+        document.getElementById(
+            "rankDetail"
+        );
+
+    if(!detailEl)
+        return;
+
+    const isOpen=
+        detailEl.classList.contains(
+            "show"
+        );
+
+    initAudio();
+
+    sound("click");
+
+    if(isOpen){
+
+        detailEl.classList.remove(
+            "show"
+        );
+
+    }else{
+
+        detailEl.classList.remove(
+            "hidden"
+        );
+
+        renderRankDetail();
+
+        requestAnimationFrame(
+            ()=>
+                detailEl.classList.add(
+                    "show"
+                )
+        );
+
+    }
+
+}
+
+/*
  * A bigger, one-time celebratory moment — structure completed,
  * new pet species discovered, first mission ever finished.
  * Created lazily on first use, same pattern as the toast above.
@@ -36672,6 +37380,8 @@ bestScoreEl.textContent=
 updateHUD();
 
 renderPlanetMap();
+
+renderRankCircle();
 
 lastTime=
     performance.now();
