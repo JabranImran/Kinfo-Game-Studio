@@ -6918,13 +6918,48 @@ function paintStructureDesignPreviews(){
                 )
             );
 
-        if(!saved)
+        /*
+         * Falls back to the hand-placed default (see
+         * DEFAULT_STRUCTURE_SHAPES) when nothing's saved yet,
+         * rather than leaving this preview blank while the
+         * surface icon right next to it already shows that same
+         * default -- the two should always agree.
+         */
+        let shapeData=null;
+
+        if(saved){
+
+            try{
+
+                shapeData=
+                    JSON.parse(saved);
+
+            }catch(error){
+
+                shapeData=null;
+
+            }
+
+        }
+
+        if(
+            !shapeData &&
+            DEFAULT_STRUCTURE_SHAPES[
+                structureId
+            ]
+        ){
+
+            shapeData=
+                DEFAULT_STRUCTURE_SHAPES[
+                    structureId
+                ];
+
+        }
+
+        if(!shapeData)
             continue;
 
         try{
-
-            const shapeData=
-                JSON.parse(saved);
 
             const shapes=
                 shapeData.map(
@@ -7509,6 +7544,68 @@ const DEFAULT_SHIP_STYLE_SHAPES=[
         holePoints:null
     }
 ];
+
+/*
+ * DEFAULT STRUCTURE ICONS
+ *
+ * Same idea as the ship's built-in default -- a hand-placed set
+ * of shapes shown whenever a structure has no custom design
+ * saved, so the surface reads as a small polished building
+ * instead of a plain emoji. Keyed by structureId (matching
+ * getStructureDesignKey), extensible one at a time -- "shop" is
+ * the first, styled as a small pastel kawaii storefront: a
+ * scalloped pink awning over a cream wall, a light-blue glass
+ * door, two soft accent circles suggesting items in the window,
+ * and a warm tan step at the base. Coordinates share the same
+ * 400x280 authoring space every design (ship or structure)
+ * already renders in.
+ */
+const DEFAULT_STRUCTURE_SHAPES={
+
+    shop:[
+        {
+            type:"custom",x:200,y:181,
+            color:"#e0b88a",scale:1,rotation:0,
+            points:[[-48,-6],[48,-6],[48,6],[-48,6]],
+            outlineColor:"#c99a6a",holePoints:null
+        },
+        {
+            type:"custom",x:200,y:145,
+            color:"#eaf6ff",scale:1,rotation:0,
+            points:[[-42,-32],[42,-32],[42,32],[-42,32]],
+            outlineColor:"#a8d8ea",holePoints:null
+        },
+        {
+            type:"custom",x:200,y:158,
+            color:"#a8d8ea",scale:1,rotation:0,
+            points:[[-16,-19],[16,-19],[16,19],[-16,19]],
+            outlineColor:"#6bb8d6",holePoints:null
+        },
+        {
+            type:"custom",x:200,y:108,
+            color:"#ffb3c6",scale:1,rotation:0,
+            points:[
+                [-48,-14],[48,-14],[48,8],
+                [36,16],[24,8],[12,16],[0,8],
+                [-12,16],[-24,8],[-36,16],[-48,8]
+            ],
+            outlineColor:"#ff8fa8",holePoints:null
+        },
+        {
+            type:"circle",x:176,y:148,
+            color:"#fff2b3",scale:.2,rotation:0,
+            points:null,outlineColor:"#e8d68a",
+            holePoints:null
+        },
+        {
+            type:"circle",x:224,y:148,
+            color:"#c8f0d8",scale:.2,rotation:0,
+            points:null,outlineColor:"#9fd8b8",
+            holePoints:null
+        }
+    ]
+
+};
 
 const SHIP_STYLE_BASE_COST=40;
 
@@ -15561,6 +15658,66 @@ function drawPlanetFocusScene(){
 
                 }
 
+                if(
+                    !drewCustomDesign &&
+                    item.kind==="structure" &&
+                    DEFAULT_STRUCTURE_SHAPES[
+                        item.structureId
+                    ] &&
+                    typeof ShapeObject!==
+                    "undefined"
+                ){
+
+                    /*
+                     * A hand-placed default look, same
+                     * transform as a real custom design above —
+                     * used until the player saves one of their
+                     * own, at which point that takes over
+                     * automatically (see the designKey check).
+                     */
+                    const designScale=
+                        (iconSize*2.4)/400;
+
+                    c.save();
+
+                    c.scale(
+                        designScale,
+                        designScale
+                    );
+
+                    c.translate(
+                        -200,
+                        -140-
+                        iconSize*.35/
+                        designScale
+                    );
+
+                    DEFAULT_STRUCTURE_SHAPES[
+                        item.structureId
+                    ].forEach(
+                        s=>{
+
+                            new ShapeObject(
+                                s.type,
+                                s.x,
+                                s.y,
+                                s.color,
+                                s.scale,
+                                s.rotation,
+                                s.points,
+                                s.outlineColor,
+                                s.holePoints
+                            ).draw(c);
+
+                        }
+                    );
+
+                    c.restore();
+
+                    drewCustomDesign=true;
+
+                }
+
                 if(!drewCustomDesign){
 
                     /*
@@ -17318,7 +17475,22 @@ function getEarthLaunchCandidates(){
      * already sitting in getShips("earth"), so the zero-ships
      * condition below is no longer true and nothing duplicates.
      */
+    /*
+     * Guarded on !running specifically -- without it, this could
+     * fire DURING an active flight: the ship that just launched
+     * was removed from the docked list for the trip, so if this
+     * function got called again before landing (which it does,
+     * every frame, from the still-running home screen behind the
+     * flight view) it would look like "zero ships anywhere" and
+     * spawn a SECOND free ship using createShip()'s own default
+     * style rather than whatever the player actually had
+     * selected -- a real, reproducible cause of a ship's chosen
+     * style appearing to "revert" after landing, when what
+     * actually happened was a phantom extra ship got created
+     * mid-flight with the wrong one.
+     */
     if(
+        !running &&
         !real.length &&
         !getTotalPlayerShipCount() &&
         !getTotalQueuedShipCount()
@@ -38651,7 +38823,16 @@ const shipCustomizer = {
                 this.shapes = [];
             }
         } else {
-            this.shapes = [];
+            // Nothing saved yet -- if this key belongs to a structure
+            // with a hand-placed default (see DEFAULT_STRUCTURE_SHAPES),
+            // start the editor from that instead of a blank canvas, so
+            // editing means adjusting a good baseline rather than
+            // building one from nothing.
+            const structureId = this.targetKey.replace('structureDesign_', '');
+            const fallback = (!this.isShipMode && DEFAULT_STRUCTURE_SHAPES[structureId]) || null;
+            this.shapes = fallback
+                ? fallback.map(s => new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints))
+                : [];
         }
     },
 
