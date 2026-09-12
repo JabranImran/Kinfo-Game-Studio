@@ -4218,6 +4218,15 @@ function loadPlanetSave(){
                         }
 
                         if(
+                            !ship.styleId
+                        ){
+
+                            ship.styleId=
+                                "custom1";
+
+                        }
+
+                        if(
                             ship.perk2===
                             undefined
                         ){
@@ -7155,7 +7164,9 @@ function paintShipPreviews(planetId,ships){
                     cargoPetInfo
                 );
 
-                shipCustomizer.shapes.forEach(
+                getShipStyleShapes(
+                    ship.styleId
+                ).forEach(
                     shape=>{
 
                         shape.draw(
@@ -7463,6 +7474,187 @@ const SPECIES_FLOURISH_ICONS={
     gorilla:"🦍",
     rex:"🦖"
 };
+
+/*
+ * SHIP STYLES
+ *
+ * A small wardrobe of ship designs a player can own, rather
+ * than one single design shared by every ship they'll ever
+ * build. "default" is a built-in look, always free, never
+ * stored anywhere -- it's these literal shapes every time.
+ * "custom1" deliberately reuses "customShip", the exact
+ * localStorage key the ship builder has always saved to, so
+ * whatever a player had already designed before this feature
+ * existed becomes their first custom slot automatically, with
+ * nothing to migrate. Slots beyond that get their own keys and
+ * cost coins to unlock, scaling up per slot.
+ */
+const DEFAULT_SHIP_STYLE_SHAPES=[
+    {
+        type:"triangle",x:200,y:110,
+        color:"#5ce4ff",scale:1.3,rotation:0,
+        points:null,outlineColor:"#eaf6ff",
+        holePoints:null
+    },
+    {
+        type:"circle",x:200,y:165,
+        color:"#2478c9",scale:.9,rotation:0,
+        points:null,outlineColor:"#5ce4ff",
+        holePoints:null
+    },
+    {
+        type:"thruster",x:200,y:205,
+        color:"#ffb347",scale:1,rotation:0,
+        points:null,outlineColor:"#ffe28a",
+        holePoints:null
+    }
+];
+
+const SHIP_STYLE_BASE_COST=40;
+
+function getShipStyleUnlockCount(){
+
+    return(
+        planetSave.shipStyleUnlockCount ||
+        1
+    );
+
+}
+
+function getShipStyleKey(styleId){
+
+    if(
+        !styleId ||
+        styleId==="default"
+    )
+        return null;
+
+    if(styleId==="custom1")
+        return "customShip";
+
+    return(
+        "customShip_"+
+        styleId.replace(
+            "custom",
+            ""
+        )
+    );
+
+}
+
+function getShipStyleList(){
+
+    const unlockCount=
+        getShipStyleUnlockCount();
+
+    const list=[
+        {
+            id:"default",
+            name:"Default",
+            locked:false,
+            cost:0
+        }
+    ];
+
+    for(
+        let i=1;
+        i<=unlockCount;
+        i++
+    ){
+
+        list.push({
+            id:"custom"+i,
+            name:"Style "+i,
+            locked:false,
+            cost:0
+        });
+
+    }
+
+    list.push({
+        id:"custom"+(unlockCount+1),
+        name:"Style "+(unlockCount+1),
+        locked:true,
+        cost:
+            SHIP_STYLE_BASE_COST*
+            unlockCount
+    });
+
+    return list;
+
+}
+
+function getShipStyleShapes(styleId){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return[];
+
+    const buildFrom=
+        data=>
+            data.map(
+                s=>
+                    new ShapeObject(
+                        s.type,
+                        s.x,
+                        s.y,
+                        s.color,
+                        s.scale,
+                        s.rotation,
+                        s.points,
+                        s.outlineColor,
+                        s.holePoints
+                    )
+            );
+
+    const key=
+        getShipStyleKey(styleId);
+
+    if(!key){
+
+        return buildFrom(
+            DEFAULT_SHIP_STYLE_SHAPES
+        );
+
+    }
+
+    try{
+
+        const saved=
+            localStorage.getItem(key);
+
+        if(saved){
+
+            const parsed=
+                JSON.parse(saved);
+
+            if(
+                Array.isArray(parsed) &&
+                parsed.length
+            ){
+
+                return buildFrom(parsed);
+
+            }
+
+        }
+
+    }catch(error){
+
+        console.error(
+            "Ship style load failed:",
+            error
+        );
+
+    }
+
+    return buildFrom(
+        DEFAULT_SHIP_STYLE_SHAPES
+    );
+
+}
 
 /*
  * RANK SYSTEM
@@ -8144,7 +8336,8 @@ function createShip(
     hasDualPerk=false,
     perk2=null,
     cargoPetCapacity=1,
-    cargoPets=null
+    cargoPets=null,
+    styleId="custom1"
 ){
 
     ensurePlanetArray(
@@ -8239,7 +8432,10 @@ function createShip(
         cargoPets:
             Array.isArray(cargoPets)
             ?cargoPets
-            :[]
+            :[],
+
+        styleId:
+            styleId || "custom1"
 
     };
 
@@ -13716,10 +13912,8 @@ function drawStarMapScene(){
                     Math.sin(time*3)*1.5;
 
                 if(
-                    typeof shipCustomizer!==
-                    "undefined" &&
-                    shipCustomizer.shapes &&
-                    shipCustomizer.shapes.length
+                    typeof ShapeObject!==
+                    "undefined"
                 ){
 
                     c.save();
@@ -13752,7 +13946,9 @@ function drawStarMapScene(){
 
                     for(
                         const shape of
-                        shipCustomizer.shapes
+                        getShipStyleShapes(
+                            currentShipStyleId
+                        )
                     ){
 
                         shape.draw(
@@ -15645,9 +15841,7 @@ function drawPlanetFocusScene(){
             Math.sin(time*3)*1.5;
 
         if(
-            typeof shipCustomizer!=="undefined" &&
-            shipCustomizer.shapes &&
-            shipCustomizer.shapes.length
+            typeof ShapeObject!=="undefined"
         ){
 
             /*
@@ -15681,7 +15875,12 @@ function drawPlanetFocusScene(){
             );
 
             for(
-                const shape of shipCustomizer.shapes
+                const shape of
+                getShipStyleShapes(
+                    focusShips[0]
+                    ?focusShips[0].styleId
+                    :"custom1"
+                )
             ){
 
                 /*
@@ -17537,6 +17736,21 @@ let expandedPerkShipId=null;
 let expandedPerk2ShipId=null;
 
 /*
+ * Same idea again, for the per-ship style picker -- independent
+ * of equip/perk expand state, so a player can browse styles
+ * without disturbing whatever else is open on the same card.
+ */
+let expandedShipStyleId=null;
+
+/*
+ * Which style is currently highlighted in the Ships tab's
+ * style gallery -- what the Customize button edits. Separate
+ * from any individual ship's own styleId; picking one here
+ * doesn't assign it to anything by itself.
+ */
+let selectedGalleryStyleId="custom1";
+
+/*
  * Which pet (if any) currently has its mission-destination
  * picker expanded — same one-at-a-time pattern as the equip
  * and perk pickers.
@@ -17685,7 +17899,9 @@ function paintShipPickerPreviews(planetId,ships,pickerKey){
 
                 ctx2d.translate(-200,-140);
 
-                shipCustomizer.shapes.forEach(
+                getShipStyleShapes(
+                    ship.styleId
+                ).forEach(
                     shape=>{
 
                         shape.draw(ctx2d,false);
@@ -17699,6 +17915,154 @@ function paintShipPickerPreviews(planetId,ships,pickerKey){
 
                 console.error(
                     "Ship picker preview failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+}
+
+/*
+ * Paints the small previews inside a ship's expanded style
+ * picker -- one per owned style, so choosing between them is a
+ * real visual decision rather than picking a name off a list.
+ */
+function paintShipStylePickerPreviews(shipId,styleList){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    styleList.forEach(
+        style=>{
+
+            const canvas=
+                document.getElementById(
+                    "shipStylePicker_"+
+                    shipId+"_"+
+                    style.id
+                );
+
+            if(!canvas)
+                return;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,0,
+                canvas.width,
+                canvas.height
+            );
+
+            try{
+
+                ctx2d.save();
+
+                ctx2d.translate(
+                    canvas.width/2,
+                    canvas.height/2
+                );
+
+                ctx2d.scale(.08,.08);
+
+                ctx2d.translate(-200,-140);
+
+                getShipStyleShapes(
+                    style.id
+                ).forEach(
+                    shape=>{
+
+                        shape.draw(ctx2d,false);
+
+                    }
+                );
+
+                ctx2d.restore();
+
+            }catch(error){
+
+                console.error(
+                    "Ship style preview failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+}
+
+/*
+ * Paints the previews in the Ships tab's style gallery -- every
+ * style at once (owned and the single next-purchasable slot),
+ * regardless of which ship (if any) currently has its own
+ * picker open, since the gallery is a separate section.
+ */
+function paintGalleryStylePreviews(){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    getShipStyleList().forEach(
+        style=>{
+
+            const canvas=
+                document.getElementById(
+                    "galleryStylePreview_"+
+                    style.id
+                );
+
+            if(!canvas)
+                return;
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,0,
+                canvas.width,
+                canvas.height
+            );
+
+            try{
+
+                ctx2d.save();
+
+                ctx2d.translate(
+                    canvas.width/2,
+                    canvas.height/2
+                );
+
+                ctx2d.scale(.11,.11);
+
+                ctx2d.translate(-200,-140);
+
+                getShipStyleShapes(
+                    style.id
+                ).forEach(
+                    shape=>{
+
+                        shape.draw(ctx2d,false);
+
+                    }
+                );
+
+                ctx2d.restore();
+
+            }catch(error){
+
+                console.error(
+                    "Gallery style preview failed:",
                     error
                 );
 
@@ -18014,6 +18378,8 @@ function closePlanetDetail(){
     planetDetailId=null;
 
     expandedEquipShipId=null;
+
+    expandedShipStyleId=null;
 
     expandedShopRowId=null;
 
@@ -18499,9 +18865,7 @@ function renderPlanetDetail(id){
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
         'Ships Here ('+ships.length+')'+
-        '</div>'+
-        '<button class="control-btn" style="width:100%;margin-bottom:10px;" '+
-        'data-action="customize-ship">🛠 Customize Ship Design</button>';
+        '</div>';
 
     if(!ships.length){
 
@@ -18879,6 +19243,79 @@ function renderPlanetDetail(id){
                         })()
                         :''
                     )+
+                    (function(){
+
+                        const styleOpen=
+                            expandedShipStyleId===
+                            ship.id;
+
+                        const styleList=
+                            getShipStyleList().filter(
+                                s => !s.locked
+                            );
+
+                        const currentStyleId=
+                            ship.styleId ||
+                            "custom1";
+
+                        const currentStyle=
+                            styleList.find(
+                                s =>
+                                    s.id===
+                                    currentStyleId
+                            ) ||
+                            styleList[0];
+
+                        return(
+                            '<button class="control-btn" data-action="toggle-style" '+
+                            'data-ship="'+ship.id+'" style="width:auto;padding:7px 10px;'+
+                            'align-self:flex-start;display:flex;align-items:center;gap:6px;">'+
+                            '<span>Style: '+currentStyle.name+'</span>'+
+                            '<span style="opacity:.6;">'+
+                            (styleOpen ? "▲" : "▼")+
+                            '</span>'+
+                            '</button>'+
+                            (
+                                styleOpen
+                                ?'<div style="display:flex;flex-direction:column;gap:6px;'+
+                                 'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
+                                 styleList.map(
+                                     s=>{
+
+                                         const isChosen=
+                                             s.id===
+                                             currentStyleId;
+
+                                         const canvasId=
+                                             "shipStylePicker_"+
+                                             ship.id+"_"+s.id;
+
+                                         return(
+                                             '<button class="shape-btn" '+
+                                             'data-action="assign-ship-style" '+
+                                             'data-ship="'+ship.id+'" '+
+                                             'data-style="'+s.id+'" '+
+                                             'style="width:100%;display:flex;'+
+                                             'align-items:center;gap:8px;'+
+                                             'padding:6px 10px;text-align:left;">'+
+                                             '<canvas id="'+canvasId+'" width="34" height="34" '+
+                                             'style="display:block;background:rgba(0,0,0,.3);'+
+                                             'border-radius:7px;flex-shrink:0;"></canvas>'+
+                                             '<span>'+
+                                             (isChosen ? "▶ " : "")+
+                                             s.name+
+                                             '</span>'+
+                                             '</button>'
+                                         );
+
+                                     }
+                                 ).join('')+
+                                 '</div>'
+                                :''
+                            )
+                        );
+
+                    })()+
                     (
                         hasPilotTraining
                         ?(function(){
@@ -19220,6 +19657,91 @@ function renderPlanetDetail(id){
         );
 
     }
+
+    /*
+     * Ship style gallery — every style the player owns, plus
+     * exactly one more shown as the next purchasable slot.
+     * Tapping a style selects it (for the Customize button
+     * below); assigning a style to a SPECIFIC ship happens up
+     * in that ship's own card instead, since a ship's look and
+     * "which style is currently being edited" are genuinely
+     * different questions.
+     */
+    (function(){
+
+        const styleList=
+            getShipStyleList();
+
+        const selected=
+            styleList.find(
+                s =>
+                    s.id===
+                    selectedGalleryStyleId &&
+                    !s.locked
+            ) ||
+            styleList[0];
+
+        html+=
+            '<div class="customizer-section-title" '+
+            'style="margin-top:12px;">Ship Styles</div>'+
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+
+            styleList.map(
+                style=>{
+
+                    const isSelected=
+                        style.id===
+                        selected.id;
+
+                    const canvasId=
+                        "galleryStylePreview_"+
+                        style.id;
+
+                    return(
+                        '<button class="shape-btn" '+
+                        'data-action="'+
+                        (
+                            style.locked
+                            ?"unlock-ship-style"
+                            :"select-gallery-style"
+                        )+
+                        '" data-style="'+style.id+'" '+
+                        'style="display:flex;flex-direction:column;'+
+                        'align-items:center;gap:4px;padding:8px;'+
+                        'width:76px;border-radius:10px;'+
+                        'border:1.5px solid '+
+                        (
+                            isSelected
+                            ?"rgba(120,220,255,.6)"
+                            :"rgba(255,255,255,.12)"
+                        )+
+                        ';opacity:'+
+                        (style.locked ? ".6" : "1")+
+                        ';">'+
+                        '<canvas id="'+canvasId+'" width="48" height="48" '+
+                        'style="display:block;background:rgba(0,0,0,.3);'+
+                        'border-radius:8px;"></canvas>'+
+                        '<span style="font-size:9px;">'+
+                        (isSelected ? "▶ " : "")+
+                        style.name+
+                        '</span>'+
+                        (
+                            style.locked
+                            ?'<span style="font-size:9px;color:#ffd76b;">'+
+                             style.cost+' coins</span>'
+                            :''
+                        )+
+                        '</button>'
+                    );
+
+                }
+            ).join('')+
+            '</div>'+
+            '<button class="control-btn" style="width:100%;margin-top:10px;" '+
+            'data-action="customize-ship" data-style="'+
+            selected.id+'">Customize \''+
+            selected.name+'\'</button>';
+
+    })();
 
     html+=
         '</div>';
@@ -20387,6 +20909,19 @@ function renderPlanetDetail(id){
 
     }
 
+    if(expandedShipStyleId){
+
+        paintShipStylePickerPreviews(
+            expandedShipStyleId,
+            getShipStyleList().filter(
+                s => !s.locked
+            )
+        );
+
+    }
+
+    paintGalleryStylePreviews();
+
     paintPetSpeciesGallery(
         id
     );
@@ -20709,6 +21244,56 @@ document
             );
 
         }else if(
+            action==="toggle-style"
+        ){
+
+            expandedShipStyleId=
+                expandedShipStyleId===
+                shipId
+                ?null
+                :shipId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="assign-ship-style"
+        ){
+
+            const styleId=
+                target.getAttribute(
+                    "data-style"
+                );
+
+            const shipRef=
+                (
+                    planetDetailId===
+                    "earth"
+                    ?getEarthLaunchCandidates()
+                    :getShips(
+                        planetDetailId
+                    ) || []
+                ).find(
+                    s => s.id===shipId
+                );
+
+            if(shipRef){
+
+                shipRef.styleId=
+                    styleId;
+
+                savePlanetProgress();
+
+            }
+
+            expandedShipStyleId=null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
             action==="toggle-ship-cargo"
         ){
 
@@ -20922,7 +21507,93 @@ document
             action==="customize-ship"
         ){
 
-            shipCustomizer.open();
+            const styleId=
+                target.getAttribute(
+                    "data-style"
+                ) || "custom1";
+
+            const styleKey=
+                getShipStyleKey(styleId);
+
+            if(!styleKey){
+
+                showShipToast(
+                    "The default style is built-in — "+
+                    "pick a custom slot to design your own."
+                );
+
+            }else{
+
+                shipCustomizer.open(
+                    styleKey,
+                    "⚙ SHIP BUILDER",
+                    "Design Your Vessel"
+                );
+
+            }
+
+        }else if(
+            action==="select-gallery-style"
+        ){
+
+            const styleId=
+                target.getAttribute(
+                    "data-style"
+                );
+
+            selectedGalleryStyleId=
+                styleId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="unlock-ship-style"
+        ){
+
+            const unlockCount=
+                getShipStyleUnlockCount();
+
+            const cost=
+                SHIP_STYLE_BASE_COST*
+                unlockCount;
+
+            if(
+                getBank(planetDetailId)<
+                cost
+            ){
+
+                showShipToast(
+                    "Not enough coins to unlock "+
+                    "a new ship style."
+                );
+
+            }else{
+
+                addToBank(
+                    planetDetailId,
+                    -cost
+                );
+
+                planetSave.shipStyleUnlockCount=
+                    unlockCount+1;
+
+                selectedGalleryStyleId=
+                    "custom"+
+                    (unlockCount+1);
+
+                savePlanetProgress();
+
+                showShipToast(
+                    "New ship style slot unlocked!"
+                );
+
+                renderPlanetDetail(
+                    planetDetailId
+                );
+
+            }
 
         }else if(
             action==="buy-pet"
@@ -25134,17 +25805,16 @@ function checkPlayerCollisions(){
 ========================================================= */
 
 /*
- * A "custom ship" only counts once the player has added at
- * least one shape beyond the mandatory EMP core, so a fresh
- * profile still shows the default triangle fighter.
+ * Every ship always has SOME style now -- its own custom design,
+ * or the built-in default if it's never been customized -- so
+ * this always resolves true. Kept as a function (rather than
+ * removing the branch it guards below) since that branch's
+ * procedural fallback isn't touched by this feature and isn't
+ * worth disturbing here.
  */
 function hasCustomShip(){
 
-    return(
-        typeof shipCustomizer!=="undefined" &&
-        shipCustomizer.shapes &&
-        shipCustomizer.shapes.length>0
-    );
+    return true;
 
 }
 
@@ -25195,7 +25865,10 @@ function drawCustomShipShapes(
     );
 
     for(
-        const shape of shipCustomizer.shapes
+        const shape of
+        getShipStyleShapes(
+            currentShipStyleId
+        )
     ){
 
         shape.draw(
@@ -33248,6 +33921,14 @@ let currentShipEquipment="emp";
 let currentShipPerk=null;
 
 /*
+ * Which style THIS ship is actually wearing for the flight in
+ * progress -- set from the launched ship's own styleId, so
+ * gameplay and the star map render the same look that ship's
+ * owner actually picked for it, not a single shared design.
+ */
+let currentShipStyleId="custom1";
+
+/*
  * Cargo Hold Expansion and Dual Perk Rig — baked into a
  * specific ship at build time (see createShip's materialCapBonus
  * and hasDualPerk), not global settings. currentShipPerk2 only
@@ -33511,6 +34192,10 @@ function startGame(){
                 3
             );
 
+        currentShipStyleId=
+            earthChoice.styleId ||
+            "custom1";
+
         selectedLaunchShipId=
             null;
 
@@ -33655,6 +34340,10 @@ function startGame(){
                 1,
                 3
             );
+
+        currentShipStyleId=
+            ship.styleId ||
+            "custom1";
 
         savePlanetProgress();
 
@@ -37502,7 +38191,12 @@ const shipCustomizer = {
     open(targetKey = 'customShip', title = '⚙ SHIP BUILDER', subtitle = 'Design Your Vessel') {
         initAudio();
         this.targetKey = targetKey;
-        this.isShipMode = targetKey === 'customShip';
+        // Recognizes ANY ship style slot ("customShip",
+        // "customShip_2", "customShip_3"...), not just the
+        // original single key -- otherwise every style beyond
+        // the first would be treated as a structure design by
+        // close()'s cleanup logic below.
+        this.isShipMode = targetKey.indexOf('customShip') === 0;
         document.getElementById('shipCustomizerTitle').textContent = title;
         document.getElementById('shipCustomizerSubtitle').textContent = subtitle;
         this.loadDesign();
