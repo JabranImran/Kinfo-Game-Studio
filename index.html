@@ -5636,7 +5636,7 @@ function resolvePetEnergy(planetId){
             ){
 
                 addRankPoints(
-                    -15,
+                    -25,
                     "A pet ran out of energy"
                 );
 
@@ -5744,7 +5744,7 @@ function buyPet(planetId){
 
     savePlanetProgress();
 
-    addRankPoints(8,"Bought a pet");
+    addRankPoints(20,"Bought a pet");
 
     if(isFirstOfSpecies){
 
@@ -5811,7 +5811,7 @@ function feedPet(planetId,petId){
 
     savePlanetProgress();
 
-    addRankPoints(2,"Fed a pet");
+    addRankPoints(3,"Fed a pet");
 
     renderPlanetDetail(
         planetId
@@ -5944,7 +5944,7 @@ function trainPetStat(planetId,petId,statName){
 
     savePlanetProgress();
 
-    addRankPoints(5,"Trained a pet");
+    addRankPoints(10,"Trained a pet");
 
     showShipToast(
         "Pilot's "+statName+
@@ -6745,7 +6745,7 @@ function buyStructureUpgrade(planetId,upgradeId){
 
     savePlanetProgress();
 
-    addRankPoints(15,"Upgraded a structure");
+    addRankPoints(50,"Upgraded a structure");
 
     showShipToast(
         upgrade.name+" purchased!"
@@ -7467,18 +7467,88 @@ const SPECIES_FLOURISH_ICONS={
  * shopping. Letting a pet run out of energy subtracts from it.
  * Global across the whole save, not per-planet, since rank is
  * about the player, not any one world.
+ *
+ * Deliberately a much smaller share of total points than
+ * engagement — this is a floor reflecting how good the player
+ * already is at the moment-to-moment game, not something that
+ * should carry rank on its own the way score initially did.
  */
-const RANK_SKILL_BASE_SCALE=400;
+const RANK_SKILL_BASE_SCALE=250;
 
+/*
+ * Numbered ranks rather than themed titles — those titles
+ * (Cadet, Ace, Legend...) describe the SKILL side specifically
+ * now (see SKILL_TITLES below), not overall rank, since overall
+ * rank mixes in engagement the skill model knows nothing about.
+ *
+ * Thresholds spaced much further apart than the first pass —
+ * reaching the top in two sessions meant the curve was far too
+ * generous relative to how fast points actually come in now.
+ * Each ring colour shifts warmer/brighter climbing the scale,
+ * matching the state-colour language used elsewhere (cool blue
+ * "in progress" tones giving way to hotter, more "arrived"
+ * ones), so a glance at the ring's colour alone hints at how far
+ * along someone is, before even reading the number.
+ */
 const RANK_TIERS=[
-    {name:"Cadet",threshold:0},
-    {name:"Pilot",threshold:150},
-    {name:"Voyager",threshold:400},
-    {name:"Navigator",threshold:800},
-    {name:"Commander",threshold:1400},
-    {name:"Ace",threshold:2200},
-    {name:"Legend",threshold:3200}
+    {name:"Rank 1",threshold:0,color:"#7fe0ff"},
+    {name:"Rank 2",threshold:600,color:"#7fc4ff"},
+    {name:"Rank 3",threshold:1500,color:"#8fb0ff"},
+    {name:"Rank 4",threshold:3000,color:"#a8a0ff"},
+    {name:"Rank 5",threshold:5500,color:"#c98cff"},
+    {name:"Rank 6",threshold:9000,color:"#ff8ce0"},
+    {name:"Rank 7",threshold:14000,color:"#ff8ca8"},
+    {name:"Rank 8",threshold:21000,color:"#ff9d6e"},
+    {name:"Rank 9",threshold:30000,color:"#ffc06e"},
+    {name:"Rank 10",threshold:42000,color:"#ffe06e"}
 ];
+
+/*
+ * SKILL TITLES — purely a label for the skill base's own 0-1
+ * estimate, shown in the rank detail panel alongside its point
+ * contribution. This is where the old Cadet/Pilot/.../Legend
+ * naming moved to, since it was always describing raw ability
+ * rather than the full rank (which engagement now dominates).
+ */
+const SKILL_TITLES=[
+    {name:"Cadet",min:0},
+    {name:"Pilot",min:.25},
+    {name:"Voyager",min:.45},
+    {name:"Commander",min:.65},
+    {name:"Ace",min:.82},
+    {name:"Legend",min:.95}
+];
+
+function getSkillTitle(){
+
+    const estimate=
+        (
+            typeof aiModel!=="undefined" &&
+            aiModel
+            ?aiModel.skillEstimate
+            :0
+        ) || 0;
+
+    let title=
+        SKILL_TITLES[0];
+
+    for(
+        let i=0;
+        i<SKILL_TITLES.length;
+        i++
+    ){
+
+        if(estimate>=SKILL_TITLES[i].min){
+
+            title=SKILL_TITLES[i];
+
+        }
+
+    }
+
+    return title.name;
+
+}
 
 let planetSave=
     loadPlanetSave();
@@ -8369,7 +8439,7 @@ function buyShopItem(planetId){
         1
     );
 
-    addRankPoints(3,"Bought from shop");
+    addRankPoints(8,"Bought from shop");
 
     showShipToast(
         item.name+" purchased!"
@@ -8919,7 +8989,7 @@ function sellItemStock(planetId,itemId){
         1
     );
 
-    addRankPoints(1,"Sold an item");
+    addRankPoints(3,"Sold an item");
 
     showShipToast(
         "Sold for "+price+" 🪙"
@@ -8971,7 +9041,7 @@ function sellMaterialStock(planetId,materialId){
         1
     );
 
-    addRankPoints(1,"Sold a material");
+    addRankPoints(3,"Sold a material");
 
     showShipToast(
         "Sold for "+price+" 🪙"
@@ -16171,7 +16241,7 @@ function resolveBuildQueue(planetId){
                     {level:1};
 
                 addRankPoints(
-                    25,"Built a structure"
+                    80,"Built a structure"
                 );
 
                 showMilestoneFlourish(
@@ -30099,9 +30169,25 @@ function landAtCurrentPlanet(){
     if(score>0){
 
         addRankPoints(
-            Math.round(score*.1),
+            Math.round(score*.03),
             "Mission complete"
         );
+
+        /*
+         * A genuine personal best is worth more than just its
+         * share of the normal per-point rate — reaching further
+         * than you ever have before is exactly the kind of
+         * moment rank should visibly reward on top of the
+         * ordinary score contribution above.
+         */
+        if(score>highScore){
+
+            addRankPoints(
+                Math.round(score*.08),
+                "New high score!"
+            );
+
+        }
 
     }
 
@@ -37062,6 +37148,13 @@ function renderRankCircle(flashAmount){
     progressEl.style.strokeDashoffset=
         circumference*(1-info.progress);
 
+    progressEl.style.stroke=
+        info.tier.color;
+
+    progressEl.style.filter=
+        "drop-shadow(0 0 4px "+
+        info.tier.color+")";
+
     if(flashAmount){
 
         const wrap=
@@ -37139,7 +37232,8 @@ function renderRankDetail(){
     document.getElementById(
         "rankDetailSkillRow"
     ).innerHTML=
-        "<span>🧠 Skill base</span><span>"+
+        "<span>🧠 Skill base ("+
+        getSkillTitle()+")</span><span>"+
         skillBase+"</span>";
 
     document.getElementById(
