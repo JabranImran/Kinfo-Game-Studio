@@ -4872,6 +4872,88 @@ function loadPlanetSave(){
 
                 }
 
+                /*
+                 * Backfills visitedPlanets for saves from before
+                 * it existed, so upgrading doesn't suddenly make
+                 * a planet the player has genuinely already been
+                 * to look unvisited on the star map. Earth is
+                 * always reachable anyway; anywhere else counts
+                 * as visited if it shows any of the ordinary
+                 * signs of having actually been landed on —
+                 * ships docked there, coins banked, or materials
+                 * stored.
+                 */
+                if(
+                    !saved.visitedPlanets ||
+                    typeof saved.visitedPlanets!==
+                    "object"
+                ){
+
+                    saved.visitedPlanets={};
+
+                    const planetIds=
+                        new Set([
+                            ...Object.keys(
+                                saved.ships || {}
+                            ),
+                            ...Object.keys(
+                                saved.banks || {}
+                            ),
+                            ...Object.keys(
+                                saved.materialBanks ||
+                                {}
+                            )
+                        ]);
+
+                    planetIds.forEach(
+                        planetId=>{
+
+                            const hasShips=
+                                Array.isArray(
+                                    saved.ships[
+                                        planetId
+                                    ]
+                                ) &&
+                                saved.ships[
+                                    planetId
+                                ].length>0;
+
+                            const hasBank=
+                                (
+                                    saved.banks[
+                                        planetId
+                                    ] || 0
+                                )>0;
+
+                            const materialEntries=
+                                saved.materialBanks[
+                                    planetId
+                                ] || {};
+
+                            const hasMaterials=
+                                Object.values(
+                                    materialEntries
+                                ).some(
+                                    amount => amount>0
+                                );
+
+                            if(
+                                hasShips ||
+                                hasBank ||
+                                hasMaterials
+                            ){
+
+                                saved.visitedPlanets[
+                                    planetId
+                                ]=true;
+
+                            }
+
+                        }
+                    );
+
+                }
+
                 return saved;
 
             }
@@ -7466,7 +7548,7 @@ function renderStructureUpgradesHtml(planetId,structureId){
  */
 const PET_ROSTER_BY_PLANET={
 
-    earth:["penguin","cat","gorilla"],
+    earth:["penguin","cat","gorilla","koala"],
 
     kepler:["rex"]
 
@@ -7483,6 +7565,7 @@ const SPECIES_DISPLAY_NAMES={
     penguin:"Penguin",
     cat:"Cat",
     gorilla:"Gorilla",
+    koala:"Koala",
     rex:"T-Rex"
 };
 
@@ -7490,6 +7573,7 @@ const SPECIES_FLOURISH_ICONS={
     penguin:"🐧",
     cat:"🐱",
     gorilla:"🦍",
+    koala:"🐨",
     rex:"🦖"
 };
 
@@ -11910,6 +11994,376 @@ function drawCatPet(c,x,y,size,energy,walkSeed){
 }
 
 /*
+ * KOALA — same fused single-oval silhouette as the cat, but
+ * built around the two features that actually read as "koala"
+ * at a glance: enormous round fluffy ears set low on the sides
+ * of the head, and a big dark rounded nose taking up the middle
+ * of the face. Soft grey-blue fur with a cream chest patch,
+ * cool sage neon rather than the cat's pink or the penguin's
+ * blue.
+ */
+function drawKoalaPet(c,x,y,size,energy,walkSeed){
+
+    const time=
+        performance.now()/1000;
+
+    const energyRatio=
+        Math.max(
+            0,
+            Math.min(1,energy/100)
+        );
+
+    const glow=
+        3+energyRatio*16;
+
+    const furColor=
+        "#aab4c2";
+
+    const chestColor=
+        "#f2efe9";
+
+    const earInnerColor=
+        "#e8c9d4";
+
+    const cheekColor=
+        "#f4b8c6";
+
+    const noseColor=
+        "#2c2a30";
+
+    const neonColor=
+        "#9fd6b8";
+
+    c.save();
+
+    c.translate(x,y);
+
+    const bob=
+        Math.sin(
+            time*3.6+walkSeed
+        )*size*.05;
+
+    c.translate(0,bob);
+
+    const waddle=
+        Math.sin(
+            time*4.6+walkSeed
+        )*.07;
+
+    c.rotate(waddle);
+
+    /*
+     * Feet — small pale-grey stubs peeking from under the body,
+     * drawn first so the body overlaps their tops.
+     */
+    c.fillStyle=
+        furColor;
+
+    c.strokeStyle=
+        neonColor;
+
+    c.lineWidth=
+        Math.max(1,size*.04);
+
+    c.shadowBlur=
+        glow*.3;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.17,
+        size*.57,
+        size*.12,
+        size*.08,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.17,
+        size*.57,
+        size*.12,
+        size*.08,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Main body — one rounded silhouette, head and back fused
+     * together, same as the cat/penguin.
+     */
+    c.fillStyle=
+        furColor;
+
+    c.lineWidth=
+        Math.max(1,size*.05);
+
+    c.shadowBlur=glow;
+
+    c.shadowColor=
+        neonColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,0,
+        size*.5,
+        size*.56,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.stroke();
+
+    /*
+     * Cream chest patch — a soft pale oval low on the body,
+     * under where the face sits.
+     */
+    c.shadowBlur=0;
+
+    c.fillStyle=
+        chestColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.28,
+        size*.24,
+        size*.22,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Ears — the defining koala feature: big, round, fluffy,
+     * set low and wide on the sides of the head rather than up
+     * on top like the cat's.
+     */
+    function drawKoalaEar(side){
+
+        c.save();
+
+        c.translate(
+            side*size*.46,
+            -size*.14
+        );
+
+        c.beginPath();
+
+        c.ellipse(
+            0,0,
+            size*.22,
+            size*.26,
+            0,0,Math.PI*2
+        );
+
+        c.fillStyle=
+            furColor;
+
+        c.strokeStyle=
+            neonColor;
+
+        c.lineWidth=
+            Math.max(1,size*.045);
+
+        c.shadowBlur=
+            glow*.7;
+
+        c.shadowColor=
+            neonColor;
+
+        c.fill();
+
+        c.stroke();
+
+        c.beginPath();
+
+        c.ellipse(
+            0,0,
+            size*.12,
+            size*.15,
+            0,0,Math.PI*2
+        );
+
+        c.fillStyle=
+            earInnerColor;
+
+        c.shadowBlur=0;
+
+        c.fill();
+
+        c.restore();
+
+    }
+
+    drawKoalaEar(-1);
+
+    drawKoalaEar(1);
+
+    /*
+     * Face group — same slow "attention" cycle as the other
+     * named pets: mostly leaning into the current waddle
+     * direction, easing back to centre every so often.
+     */
+    const attentionPeriod=
+        5.5+(walkSeed%5)*.6;
+
+    const attentionPhase=
+        (
+            (
+                time*.55+
+                walkSeed*1.7
+            )%attentionPeriod
+        )/attentionPeriod;
+
+    const followAmount=
+        Math.cos(
+            attentionPhase*Math.PI*2
+        )*.5+.5;
+
+    const faceSwayX=
+        waddle*size*1.6*
+        followAmount;
+
+    const faceSwayY=
+        Math.sin(
+            time*3+walkSeed*1.7
+        )*size*.015*
+        followAmount;
+
+    c.save();
+
+    c.translate(
+        faceSwayX,
+        faceSwayY
+    );
+
+    /*
+     * Cheeks.
+     */
+    c.globalAlpha*=.7;
+
+    c.fillStyle=
+        cheekColor;
+
+    c.beginPath();
+
+    c.arc(
+        -size*.26,
+        size*.1,
+        size*.075,
+        0,Math.PI*2
+    );
+
+    c.arc(
+        size*.26,
+        size*.1,
+        size*.075,
+        0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.globalAlpha/=.7;
+
+    /*
+     * Nose — the other defining feature: one big dark rounded
+     * shape taking up the centre of the face, koala-style,
+     * rather than a small dot.
+     */
+    c.fillStyle=
+        noseColor;
+
+    c.beginPath();
+
+    c.ellipse(
+        0,
+        size*.08,
+        size*.1,
+        size*.075,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    /*
+     * Eyes — simple round dots with a per-pet-phased blink.
+     */
+    const blinkCycle=3.9;
+
+    const blinkDuration=.16;
+
+    const blinkCyclePos=
+        (
+            time+
+            walkSeed*.7
+        )%blinkCycle;
+
+    let eyeOpenness=1;
+
+    if(blinkCyclePos<blinkDuration){
+
+        eyeOpenness=
+            1-Math.sin(
+                (blinkCyclePos/blinkDuration)*
+                Math.PI
+            );
+
+    }
+
+    const eyeRadiusX=
+        size*.07;
+
+    const eyeRadiusY=
+        eyeRadiusX*
+        Math.max(.12,eyeOpenness);
+
+    c.shadowBlur=
+        glow*.4;
+
+    c.shadowColor=
+        neonColor;
+
+    c.fillStyle=
+        "#151018";
+
+    c.beginPath();
+
+    c.ellipse(
+        -size*.19,
+        -size*.05,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.ellipse(
+        size*.19,
+        -size*.05,
+        eyeRadiusX,
+        eyeRadiusY,
+        0,0,Math.PI*2
+    );
+
+    c.fill();
+
+    c.shadowBlur=0;
+
+    c.restore();
+
+    c.restore();
+
+}
+
+/*
  * GORILLA — deliberately NOT the fused single-egg silhouette
  * the penguin and cat use. A genuinely separate round head
  * sitting on a wider, chunkier body reads as gorilla in a way
@@ -13360,6 +13814,13 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatI
             energy,walkSeed
         );
 
+    }else if(species==="koala"){
+
+        drawKoalaPet(
+            c,x,y,size,
+            energy,walkSeed
+        );
+
     }else if(species==="gorilla"){
 
         drawGorillaPet(
@@ -14029,6 +14490,12 @@ function getStarMapSelectable(){
             (
                 getShipCount(p.id)>0 &&
                 highScore>=p.requirement
+            ) ||
+            (
+                planetSave.visitedPlanets &&
+                planetSave.visitedPlanets[
+                    p.id
+                ]
             )
     ).map(
         p => p.id
@@ -32321,6 +32788,24 @@ function landAtCurrentPlanet(){
     if(!planet)
         return;
 
+    /*
+     * Marks this planet as genuinely visited, independent of
+     * whether a ship happens to stay docked here afterward —
+     * used by the star map so a planet you've landed on before
+     * stays tappable (to check what's stored there) even after
+     * every ship eventually leaves, rather than only being
+     * reachable while something's currently sitting on it.
+     */
+    if(!planetSave.visitedPlanets){
+
+        planetSave.visitedPlanets={};
+
+    }
+
+    planetSave.visitedPlanets[
+        currentPlanetId
+    ]=true;
+
 
     /*
      * A ship's docked record is only written when the player
@@ -32475,15 +32960,27 @@ function landAtCurrentPlanet(){
     /*
      * Every completed mission adds to rank, scaled by the score
      * actually earned — a bigger run genuinely counts for more,
-     * per the request that "more points, more increase". No
-     * floor other than zero: a 0-score landing (nothing survived
-     * or nothing scored) adds nothing, but never subtracts —
-     * only the pet-energy penalty elsewhere does that.
+     * per the request that "more points, more increase". Uses
+     * the NET gain this specific flight (score minus whatever
+     * the ship already had at launch), not the ship's raw
+     * total — score carries over between flights, so using the
+     * raw total let a launch-and-immediately-land cycle farm
+     * rank for the same already-rewarded score over and over,
+     * with nothing new actually happening in between. No floor
+     * other than zero: a flight with no net gain adds nothing,
+     * but never subtracts — only the pet-energy penalty
+     * elsewhere does that.
      */
-    if(score>0){
+    const netScoreGain=
+        Math.max(
+            0,
+            score-launchScore
+        );
+
+    if(netScoreGain>0){
 
         addRankPoints(
-            Math.round(score*.03),
+            Math.round(netScoreGain*.03),
             "Mission complete"
         );
 
@@ -32492,7 +32989,12 @@ function landAtCurrentPlanet(){
          * share of the normal per-point rate — reaching further
          * than you ever have before is exactly the kind of
          * moment rank should visibly reward on top of the
-         * ordinary score contribution above.
+         * ordinary score contribution above. Still gated on a
+         * real net gain this flight, for the same reason as
+         * above — highScore itself only updates during actual
+         * gameplay frames, so an instant round trip on a ship
+         * that already exceeded it would otherwise re-trigger
+         * this every single time with nothing new achieved.
          */
         if(score>highScore){
 
