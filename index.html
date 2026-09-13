@@ -3370,6 +3370,152 @@ and (max-height:500px){
 
 "use strict";
 
+/*
+ * DIAGNOSTIC ERROR OVERLAY
+ *
+ * "Script error" with no detail is what browsers show when the
+ * real message/line/stack aren't available to the handler that
+ * receives it — this can happen depending on how a page is
+ * hosted or previewed, independent of what actually broke. This
+ * catches every uncaught error and promise rejection and prints
+ * whatever detail IS available directly on screen, so a report
+ * next time can include a real message/line/stack instead of
+ * just "something broke", regardless of whether the console
+ * itself is showing the full picture.
+ */
+window.addEventListener(
+    "error",
+    event=>{
+
+        try{
+
+            const box=
+                document.createElement("div");
+
+            box.style.cssText=
+                "position:fixed;bottom:0;left:0;right:0;"+
+                "max-height:40vh;overflow:auto;"+
+                "background:rgba(20,0,0,.95);color:#ffb3b3;"+
+                "font:11px monospace;padding:10px;"+
+                "z-index:999999;white-space:pre-wrap;"+
+                "border-top:2px solid #ff4d4d;";
+
+            box.textContent=
+                "JS ERROR\n"+
+                "message: "+
+                (event.message || "(none given)")+
+                "\nfile: "+
+                (event.filename || "(none given)")+
+                "\nline: "+
+                (event.lineno || "?")+
+                " col: "+
+                (event.colno || "?")+
+                "\nstack: "+
+                (
+                    event.error &&
+                    event.error.stack
+                    ?event.error.stack
+                    :"(none given)"
+                );
+
+            document.body.appendChild(box);
+
+        }catch(diagError){
+
+            // Diagnostic overlay itself must never throw.
+
+        }
+
+    }
+);
+
+window.addEventListener(
+    "unhandledrejection",
+    event=>{
+
+        try{
+
+            const box=
+                document.createElement("div");
+
+            box.style.cssText=
+                "position:fixed;bottom:0;left:0;right:0;"+
+                "max-height:40vh;overflow:auto;"+
+                "background:rgba(20,0,0,.95);color:#ffb3b3;"+
+                "font:11px monospace;padding:10px;"+
+                "z-index:999999;white-space:pre-wrap;"+
+                "border-top:2px solid #ff4d4d;";
+
+            box.textContent=
+                "UNHANDLED PROMISE REJECTION\n"+
+                String(
+                    event.reason &&
+                    event.reason.stack
+                    ?event.reason.stack
+                    :event.reason
+                );
+
+            document.body.appendChild(box);
+
+        }catch(diagError){
+
+            // Diagnostic overlay itself must never throw.
+
+        }
+
+    }
+);
+
+/*
+ * A LOCAL try/catch, right at the source, always gets the real
+ * Error object with its full message and stack — this is what
+ * window.onerror's "Script error." sanitization CAN'T touch,
+ * since that restriction only applies to the global event, not
+ * to a catch block in the same script that threw. Used to wrap
+ * specific suspect call sites (landing, in particular) so a
+ * real report is possible even when the global handler above
+ * gets nothing.
+ */
+function showDiagnosticError(error,context){
+
+    try{
+
+        const box=
+            document.createElement("div");
+
+        box.style.cssText=
+            "position:fixed;bottom:0;left:0;right:0;"+
+            "max-height:40vh;overflow:auto;"+
+            "background:rgba(20,0,0,.95);color:#ffb3b3;"+
+            "font:11px monospace;padding:10px;"+
+            "z-index:999999;white-space:pre-wrap;"+
+            "border-top:2px solid #ff4d4d;";
+
+        box.textContent=
+            "CAUGHT ERROR ("+context+")\n"+
+            "message: "+
+            (
+                error && error.message
+                ?error.message
+                :String(error)
+            )+
+            "\nstack: "+
+            (
+                error && error.stack
+                ?error.stack
+                :"(none given)"
+            );
+
+        document.body.appendChild(box);
+
+    }catch(diagError){
+
+        // Diagnostic overlay itself must never throw.
+
+    }
+
+}
+
 
 /* =========================================================
    GOOGLE LEADERBOARD
@@ -16908,18 +17054,40 @@ function drawPlanetFocusScene(){
                         !!activeBuild &&
                         targetAngle!==null;
 
-                    drawSpacePet(
-                        c,
-                        selectedStartPlanet,
-                        px,
-                        py,
-                        petSize,
-                        pet.energy,
-                        seed,
-                        pet.species,
-                        isPetWorking,
-                        "builder"
-                    );
+                    /*
+                     * Wrapped defensively: a single pet's species
+                     * renderer throwing here previously had the
+                     * potential to break the ENTIRE home screen
+                     * render loop for every frame afterward, which
+                     * would look exactly like the whole game
+                     * freezing up on unrelated actions like
+                     * landing — not just that one pet failing to
+                     * draw. One bad pet should never be able to
+                     * take the whole screen down with it.
+                     */
+                    try{
+
+                        drawSpacePet(
+                            c,
+                            selectedStartPlanet,
+                            px,
+                            py,
+                            petSize,
+                            pet.energy,
+                            seed,
+                            pet.species,
+                            isPetWorking,
+                            "builder"
+                        );
+
+                    }catch(petDrawError){
+
+                        console.error(
+                            "Surface pet draw failed:",
+                            petDrawError
+                        );
+
+                    }
 
                     canvas._focusHitAreas.push({
                         x:px,
@@ -32796,6 +32964,23 @@ function chooseDestination(id){
 
 function landAtCurrentPlanet(){
 
+    try{
+
+        landAtCurrentPlanetInner();
+
+    }catch(error){
+
+        showDiagnosticError(
+            error,
+            "landAtCurrentPlanet"
+        );
+
+    }
+
+}
+
+function landAtCurrentPlanetInner(){
+
     if(
         !running ||
         worldState!=="planet"
@@ -33058,16 +33243,36 @@ function landAtCurrentPlanet(){
 
     flightTarget=1;
 
-    renderPlanetMap();
+    /*
+     * Wrapped defensively: everything that actually matters
+     * about landing (the ship record, saved progress, exiting
+     * flight state) is already done above this point. If a
+     * rendering-side issue turns up in here, it should show as
+     * a visible but recoverable glitch rather than an uncaught
+     * error that makes it look like landing itself silently
+     * failed.
+     */
+    try{
 
-    startFlightIn();
+        renderPlanetMap();
 
-    floatingText(
-        "SHIP LANDED",
-        W/2,
-        H*.35,
-        "#73e8ff"
-    );
+        startFlightIn();
+
+        floatingText(
+            "SHIP LANDED",
+            W/2,
+            H*.35,
+            "#73e8ff"
+        );
+
+    }catch(landingRenderError){
+
+        console.error(
+            "Post-landing render failed:",
+            landingRenderError
+        );
+
+    }
 
 }
 
@@ -35260,6 +35465,18 @@ let currentShipPerk=null;
 let currentShipStyleId="custom1";
 
 /*
+ * The score the launched ship actually walked in with — needed
+ * at global scope (not just inside startGame(), which sets it)
+ * so landAtCurrentPlanet() can compute this flight's NET score
+ * gain (current score minus this) for rank purposes. Declaring
+ * it as a genuinely local `let` inside startGame() -- the bug
+ * that shipped here initially -- meant landAtCurrentPlanet()
+ * was reaching for a variable that plain didn't exist in its
+ * scope, throwing a ReferenceError on every single landing.
+ */
+let launchScore=0;
+
+/*
  * Cargo Hold Expansion and Dual Perk Rig — baked into a
  * specific ship at build time (see createShip's materialCapBonus
  * and hasDualPerk), not global settings. currentShipPerk2 only
@@ -35389,7 +35606,15 @@ function startGame(){
      * stored ship.
      */
 
-    let launchScore=0;
+    /*
+     * launchScore itself is now declared at global scope (see
+     * its own comment there) specifically so
+     * landAtCurrentPlanet() can read it — a local `let` here
+     * would shadow that global and silently break the same
+     * thing all over again, updating a copy nothing outside
+     * this function could ever see.
+     */
+    launchScore=0;
 
     let launchCoins=0;
 
@@ -36956,7 +37181,18 @@ landButton.addEventListener(
         event.preventDefault();
         event.stopPropagation();
 
-        landAtCurrentPlanet();
+        try{
+
+            landAtCurrentPlanet();
+
+        }catch(error){
+
+            showDiagnosticError(
+                error,
+                "land button"
+            );
+
+        }
 
     },
     {
@@ -37070,9 +37306,20 @@ function handleSwipeGesture(dx,dy,duration){
         )
     ){
 
-        triggerShipSwipeAnim(1);
+        try{
 
-        landAtCurrentPlanet();
+            triggerShipSwipeAnim(1);
+
+            landAtCurrentPlanet();
+
+        }catch(error){
+
+            showDiagnosticError(
+                error,
+                "swipe-to-land"
+            );
+
+        }
 
         return true;
 
