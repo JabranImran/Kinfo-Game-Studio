@@ -18784,15 +18784,37 @@ function selectStartPlanet(id){
     if(!planet)
         return;
 
+    /*
+     * This mirrors getStarMapSelectable()'s own criteria exactly
+     * on purpose — that function decides which planets are even
+     * tappable in the first place, so rejecting a tap here on a
+     * DIFFERENT, narrower rule (only "has a ship right now, and
+     * meets the score requirement") meant a planet the map
+     * correctly showed as reachable (visited before, just
+     * nothing currently docked) would silently do nothing when
+     * tapped, leaving the selection exactly where it already
+     * was. A previously-visited planet doesn't need its own
+     * separate requirement check here either, for the same
+     * reason getStarMapSelectable() doesn't apply one to it —
+     * having been there before already proves the requirement
+     * was met at the time, and highScore only ever climbs.
+     */
+    if(id!=="earth"){
 
-    if(
-        id!=="earth"
-    ){
+        const hasShipAndQualifies=
+            getShipCount(id)>0 &&
+            highScore>=
+            planet.requirement;
+
+        const visitedBefore=
+            !!(
+                planetSave.visitedPlanets &&
+                planetSave.visitedPlanets[id]
+            );
 
         if(
-            getShipCount(id)<=0 ||
-            highScore<
-            planet.requirement
+            !hasShipAndQualifies &&
+            !visitedBefore
         ){
 
             return;
