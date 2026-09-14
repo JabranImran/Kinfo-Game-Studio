@@ -5542,6 +5542,79 @@ function getPerkForPlanet(planetId){
 
 }
 
+/*
+ * A pet stationed away from home brings its own world's
+ * exclusive perk along with it — one entry per DISTINCT home
+ * planet represented among the pets actually here right now,
+ * so two pets from the same foreign world don't duplicate the
+ * opportunity. Only pets genuinely away from home count; a
+ * pet on its own planet isn't "foreign" to anything.
+ */
+function getForeignPetPerkOpportunities(planetId){
+
+    const pets=
+        getPets(planetId);
+
+    const seenHomePlanets=
+        new Set();
+
+    const opportunities=[];
+
+    pets.forEach(
+        pet=>{
+
+            const homePlanetId=
+                pet.homePlanetId;
+
+            if(
+                !homePlanetId ||
+                homePlanetId===planetId ||
+                seenHomePlanets.has(
+                    homePlanetId
+                )
+            )
+                return;
+
+            const perk=
+                getPerkForPlanet(
+                    homePlanetId
+                );
+
+            if(!perk)
+                return;
+
+            seenHomePlanets.add(
+                homePlanetId
+            );
+
+            opportunities.push({
+                perk:perk,
+                sourcePet:pet,
+                homePlanetId:homePlanetId
+            });
+
+        }
+    );
+
+    return opportunities;
+
+}
+
+/*
+ * Whether a perk not native to planetId can still be bought
+ * there right now — true only while a pet from that perk's own
+ * home planet is actually stationed here.
+ */
+function isForeignPerkAvailableAt(planetId,perkId){
+
+    return getForeignPetPerkOpportunities(
+        planetId
+    ).some(
+        o => o.perk.id===perkId
+    );
+
+}
+
 function getPerkStock(planetId,perkId){
 
     return(
@@ -9893,6 +9966,65 @@ function buyShopItem(planetId){
  * perk (perkUnitsGranted) precisely so two different unlocks
  * sharing one material can't step on each other's progress.
  */
+/*
+ * Shared by both the normal (on the perk's own planet) and
+ * pet-enabled foreign case: given how much has now been sold in
+ * total toward this perk, grants whatever new stock units that
+ * total has earned (never double-granting the same threshold
+ * twice) at stockPlanetId — which is perk.planetId for a normal
+ * sale, or wherever the player currently is for a foreign one.
+ */
+function creditPerkProgress(stockPlanetId,perk,totalSold){
+
+    const unitsEarned=
+        Math.floor(
+            totalSold/
+            perk.unlockAmount
+        );
+
+    const alreadyGranted=
+        getPerkUnitsGranted(
+            perk.planetId,
+            perk.id
+        );
+
+    if(unitsEarned>alreadyGranted){
+
+        const newUnits=
+            unitsEarned-
+            alreadyGranted;
+
+        addPerkAvailable(
+            stockPlanetId,
+            perk.id,
+            newUnits
+        );
+
+        setPerkUnitsGranted(
+            perk.planetId,
+            perk.id,
+            unitsEarned
+        );
+
+        if(!planetSave.unlockedPerks){
+
+            planetSave.unlockedPerks={};
+
+        }
+
+        planetSave.unlockedPerks[
+            perk.id
+        ]=true;
+
+        showShipToast(
+            perk.name+
+            " now available to buy!"
+        );
+
+    }
+
+}
+
 function trackResourceSold(planetId,resourceId,amount){
 
     if(!planetSave.soldCounts){
@@ -9944,54 +10076,71 @@ function trackResourceSold(planetId,resourceId,amount){
         resourceId
     ){
 
-        const unitsEarned=
-            Math.floor(
-                totalSold/
-                perk.unlockAmount
-            );
+        creditPerkProgress(
+            planetId,
+            perk,
+            totalSold
+        );
 
-        const alreadyGranted=
-            getPerkUnitsGranted(
-                planetId,
-                perk.id
-            );
+    }
 
-        if(unitsEarned>alreadyGranted){
+    /*
+     * A pet stationed away from home lets its own world's perk
+     * be sold toward right here too — progress is tracked under
+     * the perk's OWN home planet either way (so it's a single,
+     * continuous total regardless of where any given sale
+     * happens), but the resulting stock is granted at THIS
+     * planet specifically, since that's where the player
+     * actually wants to use it without a trip home.
+     */
+    getForeignPetPerkOpportunities(
+        planetId
+    ).forEach(
+        opportunity=>{
 
-            const newUnits=
-                unitsEarned-
-                alreadyGranted;
+            const foreignPerk=
+                opportunity.perk;
 
-            addPerkAvailable(
-                planetId,
-                perk.id,
-                newUnits
-            );
+            if(
+                foreignPerk.unlockMaterial!==
+                resourceId
+            )
+                return;
 
-            setPerkUnitsGranted(
-                planetId,
-                perk.id,
-                unitsEarned
-            );
+            if(
+                !planetSave.soldCounts[
+                    foreignPerk.planetId
+                ]
+            ){
 
-            if(!planetSave.unlockedPerks){
-
-                planetSave.unlockedPerks={};
+                planetSave.soldCounts[
+                    foreignPerk.planetId
+                ]={};
 
             }
 
-            planetSave.unlockedPerks[
-                perk.id
-            ]=true;
+            planetSave.soldCounts[
+                foreignPerk.planetId
+            ][resourceId]=
+                (
+                    planetSave.soldCounts[
+                        foreignPerk.planetId
+                    ][resourceId] || 0
+                )+amount;
 
-            showShipToast(
-                perk.name+
-                " now available to buy!"
+            const foreignTotalSold=
+                planetSave.soldCounts[
+                    foreignPerk.planetId
+                ][resourceId];
+
+            creditPerkProgress(
+                planetId,
+                foreignPerk,
+                foreignTotalSold
             );
 
         }
-
-    }
+    );
 
     /*
      * Structures: a one-time unlock, never restocked — true
@@ -10331,7 +10480,13 @@ function buyPerk(planetId,perkId){
 
     if(
         !perk ||
-        perk.planetId!==planetId
+        (
+            perk.planetId!==planetId &&
+            !isForeignPerkAvailableAt(
+                planetId,
+                perkId
+            )
+        )
     )
         return;
 
@@ -19716,6 +19871,206 @@ function closePlanetDetail(){
 
 }
 
+/*
+ * One perk shop row's full HTML — the planet's own perk, or (via
+ * foreignSourcePet) a perk borrowed in by a pet stationed away
+ * from its own home world. rowKey keeps each row's expand state
+ * independent (so opening the local perk's detail doesn't also
+ * expand a foreign one, and vice versa); ships/expandedShipPickerKey
+ * are read from the enclosing renderPlanetDetail scope, same as
+ * every other row in this tab.
+ */
+function renderPerkShopRow(
+    planetId,perk,rowKey,ships,
+    expandedShipPickerKey,foreignSourcePet
+){
+
+    const unlocked=
+        isPerkUnlocked(perk.id);
+
+    const perkStockHere=
+        getPerkStock(
+            planetId,
+            perk.id
+        );
+
+    const perkAvailableHere=
+        getPerkAvailable(
+            planetId,
+            perk.id
+        );
+
+    const unlockMaterialInfo=
+        MATERIALS[
+            perk.unlockMaterial
+        ] ||
+        MATERIALS["aether-dust"];
+
+    /*
+     * Progress always reads from the perk's OWN home planet —
+     * see creditPerkProgress — so a foreign row shows the exact
+     * same running total as the perk's own planet would, since
+     * it genuinely is the same underlying progress.
+     */
+    const soldSoFar=
+        getSoldProgress(
+            perk.planetId,
+            perk.unlockMaterial
+        )%perk.unlockAmount;
+
+    const canBuyPerk=
+        perkAvailableHere>0 &&
+        getTotalAvailableCoins(planetId)>=
+        perk.buyCost;
+
+    const perkExpanded=
+        expandedShopRowId===
+        rowKey;
+
+    const titleLabel=
+        foreignSourcePet
+        ?"Perk — brought by "+
+         (
+             SPECIES_DISPLAY_NAMES[
+                 foreignSourcePet.species
+             ] || "a pet"
+         )
+        :"Perk";
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        titleLabel+'</div>'+
+        '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
+        rowKey+'">'+
+        '<div class="shop-row-main">'+
+        '<span>'+
+        (
+            perkAvailableHere>0
+            ?perk.icon
+            :'🔒'
+        )+
+        '</span>'+
+        '<span class="shop-row-name">'+perk.name+'</span>'+
+        '<span class="shop-row-meta">'+
+        unlockMaterialInfo.icon+' '+
+        soldSoFar+'/'+perk.unlockAmount+
+        '</span>'+
+        '</div>'+
+        (
+            perkAvailableHere>0
+            ?'<button class="remove-btn" style="background:'+
+             (
+                 canBuyPerk
+                 ?'rgba(110,220,255,.18)'
+                 :'rgba(255,255,255,.05)'
+             )+
+             ';border-color:'+
+             (
+                 canBuyPerk
+                 ?'rgba(110,220,255,.45)'
+                 :'rgba(255,255,255,.12)'
+             )+
+             ';color:'+
+             (
+                 canBuyPerk
+                 ?'#bcecff'
+                 :'#5c7ba0'
+             )+
+             ';" data-action="buy-perk" data-perk="'+
+             perk.id+'" '+
+             (
+                 canBuyPerk
+                 ?''
+                 :'disabled'
+             )+
+             '>Buy '+perk.buyCost+' 🪙</button>'
+            :'<button class="remove-btn" style="background:'+
+             'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
+             'color:#5c7ba0;" disabled>🔒 Locked</button>'
+        )+
+        '</div>'+
+        (
+            perkExpanded
+            ?'<div class="shop-row-detail">'+
+             perk.description+
+             (
+                 foreignSourcePet
+                 ?'<div style="margin-top:8px;color:#ffd76b;">'+
+                  'Available here because '+
+                  (
+                      SPECIES_DISPLAY_NAMES[
+                          foreignSourcePet.species
+                      ] || "a pet"
+                  )+
+                  ' is stationed away from its home world — '+
+                  'sending it back home removes this row, though '+
+                  'any progress and owned units stay exactly as '+
+                  'they are.</div>'
+                 :''
+             )+
+             '<div style="margin-top:8px;color:#70ddff;">'+
+             (
+                 unlocked
+                 ?'Owned: '+perkStockHere+
+                  ' · Available to buy: '+perkAvailableHere+
+                  ' · '
+                 :''
+             )+
+             'Progress to next: '+soldSoFar+'/'+
+             perk.unlockAmount+' '+unlockMaterialInfo.name+
+             ' sold'+
+             '</div>'+
+             '<div style="margin-top:8px;">'+
+             'Selling '+unlockMaterialInfo.icon+' '+
+             unlockMaterialInfo.name+' in the Vault tab '+
+             'doesn\'t buy this directly — it just makes another '+
+             'unit available to buy with coins. Owned units can '+
+             'be equipped onto any ship docked here.'+
+             '</div>'+
+             '</div>'
+            :''
+        )+
+        '</div>';
+
+    if(perkStockHere>0){
+
+        const perkEquipPickerKey=
+            "equip-perk-"+perk.id;
+
+        const perkEquipPickerOpen=
+            expandedShipPickerKey===
+            perkEquipPickerKey;
+
+        html+=
+            '<button class="control-btn" data-action="toggle-ship-picker" '+
+            'data-picker="'+perkEquipPickerKey+'" '+
+            'style="width:auto;padding:7px 10px;margin-top:8px;'+
+            'display:flex;align-items:center;gap:5px;">'+
+            '<span>'+perk.icon+'</span>'+
+            '<span style="opacity:.5;">→</span>'+
+            '<span>🚀</span><span>Equip to Ship</span>'+
+            '<span style="opacity:.6;">'+
+            (perkEquipPickerOpen ? "▲" : "▼")+
+            '</span></button>'+
+            (
+                perkEquipPickerOpen
+                ?renderShipPickerHtml(
+                    planetId,
+                    ships,
+                    perkEquipPickerKey,
+                    "pick-ship-equip-perk",
+                    'data-perk="'+perk.id+'"'
+                )
+                :''
+            );
+
+    }
+
+    return html;
+
+}
+
 function renderPlanetDetail(id){
 
     const planet=
@@ -20123,156 +20478,41 @@ function renderPlanetDetail(id){
 
     if(perk){
 
-        const unlocked=
-            isPerkUnlocked(perk.id);
-
-        const perkStockHere=
-            getPerkStock(
-                id,
-                perk.id
-            );
-
-        const perkAvailableHere=
-            getPerkAvailable(
-                id,
-                perk.id
-            );
-
-        const unlockMaterialInfo=
-            MATERIALS[
-                perk.unlockMaterial
-            ] ||
-            MATERIALS["aether-dust"];
-
-        const soldSoFar=
-            getSoldProgress(
-                id,
-                perk.unlockMaterial
-            )%perk.unlockAmount;
-
-        const canBuyPerk=
-            perkAvailableHere>0 &&
-            getTotalAvailableCoins(id)>=
-            perk.buyCost;
-
-        const perkExpanded=
-            expandedShopRowId===
-            "perk";
-
         html+=
-            '<div class="customizer-section">'+
-            '<div class="customizer-section-title">Perk</div>'+
-            '<div class="shop-row" data-action="toggle-shop-row" data-row="perk">'+
-            '<div class="shop-row-main">'+
-            '<span>'+
-            (
-                perkAvailableHere>0
-                ?perk.icon
-                :'🔒'
-            )+
-            '</span>'+
-            '<span class="shop-row-name">'+perk.name+'</span>'+
-            '<span class="shop-row-meta">'+
-            unlockMaterialInfo.icon+' '+
-            soldSoFar+'/'+perk.unlockAmount+
-            '</span>'+
-            '</div>'+
-            (
-                perkAvailableHere>0
-                ?'<button class="remove-btn" style="background:'+
-                 (
-                     canBuyPerk
-                     ?'rgba(110,220,255,.18)'
-                     :'rgba(255,255,255,.05)'
-                 )+
-                 ';border-color:'+
-                 (
-                     canBuyPerk
-                     ?'rgba(110,220,255,.45)'
-                     :'rgba(255,255,255,.12)'
-                 )+
-                 ';color:'+
-                 (
-                     canBuyPerk
-                     ?'#bcecff'
-                     :'#5c7ba0'
-                 )+
-                 ';" data-action="buy-perk" data-perk="'+
-                 perk.id+'" '+
-                 (
-                     canBuyPerk
-                     ?''
-                     :'disabled'
-                 )+
-                 '>Buy '+perk.buyCost+' 🪙</button>'
-                :'<button class="remove-btn" style="background:'+
-                 'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
-                 'color:#5c7ba0;" disabled>🔒 Locked</button>'
-            )+
-            '</div>'+
-            (
-                perkExpanded
-                ?'<div class="shop-row-detail">'+
-                 perk.description+
-                 '<div style="margin-top:8px;color:#70ddff;">'+
-                 (
-                     unlocked
-                     ?'Owned: '+perkStockHere+
-                      ' · Available to buy: '+perkAvailableHere+
-                      ' · '
-                     :''
-                 )+
-                 'Progress to next: '+soldSoFar+'/'+
-                 perk.unlockAmount+' '+unlockMaterialInfo.name+
-                 ' sold'+
-                 '</div>'+
-                 '<div style="margin-top:8px;">'+
-                 'Selling '+unlockMaterialInfo.icon+' '+
-                 unlockMaterialInfo.name+' in the Vault tab '+
-                 'doesn\'t buy this directly — it just makes another '+
-                 'unit available to buy with coins. Owned units can '+
-                 'be equipped onto any ship docked here.'+
-                 '</div>'+
-                 '</div>'
-                :''
-            )+
-            '</div>';
+            renderPerkShopRow(
+                id,
+                perk,
+                "perk",
+                ships,
+                expandedShipPickerKey,
+                null
+            );
 
-        if(perkStockHere>0){
+    }
 
-            const perkEquipPickerKey=
-                "equip-perk";
-
-            const perkEquipPickerOpen=
-                expandedShipPickerKey===
-                perkEquipPickerKey;
+    /*
+     * Foreign pet perk opportunities — one row per distinct
+     * home planet represented among the pets stationed here
+     * away from where they actually belong.
+     */
+    getForeignPetPerkOpportunities(
+        id
+    ).forEach(
+        opportunity=>{
 
             html+=
-                '<button class="control-btn" data-action="toggle-ship-picker" '+
-                'data-picker="'+perkEquipPickerKey+'" '+
-                'style="width:auto;padding:7px 10px;margin-top:8px;'+
-                'display:flex;align-items:center;gap:5px;">'+
-                '<span>'+perk.icon+'</span>'+
-                '<span style="opacity:.5;">→</span>'+
-                '<span>🚀</span><span>Equip to Ship</span>'+
-                '<span style="opacity:.6;">'+
-                (perkEquipPickerOpen ? "▲" : "▼")+
-                '</span></button>'+
-                (
-                    perkEquipPickerOpen
-                    ?renderShipPickerHtml(
-                        id,
-                        ships,
-                        perkEquipPickerKey,
-                        "pick-ship-equip-perk",
-                        'data-perk="'+perk.id+'"'
-                    )
-                    :''
+                renderPerkShopRow(
+                    id,
+                    opportunity.perk,
+                    "perk-foreign-"+
+                    opportunity.perk.id,
+                    ships,
+                    expandedShipPickerKey,
+                    opportunity.sourcePet
                 );
 
         }
-
-    }
+    );
 
     }
 
