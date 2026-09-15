@@ -5615,6 +5615,120 @@ function isForeignPerkAvailableAt(planetId,perkId){
 
 }
 
+/*
+ * Same idea as getForeignPetPerkOpportunities, for shop items
+ * instead of perks — one entry per distinct home planet
+ * represented among the pets stationed here away from where
+ * they belong, provided that home planet actually has its own
+ * exclusive item.
+ */
+function getForeignPetItemOpportunities(planetId){
+
+    const pets=
+        getPets(planetId);
+
+    const seenHomePlanets=
+        new Set();
+
+    const opportunities=[];
+
+    pets.forEach(
+        pet=>{
+
+            const homePlanetId=
+                pet.homePlanetId;
+
+            if(
+                !homePlanetId ||
+                homePlanetId===planetId ||
+                seenHomePlanets.has(
+                    homePlanetId
+                )
+            )
+                return;
+
+            const item=
+                getShopItemForPlanet(
+                    homePlanetId
+                );
+
+            if(!item)
+                return;
+
+            seenHomePlanets.add(
+                homePlanetId
+            );
+
+            opportunities.push({
+                item:item,
+                sourcePet:pet,
+                homePlanetId:homePlanetId
+            });
+
+        }
+    );
+
+    return opportunities;
+
+}
+
+function isForeignItemAvailableAt(planetId,itemId){
+
+    return getForeignPetItemOpportunities(
+        planetId
+    ).some(
+        o => o.item.id===itemId
+    );
+
+}
+
+/*
+ * Whether selling one of a foreign item here has already
+ * unlocked buying it directly with coins at this planet — a
+ * simple, permanent per-planet flag rather than a counter, since
+ * the request is "sell one to unlock, then buy as many as you
+ * like while the pet's still here", not a repeatable multi-unit
+ * threshold like perks use.
+ */
+function isForeignItemUnlockedAt(planetId,itemId){
+
+    return !!(
+        (
+            planetSave.foreignItemUnlocks ||
+            {}
+        )[planetId] || {}
+    )[itemId];
+
+}
+
+function unlockForeignItemAt(planetId,itemId){
+
+    if(!planetSave.foreignItemUnlocks){
+
+        planetSave.foreignItemUnlocks={};
+
+    }
+
+    if(
+        !planetSave.foreignItemUnlocks[
+            planetId
+        ]
+    ){
+
+        planetSave.foreignItemUnlocks[
+            planetId
+        ]={};
+
+    }
+
+    planetSave.foreignItemUnlocks[
+        planetId
+    ][itemId]=true;
+
+    savePlanetProgress();
+
+}
+
 function getPerkStock(planetId,perkId){
 
     return(
@@ -9910,11 +10024,34 @@ function withdrawToShip(planetId,shipId,amount){
 
 }
 
-function buyShopItem(planetId){
+function buyShopItem(planetId,itemId){
 
-    const item=
+    /*
+     * itemId is optional for backward compatibility — omitted,
+     * this planet's own item is bought exactly as before. Passed
+     * explicitly (from a foreign item's row), it's only honoured
+     * once unlocked here — see isForeignItemUnlockedAt, set by
+     * actually selling one first.
+     */
+    const localItem=
         getShopItemForPlanet(
             planetId
+        );
+
+    const item=
+        !itemId ||
+        (
+            localItem &&
+            localItem.id===itemId
+        )
+        ?localItem
+        :(
+            isForeignItemUnlockedAt(
+                planetId,
+                itemId
+            )
+            ?SHOP_ITEMS[itemId]
+            :null
         );
 
     if(!item)
@@ -10565,8 +10702,45 @@ function sellItemStock(planetId,itemId){
 
     addRankPoints(3,"Sold an item");
 
+    /*
+     * If this item belongs to a pet's home planet, and that pet
+     * is genuinely stationed here, selling ONE unit unlocks
+     * buying it directly with coins at THIS planet from now on
+     * — a one-time flag, not a repeatable threshold, since the
+     * request was "sell one to unlock", not a perk-style
+     * multi-unit counter. Combined into a single toast rather
+     * than two in a row — showShipToast overwrites in place, so
+     * a second call right after the first would silently erase
+     * it before it was ever seen.
+     */
+    let soldMessage=
+        "Sold for "+price+" 🪙";
+
+    if(
+        !isForeignItemUnlockedAt(
+            planetId,
+            itemId
+        ) &&
+        isForeignItemAvailableAt(
+            planetId,
+            itemId
+        )
+    ){
+
+        unlockForeignItemAt(
+            planetId,
+            itemId
+        );
+
+        soldMessage+=
+            " — "+
+            getItemInfo(itemId).name+
+            " unlocked for purchase here!";
+
+    }
+
     showShipToast(
-        "Sold for "+price+" 🪙"
+        soldMessage
     );
 
     renderPlanetDetail(
@@ -19880,6 +20054,141 @@ function closePlanetDetail(){
  * are read from the enclosing renderPlanetDetail scope, same as
  * every other row in this tab.
  */
+/*
+ * One shop item row — the planet's own item, or (via
+ * foreignSourcePet) an item brought in by a pet stationed away
+ * from its own home world. A foreign row starts locked: nothing
+ * to buy until one unit has actually been sold here (see
+ * sellItemStock/unlockForeignItemAt) — how a spare unit gets
+ * here at all in the first place is by equipping it on a ship
+ * elsewhere, flying here, then swapping equipment, which
+ * deposits the old one into THIS planet's stock automatically.
+ */
+function renderShopItemRow(
+    planetId,item,rowKey,foreignSourcePet
+){
+
+    const stockHere=
+        getItemStock(
+            planetId,
+            item.id
+        );
+
+    const isForeign=
+        !!foreignSourcePet;
+
+    const unlockedHere=
+        !isForeign ||
+        isForeignItemUnlockedAt(
+            planetId,
+            item.id
+        );
+
+    const affordable=
+        unlockedHere &&
+        getTotalAvailableCoins(planetId)>=
+        item.cost;
+
+    const itemExpanded=
+        expandedShopRowId===
+        rowKey;
+
+    const titleLabel=
+        isForeign
+        ?"Item — brought by "+
+         (
+             SPECIES_DISPLAY_NAMES[
+                 foreignSourcePet.species
+             ] || "a pet"
+         )
+        :"Shop";
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        titleLabel+'</div>'+
+        '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
+        rowKey+'">'+
+        '<div class="shop-row-main">'+
+        '<span>'+
+        (unlockedHere ? item.icon : '🔒')+
+        '</span>'+
+        '<span class="shop-row-name">'+item.name+'</span>'+
+        '<span class="shop-row-meta">'+
+        (
+            unlockedHere
+            ?'Stock '+stockHere
+            :'Sell one to unlock'
+        )+
+        '</span>'+
+        '</div>'+
+        (
+            unlockedHere
+            ?'<button class="remove-btn" style="background:'+
+             (
+                 affordable
+                 ?'rgba(110,220,255,.18)'
+                 :'rgba(255,255,255,.05)'
+             )+
+             ';border-color:'+
+             (
+                 affordable
+                 ?'rgba(110,220,255,.45)'
+                 :'rgba(255,255,255,.12)'
+             )+
+             ';color:'+
+             (
+                 affordable
+                 ?'#bcecff'
+                 :'#5c7ba0'
+             )+
+             ';" data-action="buy" data-item="'+item.id+'" '+
+             (
+                 affordable
+                 ?''
+                 :'disabled'
+             )+
+             '>Buy '+item.cost+' 🪙</button>'
+            :'<button class="remove-btn" style="background:'+
+             'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
+             'color:#5c7ba0;" disabled>🔒 Locked</button>'
+        )+
+        '</div>'+
+        (
+            itemExpanded
+            ?'<div class="shop-row-detail">'+
+             item.description+
+             (
+                 isForeign
+                 ?'<div style="margin-top:8px;color:#ffd76b;">'+
+                  (
+                      unlockedHere
+                      ?'Unlocked here — buy as many as you '+
+                       'like while '+
+                       (
+                           SPECIES_DISPLAY_NAMES[
+                               foreignSourcePet.species
+                           ] || "this pet"
+                       )+
+                       ' stays stationed at this planet.'
+                      :'Sell one '+item.name+' in the Vault '+
+                       'tab to unlock buying it here directly '+
+                       '— get a spare unit by equipping it on a '+
+                       'ship elsewhere, flying it here, then '+
+                       'swapping to different equipment.'
+                  )+
+                  '</div>'
+                 :''
+             )+
+             '</div>'
+            :''
+        )+
+        '</div>';
+
+    return html;
+
+}
+
 function renderPerkShopRow(
     planetId,perk,rowKey,ships,
     expandedShipPickerKey,foreignSourcePet
@@ -20406,57 +20715,13 @@ function renderPlanetDetail(id){
 
     if(shopItem){
 
-        const affordable=
-            getTotalAvailableCoins(id)>=
-            shopItem.cost;
-
-        const itemExpanded=
-            expandedShopRowId===
-            "item";
-
         html+=
-            '<div class="customizer-section">'+
-            '<div class="customizer-section-title">Shop</div>'+
-            '<div class="shop-row" data-action="toggle-shop-row" data-row="item">'+
-            '<div class="shop-row-main">'+
-            '<span>'+shopItem.icon+'</span>'+
-            '<span class="shop-row-name">'+shopItem.name+'</span>'+
-            '<span class="shop-row-meta">Stock '+stock+'</span>'+
-            '</div>'+
-            '<button class="remove-btn" style="background:'+
-            (
-                affordable
-                ?'rgba(110,220,255,.18)'
-                :'rgba(255,255,255,.05)'
-            )+
-            ';border-color:'+
-            (
-                affordable
-                ?'rgba(110,220,255,.45)'
-                :'rgba(255,255,255,.12)'
-            )+
-            ';color:'+
-            (
-                affordable
-                ?'#bcecff'
-                :'#5c7ba0'
-            )+
-            ';" data-action="buy" '+
-            (
-                affordable
-                ?''
-                :'disabled'
-            )+
-            '>Buy '+shopItem.cost+' 🪙</button>'+
-            '</div>'+
-            (
-                itemExpanded
-                ?'<div class="shop-row-detail">'+
-                 shopItem.description+
-                 '</div>'
-                :''
-            )+
-            '</div>';
+            renderShopItemRow(
+                id,
+                shopItem,
+                "item",
+                null
+            );
 
     }else{
 
@@ -20469,6 +20734,28 @@ function renderPlanetDetail(id){
             '</div>';
 
     }
+
+    /*
+     * Foreign pet item opportunities — mirrors the perk section
+     * just below: one row per distinct home planet represented
+     * among the pets stationed here away from where they belong.
+     */
+    getForeignPetItemOpportunities(
+        id
+    ).forEach(
+        opportunity=>{
+
+            html+=
+                renderShopItemRow(
+                    id,
+                    opportunity.item,
+                    "item-foreign-"+
+                    opportunity.item.id,
+                    opportunity.sourcePet
+                );
+
+        }
+    );
 
 
     /* -------- Perks -------- */
@@ -22856,8 +23143,14 @@ document
             action==="buy"
         ){
 
+            const buyItemId=
+                target.getAttribute(
+                    "data-item"
+                );
+
             buyShopItem(
-                planetDetailId
+                planetDetailId,
+                buyItemId
             );
 
         }else if(
