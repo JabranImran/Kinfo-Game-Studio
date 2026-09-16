@@ -4146,6 +4146,7 @@ function defaultPlanetSave(){
                     enduranceLevel:1,
                     survivalLevel:1,
                     perkLevel:1,
+                    pilotPoints:0,
                     lastEnergyCheck:Date.now()
                 }
             ]
@@ -4783,6 +4784,15 @@ function loadPlanetSave(){
                             ){
 
                                 pet.perkLevel=1;
+
+                            }
+
+                            if(
+                                typeof pet.pilotPoints!==
+                                "number"
+                            ){
+
+                                pet.pilotPoints=0;
 
                             }
 
@@ -6250,6 +6260,7 @@ function buyPet(planetId){
         enduranceLevel:1,
         survivalLevel:1,
         perkLevel:1,
+        pilotPoints:0,
         lastEnergyCheck:Date.now()
     });
 
@@ -6341,7 +6352,14 @@ function feedPet(planetId,petId){
  * that cap without changing anything else here.
  */
 
-const PET_STAT_MAX_LEVEL=3;
+/*
+ * Base pet stat cap before any Pilot Training upgrades — 10 per
+ * stat, with four further upgrade tiers each adding another 10,
+ * reaching a cap of 50 at the top tier. See
+ * STRUCTURE_UPGRADES["pilot-training"] for the tier chain.
+ */
+const PET_STAT_MAX_LEVEL=10;
+
 
 /*
  * Range: how many hops from home a pilot can be sent.
@@ -6393,13 +6411,22 @@ function getPetStatLevel(pet,statName){
 
 }
 
-function computeStatTrainCost(currentLevel){
+/*
+ * Exponential, same shape as the old coin-based cost, but scaled
+ * for pilotPoints (accumulated from a pet's own cargo runs)
+ * rather than coins — a much larger currency pool since it's
+ * built from raw score, not a purchase price. Growth factor is
+ * gentle (1.18x per level, not 2x) specifically because this now
+ * has to remain climbable all the way to level 50, not just the
+ * old cap of 3-5.
+ */
+function computePilotPointTrainCost(currentLevel){
 
     return Math.max(
-        1,
+        10,
         Math.round(
-            7.5*
-            Math.pow(2,currentLevel-1)
+            15*
+            Math.pow(1.18,currentLevel-1)
         )
     );
 
@@ -6433,14 +6460,16 @@ function trainPetStat(planetId,petId,statName){
         return;
 
     const cost=
-        computeStatTrainCost(
+        computePilotPointTrainCost(
             currentLevel
         );
 
     if(
-        !spendCoins(planetId,cost)
+        (pet.pilotPoints || 0)<cost
     )
         return;
+
+    pet.pilotPoints-=cost;
 
     pet[fieldName]=
         currentLevel+1;
@@ -7063,14 +7092,63 @@ const STRUCTURE_UPGRADES={
             icon:"🎖",
             description:
                 "Raises the training cap for all three pilot "+
-                "stats here from level 3 to level 5.",
+                "stats here from level 10 to level 20 — the "+
+                "first of four tiers leading up to a cap of 50.",
             unlockMaterials:[
                 {materialId:"chrono-crystal",amount:4},
                 {materialId:"shadow-vapor",amount:4}
             ],
             buyCost:25,
             effectType:"statCapBoost",
-            effectValue:2
+            effectValue:10
+        },
+        {
+            id:"pilot-training-elite",
+            structureId:"pilot-training",
+            name:"Elite Flight Academy",
+            icon:"🎖",
+            description:
+                "Second tier — raises the training cap further, "+
+                "from level 20 to level 30.",
+            unlockMaterials:[
+                {materialId:"chrono-crystal",amount:6},
+                {materialId:"shadow-vapor",amount:6}
+            ],
+            buyCost:40,
+            effectType:"statCapBoost",
+            effectValue:10
+        },
+        {
+            id:"pilot-training-veteran",
+            structureId:"pilot-training",
+            name:"Veteran Pilot Corps",
+            icon:"🎖",
+            description:
+                "Third tier — raises the training cap further, "+
+                "from level 30 to level 40.",
+            unlockMaterials:[
+                {materialId:"chrono-crystal",amount:8},
+                {materialId:"shadow-vapor",amount:8}
+            ],
+            buyCost:60,
+            effectType:"statCapBoost",
+            effectValue:10
+        },
+        {
+            id:"pilot-training-ace",
+            structureId:"pilot-training",
+            name:"Ace Pilot Institute",
+            icon:"🎖",
+            description:
+                "Fourth and final tier — raises the training cap "+
+                "from level 40 up to its full 50.",
+            unlockMaterials:[
+                {materialId:"chrono-crystal",amount:10},
+                {materialId:"shadow-vapor",amount:10}
+            ],
+            buyCost:85,
+            effectType:"statCapBoost",
+            effectValue:10
         }
     ],
 
@@ -22262,6 +22340,11 @@ function renderPlanetDetail(id){
                         enduranceLevel+' · Survival Lv.'+
                         survivalLevel+
                         '</div>'+
+                        '<div style="font-size:9px;color:#ffd76b;">'+
+                        '⭐ '+(pet.pilotPoints || 0)+
+                        ' pilot points — earned from net score '+
+                        'while this pet rides along as cargo'+
+                        '</div>'+
                         '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
 
                     [
@@ -22281,7 +22364,7 @@ function renderPlanetDetail(id){
                                 getPetStatMaxLevel(id);
 
                             const trainCost=
-                                computeStatTrainCost(
+                                computePilotPointTrainCost(
                                     statLevel
                                 );
 
@@ -22293,7 +22376,7 @@ function renderPlanetDetail(id){
                                 statKey+'" '+
                                 (
                                     maxed ||
-                                    getTotalAvailableCoins(id)<
+                                    (pet.pilotPoints || 0)<
                                     trainCost
                                     ?'disabled'
                                     :''
@@ -22303,7 +22386,7 @@ function renderPlanetDetail(id){
                                     maxed
                                     ?statLabel+' maxed'
                                     :'Train '+statLabel+
-                                     ' ('+trainCost+' 🪙)'
+                                     ' ('+trainCost+' ⭐)'
                                 )+
                                 '</button>';
 
@@ -34008,6 +34091,38 @@ function landAtCurrentPlanetInner(){
             0,
             score-launchScore
         );
+
+    /*
+     * Every pet riding along as cargo earns pilotPoints equal to
+     * this flight's net score gain — the same number every pet
+     * aboard gets, since they all experienced the same run. This
+     * is what trainPetStat() now spends instead of coins, so
+     * flying with a pet (which already grants its perk) also
+     * funds levelling up its OWN pilot stats over time. Mutates
+     * the pet objects directly rather than looking them up
+     * again — currentShipCargoPets holds the actual pet records,
+     * not copies, so this persists correctly whether the pet
+     * ends up back in currentShipCargoPets (still cargo) or
+     * moved into the newly-landed ship's own cargoPets field.
+     */
+    if(
+        netScoreGain>0 &&
+        currentShipCargoPets &&
+        currentShipCargoPets.length
+    ){
+
+        currentShipCargoPets.forEach(
+            cargoPet=>{
+
+                cargoPet.pilotPoints=
+                    (
+                        cargoPet.pilotPoints || 0
+                    )+netScoreGain;
+
+            }
+        );
+
+    }
 
     if(netScoreGain>0){
 
