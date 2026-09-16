@@ -3795,6 +3795,91 @@ const PLANETS = [
 
 ];
 
+/*
+ * Same reusable-icon pattern as MATERIAL_ICON_HTML, one per
+ * planet -- a small gradient sphere using that planet's own
+ * existing palette and atmosphere glow (see getPlanetPalette
+ * and getPlanetAtmosphere), so a planet reads the same tiny
+ * way in a tab label as it does as a full sphere on the star
+ * map. getPlanetIconHtml(planetId) is the lookup helper;
+ * falls back to the planet's own emoji if somehow asked for
+ * an id with no entry here.
+ */
+const PLANET_ICON_HTML={
+    "earth":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2369cfff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%232161a0%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23071a39%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%2352c8ff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "mars":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff9871%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23a83f2e%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23421711%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ff694c%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "europa":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23eafaff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%2386c9df%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23315e7c%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23b8edff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "titan":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffc66c%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23bb7132%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234b2c18%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ffad58%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "neptune":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%236ea6ff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%233154b8%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23101c5a%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23537cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "kepler":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ef9fff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238d45bd%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2325104a%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23df8cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "aurora":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23d49bff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23663ab1%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23170a3f%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23a96cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "helios":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23fff08a%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23ff6a19%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%237c1708%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ff9b24%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "nova":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23baffff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%2322b6b2%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23073d4d%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%2353fff0%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+    "zenith":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238559c9%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23150b38%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23c88cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
+        '" style="height:.95em;width:.95em;'+
+        'vertical-align:-.18em;border-radius:50%;">',
+
+};
+
+function getPlanetIconHtml(planetId){
+
+    return(
+        PLANET_ICON_HTML[planetId] ||
+        (
+            getPlanet(planetId) &&
+            getPlanet(planetId).icon
+        ) ||
+        "🪐"
+    );
+
+}
 
 /* =========================================================
    ROUTES
@@ -5372,6 +5457,7 @@ const MATERIALS={
         name:"Volatile Alloy",
         icon:"🔶",
         color:"#ff2e9a",
+        shape:"shard",
         planetId:"mars"
     },
 
@@ -5380,6 +5466,7 @@ const MATERIALS={
         name:"Magnetic Resin",
         icon:"🔷",
         color:"#4fd6ff",
+        shape:"gem",
         planetId:"aurora"
     },
 
@@ -5388,6 +5475,7 @@ const MATERIALS={
         name:"Cryo Shard",
         icon:"🔹",
         color:"#5cffb0",
+        shape:"shard",
         planetId:"europa"
     },
 
@@ -5396,6 +5484,7 @@ const MATERIALS={
         name:"Solar Plating",
         icon:"🔸",
         color:"#9fd8ff",
+        shape:"core",
         planetId:"helios"
     },
 
@@ -5404,6 +5493,7 @@ const MATERIALS={
         name:"Nova Dust",
         icon:"✨",
         color:"#ffd76b",
+        shape:"gem",
         planetId:"nova"
     },
 
@@ -5412,6 +5502,7 @@ const MATERIALS={
         name:"Prime Core",
         icon:"💠",
         color:"#ffd23f",
+        shape:"core",
         planetId:"zenith"
     },
 
@@ -5420,6 +5511,7 @@ const MATERIALS={
         name:"Shadow Vapor",
         icon:"🔮",
         color:"#8a7fff",
+        shape:"gem",
         planetId:"titan"
     },
 
@@ -5428,6 +5520,7 @@ const MATERIALS={
         name:"Mirror Alloy",
         icon:"🔺",
         color:"#ff9de6",
+        shape:"shard",
         planetId:"neptune"
     },
 
@@ -5436,6 +5529,7 @@ const MATERIALS={
         name:"Chrono Crystal",
         icon:"🔻",
         color:"#6ee7c8",
+        shape:"shard",
         planetId:"kepler"
     },
 
@@ -5444,6 +5538,7 @@ const MATERIALS={
         name:"Aether Dust",
         icon:"🧭",
         color:"#ff3860",
+        shape:"gem",
         planetId:null
     }
 
@@ -21534,7 +21629,7 @@ function renderPlanetDetail(id){
 
     let html=
         '<div class="customizer-title">'+
-        planet.icon+" "+
+        getPlanetIconHtml(planet.id)+" "+
         planet.name.toUpperCase()+
         '</div>';
 
@@ -22265,7 +22360,7 @@ function renderPlanetDetail(id){
                                             (
                                                 dest.id===id
                                                 ?'📍 Stay local'
-                                                :dest.icon+' '+dest.name
+                                                :getPlanetIconHtml(dest.id)+' '+dest.name
                                             )+
                                             ' ('+duration+'s, ~'+yieldAmt+
                                             ' units, '+
@@ -26696,42 +26791,154 @@ class MaterialPickup{
         const r=
             this.radius*pulse;
 
-        ctx.beginPath();
+        /*
+         * Same three gem templates (shard, gem, core) used for
+         * MATERIAL_ICON_HTML's SVG icons, translated to plain
+         * canvas paths and scaled to this pickup's own radius —
+         * the in-game version of the same crystal, not a
+         * separate design, so a material looks the same whether
+         * it's tumbling through space or sitting in the Vault.
+         */
+        const shape=
+            this.info.shape ||
+            "gem";
 
-        ctx.moveTo(0,-r);
+        if(shape==="shard"){
 
-        ctx.lineTo(r,0);
+            ctx.beginPath();
 
-        ctx.lineTo(0,r);
+            ctx.moveTo(0,-.92*r);
 
-        ctx.lineTo(-r,0);
+            ctx.lineTo(.48*r,-.4*r);
 
-        ctx.closePath();
+            ctx.lineTo(.32*r,.92*r);
 
-        ctx.fill();
+            ctx.lineTo(-.32*r,.92*r);
 
-        ctx.stroke();
+            ctx.lineTo(-.48*r,-.4*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.stroke();
+
+            ctx.shadowBlur=0;
+
+            ctx.fillStyle=
+                "rgba(255,255,255,.4)";
+
+            ctx.beginPath();
+
+            ctx.moveTo(0,-.92*r);
+
+            ctx.lineTo(.48*r,-.4*r);
+
+            ctx.lineTo(.16*r,-.32*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.beginPath();
+
+            ctx.moveTo(-.48*r,-.4*r);
+
+            ctx.lineTo(0,-.92*r);
+
+            ctx.lineTo(-.16*r,-.32*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+        }else if(shape==="core"){
+
+            ctx.beginPath();
+
+            ctx.moveTo(0,-.88*r);
+
+            ctx.lineTo(.8*r,-.44*r);
+
+            ctx.lineTo(.8*r,.44*r);
+
+            ctx.lineTo(0,.88*r);
+
+            ctx.lineTo(-.8*r,.44*r);
+
+            ctx.lineTo(-.8*r,-.44*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.stroke();
+
+            ctx.shadowBlur=0;
+
+            ctx.fillStyle=
+                "rgba(255,255,255,.55)";
+
+            ctx.beginPath();
+
+            ctx.arc(0,0,.4*r,0,Math.PI*2);
+
+            ctx.fill();
+
+        }else{
+
+            ctx.beginPath();
+
+            ctx.moveTo(-.44*r,-.6*r);
+
+            ctx.lineTo(.44*r,-.6*r);
+
+            ctx.lineTo(.84*r,-.04*r);
+
+            ctx.lineTo(.28*r,.84*r);
+
+            ctx.lineTo(-.28*r,.84*r);
+
+            ctx.lineTo(-.84*r,-.04*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.stroke();
+
+            ctx.shadowBlur=0;
+
+            ctx.fillStyle=
+                "rgba(255,255,255,.4)";
+
+            ctx.beginPath();
+
+            ctx.moveTo(-.44*r,-.6*r);
+
+            ctx.lineTo(.44*r,-.6*r);
+
+            ctx.lineTo(0,-.12*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.beginPath();
+
+            ctx.moveTo(-.84*r,-.04*r);
+
+            ctx.lineTo(-.44*r,-.6*r);
+
+            ctx.lineTo(0,-.12*r);
+
+            ctx.closePath();
+
+            ctx.fill();
+
+        }
 
         ctx.shadowBlur=0;
-
-        ctx.rotate(
-            -this.spin
-        );
-
-        ctx.font=
-            "11px system-ui";
-
-        ctx.textAlign=
-            "center";
-
-        ctx.textBaseline=
-            "middle";
-
-        ctx.fillText(
-            this.info.icon,
-            0,
-            1
-        );
 
         ctx.restore();
 
@@ -39885,7 +40092,7 @@ function renderFleetOverview(){
             html+=
                 '<div class="customizer-section">'+
                 '<div class="customizer-section-title">'+
-                planet.icon+' '+planet.name+
+                getPlanetIconHtml(planet.id)+' '+planet.name+
                 '</div>';
 
             if(hasFactory){
