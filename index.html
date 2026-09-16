@@ -8066,6 +8066,173 @@ function paintPetPreviews(planetId,pets){
 }
 
 /*
+ * Paints the actual pet species onto a canvas rather than
+ * showing its emoji — shared by every place a ship's cargo pets
+ * show up: the Pet Bay's own summary slots, the "Carrying"
+ * list, and the "Load from here" list. Since only one ship card
+ * can be expanded at a time, a plain pet.id is enough to keep
+ * every canvas id unique without also needing the ship's id.
+ */
+function paintOneCargoPetPreview(canvas,pet,planetId){
+
+    if(!canvas || !pet)
+        return false;
+
+    const ctx2d=
+        canvas.getContext("2d");
+
+    ctx2d.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    let seed=0;
+
+    for(
+        let i=0;
+        i<pet.id.length;
+        i++
+    ){
+
+        seed+=
+            pet.id.charCodeAt(i);
+
+    }
+
+    try{
+
+        drawSpacePet(
+            ctx2d,
+            planetId,
+            canvas.width/2,
+            canvas.height/2+
+            canvas.height*.08,
+            canvas.width*.42,
+            pet.energy,
+            seed,
+            pet.species,
+            false,
+            null
+        );
+
+    }catch(error){
+
+        console.error(
+            "Cargo pet preview draw failed:",
+            error
+        );
+
+    }
+
+    return true;
+
+}
+
+function paintShipCargoPreviews(planetId,ships){
+
+    if(
+        typeof drawSpacePet===
+        "undefined"
+    )
+        return;
+
+    let anyCanvas=false;
+
+    ships.forEach(
+        ship=>{
+
+            const cargoPets=
+                Array.isArray(
+                    ship.cargoPets
+                )
+                ?ship.cargoPets
+                :[];
+
+            cargoPets.forEach(
+                (pet,slotIndex)=>{
+
+                    const slotCanvas=
+                        document.getElementById(
+                            "cargoSlotPreview_"+
+                            ship.id+"_"+
+                            slotIndex
+                        );
+
+                    if(
+                        paintOneCargoPetPreview(
+                            slotCanvas,pet,planetId
+                        )
+                    ){
+
+                        anyCanvas=true;
+
+                    }
+
+                    const rowCanvas=
+                        document.getElementById(
+                            "cargoRowPreview_"+
+                            pet.id
+                        );
+
+                    if(
+                        paintOneCargoPetPreview(
+                            rowCanvas,pet,planetId
+                        )
+                    ){
+
+                        anyCanvas=true;
+
+                    }
+
+                }
+            );
+
+            getPets(planetId).forEach(
+                pet=>{
+
+                    const loadRowCanvas=
+                        document.getElementById(
+                            "cargoLoadPreview_"+
+                            pet.id
+                        );
+
+                    if(
+                        paintOneCargoPetPreview(
+                            loadRowCanvas,pet,planetId
+                        )
+                    ){
+
+                        anyCanvas=true;
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+    if(
+        anyCanvas &&
+        planetDetailTab==="ships" &&
+        planetDetailId===planetId
+    ){
+
+        requestAnimationFrame(
+            ()=>
+                paintShipCargoPreviews(
+                    planetId,
+                    ships
+                )
+        );
+
+    }
+
+}
+
+/*
  * Paints each docked ship's actual design into its small preview
  * canvas in the Ships tab — the same shipCustomizer.shapes every
  * other view uses, just scaled down to fit, with that specific
@@ -22177,11 +22344,9 @@ function renderPlanetDetail(id){
                             (pet ? ' filled' : '')+'">'+
                             (
                                 pet
-                                ?(
-                                    SPECIES_FLOURISH_ICONS[
-                                        pet.species
-                                    ] || "🐾"
-                                )
+                                ?'<canvas id="cargoSlotPreview_'+
+                                 ship.id+'_'+slotIndex+
+                                 '" width="38" height="38"></canvas>'
                                 :''
                             )+
                             '</div>';
@@ -22211,17 +22376,17 @@ function renderPlanetDetail(id){
 
                                     html+=
                                         '<button class="shape-btn" style="width:100%;'+
-                                        'display:flex;align-items:center;justify-content:space-between;'+
-                                        'padding:8px 10px;font-size:11px;" '+
+                                        'display:flex;align-items:center;gap:8px;'+
+                                        'justify-content:space-between;'+
+                                        'padding:6px 10px;font-size:11px;" '+
                                         'data-action="unload-pet" data-ship="'+
                                         ship.id+'" data-pet="'+pet.id+'" '+
                                         (canUnloadHere ? '' : 'disabled')+
                                         '>'+
-                                        (
-                                            SPECIES_FLOURISH_ICONS[
-                                                pet.species
-                                            ] || "🐾"
-                                        )+' '+
+                                        '<span style="display:flex;align-items:center;gap:8px;">'+
+                                        '<canvas id="cargoRowPreview_'+pet.id+
+                                        '" width="30" height="30" style="flex-shrink:0;"></canvas>'+
+                                        '<span>'+
                                         (
                                             SPECIES_DISPLAY_NAMES[
                                                 pet.species
@@ -22229,7 +22394,8 @@ function renderPlanetDetail(id){
                                         )+
                                         ' — Energy '+
                                         Math.round(pet.energy)+
-                                        '% <span style="opacity:.6;font-size:9px;">'+
+                                        '%</span></span>'+
+                                        '<span style="opacity:.6;font-size:9px;">'+
                                         (
                                             canUnloadHere
                                             ?'Unload here'
@@ -22258,14 +22424,13 @@ function renderPlanetDetail(id){
 
                                         html+=
                                             '<button class="shape-btn" style="width:100%;'+
-                                            'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                            'display:flex;align-items:center;gap:8px;'+
+                                            'text-align:left;padding:6px 10px;font-size:11px;" '+
                                             'data-action="load-pet" data-ship="'+
                                             ship.id+'" data-pet="'+pet.id+'">'+
-                                            (
-                                                SPECIES_FLOURISH_ICONS[
-                                                    pet.species
-                                                ] || "🐾"
-                                            )+' '+
+                                            '<canvas id="cargoLoadPreview_'+pet.id+
+                                            '" width="30" height="30" style="flex-shrink:0;"></canvas>'+
+                                            '<span>'+
                                             (
                                                 SPECIES_DISPLAY_NAMES[
                                                     pet.species
@@ -22280,7 +22445,7 @@ function renderPlanetDetail(id){
                                                 ?"Pilot"
                                                 :"Builder"
                                             )+
-                                            '</button>';
+                                            '</span></button>';
 
                                     }
                                 );
@@ -23817,6 +23982,11 @@ function renderPlanetDetail(id){
     );
 
     paintShipPreviews(
+        id,
+        ships
+    );
+
+    paintShipCargoPreviews(
         id,
         ships
     );
