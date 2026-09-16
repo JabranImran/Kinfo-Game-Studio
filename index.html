@@ -7426,6 +7426,175 @@ function getStructureDesignKey(structureId){
 
 }
 
+/*
+ * Renders a structure's CURRENT look (its saved custom design if
+ * one exists, otherwise the hand-placed default) onto an
+ * offscreen canvas and returns it as a data-URL <img> tag, the
+ * same reusable-icon pattern COIN_ICON_HTML uses. Cached per
+ * structureId since a structure's design only changes when the
+ * player actually saves a new one in the Structure Designer —
+ * re-rendering it fresh on every single label that shows it
+ * would be pure waste. invalidateStructureIconCache() clears an
+ * entry so the very next request re-renders it, called right
+ * after a design is saved.
+ */
+let structureIconCache={};
+
+function invalidateStructureIconCache(structureId){
+
+    delete structureIconCache[
+        structureId
+    ];
+
+}
+
+function getStructureIconHtml(structureId){
+
+    if(
+        structureIconCache[
+            structureId
+        ]
+    ){
+
+        return structureIconCache[
+            structureId
+        ];
+
+    }
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    ){
+
+        return(
+            STRUCTURES[structureId] &&
+            STRUCTURES[structureId].icon
+        ) || "";
+
+    }
+
+    try{
+
+        const canvas=
+            document.createElement(
+                "canvas"
+            );
+
+        canvas.width=64;
+
+        canvas.height=64;
+
+        const ctx2d=
+            canvas.getContext("2d");
+
+        const saved=
+            localStorage.getItem(
+                getStructureDesignKey(
+                    structureId
+                )
+            );
+
+        let shapeData=null;
+
+        if(saved){
+
+            try{
+
+                shapeData=
+                    JSON.parse(saved);
+
+            }catch(parseError){
+
+                shapeData=null;
+
+            }
+
+        }
+
+        if(
+            !shapeData &&
+            DEFAULT_STRUCTURE_SHAPES[
+                structureId
+            ]
+        ){
+
+            shapeData=
+                DEFAULT_STRUCTURE_SHAPES[
+                    structureId
+                ];
+
+        }
+
+        if(!shapeData){
+
+            return(
+                STRUCTURES[structureId] &&
+                STRUCTURES[structureId].icon
+            ) || "";
+
+        }
+
+        const shapes=
+            shapeData.map(
+                s=>
+                    new ShapeObject(
+                        s.type,
+                        s.x,
+                        s.y,
+                        s.color,
+                        s.scale,
+                        s.rotation,
+                        s.points,
+                        s.outlineColor,
+                        s.holePoints
+                    )
+            );
+
+        ctx2d.save();
+
+        ctx2d.scale(.16,.16);
+
+        ctx2d.translate(-200,-140);
+
+        shapes.forEach(
+            shape=>{
+
+                shape.draw(ctx2d);
+
+            }
+        );
+
+        ctx2d.restore();
+
+        const html=
+            '<img src="'+
+            canvas.toDataURL()+
+            '" style="height:1.1em;width:1.1em;'+
+            'vertical-align:-.2em;">';
+
+        structureIconCache[
+            structureId
+        ]=html;
+
+        return html;
+
+    }catch(error){
+
+        console.error(
+            "Structure icon render failed:",
+            error
+        );
+
+        return(
+            STRUCTURES[structureId] &&
+            STRUCTURES[structureId].icon
+        ) || "";
+
+    }
+
+}
+
 function renderStructureDesignerHtml(structureId,structureName){
 
     const canvasId=
@@ -17132,11 +17301,16 @@ function drawPlanetFocusScene(){
          * Spread across a shallow arc centred on the top of the
          * sphere. The arc widens with more items but stays
          * narrow enough that everything sits on visible ground.
+         * Widened alongside the icon size increase above -- a
+         * roughly proportional (not quite double, to stay clear
+         * of the screen edges) increase in both the per-item gap
+         * and the cap, so bigger icons still get bigger breathing
+         * room between them instead of starting to overlap.
          */
         const arcSpan=
             Math.min(
-                .2,
-                .06*surfaceItems.length
+                .32,
+                .1*surfaceItems.length
             );
 
         /*
@@ -17153,7 +17327,7 @@ function drawPlanetFocusScene(){
          * wider spread was what pushed buildings clean off the
          * edges of the screen.
          */
-        const CENTRE_GAP=.09;
+        const CENTRE_GAP=.16;
 
         /*
          * Filled in as each structure is placed, so the pet pass
@@ -17220,16 +17394,24 @@ function drawPlanetFocusScene(){
                     angle+Math.PI/2
                 );
 
+                /*
+                 * Structures drawn at double their old size, per
+                 * request — they were reading noticeably smaller
+                 * than the pets standing right next to them. Only
+                 * the non-ship branch changes; the ship itself
+                 * (drawn separately, further below) keeps its own
+                 * scale untouched.
+                 */
                 const iconSize=
                     Math.max(
                         item.kind==="ship"
                         ?40
-                        :34,
+                        :68,
                         width*
                         (
                             item.kind==="ship"
                             ?.115
-                            :.095
+                            :.19
                         )
                     );
 
@@ -20862,7 +21044,9 @@ function renderPlanetDetail(id){
             availableTabs.push({
                 id:"structure-"+structureId,
                 label:
-                    STRUCTURES[structureId].icon+
+                    getStructureIconHtml(
+                        structureId
+                    )+
                     " "+
                     STRUCTURES[structureId].name
             });
@@ -22675,7 +22859,9 @@ function renderPlanetDetail(id){
             '<span>'+
             (
                 unlocked
-                ?structure.icon
+                ?getStructureIconHtml(
+                    structureId
+                )
                 :'🔒'
             )+
             '</span>'+
@@ -22829,7 +23015,7 @@ function renderPlanetDetail(id){
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
-        STRUCTURES["ship-factory"].icon+
+        getStructureIconHtml("ship-factory")+
         ' Ship Factory'+
         '</div>';
 
@@ -23038,7 +23224,7 @@ function renderPlanetDetail(id){
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
-        STRUCTURES["pilot-training"].icon+
+        getStructureIconHtml("pilot-training")+
         ' Pilot Training'+
         '</div>';
 
@@ -23155,7 +23341,7 @@ function renderPlanetDetail(id){
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
-        STRUCTURES["bio-dome"].icon+
+        getStructureIconHtml("bio-dome")+
         ' Bio Dome'+
         '</div>';
 
@@ -41254,6 +41440,11 @@ const shipCustomizer = {
         if (confirm(this.isShipMode ? 'Reset ship to default?' : 'Reset this structure design to default?')) {
             sound('click');
             localStorage.removeItem(this.targetKey);
+            if (!this.isShipMode) {
+                invalidateStructureIconCache(
+                    this.targetKey.replace('structureDesign_', '')
+                );
+            }
             // loadDesign() (not a blank array) so a structure with a
             // hand-placed default (see DEFAULT_STRUCTURE_SHAPES)
             // actually shows it again immediately, rather than
@@ -41305,6 +41496,14 @@ const shipCustomizer = {
 
     finishCustomization() {
         this.saveDesign();
+        if (!this.isShipMode) {
+            // A structure's cached icon (used in menus/labels via
+            // getStructureIconHtml) is now stale -- clear it so the
+            // very next reference re-renders from what was just saved.
+            invalidateStructureIconCache(
+                this.targetKey.replace('structureDesign_', '')
+            );
+        }
         showShipToast(
             this.isShipMode
                 ? (this.shapes.length > 1 ? 'Ship saved!' : 'Core saved — add some shapes to design your hull!')
