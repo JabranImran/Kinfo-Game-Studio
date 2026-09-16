@@ -5181,6 +5181,23 @@ function loadPlanetSave(){
  */
 const MATERIAL_CAP=20;
 
+/*
+ * A single reusable coin icon, drawn once as an SVG and reused
+ * everywhere the game used to show a plain coin emoji -- gives
+ * every coin reference the same look as the actual in-game
+ * CoinPickup object (see its draw() method), rather than an
+ * emoji whose rendering varies by device/font. Percent-encoded
+ * as a data URI specifically so the resulting string contains
+ * no literal quote characters, making it safe to splice into a
+ * JS string via concatenation regardless of whether that
+ * string happens to use single or double quotes.
+ */
+const COIN_ICON_HTML=
+    '<img src="data:image/svg+xml,'+
+    "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ffd75e%22%20stroke%3D%22%23c9861f%22%20stroke-width%3D%223%22/%3E%3Cg%20clip-path%3D%22url%28%23r%29%22%3E%3CclipPath%20id%3D%22r%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22/%3E%3C/clipPath%3E%3Crect%20x%3D%22-20%22%20y%3D%228%22%20width%3D%22140%22%20height%3D%2214%22%20fill%3D%22%23ffe58a%22%20transform%3D%22rotate%28-32%2050%2050%29%22/%3E%3Crect%20x%3D%22-20%22%20y%3D%2246%22%20width%3D%22140%22%20height%3D%2214%22%20fill%3D%22%23ffe58a%22%20transform%3D%22rotate%28-32%2050%2050%29%22/%3E%3Crect%20x%3D%22-20%22%20y%3D%2284%22%20width%3D%22140%22%20height%3D%2214%22%20fill%3D%22%23ffe58a%22%20transform%3D%22rotate%28-32%2050%2050%29%22/%3E%3C/g%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2254%22%20r%3D%2229%22%20fill%3D%22%23c9791a%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2229%22%20fill%3D%22%23e8952d%22/%3E%3C/svg%3E"+
+    '" style="height:.85em;width:.85em;'+
+    'vertical-align:-.12em;">';
+
 const MATERIALS={
 
     "volatile-alloy":{
@@ -6018,7 +6035,7 @@ function setPetRole(planetId,petId,role){
 
         showShipToast(
             "Pilot training fee paid — "+
-            PET_PILOT_ASSIGNMENT_FEE+" 🪙"
+            PET_PILOT_ASSIGNMENT_FEE+" "+COIN_ICON_HTML
         );
 
     }
@@ -7975,7 +7992,7 @@ function renderStructureUpgradesHtml(planetId,structureId){
                         ?''
                         :'disabled'
                     )+
-                    '>Buy '+upgrade.buyCost+' 🪙</button>'+
+                    '>Buy '+upgrade.buyCost+' '+COIN_ICON_HTML+'</button>'+
                     '</div>';
 
             }else{
@@ -9483,7 +9500,7 @@ function resolveRunEndCoins(){
         runCoins;
 
     floatingText(
-        "LOST "+runCoins+" 🪙",
+        "LOST "+runCoins+" "+COIN_ICON_HTML,
         W/2,
         H*.42,
         "#ff8d8d"
@@ -11009,7 +11026,7 @@ function sellItemStock(planetId,itemId){
      * it before it was ever seen.
      */
     let soldMessage=
-        "Sold for "+price+" 🪙";
+        "Sold for "+price+" "+COIN_ICON_HTML;
 
     if(
         !isForeignItemUnlockedAt(
@@ -11087,7 +11104,7 @@ function sellMaterialStock(planetId,materialId){
     addRankPoints(3,"Sold a material");
 
     showShipToast(
-        "Sold for "+price+" 🪙"
+        "Sold for "+price+" "+COIN_ICON_HTML
     );
 
     renderPlanetDetail(
@@ -11132,7 +11149,7 @@ function sellPerkStock(planetId,perkId){
     addRankPoints(3,"Sold food");
 
     showShipToast(
-        "Sold for "+price+" 🪙"
+        "Sold for "+price+" "+COIN_ICON_HTML
     );
 
     renderPlanetDetail(
@@ -18622,7 +18639,7 @@ function renderShipSelectButton(ship,isChosen){
             ?"Fresh ship (∞) · "+
              getHeartsLabel(ship)
             :ship.score.toLocaleString()+
-             " pts · 🪙"+
+             " pts · "+COIN_ICON_HTML+
              (ship.coins || 0)+
              " · "+getEquippedLabel(ship)+
              " · Wave "+(ship.wave || 1)+
@@ -20491,7 +20508,7 @@ function renderShopItemRow(
                  ?''
                  :'disabled'
              )+
-             '>Buy '+item.cost+' 🪙</button>'
+             '>Buy '+item.cost+' '+COIN_ICON_HTML+'</button>'
             :'<button class="remove-btn" style="background:'+
              'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
              'color:#5c7ba0;" disabled>🔒 Locked</button>'
@@ -20637,7 +20654,7 @@ function renderPerkShopRow(
                  ?''
                  :'disabled'
              )+
-             '>Buy '+perk.buyCost+' 🪙</button>'
+             '>Buy '+perk.buyCost+' '+COIN_ICON_HTML+'</button>'
             :'<button class="remove-btn" style="background:'+
              'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
              'color:#5c7ba0;" disabled>🔒 Locked</button>'
@@ -20922,14 +20939,14 @@ function renderPlanetDetail(id){
         '<div class="customizer-section-title">Planet Bank</div>'+
         '<div class="selected-shape-info">'+
         '<span>🏦 Bank balance</span>'+
-        '<strong>'+bank.toLocaleString()+' 🪙</strong>'+
+        '<strong>'+bank.toLocaleString()+' '+COIN_ICON_HTML+'</strong>'+
         '</div>'+
         (
             bank>0
             ?'<button class="control-btn" data-action="toggle-ship-picker" '+
              'data-picker="coins" style="width:auto;padding:7px 10px;'+
              'margin-top:8px;display:flex;align-items:center;gap:5px;">'+
-             '<span>🪙</span><span style="opacity:.5;">→</span>'+
+             '<span>'+COIN_ICON_HTML+'</span><span style="opacity:.5;">→</span>'+
              '<span>🚀</span><span>Send to Ship</span>'+
              '<span style="opacity:.6;">'+
              (vaultCoinPickerOpen ? "▲" : "▼")+
@@ -21002,17 +21019,17 @@ function renderPlanetDetail(id){
 
         html+=
             '<div class="selected-shape-info">'+
-            '<span>🪙 Coins on ships</span>'+
+            '<span>'+COIN_ICON_HTML+' Coins on ships</span>'+
             '<strong>'+
             shipCoinTotal.toLocaleString()+
-            ' 🪙</strong>'+
+            ' '+COIN_ICON_HTML+'</strong>'+
             '</div>'+
             '<button class="control-btn" '+
             'data-action="deposit-all-ship-coins" '+
             'style="width:auto;padding:7px 10px;'+
             'margin-bottom:8px;display:flex;'+
             'align-items:center;gap:5px;">'+
-            '<span>🪙</span><span style="opacity:.5;">→</span>'+
+            '<span>'+COIN_ICON_HTML+'</span><span style="opacity:.5;">→</span>'+
             '<span>🏦</span><span>Save to Vault</span>'+
             '</button>';
 
@@ -21263,7 +21280,7 @@ function renderPlanetDetail(id){
                     '<span><strong>'+
                     ship.score.toLocaleString()+
                     ' pts</strong></span>'+
-                    '<span>🪙 '+
+                    '<span>'+COIN_ICON_HTML+' '+
                     ship.coins.toLocaleString()+
                     ' carried</span>'+
                     '</div>'+
@@ -21272,7 +21289,7 @@ function renderPlanetDetail(id){
                     '<button class="control-btn" data-action="deposit" data-ship="'+
                     ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
                     'display:flex;align-items:center;gap:5px;">'+
-                    '<span>🪙</span><span style="opacity:.5;">→</span>'+
+                    '<span>'+COIN_ICON_HTML+'</span><span style="opacity:.5;">→</span>'+
                     '<span>🏦</span><span>Save to Vault</span></button>'+
                     (
                         Object.keys(
@@ -21887,7 +21904,7 @@ function renderPlanetDetail(id){
         'justify-content:space-between;align-items:center;">'+
         '<span>Planet Stock</span>'+
         '<span style="font-size:9px;color:#70ddff;font-weight:700;">'+
-        'Sells '+computeSellPrice(id)+' 🪙 each</span>'+
+        'Sells '+computeSellPrice(id)+' '+COIN_ICON_HTML+' each</span>'+
         '</div>';
 
     if(
@@ -21934,7 +21951,7 @@ function renderPlanetDetail(id){
                     'data-item="'+itemId+'">'+
                     '<span>'+info.icon+'</span>'+
                     '<span style="opacity:.5;">→</span>'+
-                    '<span>🪙</span>'+
+                    '<span>'+COIN_ICON_HTML+'</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
                     '</button>'+
                     '</div>'+
@@ -21987,7 +22004,7 @@ function renderPlanetDetail(id){
                     'data-material="'+materialId+'">'+
                     '<span>'+info.icon+'</span>'+
                     '<span style="opacity:.5;">→</span>'+
-                    '<span>🪙</span>'+
+                    '<span>'+COIN_ICON_HTML+'</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
                     '</button>'+
                     '</div>'+
@@ -22074,7 +22091,7 @@ function renderPlanetDetail(id){
                     'data-perk="'+perkFood.id+'">'+
                     '<span>'+perkFood.icon+'</span>'+
                     '<span style="opacity:.5;">→</span>'+
-                    '<span>🪙</span>'+
+                    '<span>'+COIN_ICON_HTML+'</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
                     '</button>'+
                     '</div>'+
@@ -22173,7 +22190,7 @@ function renderPlanetDetail(id){
                         ?'disabled'
                         :''
                     )+
-                    '>Feed ('+PET_FOOD_COST+' 🪙)</button>'+
+                    '>Feed ('+PET_FOOD_COST+' '+COIN_ICON_HTML+')</button>'+
                     '</div>'+
                     '<div style="display:flex;gap:6px;align-items:center;">'+
                     '<span style="font-size:9px;color:#8fa7c7;">Role:</span>'+
@@ -22207,7 +22224,7 @@ function renderPlanetDetail(id){
                         '>✈ Pilot'+
                         (
                             role!=="pilot"
-                            ?' ('+PET_PILOT_ASSIGNMENT_FEE+' 🪙)'
+                            ?' ('+PET_PILOT_ASSIGNMENT_FEE+' '+COIN_ICON_HTML+')'
                             :''
                         )+
                         '</button>'
@@ -22450,7 +22467,7 @@ function renderPlanetDetail(id){
             ?''
             :'disabled'
         )+
-        '>Buy Pet ('+petCost+' 🪙)</button>'+
+        '>Buy Pet ('+petCost+' '+COIN_ICON_HTML+')</button>'+
         '</div>';
 
     /*
@@ -22715,7 +22732,7 @@ function renderPlanetDetail(id){
                     ?''
                     :'disabled'
                 )+
-                '>'+buildLabel+' '+structureCost+' 🪙</button>';
+                '>'+buildLabel+' '+structureCost+' '+COIN_ICON_HTML+'</button>';
 
         }
 
@@ -22886,7 +22903,7 @@ function renderPlanetDetail(id){
                     )+
                     '" style="width:auto;padding:6px 10px;font-size:10px;" '+
                     'data-action="toggle-ship-build-option" '+
-                    'data-option="cargoHold">📦 Cargo Hold (+3 🪙)</button>';
+                    'data-option="cargoHold">📦 Cargo Hold (+3 '+COIN_ICON_HTML+')</button>';
 
             }
 
@@ -22901,7 +22918,7 @@ function renderPlanetDetail(id){
                     )+
                     '" style="width:auto;padding:6px 10px;font-size:10px;" '+
                     'data-action="toggle-ship-build-option" '+
-                    'data-option="dualPerk">🐾 Pet Bay II (+5 🪙)</button>';
+                    'data-option="dualPerk">🐾 Pet Bay II (+5 '+COIN_ICON_HTML+')</button>';
 
             }
 
@@ -22944,7 +22961,7 @@ function renderPlanetDetail(id){
                 ?''
                 :'disabled'
             )+
-            '>Build '+shipCost+' 🪙</button>'+
+            '>Build '+shipCost+' '+COIN_ICON_HTML+'</button>'+
             '</div>';
 
         if(shipBuilds.length){
@@ -23324,7 +23341,7 @@ document
 
         if(action==="deposit"){
 
-            flyIconFrom(target,"🪙");
+            flyIconFrom(target,COIN_ICON_HTML);
 
             depositShipCoins(
                 planetDetailId,
@@ -23369,7 +23386,7 @@ document
                 planetDetailId
             );
 
-            flyIconFrom(target,"🪙");
+            flyIconFrom(target,COIN_ICON_HTML);
 
             renderPlanetDetail(
                 planetDetailId
@@ -23410,7 +23427,7 @@ document
                     'input[data-action="coin-picker-slider"]'
                 );
 
-            flyIconFrom(target,"🪙");
+            flyIconFrom(target,COIN_ICON_HTML);
 
             withdrawToShip(
                 planetDetailId,
@@ -25547,33 +25564,125 @@ class CoinPickup{
         ctx.shadowColor=
             this.isHeart
             ?"#ff6b8a"
-            :"#ffd76b";
+            :"#ffd75e";
 
-        ctx.fillStyle=
-            this.isHeart
-            ?"#ff8fa8"
-            :"#ffe28a";
+        if(this.isHeart){
 
-        ctx.strokeStyle=
-            this.isHeart
-            ?"#a3123f"
-            :"#a97a1a";
+            ctx.fillStyle=
+                "#ff8fa8";
 
-        ctx.lineWidth=2;
+            ctx.strokeStyle=
+                "#a3123f";
 
-        ctx.beginPath();
+            ctx.lineWidth=2;
 
-        ctx.arc(
-            0,
-            0,
-            this.radius*pulse,
-            0,
-            Math.PI*2
-        );
+            ctx.beginPath();
 
-        ctx.fill();
+            ctx.arc(
+                0,
+                0,
+                this.radius*pulse,
+                0,
+                Math.PI*2
+            );
 
-        ctx.stroke();
+            ctx.fill();
+
+            ctx.stroke();
+
+        }else{
+
+            /*
+             * Coin body — a bright gold rim with a few diagonal
+             * highlight stripes, and a darker orange-gold inner
+             * disc sitting slightly proud of it, matching the
+             * reference image's look. The stripes are drawn as
+             * plain rotated bars across the whole coin first,
+             * then the inner disc is painted on top — leaving
+             * only the rim portion of each stripe visible,
+             * which is far cheaper than clipping to a donut
+             * shape and looks identical at this size.
+             */
+            const r=
+                this.radius*pulse;
+
+            ctx.beginPath();
+
+            ctx.arc(0,0,r,0,Math.PI*2);
+
+            ctx.fillStyle=
+                "#ffd75e";
+
+            ctx.fill();
+
+            ctx.strokeStyle=
+                "#c9861f";
+
+            ctx.lineWidth=1.5;
+
+            ctx.stroke();
+
+            ctx.save();
+
+            ctx.beginPath();
+
+            ctx.arc(0,0,r,0,Math.PI*2);
+
+            ctx.clip();
+
+            ctx.fillStyle=
+                "rgba(255,255,255,.4)";
+
+            [-.9,.15,1.1].forEach(
+                angle=>{
+
+                    ctx.save();
+
+                    ctx.rotate(angle);
+
+                    ctx.fillRect(
+                        -r,
+                        -r*.75,
+                        r*2,
+                        r*.32
+                    );
+
+                    ctx.restore();
+
+                }
+            );
+
+            ctx.restore();
+
+            ctx.shadowBlur=0;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                0,r*.08,
+                r*.62,
+                0,Math.PI*2
+            );
+
+            ctx.fillStyle=
+                "#c9791a";
+
+            ctx.fill();
+
+            ctx.beginPath();
+
+            ctx.arc(
+                0,0,
+                r*.6,
+                0,Math.PI*2
+            );
+
+            ctx.fillStyle=
+                "#e8952d";
+
+            ctx.fill();
+
+        }
 
         ctx.shadowBlur=0;
 
@@ -26307,7 +26416,7 @@ function resolveCapsuleOutcome(wasSafe){
 
         floatingText(
             "CAPSULE SAVED "+
-            saved+" 🪙"+
+            saved+" "+COIN_ICON_HTML+
             (
                 materialsSavedTotal>0
                 ?" +"+materialsSavedTotal+
@@ -26823,7 +26932,15 @@ function floatingText(
     div.className=
         "floating-text";
 
-    div.textContent=
+    /*
+     * innerHTML rather than textContent -- every existing
+     * caller still passes plain text, which renders identically
+     * either way, but this also lets callers pass real HTML
+     * (like COIN_ICON_HTML) so a floating "+5 🪙" reads exactly
+     * like every other coin reference in the game instead of
+     * showing the raw HTML tag as literal text.
+     */
+    div.innerHTML=
         text;
 
     div.style.left=
@@ -32784,7 +32901,7 @@ function activateNovaBurst(){
 
         floatingText(
             "NOVA BURST +"+
-            awarded+" 🪙",
+            awarded+" "+COIN_ICON_HTML,
             W/2,
             H*.3,
             "#ffd76b"
@@ -37381,7 +37498,7 @@ function handlePointer(event){
             );
 
             floatingText(
-                "+"+awarded+" 🪙",
+                "+"+awarded+" "+COIN_ICON_HTML,
                 p.x,
                 p.y,
                 "#ffd76b"
@@ -38926,7 +39043,7 @@ function renderFleetOverview(){
                             '<div class="selected-shape-info">'+
                             '<span>'+
                             ship.score.toLocaleString()+
-                            ' pts · 🪙'+
+                            ' pts · '+COIN_ICON_HTML+
                             (ship.coins || 0)+
                             (
                                 materialSummary
@@ -41231,7 +41348,14 @@ function flyIconFrom(sourceEl,icon){
 
     el.className="fly-icon";
 
-    el.textContent=icon;
+    /*
+     * innerHTML rather than textContent -- every existing
+     * caller still passes a plain emoji character, which
+     * renders identically either way, but this also lets
+     * callers pass real HTML (like COIN_ICON_HTML) so the
+     * flying icon matches whatever's actually shown elsewhere.
+     */
+    el.innerHTML=icon;
 
     el.style.left=startX+"px";
 
