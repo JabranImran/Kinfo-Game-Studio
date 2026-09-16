@@ -5478,48 +5478,52 @@ const PERKS={
         id:"coin-magnet",
         planetId:"mars",
         species:"penguin",
-        name:"Coin Magnet Charm",
-        icon:"🧲",
+        name:"Coin Magnet Kibble",
+        icon:"🍪",
         unlockMaterial:"volatile-alloy",
         unlockAmount:3,
         buyCost:4,
         effectType:"coinMultiplier",
         effectValue:.25,
         description:
-            "Every coin you collect is worth 25% more. Stacks "+
-            "alongside whatever ability you have equipped."
+            "Fed to a Penguin, raises its Coin Magnet level — "+
+            "every coin collected is worth 25% more per level, "+
+            "for as long as that Penguin is riding along as cargo."
     },
 
     "refinery-core":{
         id:"refinery-core",
         planetId:"aurora",
         species:"cat",
-        name:"Refinery Core",
-        icon:"⚙",
+        name:"Refinery Ration",
+        icon:"🥫",
         unlockMaterial:"magnetic-resin",
         unlockAmount:3,
         buyCost:4,
         effectType:"materialDropBoost",
         effectValue:.4,
         description:
-            "Meaningfully raises the chance a unique asteroid "+
-            "drops its material at all, on top of whatever the "+
-            "field is already offering."
+            "Fed to a Cat, raises its Refinery level — "+
+            "meaningfully raises the chance a unique asteroid "+
+            "drops its material at all, scaling with level, for "+
+            "as long as that Cat is riding along as cargo."
     },
 
     "overcharge-coil":{
         id:"overcharge-coil",
         planetId:"titan",
         species:"gorilla",
-        name:"Overcharge Coil",
-        icon:"🔋",
+        name:"Overcharge Snacks",
+        icon:"🍌",
         unlockMaterial:"incinerator-beam",
         unlockAmount:2,
         buyCost:5,
         effectType:"chargeRateBoost",
         effectValue:.2,
         description:
-            "Whatever ability is equipped charges 20% faster. "+
+            "Fed to a Gorilla, raises its Overcharge level — "+
+            "your equipped ability charges 20% faster per level, "+
+            "for as long as that Gorilla is riding along as cargo. "+
             "Restocked by selling spare Incinerator Beam units "+
             "rather than a material — surplus hardware, not ore."
     }
@@ -10160,9 +10164,23 @@ function creditPerkProgress(stockPlanetId,perk,totalSold){
 
     if(unitsEarned>alreadyGranted){
 
+        /*
+         * The very first unlock grants at least 3 units, not
+         * just whatever the threshold math alone would give —
+         * a real starting stock to actually buy and feed from,
+         * rather than one unit that's immediately gone after a
+         * single purchase. Every unlock after the first follows
+         * the plain threshold math as normal.
+         */
         const newUnits=
-            unitsEarned-
-            alreadyGranted;
+            alreadyGranted===0
+            ?Math.max(
+                3,
+                unitsEarned-
+                alreadyGranted
+            )
+            :unitsEarned-
+             alreadyGranted;
 
         addPerkAvailable(
             stockPlanetId,
@@ -10887,6 +10905,51 @@ function sellMaterialStock(planetId,materialId){
     );
 
     addRankPoints(3,"Sold a material");
+
+    showShipToast(
+        "Sold for "+price+" 🪙"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Sells one owned unit of a food item — same coin payout as any
+ * other sale, but deliberately does NOT feed trackResourceSold:
+ * food isn't itself a material used to unlock more food, so
+ * selling it back shouldn't quietly nudge its own unlock
+ * progress in a circular way.
+ */
+function sellPerkStock(planetId,perkId){
+
+    if(
+        getPerkStock(
+            planetId,
+            perkId
+        )<=0
+    )
+        return;
+
+    addPerkStock(
+        planetId,
+        perkId,
+        -1
+    );
+
+    const price=
+        computeSellPrice(
+            planetId
+        );
+
+    addToBank(
+        planetId,
+        price
+    );
+
+    addRankPoints(3,"Sold food");
 
     showShipToast(
         "Sold for "+price+" 🪙"
@@ -19437,6 +19500,15 @@ let expandedShopRowId=null;
 let expandedShipPickerKey=null;
 
 /*
+ * Which pet (if any) currently has its perk detail panel open —
+ * shows the pet's species ability, its current level, and how
+ * to raise it. Independent of expandedShipPickerKey above, since
+ * the Vault's own Feed to Pet picker can be open on a different
+ * pet at the same time without the two fighting over one flag.
+ */
+let expandedPetPerkId=null;
+
+/*
  * Renders the ship-picker list itself — each docked ship shown
  * with its own small live preview (the same drawSpacePet-style
  * canvas approach used for the Ships tab cards), tapping one
@@ -20012,6 +20084,8 @@ function openPlanetDetail(id){
 
     expandedShipPickerKey=null;
 
+    expandedPetPerkId=null;
+
     resetPlanetMenuIdleTimer();
 
     startPlanetMenuTipChecking();
@@ -20081,6 +20155,8 @@ function closePlanetDetail(){
     expandedShopRowId=null;
 
     expandedShipPickerKey=null;
+
+    expandedPetPerkId=null;
 
     hidePlanetMenuTip(true);
 
@@ -21709,6 +21785,91 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    /*
+     * Food — every owned unit of a perk's food, sellable the
+     * same way as any material, plus a Feed to Pet picker
+     * (mirroring materials' Send to Ship) so leveling up a pet
+     * doesn't require leaving the Vault tab at all.
+     */
+    const ownedFoodEntries=
+        Object.values(PERKS).filter(
+            p =>
+                getPerkStock(id,p.id)>0
+        );
+
+    if(ownedFoodEntries.length){
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Food</div>';
+
+        ownedFoodEntries.forEach(
+            perkFood=>{
+
+                const foodCount=
+                    getPerkStock(
+                        id,
+                        perkFood.id
+                    );
+
+                const feedPickerKey=
+                    "feed-vault-"+
+                    perkFood.id;
+
+                const feedPickerOpen=
+                    expandedShipPickerKey===
+                    feedPickerKey;
+
+                const matchingPets=
+                    getPets(id).filter(
+                        p =>
+                            p.species===
+                            perkFood.species
+                    );
+
+                html+=
+                    '<div class="selected-shape-info">'+
+                    '<span>'+perkFood.icon+' '+
+                    perkFood.name+
+                    ' <span style="opacity:.6;font-size:9px;">×'+
+                    foodCount+'</span></span>'+
+                    '<div style="display:flex;gap:6px;">'+
+                    '<button class="control-btn" data-action="toggle-ship-picker" '+
+                    'data-picker="'+feedPickerKey+'" '+
+                    'style="width:auto;padding:7px 10px;'+
+                    'display:flex;align-items:center;gap:5px;">'+
+                    '<span>'+perkFood.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🐾</span>'+
+                    '</button>'+
+                    '<button class="remove-btn" data-action="sell-perk-stock" '+
+                    'style="display:flex;align-items:center;gap:5px;" '+
+                    'data-perk="'+perkFood.id+'">'+
+                    '<span>'+perkFood.icon+'</span>'+
+                    '<span style="opacity:.5;">→</span>'+
+                    '<span>🪙</span>'+
+                    '<span>'+computeSellPrice(id)+'</span>'+
+                    '</button>'+
+                    '</div>'+
+                    '</div>'+
+                    (
+                        feedPickerOpen
+                        ?renderPetFeedPickerHtml(
+                            matchingPets,
+                            feedPickerKey,
+                            perkFood.id
+                        )
+                        :''
+                    );
+
+            }
+        );
+
+        html+=
+            '</div>';
+
+    }
+
     html+=
         renderStructureDesignerHtml(
             "stock",
@@ -21825,6 +21986,81 @@ function renderPlanetDetail(id){
                         :''
                     )+
                     '</div>';
+
+                /*
+                 * Perk detail — only shown once this species
+                 * actually carries an ability (not every species
+                 * has one yet). Tapping shows the current level,
+                 * what it does, how much food raises it further,
+                 * and a Feed button right here if any is in stock
+                 * — the same feedPerkFoodToPet the Vault and Shop
+                 * feed pickers already use.
+                 */
+                (function(){
+
+                    const petPerk=
+                        getPerkForSpecies(
+                            pet.species
+                        );
+
+                    if(!petPerk)
+                        return;
+
+                    const petPerkExpanded=
+                        expandedPetPerkId===
+                        pet.id;
+
+                    const petPerkLevel=
+                        pet.perkLevel || 1;
+
+                    const foodStockHere=
+                        getPerkStock(
+                            id,
+                            petPerk.id
+                        );
+
+                    html+=
+                        '<button class="control-btn" data-action="toggle-pet-perk" '+
+                        'data-pet="'+pet.id+'" style="width:auto;padding:7px 10px;'+
+                        'align-self:flex-start;display:flex;align-items:center;gap:6px;'+
+                        'margin-top:6px;">'+
+                        '<span>'+petPerk.icon+' Perk: '+petPerk.name+
+                        ' Lv.'+petPerkLevel+'</span>'+
+                        '<span style="opacity:.6;">'+
+                        (petPerkExpanded ? "▲" : "▼")+
+                        '</span>'+
+                        '</button>'+
+                        (
+                            petPerkExpanded
+                            ?'<div style="padding:8px;border-radius:10px;'+
+                             'background:rgba(0,0,0,.2);margin-top:6px;'+
+                             'font-size:10px;color:#c9a8ff;">'+
+                             petPerk.description+
+                             '<div style="margin-top:6px;color:#70ddff;">'+
+                             'Current level: '+petPerkLevel+
+                             '</div>'+
+                             '<div style="margin-top:4px;">'+
+                             'Feed 1 '+petPerk.icon+' '+petPerk.name+
+                             ' to reach Level '+(petPerkLevel+1)+
+                             '</div>'+
+                             (
+                                 foodStockHere>0
+                                 ?'<button class="control-btn" '+
+                                  'data-action="feed-perk-food" '+
+                                  'data-pet="'+pet.id+'" '+
+                                  'data-perk="'+petPerk.id+'" '+
+                                  'style="width:auto;padding:6px 10px;'+
+                                  'margin-top:8px;">Feed ('+
+                                  foodStockHere+' in stock)</button>'
+                                 :'<div style="margin-top:8px;color:#5c7ba0;">'+
+                                  'None in stock here — buy some from '+
+                                  'the Shop above.</div>'
+                             )+
+                             '</div>'
+                            :''
+                        );
+
+                })();
 
                 if(
                     role==="pilot" &&
@@ -23215,6 +23451,28 @@ document
             );
 
         }else if(
+            action==="sell-perk-stock"
+        ){
+
+            const perkId=
+                target.getAttribute(
+                    "data-perk"
+                );
+
+            flyIconFrom(
+                target,
+                (
+                    PERKS[perkId] &&
+                    PERKS[perkId].icon
+                ) || "🍪"
+            );
+
+            sellPerkStock(
+                planetDetailId,
+                perkId
+            );
+
+        }else if(
             action==="queue-ship"
         ){
 
@@ -23435,6 +23693,25 @@ document
                 planetDetailId,
                 petId,
                 role
+            );
+
+        }else if(
+            action==="toggle-pet-perk"
+        ){
+
+            const perkPetId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            expandedPetPerkId=
+                expandedPetPerkId===
+                perkPetId
+                ?null
+                :perkPetId;
+
+            renderPlanetDetail(
+                planetDetailId
             );
 
         }else if(
