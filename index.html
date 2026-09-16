@@ -5485,6 +5485,7 @@ const PERKS={
         buyCost:4,
         effectType:"coinMultiplier",
         effectValue:.25,
+        secondaryFoodPerkId:"refinery-core",
         description:
             "Fed to a Penguin, raises its Coin Magnet level — "+
             "every coin collected is worth 25% more per level, "+
@@ -5502,6 +5503,7 @@ const PERKS={
         buyCost:4,
         effectType:"materialDropBoost",
         effectValue:.4,
+        secondaryFoodPerkId:"overcharge-coil",
         description:
             "Fed to a Cat, raises its Refinery level — "+
             "meaningfully raises the chance a unique asteroid "+
@@ -5520,6 +5522,7 @@ const PERKS={
         buyCost:5,
         effectType:"chargeRateBoost",
         effectValue:.2,
+        secondaryFoodPerkId:"coin-magnet",
         description:
             "Fed to a Gorilla, raises its Overcharge level — "+
             "your equipped ability charges 20% faster per level, "+
@@ -5545,6 +5548,54 @@ function getPerkForSpecies(species){
             perk.species===
             species
     ) || null;
+
+}
+
+/*
+ * From what level to what level, how much of the primary food
+ * it costs -- going from level N to N+1 costs N units, so each
+ * step up is genuinely steeper than the last (1, then 2, then
+ * 3...), the same shape pet stat training already uses.
+ */
+function computePerkFoodCost(currentLevel){
+
+    return Math.max(1,currentLevel);
+
+}
+
+/*
+ * From this level onward, leveling up also needs a unit of a
+ * second food type -- the next perk's food in a three-way cycle
+ * (Penguin -> Cat -> Gorilla -> Penguin), so a well-leveled pet
+ * eventually depends on more than just its own planet's economy.
+ */
+const PERK_SECONDARY_FOOD_LEVEL=4;
+
+function getPerkFoodRequirement(perk,currentLevel){
+
+    const requirement=[
+        {
+            perkId:perk.id,
+            amount:computePerkFoodCost(
+                currentLevel
+            )
+        }
+    ];
+
+    if(
+        currentLevel>=
+        PERK_SECONDARY_FOOD_LEVEL &&
+        perk.secondaryFoodPerkId
+    ){
+
+        requirement.push({
+            perkId:perk.secondaryFoodPerkId,
+            amount:1
+        });
+
+    }
+
+    return requirement;
 
 }
 
@@ -10745,33 +10796,84 @@ function feedPerkFoodToPet(planetId,petId,perkId){
     )
         return;
 
-    if(
-        getPerkStock(
-            planetId,
-            perkId
-        )<=0
-    )
+    const currentLevel=
+        pet.perkLevel || 1;
+
+    const requirement=
+        getPerkFoodRequirement(
+            perk,
+            currentLevel
+        );
+
+    /*
+     * Every required food (the scaling primary amount, plus a
+     * secondary type once past PERK_SECONDARY_FOOD_LEVEL) has to
+     * actually be in stock before ANY of it is spent — never a
+     * partial feed that eats the primary but fails on a missing
+     * secondary.
+     */
+    const canAfford=
+        requirement.every(
+            r =>
+                getPerkStock(
+                    planetId,
+                    r.perkId
+                )>=r.amount
+        );
+
+    if(!canAfford)
         return;
 
-    addPerkStock(
-        planetId,
-        perkId,
-        -1
+    requirement.forEach(
+        r=>{
+
+            addPerkStock(
+                planetId,
+                r.perkId,
+                -r.amount
+            );
+
+        }
     );
 
     pet.perkLevel=
-        (pet.perkLevel || 1)+1;
+        currentLevel+1;
+
+    /*
+     * Special food is a genuine treat, not just a levelling
+     * mechanism — fills the pet's energy completely on top of
+     * the level gained, distinct from ordinary Feed which only
+     * restores it partway.
+     */
+    pet.energy=100;
 
     savePlanetProgress();
 
+    const speciesName=
+        SPECIES_DISPLAY_NAMES[
+            pet.species
+        ] || pet.species;
+
+    const secondaryUsed=
+        requirement.find(
+            r => r.perkId!==perkId
+        );
+
     showShipToast(
-        (
-            SPECIES_DISPLAY_NAMES[
-                pet.species
-            ] || pet.species
-        )+"'s "+perk.name+
+        speciesName+"'s "+perk.name+
         " ability is now level "+
-        pet.perkLevel+"!"
+        pet.perkLevel+
+        (
+            secondaryUsed
+            ?" (used "+
+             (
+                 PERKS[
+                     secondaryUsed.perkId
+                 ] || {}
+             ).name+" too)"
+            :""
+        )+
+        " — energy refilled!"
     );
 
     renderPlanetDetail(
@@ -19572,7 +19674,7 @@ function renderShipPickerHtml(planetId,ships,pickerKey,pickAction,extraAttrs){
  * the way ship styles are; species and current level are
  * enough to tell them apart.
  */
-function renderPetFeedPickerHtml(pets,pickerKey,perkId){
+function renderPetFeedPickerHtml(pets,pickerKey,perkId,planetId){
 
     if(!pets.length){
 
@@ -19583,6 +19685,9 @@ function renderPetFeedPickerHtml(pets,pickerKey,perkId){
 
     }
 
+    const perk=
+        PERKS[perkId];
+
     return(
         '<div style="display:flex;flex-direction:column;gap:6px;'+
         'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);'+
@@ -19590,23 +19695,66 @@ function renderPetFeedPickerHtml(pets,pickerKey,perkId){
         pets.map(
             pet=>{
 
+                const petLevel=
+                    pet.perkLevel || 1;
+
+                const requirement=
+                    perk
+                    ?getPerkFoodRequirement(
+                        perk,
+                        petLevel
+                    )
+                    :[];
+
+                const costLabel=
+                    requirement.map(
+                        r=>
+                            r.amount+
+                            (
+                                PERKS[r.perkId] &&
+                                PERKS[r.perkId].icon
+                            )
+                    ).join(" + ");
+
+                const affordable=
+                    !planetId ||
+                    requirement.every(
+                        r =>
+                            getPerkStock(
+                                planetId,
+                                r.perkId
+                            )>=r.amount
+                    );
+
                 return(
                     '<button class="shape-btn" style="width:100%;'+
                     'display:flex;align-items:center;'+
                     'justify-content:space-between;'+
-                    'padding:8px 10px;text-align:left;" '+
-                    'data-action="feed-perk-food" '+
+                    'padding:8px 10px;text-align:left;'+
+                    (
+                        affordable
+                        ?''
+                        :'opacity:.5;'
+                    )+
+                    '" data-action="feed-perk-food" '+
                     'data-pet="'+pet.id+'" '+
-                    'data-perk="'+perkId+'">'+
+                    'data-perk="'+perkId+'" '+
+                    (
+                        affordable
+                        ?''
+                        :'disabled'
+                    )+
+                    '>'+
                     '<span>'+
                     (
                         SPECIES_DISPLAY_NAMES[
                             pet.species
                         ] || pet.species
                     )+
-                    '</span>'+
+                    ' <span style="opacity:.6;">'+
+                    'Lv.'+petLevel+'</span></span>'+
                     '<span style="opacity:.6;font-size:9px;">'+
-                    'Level '+(pet.perkLevel || 1)+
+                    costLabel+
                     '</span>'+
                     '</button>'
                 );
@@ -20490,7 +20638,8 @@ function renderPerkShopRow(
                     ?renderPetFeedPickerHtml(
                         matchingPets,
                         feedPickerKey,
-                        perk.id
+                        perk.id,
+                        planetId
                     )
                     :''
                 );
@@ -21857,7 +22006,8 @@ function renderPlanetDetail(id){
                         ?renderPetFeedPickerHtml(
                             matchingPets,
                             feedPickerKey,
-                            perkFood.id
+                            perkFood.id,
+                            id
                         )
                         :''
                     );
@@ -21991,8 +22141,9 @@ function renderPlanetDetail(id){
                  * Perk detail — only shown once this species
                  * actually carries an ability (not every species
                  * has one yet). Tapping shows the current level,
-                 * what it does, how much food raises it further,
-                 * and a Feed button right here if any is in stock
+                 * what it does, the full scaling cost (and any
+                 * secondary food required at higher levels), and
+                 * a Feed button right here if it's all in stock
                  * — the same feedPerkFoodToPet the Vault and Shop
                  * feed pickers already use.
                  */
@@ -22013,11 +22164,34 @@ function renderPlanetDetail(id){
                     const petPerkLevel=
                         pet.perkLevel || 1;
 
-                    const foodStockHere=
-                        getPerkStock(
-                            id,
-                            petPerk.id
+                    const requirement=
+                        getPerkFoodRequirement(
+                            petPerk,
+                            petPerkLevel
                         );
+
+                    const canFeed=
+                        requirement.every(
+                            r =>
+                                getPerkStock(
+                                    id,
+                                    r.perkId
+                                )>=r.amount
+                        );
+
+                    const costLabel=
+                        requirement.map(
+                            r=>
+                                r.amount+' '+
+                                (
+                                    PERKS[r.perkId] &&
+                                    PERKS[r.perkId].icon
+                                )+' '+
+                                (
+                                    PERKS[r.perkId] &&
+                                    PERKS[r.perkId].name
+                                )
+                        ).join(" + ");
 
                     html+=
                         '<button class="control-btn" data-action="toggle-pet-perk" '+
@@ -22040,21 +22214,21 @@ function renderPlanetDetail(id){
                              'Current level: '+petPerkLevel+
                              '</div>'+
                              '<div style="margin-top:4px;">'+
-                             'Feed 1 '+petPerk.icon+' '+petPerk.name+
+                             'Feed '+costLabel+
                              ' to reach Level '+(petPerkLevel+1)+
+                             ' (also refills energy)'+
                              '</div>'+
                              (
-                                 foodStockHere>0
+                                 canFeed
                                  ?'<button class="control-btn" '+
                                   'data-action="feed-perk-food" '+
                                   'data-pet="'+pet.id+'" '+
                                   'data-perk="'+petPerk.id+'" '+
                                   'style="width:auto;padding:6px 10px;'+
-                                  'margin-top:8px;">Feed ('+
-                                  foodStockHere+' in stock)</button>'
+                                  'margin-top:8px;">Feed</button>'
                                  :'<div style="margin-top:8px;color:#5c7ba0;">'+
-                                  'None in stock here — buy some from '+
-                                  'the Shop above.</div>'
+                                  'Not enough in stock here yet — buy or '+
+                                  'bring in what\'s missing.</div>'
                              )+
                              '</div>'
                             :''
