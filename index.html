@@ -4145,6 +4145,7 @@ function defaultPlanetSave(){
                     rangeLevel:1,
                     enduranceLevel:1,
                     survivalLevel:1,
+                    perkLevel:1,
                     lastEnergyCheck:Date.now()
                 }
             ]
@@ -4773,6 +4774,15 @@ function loadPlanetSave(){
                                 pet.survivalLevel=
                                     pet.trainingLevel ||
                                     1;
+
+                            }
+
+                            if(
+                                typeof pet.perkLevel!==
+                                "number"
+                            ){
+
+                                pet.perkLevel=1;
 
                             }
 
@@ -5467,6 +5477,7 @@ const PERKS={
     "coin-magnet":{
         id:"coin-magnet",
         planetId:"mars",
+        species:"penguin",
         name:"Coin Magnet Charm",
         icon:"🧲",
         unlockMaterial:"volatile-alloy",
@@ -5482,6 +5493,7 @@ const PERKS={
     "refinery-core":{
         id:"refinery-core",
         planetId:"aurora",
+        species:"cat",
         name:"Refinery Core",
         icon:"⚙",
         unlockMaterial:"magnetic-resin",
@@ -5498,6 +5510,7 @@ const PERKS={
     "overcharge-coil":{
         id:"overcharge-coil",
         planetId:"titan",
+        species:"gorilla",
         name:"Overcharge Coil",
         icon:"🔋",
         unlockMaterial:"incinerator-beam",
@@ -5512,6 +5525,24 @@ const PERKS={
     }
 
 };
+
+/*
+ * Reverse lookup — which perk (if any) a given pet species
+ * carries. Not every species has one yet; that's intentional,
+ * per the request to transfer the existing three rather than
+ * invent new ones for every species right now.
+ */
+function getPerkForSpecies(species){
+
+    return Object.values(
+        PERKS
+    ).find(
+        perk =>
+            perk.species===
+            species
+    ) || null;
+
+}
 
 function getUnlockedPerks(){
 
@@ -6163,6 +6194,7 @@ function buyPet(planetId){
         rangeLevel:1,
         enduranceLevel:1,
         survivalLevel:1,
+        perkLevel:1,
         lastEnergyCheck:Date.now()
     });
 
@@ -7008,19 +7040,20 @@ const STRUCTURE_UPGRADES={
         {
             id:"ship-factory-dual-perk",
             structureId:"ship-factory",
-            name:"Dual Perk Rig",
-            icon:"⚡",
+            name:"Pet Bay Expansion II",
+            icon:"🐾",
             description:
-                "Adds an optional toggle when building a ship "+
-                "here: room for a second perk at once, for an "+
-                "even steeper coin cost.",
+                "A second tier on top of Pet Bay Expansion — "+
+                "adds an optional toggle when building a ship "+
+                "here: room for 3 pets in cargo instead of 2, "+
+                "for an even steeper coin cost.",
             unlockMaterials:[
                 {materialId:"cryo-shard",amount:5},
                 {materialId:"nova-dust",amount:5}
             ],
             buyCost:30,
             effectType:"shipToggle",
-            toggleId:"dual-perk"
+            toggleId:"pet-bay-2"
         },
         {
             id:"ship-factory-pet-bay",
@@ -10604,11 +10637,12 @@ function markStructureUnlocked(planetId,structureId){
 }
 
 /*
- * Buying a perk consumes one unit of "available" (earned by
- * selling) and turns it into one unit of actual owned stock,
- * which is what equipPerkAt() draws from — the two-step split
- * the whole redesign is about: selling unlocks the option to
- * buy, coins are what actually buy it.
+ * Buying a perk's space food consumes one unit of "available"
+ * (earned by selling) and turns it into one unit of actual owned
+ * stock, which feedPerkFoodToPet() then consumes to level up a
+ * matching pet — the two-step split the whole redesign is about:
+ * selling unlocks the option to buy, coins are what actually
+ * buy it, feeding is what actually uses it.
  */
 function buyPerk(planetId,perkId){
 
@@ -10657,6 +10691,69 @@ function buyPerk(planetId,perkId){
 
     showShipToast(
         perk.name+" purchased!"
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+/*
+ * Feeds one owned unit of a perk's space food to a specific pet
+ * — raises that pet's own perkLevel by one, which scales its
+ * species ability whenever it's aboard a ship as cargo (see
+ * getPerkEffect). Only valid for a pet of the matching species,
+ * genuinely stationed at this planet, with at least one fed
+ * unit actually in stock here.
+ */
+function feedPerkFoodToPet(planetId,petId,perkId){
+
+    const perk=
+        PERKS[perkId];
+
+    if(!perk)
+        return;
+
+    const pet=
+        getPets(planetId).find(
+            p => p.id===petId
+        );
+
+    if(
+        !pet ||
+        pet.species!==
+        perk.species
+    )
+        return;
+
+    if(
+        getPerkStock(
+            planetId,
+            perkId
+        )<=0
+    )
+        return;
+
+    addPerkStock(
+        planetId,
+        perkId,
+        -1
+    );
+
+    pet.perkLevel=
+        (pet.perkLevel || 1)+1;
+
+    savePlanetProgress();
+
+    showShipToast(
+        (
+            SPECIES_DISPLAY_NAMES[
+                pet.species
+            ] || pet.species
+        )+"'s "+perk.name+
+        " ability is now level "+
+        pet.perkLevel+"!"
     );
 
     renderPlanetDetail(
@@ -10881,136 +10978,6 @@ function equipItemAt(planetId,shipId,itemId){
  * as buying an ability item.
  */
 /*
- * Equipping/unequipping a perk mirrors equipItemAt(), but on
- * its own slot (ship.perk) with its own stock namespace
- * (perkStock) — entirely independent of whatever ability is
- * equipped at the same time.
- */
-function equipPerkAt(planetId,shipId,perkId,slot){
-
-    slot=slot===2 ? 2 : 1;
-
-    const ship=
-        (
-            planetSave.ships[
-                planetId
-            ] || []
-        ).find(
-            s => s.id===shipId
-        );
-
-    if(!ship)
-        return;
-
-    if(
-        slot===2 &&
-        !ship.hasDualPerk
-    ){
-
-        return;
-
-    }
-
-    const fieldName=
-        slot===2 ? "perk2" : "perk";
-
-    const otherFieldName=
-        slot===2 ? "perk" : "perk2";
-
-    if(ship[fieldName]===perkId){
-
-        return;
-
-    }
-
-    /*
-     * The same perk can't sit in both slots at once — that
-     * would just be double-dipping one effect rather than
-     * genuinely running two different perks together.
-     */
-    if(
-        perkId &&
-        perkId===
-        ship[otherFieldName]
-    ){
-
-        return;
-
-    }
-
-    if(
-        perkId &&
-        getPerkStock(
-            planetId,
-            perkId
-        )<=0
-    ){
-
-        return;
-
-    }
-
-    if(!planetSave.perkStock){
-
-        planetSave.perkStock={};
-
-    }
-
-    if(
-        !planetSave.perkStock[
-            planetId
-        ]
-    ){
-
-        planetSave.perkStock[
-            planetId
-        ]={};
-
-    }
-
-    if(ship[fieldName]){
-
-        planetSave.perkStock[
-            planetId
-        ][ship[fieldName]]=
-            (
-                getPerkStock(
-                    planetId,
-                    ship[fieldName]
-                )
-            )+1;
-
-    }
-
-    if(perkId){
-
-        planetSave.perkStock[
-            planetId
-        ][perkId]=
-            getPerkStock(
-                planetId,
-                perkId
-            )-1;
-
-    }
-
-    ship[fieldName]=perkId || null;
-
-    expandedPerkShipId=null;
-
-    savePlanetProgress();
-
-    showShipToast(
-        perkId
-        ?"Equipped "+PERKS[perkId].name
-        :"Perk unequipped"
-    );
-
-    renderPlanetDetail(
-        planetId
-    );
-
-}
 
 
 /*
@@ -15502,7 +15469,9 @@ function drawStarMapScene(){
                             c,
                             true,
                             starMapCargoPetInfo,
-                            currentShipPerk
+                            getPrimaryCargoPerkId(
+                                currentShipCargoPets
+                            )
                         );
 
                     }
@@ -17524,7 +17493,9 @@ function drawPlanetFocusScene(){
                     flightProgress>0,
                     focusCargoPetInfo,
                     focusShips[0]
-                    ?focusShips[0].perk
+                    ?getPrimaryCargoPerkId(
+                        focusShips[0].cargoPets
+                    )
                     :null
                 );
 
@@ -18483,9 +18454,23 @@ function resolveBuildQueue(planetId){
                     :0,
                     !!build.dualPerk,
                     null,
-                    build.petBay
-                    ?2
-                    :1,
+                    /*
+                     * dualPerk now means Pet Bay Expansion II
+                     * (3 slots) rather than a second perk slot —
+                     * see the structure upgrade's own comment
+                     * for why the field name itself was left
+                     * alone rather than renamed everywhere.
+                     * Tier 2 always wins outright if selected,
+                     * regardless of whether tier 1 was also
+                     * checked, so the two never stack into 4.
+                     */
+                    build.dualPerk
+                    ?3
+                    :(
+                        build.petBay
+                        ?2
+                        :1
+                    ),
                     null
                 );
 
@@ -19440,12 +19425,14 @@ let expandedShopRowId=null;
 /*
  * SHIP PICKER — a reusable "which ship should this go to" list,
  * shared by sending coins, sending a material, and equipping an
- * item or perk, rather than three separate pickers. Only one
- * can be open at a time, keyed by a string identifying what's
- * being sent ("coins", "material-<id>", "equip-<itemId>",
- * "equip-perk"). Reset alongside the other expand states so it
- * never survives a tab switch or a re-open on a different
- * planet.
+ * item, rather than three separate pickers. Perks no longer
+ * equip to a ship this way — they're carried by pets now — so
+ * this picker's remaining perk-adjacent use is the "equip to
+ * ship" case only for regular ability items. Only one can be
+ * open at a time, keyed by a string identifying what's being
+ * sent ("coins", "material-<id>", "equip-<itemId>"). Reset
+ * alongside the other expand states so it never survives a tab
+ * switch or a re-open on a different planet.
  */
 let expandedShipPickerKey=null;
 
@@ -19495,6 +19482,60 @@ function renderShipPickerHtml(planetId,ships,pickerKey,pickAction,extraAttrs){
                     'border-radius:8px;flex-shrink:0;"></canvas>'+
                     '<span style="flex:1;">'+
                     ship.score.toLocaleString()+' pts</span>'+
+                    '</button>'
+                );
+
+            }
+        ).join('')+
+        '</div>'
+    );
+
+}
+
+/*
+ * A picker listing pets (already filtered to the matching
+ * species by the caller), each showing its current perk level
+ * -- tapping one feeds it right away. No visual preview the way
+ * the ship picker has one, since pets aren't custom-designed
+ * the way ship styles are; species and current level are
+ * enough to tell them apart.
+ */
+function renderPetFeedPickerHtml(pets,pickerKey,perkId){
+
+    if(!pets.length){
+
+        return(
+            '<div style="font-size:10px;color:#5c7ba0;'+
+            'padding:8px;">No matching pet here to feed.</div>'
+        );
+
+    }
+
+    return(
+        '<div style="display:flex;flex-direction:column;gap:6px;'+
+        'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);'+
+        'margin-top:6px;">'+
+        pets.map(
+            pet=>{
+
+                return(
+                    '<button class="shape-btn" style="width:100%;'+
+                    'display:flex;align-items:center;'+
+                    'justify-content:space-between;'+
+                    'padding:8px 10px;text-align:left;" '+
+                    'data-action="feed-perk-food" '+
+                    'data-pet="'+pet.id+'" '+
+                    'data-perk="'+perkId+'">'+
+                    '<span>'+
+                    (
+                        SPECIES_DISPLAY_NAMES[
+                            pet.species
+                        ] || pet.species
+                    )+
+                    '</span>'+
+                    '<span style="opacity:.6;font-size:9px;">'+
+                    'Level '+(pet.perkLevel || 1)+
+                    '</span>'+
                     '</button>'
                 );
 
@@ -20236,15 +20277,16 @@ function renderPerkShopRow(
         expandedShopRowId===
         rowKey;
 
+    const speciesName=
+        SPECIES_DISPLAY_NAMES[
+            perk.species
+        ] || "a pet";
+
     const titleLabel=
         foreignSourcePet
-        ?"Perk — brought by "+
-         (
-             SPECIES_DISPLAY_NAMES[
-                 foreignSourcePet.species
-             ] || "a pet"
-         )
-        :"Perk";
+        ?"Space Food — brought by "+
+         speciesName
+        :"Space Food";
 
     let html=
         '<div class="customizer-section">'+
@@ -20303,15 +20345,18 @@ function renderPerkShopRow(
             perkExpanded
             ?'<div class="shop-row-detail">'+
              perk.description+
+             '<div style="margin-top:8px;color:#c9a8ff;">'+
+             'Fed to a '+speciesName+
+             ', this raises the level of its '+
+             speciesName+'-only ability — every '+speciesName+
+             ' carried aboard as cargo already grants that '+
+             'ability at its own current level, no equipping '+
+             'required.'+
+             '</div>'+
              (
                  foreignSourcePet
                  ?'<div style="margin-top:8px;color:#ffd76b;">'+
-                  'Available here because '+
-                  (
-                      SPECIES_DISPLAY_NAMES[
-                          foreignSourcePet.species
-                      ] || "a pet"
-                  )+
+                  'Available here because '+speciesName+
                   ' is stationed away from its home world — '+
                   'sending it back home removes this row, though '+
                   'any progress and owned units stay exactly as '+
@@ -20330,13 +20375,6 @@ function renderPerkShopRow(
              perk.unlockAmount+' '+unlockMaterialInfo.name+
              ' sold'+
              '</div>'+
-             '<div style="margin-top:8px;">'+
-             'Selling '+unlockMaterialInfo.icon+' '+
-             unlockMaterialInfo.name+' in the Vault tab '+
-             'doesn\'t buy this directly — it just makes another '+
-             'unit available to buy with coins. Owned units can '+
-             'be equipped onto any ship docked here.'+
-             '</div>'+
              '</div>'
             :''
         )+
@@ -20344,35 +20382,51 @@ function renderPerkShopRow(
 
     if(perkStockHere>0){
 
-        const perkEquipPickerKey=
-            "equip-perk-"+perk.id;
-
-        const perkEquipPickerOpen=
-            expandedShipPickerKey===
-            perkEquipPickerKey;
-
-        html+=
-            '<button class="control-btn" data-action="toggle-ship-picker" '+
-            'data-picker="'+perkEquipPickerKey+'" '+
-            'style="width:auto;padding:7px 10px;margin-top:8px;'+
-            'display:flex;align-items:center;gap:5px;">'+
-            '<span>'+perk.icon+'</span>'+
-            '<span style="opacity:.5;">→</span>'+
-            '<span>🚀</span><span>Equip to Ship</span>'+
-            '<span style="opacity:.6;">'+
-            (perkEquipPickerOpen ? "▲" : "▼")+
-            '</span></button>'+
-            (
-                perkEquipPickerOpen
-                ?renderShipPickerHtml(
-                    planetId,
-                    ships,
-                    perkEquipPickerKey,
-                    "pick-ship-equip-perk",
-                    'data-perk="'+perk.id+'"'
-                )
-                :''
+        const matchingPets=
+            getPets(planetId).filter(
+                p =>
+                    p.species===
+                    perk.species
             );
+
+        const feedPickerKey=
+            "feed-perk-"+perk.id;
+
+        const feedPickerOpen=
+            expandedShipPickerKey===
+            feedPickerKey;
+
+        if(matchingPets.length){
+
+            html+=
+                '<button class="control-btn" data-action="toggle-ship-picker" '+
+                'data-picker="'+feedPickerKey+'" '+
+                'style="width:auto;padding:7px 10px;margin-top:8px;'+
+                'display:flex;align-items:center;gap:5px;">'+
+                '<span>'+perk.icon+'</span>'+
+                '<span style="opacity:.5;">→</span>'+
+                '<span>🐾</span><span>Feed to '+speciesName+'</span>'+
+                '<span style="opacity:.6;">'+
+                (feedPickerOpen ? "▲" : "▼")+
+                '</span></button>'+
+                (
+                    feedPickerOpen
+                    ?renderPetFeedPickerHtml(
+                        matchingPets,
+                        feedPickerKey,
+                        perk.id
+                    )
+                    :''
+                );
+
+        }else{
+
+            html+=
+                '<div style="font-size:10px;color:#5c7ba0;'+
+                'margin-top:8px;">No '+speciesName+
+                ' here to feed this to.</div>';
+
+        }
 
     }
 
@@ -21000,194 +21054,6 @@ function renderPlanetDetail(id){
                               'another planet.</span>'
                         )+
                         '</div>'
-                        :''
-                    )+
-                    (
-                        (function(){
-
-                            const localPerk=
-                                getPerkForPlanet(id);
-
-                            const perkOptions=[];
-
-                            if(
-                                localPerk &&
-                                isPerkUnlocked(localPerk.id) &&
-                                ship.perk!==
-                                localPerk.id &&
-                                getPerkStock(
-                                    id,
-                                    localPerk.id
-                                )>0
-                            ){
-
-                                perkOptions.push(
-                                    localPerk
-                                );
-
-                            }
-
-                            const perkExpanded=
-                                expandedPerkShipId===
-                                ship.id;
-
-                            const currentPerkInfo=
-                                ship.perk
-                                ?PERKS[ship.perk]
-                                :null;
-
-                            return(
-                                '<button class="control-btn" data-action="toggle-perk" data-ship="'+
-                                ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
-                                'display:flex;align-items:center;gap:6px;">'+
-                                '<span>Perk: '+
-                                (
-                                    currentPerkInfo
-                                    ?currentPerkInfo.icon+' '+currentPerkInfo.name
-                                    :"None"
-                                )+
-                                '</span>'+
-                                '<span style="opacity:.6;">'+
-                                (perkExpanded ? "▲" : "▼")+
-                                '</span>'+
-                                '</button>'+
-                                (
-                                    perkExpanded
-                                    ?'<div style="display:flex;flex-direction:column;gap:6px;'+
-                                    'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
-                                    (
-                                        ship.perk
-                                        ?'<button class="shape-btn" style="width:100%;'+
-                                        'text-align:left;padding:8px 10px;font-size:11px;" '+
-                                        'data-action="equip-perk" data-ship="'+
-                                        ship.id+'" data-perk="">'+
-                                        'None (unequip)</button>'
-                                        :''
-                                    )+
-                                    (
-                                        perkOptions.length
-                                        ?perkOptions.map(
-                                            p =>
-                                                '<button class="shape-btn" style="width:100%;'+
-                                                'display:flex;align-items:center;justify-content:space-between;'+
-                                                'padding:8px 10px;font-size:11px;" '+
-                                                'data-action="equip-perk" data-ship="'+
-                                                ship.id+'" data-perk="'+p.id+'">'+
-                                                '<span>'+p.icon+' '+p.name+'</span>'+
-                                                '<span style="opacity:.6;font-size:9px;">'+
-                                                getPerkStock(id,p.id)+
-                                                ' in stock</span>'+
-                                                '</button>'
-                                        ).join("")
-                                        :(
-                                            ship.perk
-                                            ?''
-                                            :'<span style="font-size:10px;color:#5c7ba0;">'+
-                                              'Nothing to equip here — unlock and buy a '+
-                                              'perk above first.</span>'
-                                        )
-                                    )+
-                                    '</div>'
-                                    :''
-                                )
-                            );
-
-                        })()
-                    )+
-                    (
-                        ship.hasDualPerk
-                        ?(function(){
-
-                            const localPerk2=
-                                getPerkForPlanet(id);
-
-                            const perk2Options=[];
-
-                            if(
-                                localPerk2 &&
-                                isPerkUnlocked(localPerk2.id) &&
-                                ship.perk2!==
-                                localPerk2.id &&
-                                localPerk2.id!==
-                                ship.perk &&
-                                getPerkStock(
-                                    id,
-                                    localPerk2.id
-                                )>0
-                            ){
-
-                                perk2Options.push(
-                                    localPerk2
-                                );
-
-                            }
-
-                            const perk2Expanded=
-                                expandedPerk2ShipId===
-                                ship.id;
-
-                            const currentPerk2Info=
-                                ship.perk2
-                                ?PERKS[ship.perk2]
-                                :null;
-
-                            return(
-                                '<button class="control-btn" data-action="toggle-perk2" data-ship="'+
-                                ship.id+'" style="width:auto;padding:7px 10px;align-self:flex-start;'+
-                                'display:flex;align-items:center;gap:6px;">'+
-                                '<span>Perk 2: '+
-                                (
-                                    currentPerk2Info
-                                    ?currentPerk2Info.icon+' '+currentPerk2Info.name
-                                    :"None"
-                                )+
-                                '</span>'+
-                                '<span style="opacity:.6;">'+
-                                (perk2Expanded ? "▲" : "▼")+
-                                '</span>'+
-                                '</button>'+
-                                (
-                                    perk2Expanded
-                                    ?'<div style="display:flex;flex-direction:column;gap:6px;'+
-                                    'padding:8px;border-radius:10px;background:rgba(0,0,0,.2);">'+
-                                    (
-                                        ship.perk2
-                                        ?'<button class="shape-btn" style="width:100%;'+
-                                        'text-align:left;padding:8px 10px;font-size:11px;" '+
-                                        'data-action="equip-perk2" data-ship="'+
-                                        ship.id+'" data-perk="">'+
-                                        'None (unequip)</button>'
-                                        :''
-                                    )+
-                                    (
-                                        perk2Options.length
-                                        ?perk2Options.map(
-                                            p =>
-                                                '<button class="shape-btn" style="width:100%;'+
-                                                'display:flex;align-items:center;justify-content:space-between;'+
-                                                'padding:8px 10px;font-size:11px;" '+
-                                                'data-action="equip-perk2" data-ship="'+
-                                                ship.id+'" data-perk="'+p.id+'">'+
-                                                '<span>'+p.icon+' '+p.name+'</span>'+
-                                                '<span style="opacity:.6;font-size:9px;">'+
-                                                getPerkStock(id,p.id)+
-                                                ' in stock</span>'+
-                                                '</button>'
-                                        ).join("")
-                                        :(
-                                            ship.perk2
-                                            ?''
-                                            :'<span style="font-size:10px;color:#5c7ba0;">'+
-                                              'Nothing else to equip here — the same perk '+
-                                              'can\'t fill both slots.</span>'
-                                        )
-                                    )+
-                                    '</div>'
-                                    :''
-                                )
-                            );
-
-                        })()
                         :''
                     )+
                     (function(){
@@ -22542,7 +22408,7 @@ function renderPlanetDetail(id){
                     )+
                     '" style="width:auto;padding:6px 10px;font-size:10px;" '+
                     'data-action="toggle-ship-build-option" '+
-                    'data-option="dualPerk">⚡ Dual Perk (+5 🪙)</button>';
+                    'data-option="dualPerk">🐾 Pet Bay II (+5 🪙)</button>';
 
             }
 
@@ -23118,28 +22984,6 @@ document
             );
 
         }else if(
-            action==="pick-ship-equip-perk"
-        ){
-
-            const perkId=
-                target.getAttribute(
-                    "data-perk"
-                );
-
-            equipPerkAt(
-                planetDetailId,
-                shipId,
-                perkId || null,
-                1
-            );
-
-            expandedShipPickerKey=null;
-
-            renderPlanetDetail(
-                planetDetailId
-            );
-
-        }else if(
             action==="buy"
         ){
 
@@ -23180,66 +23024,6 @@ document
                 planetDetailId,
                 shipId,
                 itemId
-            );
-
-        }else if(
-            action==="toggle-perk"
-        ){
-
-            expandedPerkShipId=
-                expandedPerkShipId===
-                shipId
-                ?null
-                :shipId;
-
-            renderPlanetDetail(
-                planetDetailId
-            );
-
-        }else if(
-            action==="equip-perk"
-        ){
-
-            const perkId=
-                target.getAttribute(
-                    "data-perk"
-                );
-
-            equipPerkAt(
-                planetDetailId,
-                shipId,
-                perkId || null,
-                1
-            );
-
-        }else if(
-            action==="toggle-perk2"
-        ){
-
-            expandedPerk2ShipId=
-                expandedPerk2ShipId===
-                shipId
-                ?null
-                :shipId;
-
-            renderPlanetDetail(
-                planetDetailId
-            );
-
-        }else if(
-            action==="equip-perk2"
-        ){
-
-            const perkId=
-                target.getAttribute(
-                    "data-perk"
-                );
-
-            equipPerkAt(
-                planetDetailId,
-                shipId,
-                perkId || null,
-                2
             );
 
         }else if(
@@ -23366,6 +23150,26 @@ document
 
             buyPerk(
                 planetDetailId,
+                perkId
+            );
+
+        }else if(
+            action==="feed-perk-food"
+        ){
+
+            const perkId=
+                target.getAttribute(
+                    "data-perk"
+                );
+
+            const petId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            feedPerkFoodToPet(
+                planetDetailId,
+                petId,
                 perkId
             );
 
@@ -27871,7 +27675,9 @@ function drawCustomShipShapes(
             ctx,
             true,
             cargoPetInfo,
-            currentShipPerk
+            getPrimaryCargoPerkId(
+                currentShipCargoPets
+            )
         );
 
     }
@@ -30531,45 +30337,80 @@ function computeMaterialDropRate(){
  * alongside whatever ability is equipped, so this is checked
  * independently of currentShipEquipment entirely.
  */
+/*
+ * A single "which colour should the thruster spark" id, taken
+ * from whichever cargo pet (if any) happens to be first with a
+ * species that actually carries a perk — a ship carrying
+ * several perked pets at once only shows one spark colour, not
+ * one per pet, purely as a display simplification; every pet's
+ * actual effect still applies in full regardless of what the
+ * spark shows.
+ */
+function getPrimaryCargoPerkId(cargoPets){
+
+    const pet=
+        (cargoPets || []).find(
+            p =>
+                !!getPerkForSpecies(
+                    p.species
+                )
+        );
+
+    return(
+        pet
+        ?getPerkForSpecies(
+            pet.species
+        ).id
+        :null
+    );
+
+}
+
 function getPerkEffect(effectType){
 
     let total=0;
 
-    const perk=
-        PERKS[currentShipPerk];
-
-    if(
-        perk &&
-        perk.effectType===
-        effectType
-    ){
-
-        total+=
-            perk.effectValue;
-
-    }
-
     /*
-     * Dual Perk Rig: a second slot, entirely independent of the
-     * first — a ship without the upgrade always has
-     * currentShipPerk2 as null regardless of what's stored on
-     * it, so this is safe to check unconditionally.
+     * Perks now come from whichever pets are actually aboard as
+     * cargo, not a fixed ship-equipped slot — each pet's species
+     * carries its own ability (see getPerkForSpecies), scaled up
+     * by that individual pet's own perkLevel, so multiple pets
+     * of the same species stack independently rather than
+     * capping at one. How many can ride along at once is simply
+     * whatever the ship's cargoPetCapacity allows — Pet Bay
+     * Expansion (and its second tier) raise that directly,
+     * which is what replaced the old fixed two-slot Dual Perk
+     * Rig entirely.
      */
-    const perk2=
-        PERKS[currentShipPerk2];
+    (
+        currentShipCargoPets || []
+    ).forEach(
+        cargoPet=>{
 
-    if(
-        perk2 &&
-        perk2.effectType===
-        effectType &&
-        currentShipPerk2!==
-        currentShipPerk
-    ){
+            const perk=
+                getPerkForSpecies(
+                    cargoPet.species
+                );
 
-        total+=
-            perk2.effectValue;
+            if(
+                !perk ||
+                perk.effectType!==
+                effectType
+            )
+                return;
 
-    }
+            const level=
+                Math.max(
+                    1,
+                    cargoPet.perkLevel || 1
+                );
+
+            total+=
+                perk.effectValue*
+                level;
+
+        }
+    );
 
     return total;
 
