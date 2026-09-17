@@ -5828,6 +5828,88 @@ function getShopItemForPlanet(planetId){
 
 }
 
+/*
+ * Same reusable-icon pattern as MATERIAL_ICON_HTML, one per
+ * powerup item -- each one thematically distinct (bolt,
+ * flame, heart, blade...) rather than a shared template,
+ * since these items are far more different from each other
+ * than materials are. getItemIconHtml(itemId) is the lookup
+ * helper; falls back to the item's own emoji if somehow
+ * asked for an id with no entry here.
+ */
+const ITEM_ICON_HTML={
+    "emp":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M56%204%20L22%2056%20L46%2056%20L40%2096%20L80%2042%20L54%2042%20Z%22%20fill%3D%22%23ffe45c%22%20stroke%3D%22%23a3790a%22%20stroke-width%3D%224%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "regen-coil":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M50%2088%20C10%2060%2012%2024%2036%2020%20C46%2018%2050%2030%2050%2030%20C50%2030%2054%2018%2064%2020%20C88%2024%2090%2060%2050%2088%20Z%22%20fill%3D%22%23ff5c7a%22%20stroke%3D%22%23a3123f%22%20stroke-width%3D%224%22/%3E%3Cpath%20d%3D%22M28%2046%20L40%2046%20L46%2034%20L54%2058%20L60%2046%20L72%2046%22%20fill%3D%22none%22%20stroke%3D%22%23ffd6de%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "incinerator-beam":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M50%206%20C58%2026%2074%2032%2074%2054%20C74%2076%2060%2094%2050%2094%20C40%2094%2026%2076%2026%2054%20C26%2040%2034%2034%2038%2024%20C40%2034%2044%2036%2046%2030%20C48%2024%2046%2014%2050%206%20Z%22%20fill%3D%22%23ff5c1a%22%20stroke%3D%22%238a2600%22%20stroke-width%3D%224%22/%3E%3Cpath%20d%3D%22M50%2040%20C54%2050%2060%2054%2060%2064%20C60%2076%2054%2084%2050%2084%20C46%2084%2040%2076%2040%2066%20C40%2058%2044%2054%2046%2048%20C48%2054%2050%2046%2050%2040%20Z%22%20fill%3D%22%23ffd25c%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "return-capsule":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M20%2044%20Q20%2018%2050%2016%20Q80%2018%2080%2044%20L78%2072%20Q76%2090%2050%2092%20Q24%2090%2022%2072%20Z%22%20fill%3D%22%23e0b070%22%20stroke%3D%22%237a4d1e%22%20stroke-width%3D%224%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2242%22%20r%3D%2216%22%20fill%3D%22%239fd8ff%22%20stroke%3D%22%233a6f8f%22%20stroke-width%3D%224%22/%3E%3Crect%20x%3D%2234%22%20y%3D%2270%22%20width%3D%2232%22%20height%3D%228%22%20rx%3D%223%22%20fill%3D%22%237a4d1e%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "ghost-shield":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M50%208%20C74%208%2088%2026%2088%2050%20L88%2082%20L76%2072%20L64%2084%20L50%2072%20L36%2084%20L24%2072%20L12%2082%20L12%2050%20C12%2026%2026%208%2050%208%20Z%22%20fill%3D%22%23eaf4ff%22%20stroke%3D%22%235c7ba0%22%20stroke-width%3D%224%22%20opacity%3D%22.92%22/%3E%3Ccircle%20cx%3D%2238%22%20cy%3D%2246%22%20r%3D%225%22%20fill%3D%22%235c7ba0%22/%3E%3Ccircle%20cx%3D%2262%22%20cy%3D%2246%22%20r%3D%225%22%20fill%3D%22%235c7ba0%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "chrono-field":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2244%22%20fill%3D%22%238a7fff%22%20stroke%3D%22%234b3fa8%22%20stroke-width%3D%224%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2234%22%20fill%3D%22%23c9c2ff%22%20opacity%3D%22.5%22/%3E%3Cpath%20d%3D%22M50%2050%20L50%2024%22%20stroke%3D%22%232c2360%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M50%2050%20L68%2058%22%20stroke%3D%22%232c2360%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%225%22%20fill%3D%22%232c2360%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "ricochet-orb":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M8%2066%20Q30%2074%2050%2066%22%20fill%3D%22none%22%20stroke%3D%22%234fd6ff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.5%22/%3E%3Cpath%20d%3D%22M4%2050%20Q28%2058%2052%2050%22%20fill%3D%22none%22%20stroke%3D%22%234fd6ff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.7%22/%3E%3Ccircle%20cx%3D%2262%22%20cy%3D%2242%22%20r%3D%2226%22%20fill%3D%22%234fd6ff%22%20stroke%3D%22%231a6f96%22%20stroke-width%3D%224%22/%3E%3Ccircle%20cx%3D%2254%22%20cy%3D%2234%22%20r%3D%227%22%20fill%3D%22%23eafcff%22%20opacity%3D%22.8%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "solar-blade":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M20%2080%20L66%2020%20L80%2020%20L80%2034%20L34%2090%20Z%22%20fill%3D%22%23ffe45c%22%20stroke%3D%22%23a3790a%22%20stroke-width%3D%224%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M24%2078%20L64%2026%22%20stroke%3D%22%23fff6cc%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3Crect%20x%3D%2214%22%20y%3D%2278%22%20width%3D%2216%22%20height%3D%2210%22%20rx%3D%223%22%20transform%3D%22rotate%28-40%2022%2083%29%22%20fill%3D%22%237a4d1e%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "nova-burst":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M50%204%20L58%2040%20L94%2048%20L58%2056%20L50%2094%20L42%2056%20L6%2048%20L42%2040%20Z%22%20fill%3D%22%23ffd76b%22%20stroke%3D%22%23a3790a%22%20stroke-width%3D%224%22%20stroke-linejoin%3D%22round%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2248%22%20r%3D%229%22%20fill%3D%22%23fff6cc%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "singularity":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2246%22%20fill%3D%22none%22%20stroke%3D%22%238a5cff%22%20stroke-width%3D%226%22%20opacity%3D%22.55%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2234%22%20fill%3D%22none%22%20stroke%3D%22%23c9a8ff%22%20stroke-width%3D%224%22%20opacity%3D%22.8%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2222%22%20fill%3D%22%230d0620%22%20stroke%3D%22%233a1f6b%22%20stroke-width%3D%223%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+};
+
+function getItemIconHtml(itemId){
+
+    return(
+        ITEM_ICON_HTML[
+            getItemInfo(itemId).id
+        ] ||
+        getItemInfo(itemId).icon
+    );
+
+}
 
 /*
  * Perks: unlocked by selling (spending) a planet-unique
@@ -21290,7 +21372,7 @@ function renderShopItemRow(
         rowKey+'">'+
         '<div class="shop-row-main">'+
         '<span>'+
-        (unlockedHere ? item.icon : '🔒')+
+        (unlockedHere ? getItemIconHtml(item.id) : '🔒')+
         '</span>'+
         '<span class="shop-row-name">'+item.name+'</span>'+
         '<span class="shop-row-meta">'+
@@ -22175,7 +22257,7 @@ function renderPlanetDetail(id){
                     '<div class="ship-card-stat-row">'+
                     '<span>'+COIN_ICON_HTML+' '+
                     ship.coins.toLocaleString()+'</span>'+
-                    '<span>'+equippedInfo.icon+' '+equippedInfo.name+'</span>'+
+                    '<span>'+getItemIconHtml(ship.equipment)+' '+equippedInfo.name+'</span>'+
                     (
                         cargoPets.length
                         ?'<span>🐾 '+cargoPets.length+'/'+cargoCap+'</span>'
@@ -22447,7 +22529,7 @@ function renderPlanetDetail(id){
                         '</div>'+
                         '<div class="ship-bay-content">'+
                         '<div class="ship-bay-slot filled">'+
-                        equippedInfo.icon+'</div>'+
+                        getItemIconHtml(ship.equipment)+'</div>'+
                         '<span style="font-size:10px;color:#8fa7c7;">'+
                         equippedInfo.name+'</span>'+
                         '</div>';
@@ -22468,7 +22550,7 @@ function renderPlanetDetail(id){
                                         'padding:8px 10px;font-size:11px;" '+
                                         'data-action="equip-item" data-ship="'+
                                         ship.id+'" data-item="'+item.id+'">'+
-                                        '<span>'+item.icon+' '+item.name+'</span>'+
+                                        '<span>'+getItemIconHtml(item.id)+' '+item.name+'</span>'+
                                         (
                                             item.id!=="emp"
                                             ?'<span style="opacity:.6;font-size:9px;">'+
@@ -22869,7 +22951,7 @@ function renderPlanetDetail(id){
 
                 html+=
                     '<div class="selected-shape-info">'+
-                    '<span>'+info.icon+' '+info.name+
+                    '<span>'+getItemIconHtml(itemId)+' '+info.name+
                     ' <span style="opacity:.6;font-size:9px;">×'+
                     count+'</span></span>'+
                     '<div style="display:flex;gap:6px;">'+
@@ -22877,14 +22959,14 @@ function renderPlanetDetail(id){
                     'data-picker="'+equipPickerKey+'" '+
                     'style="width:auto;padding:7px 10px;'+
                     'display:flex;align-items:center;gap:5px;">'+
-                    '<span>'+info.icon+'</span>'+
+                    '<span>'+getItemIconHtml(itemId)+'</span>'+
                     '<span style="opacity:.5;">→</span>'+
                     '<span>'+ROCKET_ICON_HTML+'</span>'+
                     '</button>'+
                     '<button class="remove-btn" data-action="sell-item" '+
                     'style="display:flex;align-items:center;gap:5px;" '+
                     'data-item="'+itemId+'">'+
-                    '<span>'+info.icon+'</span>'+
+                    '<span>'+getItemIconHtml(itemId)+'</span>'+
                     '<span style="opacity:.5;">→</span>'+
                     '<span>'+COIN_ICON_HTML+'</span>'+
                     '<span>'+computeSellPrice(id)+'</span>'+
@@ -37268,34 +37350,9 @@ function updateHUD(){
     );
 
     const abilityIcon=
-        currentShipEquipment===
-        "incinerator-beam"
-        ?"🔥"
-        :currentShipEquipment===
-        "regen-coil"
-        ?"❤"
-        :currentShipEquipment===
-        "return-capsule"
-        ?"📦"
-        :currentShipEquipment===
-        "ghost-shield"
-        ?"👻"
-        :currentShipEquipment===
-        "chrono-field"
-        ?"🌀"
-        :currentShipEquipment===
-        "ricochet-orb"
-        ?"🔵"
-        :currentShipEquipment===
-        "solar-blade"
-        ?"☄"
-        :currentShipEquipment===
-        "nova-burst"
-        ?"✨"
-        :currentShipEquipment===
-        "singularity"
-        ?"🌌"
-        :"⚡";
+        getItemIconHtml(
+            currentShipEquipment
+        );
 
     if(
         currentShipEquipment===
