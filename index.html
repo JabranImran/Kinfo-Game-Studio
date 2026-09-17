@@ -2304,6 +2304,77 @@ and (max-height:500px){
     gap:6px;
 }
 
+/*
+ * Shop item cards — a big, centered icon (at least double the
+ * buy button's own size) with the name, stock/unlock progress,
+ * and buy button stacked underneath, playing-card style like
+ * the ship cards. Tapping the card (but not the buy button
+ * itself — same click-delegation precedence as .shop-row)
+ * expands it to reveal the full description below.
+ */
+.item-shop-card{
+    border:1px solid rgba(100,190,255,.25);
+    border-radius:16px;
+    background:linear-gradient(180deg,rgba(20,32,54,.55),rgba(9,13,22,.55));
+    overflow:hidden;
+    margin-bottom:10px;
+}
+
+.item-shop-card-main{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    padding:16px 14px 14px;
+    cursor:pointer;
+}
+
+.item-shop-card-icon{
+    width:80px;
+    height:80px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:16px;
+    background:radial-gradient(circle at 50% 35%,rgba(100,190,255,.12),rgba(0,0,0,.35));
+    border:1px solid rgba(100,190,255,.18);
+    /*
+     * The icon <img> itself carries a fixed inline
+     * height:.9em/width:.9em (shared across every other, much
+     * smaller, inline usage of these icons) — inline styles beat
+     * any CSS rule here regardless of specificity, so the only
+     * way to actually make it big is to make its em basis big:
+     * font-size sets what "1em" means for the image inside.
+     * The buy button beneath this card is roughly 25px tall, so
+     * this comfortably clears twice that.
+     */
+    font-size:62px;
+}
+
+.item-shop-card-icon img{
+    width:44px;
+    height:44px;
+}
+
+.item-shop-card-name{
+    font-size:14px;
+    font-weight:700;
+    color:#eaf6ff;
+    letter-spacing:.3px;
+    text-align:center;
+}
+
+.item-shop-card-meta{
+    font-size:10.5px;
+    color:#8fa7c7;
+    text-align:center;
+}
+
+.item-shop-card-btn-wrap{
+    padding:0 14px 14px;
+}
+
+/*
  * One-liner shop/perk rows — collapsed by default (icon, name,
  * an abbreviated requirement or stock note, and a clear buy
  * button), expanding on tap to reveal the full description.
@@ -3796,88 +3867,84 @@ const PLANETS = [
 ];
 
 /*
- * Same reusable-icon pattern as MATERIAL_ICON_HTML, one per
- * planet -- a small gradient sphere using that planet's own
- * existing palette and atmosphere glow (see getPlanetPalette
- * and getPlanetAtmosphere), so a planet reads the same tiny
- * way in a tab label as it does as a full sphere on the star
- * map. getPlanetIconHtml(planetId) is the lookup helper;
- * falls back to the planet's own emoji if somehow asked for
- * an id with no entry here.
+ * Planet icons render the actual planet -- reusing
+ * drawSpacePlanet() (the exact function the star map itself
+ * calls) onto a small offscreen canvas, rather than a
+ * separately-designed approximation. Cached permanently per
+ * planetId since, unlike a structure, a planet's look never
+ * changes -- there's no player customization to invalidate.
  */
-const PLANET_ICON_HTML={
-    "earth":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2369cfff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%232161a0%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23071a39%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%2352c8ff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "mars":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff9871%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23a83f2e%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23421711%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ff694c%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "europa":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23eafaff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%2386c9df%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23315e7c%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23b8edff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "titan":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffc66c%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23bb7132%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234b2c18%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ffad58%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "neptune":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%236ea6ff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%233154b8%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23101c5a%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23537cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "kepler":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ef9fff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238d45bd%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2325104a%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23df8cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "aurora":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23d49bff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23663ab1%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23170a3f%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23a96cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "helios":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23fff08a%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%23ff6a19%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%237c1708%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23ff9b24%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "nova":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23baffff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%2322b6b2%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23073d4d%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%2353fff0%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-    "zenith":
-        '<img src="data:image/svg+xml,'+
-        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2235%25%22%20cy%3D%2230%25%22%20r%3D%2275%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%238559c9%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23150b38%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2247%22%20fill%3D%22%23c88cff%22%20opacity%3D%22.35%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2241%22%20fill%3D%22url%28%23g%29%22/%3E%3Cellipse%20cx%3D%2238%22%20cy%3D%2232%22%20rx%3D%2212%22%20ry%3D%227%22%20fill%3D%22%23ffffff%22%20opacity%3D%22.35%22/%3E%3C/svg%3E"+
-        '" style="height:.95em;width:.95em;'+
-        'vertical-align:-.18em;border-radius:50%;">',
-
-};
+let planetIconCache={};
 
 function getPlanetIconHtml(planetId){
 
-    return(
-        PLANET_ICON_HTML[planetId] ||
-        (
+    if(planetIconCache[planetId]){
+
+        return planetIconCache[
+            planetId
+        ];
+
+    }
+
+    if(
+        typeof drawSpacePlanet===
+        "undefined"
+    ){
+
+        return(
             getPlanet(planetId) &&
             getPlanet(planetId).icon
-        ) ||
-        "🪐"
-    );
+        ) || "🪐";
+
+    }
+
+    try{
+
+        const canvas=
+            document.createElement(
+                "canvas"
+            );
+
+        canvas.width=64;
+
+        canvas.height=64;
+
+        const ctx2d=
+            canvas.getContext("2d");
+
+        drawSpacePlanet(
+            ctx2d,
+            planetId,
+            32,
+            32,
+            27
+        );
+
+        const html=
+            '<img src="'+
+            canvas.toDataURL()+
+            '" style="height:.95em;width:.95em;'+
+            'vertical-align:-.18em;">';
+
+        planetIconCache[
+            planetId
+        ]=html;
+
+        return html;
+
+    }catch(error){
+
+        console.error(
+            "Planet icon render failed:",
+            error
+        );
+
+        return(
+            getPlanet(planetId) &&
+            getPlanet(planetId).icon
+        ) || "🪐";
+
+    }
 
 }
 
@@ -8464,6 +8531,22 @@ function paintShipCargoPreviews(planetId,ships){
                     if(
                         paintOneCargoPetPreview(
                             loadRowCanvas,pet,planetId
+                        )
+                    ){
+
+                        anyCanvas=true;
+
+                    }
+
+                    const pilotRowCanvas=
+                        document.getElementById(
+                            "pilotRowPreview_"+
+                            pet.id
+                        );
+
+                    if(
+                        paintOneCargoPetPreview(
+                            pilotRowCanvas,pet,planetId
                         )
                     ){
 
@@ -21368,24 +21451,25 @@ function renderShopItemRow(
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
         titleLabel+'</div>'+
-        '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
-        rowKey+'">'+
-        '<div class="shop-row-main">'+
-        '<span>'+
+        '<div class="item-shop-card">'+
+        '<div class="item-shop-card-main" data-action="toggle-shop-row" '+
+        'data-row="'+rowKey+'">'+
+        '<div class="item-shop-card-icon">'+
         (unlockedHere ? getItemIconHtml(item.id) : '🔒')+
-        '</span>'+
-        '<span class="shop-row-name">'+item.name+'</span>'+
-        '<span class="shop-row-meta">'+
+        '</div>'+
+        '<div class="item-shop-card-name">'+item.name+'</div>'+
+        '<div class="item-shop-card-meta">'+
         (
             unlockedHere
             ?'Stock '+stockHere
             :'Sell one to unlock'
         )+
-        '</span>'+
         '</div>'+
+        '</div>'+
+        '<div class="item-shop-card-btn-wrap">'+
         (
             unlockedHere
-            ?'<button class="remove-btn" style="background:'+
+            ?'<button class="remove-btn" style="width:100%;background:'+
              (
                  affordable
                  ?'rgba(110,220,255,.18)'
@@ -21410,7 +21494,7 @@ function renderShopItemRow(
                  :'disabled'
              )+
              '>Buy '+item.cost+' '+COIN_ICON_HTML+'</button>'
-            :'<button class="remove-btn" style="background:'+
+            :'<button class="remove-btn" style="width:100%;background:'+
              'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
              'color:#5c7ba0;" disabled>🔒 Locked</button>'
         )+
@@ -21444,6 +21528,7 @@ function renderShopItemRow(
              '</div>'
             :''
         )+
+        '</div>'+
         '</div>';
 
     return html;
@@ -22479,13 +22564,8 @@ function renderPlanetDetail(id){
                                                 'text-align:left;padding:8px 10px;font-size:11px;" '+
                                                 'data-action="pick-ship-pilot" data-ship="'+
                                                 ship.id+'" data-pet="'+pet.id+'">'+
-                                                '<span>'+
-                                                (
-                                                    SPECIES_FLOURISH_ICONS[
-                                                        pet.species
-                                                    ] || "🐾"
-                                                )+
-                                                '</span>'+
+                                                '<canvas id="pilotRowPreview_'+pet.id+
+                                                '" width="30" height="30" style="flex-shrink:0;"></canvas>'+
                                                 '<span>'+
                                                 (
                                                     SPECIES_DISPLAY_NAMES[
