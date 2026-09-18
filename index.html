@@ -2317,7 +2317,14 @@ and (max-height:500px){
     border-radius:16px;
     background:linear-gradient(180deg,rgba(20,32,54,.55),rgba(9,13,22,.55));
     overflow:hidden;
-    margin-bottom:10px;
+    margin:0 auto 10px;
+    /*
+     * Constrained to roughly a playing card's own proportions
+     * (~5:7) rather than stretching the full section width —
+     * the icon/name/meta/button stack inside is tall enough on
+     * its own that just capping the width gets there.
+     */
+    max-width:150px;
 }
 
 .item-shop-card-main{
@@ -6058,6 +6065,47 @@ const PERKS={
 };
 
 /*
+ * Same reusable-icon pattern as MATERIAL_ICON_HTML, one per
+ * space food -- Coin Magnet Kibble's golden biscuit, Refinery
+ * Ration's little tin, Overcharge Snacks' banana. Keyed by
+ * the perk id, same as PERKS itself. getFoodIconHtml(perkId)
+ * is the lookup helper; falls back to the perk's own emoji
+ * if somehow asked for an id with no entry here.
+ */
+const FOOD_ICON_HTML={
+    "coin-magnet":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2254%22%20r%3D%2234%22%20fill%3D%22%23d9a04a%22%20stroke%3D%22%238a5c1e%22%20stroke-width%3D%224%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2254%22%20r%3D%2234%22%20fill%3D%22none%22%20stroke%3D%22%23f0c77a%22%20stroke-width%3D%223%22%20stroke-dasharray%3D%226%207%22%20opacity%3D%22.6%22/%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2252%22%20r%3D%2214%22%20fill%3D%22%23ffe45c%22%20stroke%3D%22%23a3790a%22%20stroke-width%3D%223%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2247%22%20r%3D%224%22%20fill%3D%22%23fff6cc%22/%3E%3Ccircle%20cx%3D%2226%22%20cy%3D%2230%22%20r%3D%227%22%20fill%3D%22%23d9a04a%22%20stroke%3D%22%238a5c1e%22%20stroke-width%3D%223%22/%3E%3Ccircle%20cx%3D%2276%22%20cy%3D%2228%22%20r%3D%226%22%20fill%3D%22%23d9a04a%22%20stroke%3D%22%238a5c1e%22%20stroke-width%3D%223%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "refinery-core":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M26%2040%20L74%2040%20L70%2084%20Q70%2090%2060%2090%20L40%2090%20Q30%2090%2030%2084%20Z%22%20fill%3D%22%23c3c9d4%22%20stroke%3D%22%235c6470%22%20stroke-width%3D%224%22/%3E%3Cellipse%20cx%3D%2250%22%20cy%3D%2240%22%20rx%3D%2224%22%20ry%3D%228%22%20fill%3D%22%238fd6a8%22%20stroke%3D%22%233a7a52%22%20stroke-width%3D%224%22/%3E%3Cellipse%20cx%3D%2250%22%20cy%3D%2238%22%20rx%3D%2218%22%20ry%3D%225%22%20fill%3D%22%23b8f0c9%22/%3E%3Cpath%20d%3D%22M22%2036%20L78%2036%22%20stroke%3D%22%238a919e%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+    "overcharge-coil":
+        '<img src="data:image/svg+xml,'+
+        "%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M30%2082%20C20%2070%2022%2044%2042%2024%20C48%2018%2056%2016%2060%2020%20C56%2024%2050%2028%2046%2036%20C36%2054%2036%2070%2046%2080%20C42%2086%2034%2088%2030%2082%20Z%22%20fill%3D%22%23ffe45c%22%20stroke%3D%22%23a3790a%22%20stroke-width%3D%224%22/%3E%3Cpath%20d%3D%22M58%2018%20L66%2016%20L62%2030%20L70%2028%20L52%2048%20L56%2034%20L48%2036%20Z%22%20fill%3D%22%23ffb347%22%20stroke%3D%22%23a3600a%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E"+
+        '" style="height:.9em;width:.9em;'+
+        'vertical-align:-.15em;">',
+
+};
+
+function getFoodIconHtml(perkId){
+
+    return(
+        FOOD_ICON_HTML[perkId] ||
+        (
+            PERKS[perkId] &&
+            PERKS[perkId].icon
+        ) ||
+        "🍪"
+    );
+
+}
+/*
  * Reverse lookup — which perk (if any) a given pet species
  * carries. Not every species has one yet; that's intentional,
  * per the request to transfer the existing three rather than
@@ -6785,9 +6833,9 @@ function buyPet(planetId){
     if(isFirstOfSpecies){
 
         showMilestoneFlourish(
-            SPECIES_FLOURISH_ICONS[
+            getPetSpeciesIconHtml(
                 newSpecies
-            ] || "🐾",
+            ),
             "New species discovered!",
             SPECIES_DISPLAY_NAMES[
                 newSpecies
@@ -8457,6 +8505,107 @@ function paintOneCargoPetPreview(canvas,pet,planetId){
     }
 
     return true;
+
+}
+
+/*
+ * A standalone species icon (not tied to any specific pet
+ * instance) as a data-URL <img>, for one-off spots like the
+ * "New species discovered!" milestone flourish — full energy,
+ * a fixed seed derived from the species name itself so the
+ * same species always gets the same pose.
+ */
+let petSpeciesIconCache={};
+
+function getPetSpeciesIconHtml(species){
+
+    if(petSpeciesIconCache[species]){
+
+        return petSpeciesIconCache[
+            species
+        ];
+
+    }
+
+    if(
+        typeof drawSpacePet===
+        "undefined"
+    ){
+
+        return(
+            SPECIES_FLOURISH_ICONS[
+                species
+            ] || "🐾"
+        );
+
+    }
+
+    try{
+
+        const canvas=
+            document.createElement(
+                "canvas"
+            );
+
+        canvas.width=64;
+
+        canvas.height=64;
+
+        const ctx2d=
+            canvas.getContext("2d");
+
+        let seed=0;
+
+        for(
+            let i=0;
+            i<species.length;
+            i++
+        ){
+
+            seed+=
+                species.charCodeAt(i);
+
+        }
+
+        drawSpacePet(
+            ctx2d,
+            "earth",
+            32,
+            32+
+            64*.08,
+            64*.42,
+            100,
+            seed,
+            species,
+            false,
+            null
+        );
+
+        const html=
+            '<img src="'+
+            canvas.toDataURL()+
+            '" style="height:1em;width:1em;">';
+
+        petSpeciesIconCache[
+            species
+        ]=html;
+
+        return html;
+
+    }catch(error){
+
+        console.error(
+            "Species icon render failed:",
+            error
+        );
+
+        return(
+            SPECIES_FLOURISH_ICONS[
+                species
+            ] || "🐾"
+        );
+
+    }
 
 }
 
@@ -21597,25 +21746,26 @@ function renderPerkShopRow(
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">'+
         titleLabel+'</div>'+
-        '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
-        rowKey+'">'+
-        '<div class="shop-row-main">'+
-        '<span>'+
+        '<div class="item-shop-card">'+
+        '<div class="item-shop-card-main" data-action="toggle-shop-row" '+
+        'data-row="'+rowKey+'">'+
+        '<div class="item-shop-card-icon">'+
         (
             perkAvailableHere>0
-            ?perk.icon
+            ?getFoodIconHtml(perk.id)
             :'🔒'
         )+
-        '</span>'+
-        '<span class="shop-row-name">'+perk.name+'</span>'+
-        '<span class="shop-row-meta">'+
+        '</div>'+
+        '<div class="item-shop-card-name">'+perk.name+'</div>'+
+        '<div class="item-shop-card-meta">'+
         getMaterialIconHtml(perk.unlockMaterial)+' '+
         soldSoFar+'/'+perk.unlockAmount+
-        '</span>'+
         '</div>'+
+        '</div>'+
+        '<div class="item-shop-card-btn-wrap">'+
         (
             perkAvailableHere>0
-            ?'<button class="remove-btn" style="background:'+
+            ?'<button class="remove-btn" style="width:100%;background:'+
              (
                  canBuyPerk
                  ?'rgba(110,220,255,.18)'
@@ -21641,7 +21791,7 @@ function renderPerkShopRow(
                  :'disabled'
              )+
              '>Buy '+perk.buyCost+' '+COIN_ICON_HTML+'</button>'
-            :'<button class="remove-btn" style="background:'+
+            :'<button class="remove-btn" style="width:100%;background:'+
              'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
              'color:#5c7ba0;" disabled>🔒 Locked</button>'
         )+
@@ -21683,6 +21833,7 @@ function renderPerkShopRow(
              '</div>'
             :''
         )+
+        '</div>'+
         '</div>';
 
     if(perkStockHere>0){
@@ -21708,7 +21859,7 @@ function renderPerkShopRow(
                 'data-picker="'+feedPickerKey+'" '+
                 'style="width:auto;padding:7px 10px;margin-top:8px;'+
                 'display:flex;align-items:center;gap:5px;">'+
-                '<span>'+perk.icon+'</span>'+
+                '<span>'+getFoodIconHtml(perk.id)+'</span>'+
                 '<span style="opacity:.5;">→</span>'+
                 '<span>🐾</span><span>Feed to '+speciesName+'</span>'+
                 '<span style="opacity:.6;">'+
@@ -23766,10 +23917,10 @@ function renderPlanetDetail(id){
         }
 
         let rowHtml=
-            '<div class="shop-row" data-action="toggle-shop-row" data-row="'+
-            rowKey+'">'+
-            '<div class="shop-row-main">'+
-            '<span'+
+            '<div class="item-shop-card">'+
+            '<div class="item-shop-card-main" data-action="toggle-shop-row" '+
+            'data-row="'+rowKey+'">'+
+            '<div class="item-shop-card-icon"'+
             (
                 unlocked
                 ?''
@@ -23779,19 +23930,20 @@ function renderPlanetDetail(id){
             getStructureIconHtml(
                 structureId
             )+
-            '</span>'+
-            '<span class="shop-row-name">'+structure.name+'</span>'+
+            '</div>'+
+            '<div class="item-shop-card-name">'+structure.name+'</div>'+
             (
                 unlocked
                 ?''
-                :'<span class="shop-row-meta">'+abbrevMeta+'</span>'
+                :'<div class="item-shop-card-meta">'+abbrevMeta+'</div>'
             )+
-            '</div>';
+            '</div>'+
+            '<div class="item-shop-card-btn-wrap">';
 
         if(!unlocked){
 
             rowHtml+=
-                '<button class="remove-btn" style="background:'+
+                '<button class="remove-btn" style="width:100%;background:'+
                 'rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);'+
                 'color:#5c7ba0;" disabled>🔒 Locked</button>';
 
@@ -23808,7 +23960,7 @@ function renderPlanetDetail(id){
                 structureCost;
 
             rowHtml+=
-                '<button class="remove-btn" style="background:'+
+                '<button class="remove-btn" style="width:100%;background:'+
                 (
                     canBuild
                     ?'rgba(110,220,255,.18)'
@@ -23921,7 +24073,25 @@ function renderPlanetDetail(id){
 
         }
 
+        rowHtml+=
+            '</div>';
+
         return rowHtml;
+
+    }
+
+    if(
+        showShop &&
+        (
+            !shipFactoryBuilt ||
+            !pilotTrainingBuilt ||
+            !bioDomeBuilt
+        )
+    ){
+
+        html+=
+            '<div class="customizer-section-title" '+
+            'style="margin:14px 0 8px;">Structures</div>';
 
     }
 
@@ -23929,10 +24099,14 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        getStructureIconHtml("ship-factory")+
-        ' Ship Factory'+
-        '</div>';
+        (
+            factory
+            ?'<div class="customizer-section-title">'+
+             getStructureIconHtml("ship-factory")+
+             ' Ship Factory'+
+             '</div>'
+            :''
+        );
 
     if(factory){
 
@@ -24138,10 +24312,14 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        getStructureIconHtml("pilot-training")+
-        ' Pilot Training'+
-        '</div>';
+        (
+            pilotTraining
+            ?'<div class="customizer-section-title">'+
+             getStructureIconHtml("pilot-training")+
+             ' Pilot Training'+
+             '</div>'
+            :''
+        );
 
     if(pilotTraining){
 
@@ -24255,10 +24433,14 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        getStructureIconHtml("bio-dome")+
-        ' Bio Dome'+
-        '</div>';
+        (
+            bioDome
+            ?'<div class="customizer-section-title">'+
+             getStructureIconHtml("bio-dome")+
+             ' Bio Dome'+
+             '</div>'
+            :''
+        );
 
     if(bioDome){
 
