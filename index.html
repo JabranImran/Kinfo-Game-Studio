@@ -2311,20 +2311,34 @@ and (max-height:500px){
  * the ship cards. Tapping the card (but not the buy button
  * itself — same click-delegation precedence as .shop-row)
  * expands it to reveal the full description below.
+ *
+ * .item-shop-card-row wraps one or more cards side by side --
+ * centered (so a single card still reads as centered, not
+ * stuck to one edge) and wrapping onto a new line if there
+ * isn't room, rather than always stacking vertically.
  */
+.item-shop-card-row{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    align-items:flex-start;
+    gap:10px;
+}
+
 .item-shop-card{
     border:1px solid rgba(100,190,255,.25);
     border-radius:16px;
     background:linear-gradient(180deg,rgba(20,32,54,.55),rgba(9,13,22,.55));
     overflow:hidden;
-    margin:0 auto 10px;
+    margin:0;
+    flex:0 0 auto;
     /*
      * Constrained to roughly a playing card's own proportions
      * (~5:7) rather than stretching the full section width —
      * the icon/name/meta/button stack inside is tall enough on
      * its own that just capping the width gets there.
      */
-    max-width:150px;
+    width:150px;
 }
 
 .item-shop-card-main{
@@ -21586,20 +21600,16 @@ function renderShopItemRow(
         expandedShopRowId===
         rowKey;
 
-    const titleLabel=
+    const speciesLabel=
         isForeign
-        ?"Item — brought by "+
-         (
-             SPECIES_DISPLAY_NAMES[
-                 foreignSourcePet.species
-             ] || "a pet"
-         )
-        :"Shop";
+        ?(
+            SPECIES_DISPLAY_NAMES[
+                foreignSourcePet.species
+            ] || "a pet"
+        )
+        :null;
 
     let html=
-        '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        titleLabel+'</div>'+
         '<div class="item-shop-card">'+
         '<div class="item-shop-card-main" data-action="toggle-shop-row" '+
         'data-row="'+rowKey+'">'+
@@ -21608,6 +21618,11 @@ function renderShopItemRow(
         '</div>'+
         '<div class="item-shop-card-name">'+item.name+'</div>'+
         '<div class="item-shop-card-meta">'+
+        (
+            isForeign
+            ?'Via '+speciesLabel+'<br>'
+            :''
+        )+
         (
             unlockedHere
             ?'Stock '+stockHere
@@ -21658,12 +21673,7 @@ function renderShopItemRow(
                   (
                       unlockedHere
                       ?'Unlocked here — buy as many as you '+
-                       'like while '+
-                       (
-                           SPECIES_DISPLAY_NAMES[
-                               foreignSourcePet.species
-                           ] || "this pet"
-                       )+
+                       'like while '+speciesLabel+
                        ' stays stationed at this planet.'
                       :'Sell one '+item.name+' in the Vault '+
                        'tab to unlock buying it here directly '+
@@ -21677,7 +21687,6 @@ function renderShopItemRow(
              '</div>'
             :''
         )+
-        '</div>'+
         '</div>';
 
     return html;
@@ -21736,16 +21745,10 @@ function renderPerkShopRow(
             perk.species
         ] || "a pet";
 
-    const titleLabel=
-        foreignSourcePet
-        ?"Space Food — brought by "+
-         speciesName
-        :"Space Food";
+    const isForeign=
+        !!foreignSourcePet;
 
     let html=
-        '<div class="customizer-section">'+
-        '<div class="customizer-section-title">'+
-        titleLabel+'</div>'+
         '<div class="item-shop-card">'+
         '<div class="item-shop-card-main" data-action="toggle-shop-row" '+
         'data-row="'+rowKey+'">'+
@@ -21758,6 +21761,11 @@ function renderPerkShopRow(
         '</div>'+
         '<div class="item-shop-card-name">'+perk.name+'</div>'+
         '<div class="item-shop-card-meta">'+
+        (
+            isForeign
+            ?'Via '+speciesName+'<br>'
+            :''
+        )+
         getMaterialIconHtml(perk.unlockMaterial)+' '+
         soldSoFar+'/'+perk.unlockAmount+
         '</div>'+
@@ -21809,7 +21817,7 @@ function renderPerkShopRow(
              'required.'+
              '</div>'+
              (
-                 foreignSourcePet
+                 isForeign
                  ?'<div style="margin-top:8px;color:#ffd76b;">'+
                   'Available here because '+speciesName+
                   ' is stationed away from its home world — '+
@@ -21832,9 +21840,7 @@ function renderPerkShopRow(
              '</div>'+
              '</div>'
             :''
-        )+
-        '</div>'+
-        '</div>';
+        );
 
     if(perkStockHere>0){
 
@@ -21855,13 +21861,15 @@ function renderPerkShopRow(
         if(matchingPets.length){
 
             html+=
+                '<div style="padding:0 14px 14px;">'+
                 '<button class="control-btn" data-action="toggle-ship-picker" '+
                 'data-picker="'+feedPickerKey+'" '+
-                'style="width:auto;padding:7px 10px;margin-top:8px;'+
-                'display:flex;align-items:center;gap:5px;">'+
+                'style="width:100%;padding:7px 10px;'+
+                'display:flex;align-items:center;justify-content:center;'+
+                'gap:5px;font-size:10px;">'+
                 '<span>'+getFoodIconHtml(perk.id)+'</span>'+
                 '<span style="opacity:.5;">→</span>'+
-                '<span>🐾</span><span>Feed to '+speciesName+'</span>'+
+                '<span>🐾</span>'+
                 '<span style="opacity:.6;">'+
                 (feedPickerOpen ? "▲" : "▼")+
                 '</span></button>'+
@@ -21874,18 +21882,22 @@ function renderPerkShopRow(
                         planetId
                     )
                     :''
-                );
+                )+
+                '</div>';
 
         }else{
 
             html+=
-                '<div style="font-size:10px;color:#5c7ba0;'+
-                'margin-top:8px;">No '+speciesName+
-                ' here to feed this to.</div>';
+                '<div style="padding:0 14px 14px;font-size:9px;'+
+                'color:#5c7ba0;text-align:center;">No '+
+                speciesName+' here to feed.</div>';
 
         }
 
     }
+
+    html+=
+        '</div>';
 
     return html;
 
@@ -21946,7 +21958,7 @@ function renderPlanetDetail(id){
         :0;
 
     let html=
-        '<div class="customizer-title">'+
+        '<div class="customizer-title" data-action="close-planet-detail">'+
         getPlanetIconHtml(planet.id)+" "+
         planet.name.toUpperCase()+
         '</div>';
@@ -22236,25 +22248,17 @@ function renderPlanetDetail(id){
 
     if(showShop){
 
+    let itemCardsHtml="";
+
     if(shopItem){
 
-        html+=
+        itemCardsHtml+=
             renderShopItemRow(
                 id,
                 shopItem,
                 "item",
                 null
             );
-
-    }else{
-
-        html+=
-            '<div class="customizer-section">'+
-            '<div class="customizer-section-title">Shop</div>'+
-            '<div class="metric-note">'+
-            'This planet doesn\'t sell anything of its own.'+
-            '</div>'+
-            '</div>';
 
     }
 
@@ -22268,7 +22272,7 @@ function renderPlanetDetail(id){
     ).forEach(
         opportunity=>{
 
-            html+=
+            itemCardsHtml+=
                 renderShopItemRow(
                     id,
                     opportunity.item,
@@ -22280,15 +22284,39 @@ function renderPlanetDetail(id){
         }
     );
 
+    if(itemCardsHtml){
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Shop</div>'+
+            '<div class="item-shop-card-row">'+
+            itemCardsHtml+
+            '</div>'+
+            '</div>';
+
+    }else{
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Shop</div>'+
+            '<div class="metric-note">'+
+            'This planet doesn\'t sell anything of its own.'+
+            '</div>'+
+            '</div>';
+
+    }
+
 
     /* -------- Perks -------- */
 
     const perk=
         getPerkForPlanet(id);
 
+    let foodCardsHtml="";
+
     if(perk){
 
-        html+=
+        foodCardsHtml+=
             renderPerkShopRow(
                 id,
                 perk,
@@ -22310,7 +22338,7 @@ function renderPlanetDetail(id){
     ).forEach(
         opportunity=>{
 
-            html+=
+            foodCardsHtml+=
                 renderPerkShopRow(
                     id,
                     opportunity.perk,
@@ -22323,6 +22351,18 @@ function renderPlanetDetail(id){
 
         }
     );
+
+    if(foodCardsHtml){
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Space Food</div>'+
+            '<div class="item-shop-card-row">'+
+            foodCardsHtml+
+            '</div>'+
+            '</div>';
+
+    }
 
     }
 
@@ -24080,35 +24120,27 @@ function renderPlanetDetail(id){
 
     }
 
-    if(
-        showShop &&
-        (
-            !shipFactoryBuilt ||
-            !pilotTrainingBuilt ||
-            !bioDomeBuilt
-        )
-    ){
-
-        html+=
-            '<div class="customizer-section-title" '+
-            'style="margin:14px 0 8px;">Structures</div>';
-
-    }
+    /*
+     * Buy-cards for the three structures (whichever aren't built
+     * yet) all accumulate here and get wrapped in one shared
+     * "Structures" title + flex row together, rather than each
+     * getting its own titled section — a built structure's own
+     * management UI (upgrades etc.) is a completely different,
+     * full-width layout and is written straight to html as
+     * before, unaffected by this.
+     */
+    let structureCardsHtml="";
 
     if(showShipFactory){
 
+    if(factory){
+
     html+=
         '<div class="customizer-section">'+
-        (
-            factory
-            ?'<div class="customizer-section-title">'+
-             getStructureIconHtml("ship-factory")+
-             ' Ship Factory'+
-             '</div>'
-            :''
-        );
-
-    if(factory){
+        '<div class="customizer-section-title">'+
+        getStructureIconHtml("ship-factory")+
+        ' Ship Factory'+
+        '</div>';
 
         const hasCargoHoldUpgrade=
             isUpgradePurchased(
@@ -24267,26 +24299,28 @@ function renderPlanetDetail(id){
                 "Ship Factory"
             );
 
+    html+=
+        '</div>';
+
     }else if(structureBuild){
 
-        html+=
-            '<div class="metric-note state-warn">'+
-            '🏗 Factory under construction — '+
-            formatRemaining(structureBuild)+
-            '</div>';
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="metric-note state-warn">'+
+        '🏗 Factory under construction — '+
+        formatRemaining(structureBuild)+
+        '</div>'+
+        '</div>';
 
     }else{
 
-        html+=
+        structureCardsHtml+=
             renderStructureShopRow(
                 "ship-factory",
                 "Build Factory"
             );
 
     }
-
-    html+=
-        '</div>';
 
     }
 
@@ -24310,18 +24344,14 @@ function renderPlanetDetail(id){
 
     if(showPilotTraining){
 
+    if(pilotTraining){
+
     html+=
         '<div class="customizer-section">'+
-        (
-            pilotTraining
-            ?'<div class="customizer-section-title">'+
-             getStructureIconHtml("pilot-training")+
-             ' Pilot Training'+
-             '</div>'
-            :''
-        );
-
-    if(pilotTraining){
+        '<div class="customizer-section-title">'+
+        getStructureIconHtml("pilot-training")+
+        ' Pilot Training'+
+        '</div>';
 
         html+=
             '<div class="metric-note">'+
@@ -24388,26 +24418,28 @@ function renderPlanetDetail(id){
                 "Pilot Training"
             );
 
+    html+=
+        '</div>';
+
     }else if(pilotTrainingBuild){
 
-        html+=
-            '<div class="metric-note state-warn">'+
-            '🏗 Under construction — '+
-            formatRemaining(pilotTrainingBuild)+
-            '</div>';
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="metric-note state-warn">'+
+        '🏗 Under construction — '+
+        formatRemaining(pilotTrainingBuild)+
+        '</div>'+
+        '</div>';
 
     }else{
 
-        html+=
+        structureCardsHtml+=
             renderStructureShopRow(
                 "pilot-training",
                 "Build"
             );
 
     }
-
-    html+=
-        '</div>';
 
     }
 
@@ -24431,18 +24463,14 @@ function renderPlanetDetail(id){
 
     if(showBioDome){
 
+    if(bioDome){
+
     html+=
         '<div class="customizer-section">'+
-        (
-            bioDome
-            ?'<div class="customizer-section-title">'+
-             getStructureIconHtml("bio-dome")+
-             ' Bio Dome'+
-             '</div>'
-            :''
-        );
-
-    if(bioDome){
+        '<div class="customizer-section-title">'+
+        getStructureIconHtml("bio-dome")+
+        ' Bio Dome'+
+        '</div>';
 
         html+=
             '<div class="metric-note">'+
@@ -24456,17 +24484,22 @@ function renderPlanetDetail(id){
                 "Bio Dome"
             );
 
+    html+=
+        '</div>';
+
     }else if(bioDomeBuild){
 
-        html+=
-            '<div class="metric-note state-warn">'+
-            '🏗 Under construction — '+
-            formatRemaining(bioDomeBuild)+
-            '</div>';
+    html+=
+        '<div class="customizer-section">'+
+        '<div class="metric-note state-warn">'+
+        '🏗 Under construction — '+
+        formatRemaining(bioDomeBuild)+
+        '</div>'+
+        '</div>';
 
     }else{
 
-        html+=
+        structureCardsHtml+=
             renderStructureShopRow(
                 "bio-dome",
                 "Build"
@@ -24474,8 +24507,17 @@ function renderPlanetDetail(id){
 
     }
 
-    html+=
-        '</div>';
+    }
+
+    if(structureCardsHtml){
+
+        html+=
+            '<div class="customizer-section">'+
+            '<div class="customizer-section-title">Structures</div>'+
+            '<div class="item-shop-card-row">'+
+            structureCardsHtml+
+            '</div>'+
+            '</div>';
 
     }
 
@@ -24611,6 +24653,14 @@ document
             target.getAttribute(
                 "data-action"
             );
+
+        if(action==="close-planet-detail"){
+
+            closePlanetDetail();
+
+            return;
+
+        }
 
         if(action==="planet-tab"){
 
@@ -25397,6 +25447,36 @@ document
 
     },
     {passive:false}
+);
+
+/*
+ * Tapping the dimmed backdrop itself (not the card, not
+ * anything inside it — structures, pets, tabs all still work
+ * normally) closes the menu the same as the X button, saving a
+ * trip up to the corner. event.target===this is what makes
+ * this safe: it's only true when the tap landed directly on
+ * the overlay element, never when it bubbled up from a child.
+ */
+document
+.getElementById(
+    "planetDetail"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        if(
+            event.target!==
+            event.currentTarget
+        )
+            return;
+
+        sound("click");
+
+        closePlanetDetail();
+
+    },
+    {passive:true}
 );
 
 
