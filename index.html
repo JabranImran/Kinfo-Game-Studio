@@ -25450,12 +25450,14 @@ document
 );
 
 /*
- * Tapping the dimmed backdrop itself (not the card, not
- * anything inside it — structures, pets, tabs all still work
- * normally) closes the menu the same as the X button, saving a
- * trip up to the corner. event.target===this is what makes
- * this safe: it's only true when the tap landed directly on
- * the overlay element, never when it bubbled up from a child.
+ * Tapping anywhere outside the menu card itself — the dimmed
+ * backdrop, or (since the card doesn't always reach the full
+ * width/height of the screen) whatever of the home screen is
+ * still visible around it, planet included — closes the menu
+ * the same as the X button. Checked against the card's own
+ * actual rendered bounding box rather than relying on
+ * event.target identity, since that's what genuinely matches
+ * "outside the visible menu" regardless of DOM nesting.
  */
 document
 .getElementById(
@@ -25465,10 +25467,24 @@ document
     "pointerdown",
     event=>{
 
-        if(
-            event.target!==
-            event.currentTarget
-        )
+        const cardEl=
+            document.querySelector(
+                "#planetDetail .customizer-card"
+            );
+
+        if(!cardEl)
+            return;
+
+        const rect=
+            cardEl.getBoundingClientRect();
+
+        const inside=
+            event.clientX>=rect.left &&
+            event.clientX<=rect.right &&
+            event.clientY>=rect.top &&
+            event.clientY<=rect.bottom;
+
+        if(inside)
             return;
 
         sound("click");
@@ -39661,8 +39677,32 @@ document
              */
             if(distance<=TAP_SLOP){
 
-                if(!downArea)
+                if(!downArea){
+
+                    /*
+                     * Tapped genuinely empty ground — no
+                     * structure, pet, or ship under the finger.
+                     * If the planet detail menu is currently
+                     * open, this is exactly the "tap outside to
+                     * close" gesture, so close it here rather
+                     * than doing nothing. This is the actual
+                     * fix for that gesture, not the earlier
+                     * overlay-backdrop listener — this canvas
+                     * still receives the tap even while the
+                     * menu is open, so that's where it needs to
+                     * be handled.
+                     */
+                    if(planetDetailId){
+
+                        sound("click");
+
+                        closePlanetDetail();
+
+                    }
+
                     return;
+
+                }
 
                 sound("click");
 
