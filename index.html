@@ -7300,28 +7300,168 @@ function getMissionLog(planetId){
  * anywhere in the game, any ship anywhere can be spared for a
  * mission, not just ones at the departure planet.
  */
-function sendPetOnMission(planetId,shipId,petId,destinationId){
+/*
+ * Assigning a pilot no longer launches the mission immediately —
+ * it just commits the pet to this ship (moved out of the
+ * planet's own pet roster, same as cargo pets moving onto a
+ * ship) and shows up as a ready-to-launch card in the Pilot
+ * Training tab, where the actual destination gets chosen and
+ * confirmed separately. Re-assigning a different pet to a ship
+ * that already has one returns the old one to the roster first.
+ */
+function assignPendingPilot(planetId,shipId,petId){
 
     const pets=
         getPets(planetId);
 
-    const pet=
-        pets.find(
+    const petIndex=
+        pets.findIndex(
             p => p.id===petId
         );
 
+    if(petIndex===-1)
+        return;
+
+    const pet=
+        pets[petIndex];
+
     if(
-        !pet ||
         pet.energy<=0 ||
         (pet.role || "builder")!==
         "pilot"
     )
         return;
 
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    const ship=
+        ships.find(
+            s => s.id===shipId
+        );
+
+    if(!ship)
+        return;
+
+    if(ship.pendingPilot){
+
+        if(!planetSave.pets[planetId]){
+
+            planetSave.pets[planetId]=[];
+
+        }
+
+        planetSave.pets[planetId].push(
+            ship.pendingPilot
+        );
+
+    }
+
+    pets.splice(petIndex,1);
+
+    ship.pendingPilot=pet;
+
+    ship.pendingDestinationId=null;
+
+    expandedShipPilotId=null;
+
+    savePlanetProgress();
+
+    showShipToast(
+        (
+            SPECIES_DISPLAY_NAMES[
+                pet.species
+            ] || pet.species
+        )+
+        " assigned as pilot — choose "+
+        "a destination in the Pilot "+
+        "Training tab."
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function cancelPendingPilot(planetId,shipId){
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    const ship=
+        ships.find(
+            s => s.id===shipId
+        );
+
     if(
-        getTotalPlayerShipCount()<2
+        !ship ||
+        !ship.pendingPilot
     )
         return;
+
+    if(!planetSave.pets[planetId]){
+
+        planetSave.pets[planetId]=[];
+
+    }
+
+    planetSave.pets[planetId].push(
+        ship.pendingPilot
+    );
+
+    ship.pendingPilot=null;
+
+    ship.pendingDestinationId=null;
+
+    savePlanetProgress();
+
+    showShipToast(
+        "Pilot assignment cancelled."
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function setPendingMissionDestination(
+    planetId,shipId,destinationId
+){
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    const ship=
+        ships.find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !ship.pendingPilot
+    )
+        return;
+
+    ship.pendingDestinationId=
+        destinationId;
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function launchPendingMission(planetId,shipId){
 
     const ships=
         planetId==="earth"
@@ -7335,6 +7475,26 @@ function sendPetOnMission(planetId,shipId,petId,destinationId){
 
     if(shipIndex===-1)
         return;
+
+    const ship=
+        ships[shipIndex];
+
+    if(
+        !ship.pendingPilot ||
+        !ship.pendingDestinationId
+    )
+        return;
+
+    if(
+        getTotalPlayerShipCount()<2
+    )
+        return;
+
+    const pet=
+        ship.pendingPilot;
+
+    const destinationId=
+        ship.pendingDestinationId;
 
     const hops=
         computeHopDistance(
@@ -7352,27 +7512,14 @@ function sendPetOnMission(planetId,shipId,petId,destinationId){
     if(hops>range)
         return;
 
-    const chosenShip=
-        ships[shipIndex];
-
     ships.splice(
         shipIndex,
         1
     );
 
-    const petIndex=
-        pets.findIndex(
-            p => p.id===petId
-        );
+    ship.pendingPilot=null;
 
-    if(petIndex!==-1){
-
-        pets.splice(
-            petIndex,
-            1
-        );
-
-    }
+    ship.pendingDestinationId=null;
 
     if(!planetSave.missions){
 
@@ -7411,7 +7558,7 @@ function sendPetOnMission(planetId,shipId,petId,destinationId){
     planetSave.missions[
         planetId
     ].push({
-        ship:chosenShip,
+        ship:ship,
         pet:pet,
         destinationId:destinationId,
         hops:hops,
@@ -7419,10 +7566,6 @@ function sendPetOnMission(planetId,shipId,petId,destinationId){
         startedAt:Date.now(),
         durationSeconds:durationSeconds
     });
-
-    expandedShipPilotId=null;
-
-    pilotAssignmentPetId=null;
 
     savePlanetProgress();
 
@@ -7546,6 +7689,16 @@ function resolveMissions(planetId){
                 )
                 :null;
 
+            /*
+             * A successful mission should never come back
+             * completely empty-handed — if the destination has
+             * no special material of its own (Stay Local, or
+             * anywhere without one), the same yield formula
+             * pays out in coins instead, so surviving the trip
+             * always means bringing something home.
+             */
+            let coinsBrought=0;
+
             if(material){
 
                 materialsBrought=
@@ -7566,6 +7719,22 @@ function resolveMissions(planetId){
                     materialsBrought
                 );
 
+            }else{
+
+                coinsBrought=
+                    computeMissionYield(
+                        mission.hops,
+                        getPetStatLevel(
+                            mission.pet,
+                            "endurance"
+                        )
+                    );
+
+                addToBank(
+                    planetId,
+                    coinsBrought
+                );
+
             }
 
             showShipToast(
@@ -7580,7 +7749,9 @@ function resolveMissions(planetId){
                     ?" with "+
                      materialsBrought+" "+
                      materialName
-                    :""
+                    :" with "+
+                     coinsBrought+" "+
+                     COIN_ICON_HTML
                 )+"!"
             );
 
@@ -8967,6 +9138,26 @@ function paintShipPreviews(planetId,ships){
 
             if(
                 paintOne(interiorCanvas,ship)
+            ){
+
+                anyCanvas=true;
+
+            }
+
+            /*
+             * The pending-mission preview in the Pilot Training
+             * tab — same ship, same style, just a third possible
+             * canvas id depending on which section is currently
+             * showing it.
+             */
+            const pendingCanvas=
+                document.getElementById(
+                    "pendingShipPreview_"+
+                    ship.id
+                );
+
+            if(
+                paintOne(pendingCanvas,ship)
             ){
 
                 anyCanvas=true;
@@ -20910,12 +21101,13 @@ let selectedGalleryStyleId="custom1";
  * and perk pickers.
  */
 /*
- * Ship-based pilot assignment replaces the old pet-initiated
- * flow entirely: expandedShipPilotId tracks which ship's
- * "Assign Pilot" dropdown is open (showing Player + eligible
- * pilot pets); pilotAssignmentPetId tracks which pet within
- * that dropdown has been picked, at which point a destination
- * sub-list replaces the pet list for that same ship.
+ * Ship-based pilot assignment: expandedShipPilotId tracks which
+ * ship's "Assign Pilot" dropdown is open (showing Player +
+ * eligible pilot pets). Picking a pet there commits it straight
+ * to the ship (assignPendingPilot) rather than opening a further
+ * destination sub-list here — the destination and the actual
+ * launch both happen from that ship's own ready-to-launch card
+ * in the Pilot Training tab instead.
  */
 let expandedShipPilotId=null;
 
@@ -21356,7 +21548,6 @@ let shipBuildToggles={
     cargoHold:false,
     dualPerk:false
 };
-let pilotAssignmentPetId=null;
 
 /*
  * PLANET MENU TIPS
@@ -22739,6 +22930,14 @@ function renderPlanetDetail(id){
                      * until a pilot-role pet is actually sent out
                      * from here, which removes the ship from this
                      * list entirely for the mission's duration.
+                     *
+                     * Assigning a pilot here no longer launches
+                     * anything directly — it just commits the pet
+                     * to this ship. The actual destination and
+                     * launch happen from a ready-to-launch card in
+                     * the Pilot Training tab instead, since that's
+                     * a decision worth its own dedicated screen
+                     * rather than one more nested picker.
                      */
                     if(hasPilotTraining){
 
@@ -22755,6 +22954,36 @@ function renderPlanetDetail(id){
 
                         const canSpare=
                             getTotalPlayerShipCount()>=2;
+
+                        if(ship.pendingPilot){
+
+                            html+=
+                                '<div class="ship-bay">'+
+                                '<div class="ship-bay-label">Pilot Bay</div>'+
+                                '<div class="ship-bay-content">'+
+                                '<div class="ship-bay-slot filled">'+
+                                (
+                                    SPECIES_FLOURISH_ICONS[
+                                        ship.pendingPilot.species
+                                    ] || "🐾"
+                                )+
+                                '</div>'+
+                                '<span style="font-size:10px;color:#8fa7c7;">'+
+                                (
+                                    SPECIES_DISPLAY_NAMES[
+                                        ship.pendingPilot.species
+                                    ] || ship.pendingPilot.species
+                                )+
+                                ' assigned — pick a destination '+
+                                'in Pilot Training</span>'+
+                                '</div>'+
+                                '<button class="control-btn" style="width:auto;'+
+                                'padding:6px 8px;margin-top:8px;font-size:10px;" '+
+                                'data-action="cancel-pending-pilot" data-ship="'+
+                                ship.id+'">Cancel assignment</button>'+
+                                '</div>';
+
+                        }else{
 
                         html+=
                             '<div class="ship-bay">'+
@@ -22782,119 +23011,44 @@ function renderPlanetDetail(id){
                                     'Need at least one other ship docked '+
                                     'somewhere else in the game first.</span>';
 
-                            }else if(
-                                pilotAssignmentPetId &&
-                                availablePilots.some(
-                                    p => p.id===pilotAssignmentPetId
-                                )
-                            ){
-
-                                const pet=
-                                    availablePilots.find(
-                                        p => p.id===pilotAssignmentPetId
-                                    );
-
-                                const reachable=
-                                    getReachablePlanets(
-                                        id,
-                                        getPetStatLevel(pet,"range")
-                                    );
+                            }else if(!availablePilots.length){
 
                                 html+=
-                                    '<span style="font-size:9px;color:#8fa7c7;">'+
-                                    'Choose a destination:</span>';
-
-                                reachable.forEach(
-                                    dest=>{
-
-                                        const hops=
-                                            computeHopDistance(id,dest.id);
-
-                                        const duration=
-                                            computeMissionDuration(
-                                                hops,
-                                                getPetStatLevel(pet,"endurance")
-                                            );
-
-                                        const yieldAmt=
-                                            computeMissionYield(
-                                                hops,
-                                                getPetStatLevel(pet,"endurance")
-                                            );
-
-                                        const survival=
-                                            computeSurvivalChance(
-                                                getPetStatLevel(pet,"survival"),
-                                                duration
-                                            );
-
-                                        html+=
-                                            '<button class="shape-btn" style="width:100%;'+
-                                            'text-align:left;padding:8px 10px;font-size:11px;" '+
-                                            'data-action="send-ship-mission" data-ship="'+
-                                            ship.id+'" data-pet="'+pet.id+
-                                            '" data-destination="'+dest.id+'">'+
-                                            (
-                                                dest.id===id
-                                                ?'📍 Stay local'
-                                                :getPlanetIconHtml(dest.id)+' '+dest.name
-                                            )+
-                                            ' ('+duration+'s, ~'+yieldAmt+
-                                            ' units, '+
-                                            Math.round(survival*100)+
-                                            '% survival)</button>';
-
-                                    }
-                                );
-
-                                html+=
-                                    '<button class="control-btn" style="width:auto;'+
-                                    'padding:6px 8px;font-size:10px;" '+
-                                    'data-action="back-ship-pilot" data-ship="'+
-                                    ship.id+'">← Back</button>';
+                                    '<span style="font-size:10px;color:#5c7ba0;">'+
+                                    'No pilot-role pets with energy here — '+
+                                    'assign one the Pilot role in the Pets '+
+                                    'section above.</span>';
 
                             }else{
 
-                                if(!availablePilots.length){
+                                availablePilots.forEach(
+                                    pet=>{
 
-                                    html+=
-                                        '<span style="font-size:10px;color:#5c7ba0;">'+
-                                        'No pilot-role pets with energy here — '+
-                                        'assign one the Pilot role in the Pets '+
-                                        'section above.</span>';
+                                        html+=
+                                            '<button class="shape-btn" style="width:100%;'+
+                                            'display:flex;align-items:center;gap:8px;'+
+                                            'text-align:left;padding:8px 10px;font-size:11px;" '+
+                                            'data-action="assign-pending-pilot" data-ship="'+
+                                            ship.id+'" data-pet="'+pet.id+'">'+
+                                            '<canvas id="pilotRowPreview_'+pet.id+
+                                            '" width="30" height="30" style="flex-shrink:0;"></canvas>'+
+                                            '<span>'+
+                                            (
+                                                SPECIES_DISPLAY_NAMES[
+                                                    pet.species
+                                                ] || pet.species
+                                            )+
+                                            ' — R'+
+                                            getPetStatLevel(pet,"range")+
+                                            ' E'+
+                                            getPetStatLevel(pet,"endurance")+
+                                            ' S'+
+                                            getPetStatLevel(pet,"survival")+
+                                            '</span>'+
+                                            '</button>';
 
-                                }else{
-
-                                    availablePilots.forEach(
-                                        pet=>{
-
-                                            html+=
-                                                '<button class="shape-btn" style="width:100%;'+
-                                                'display:flex;align-items:center;gap:8px;'+
-                                                'text-align:left;padding:8px 10px;font-size:11px;" '+
-                                                'data-action="pick-ship-pilot" data-ship="'+
-                                                ship.id+'" data-pet="'+pet.id+'">'+
-                                                '<canvas id="pilotRowPreview_'+pet.id+
-                                                '" width="30" height="30" style="flex-shrink:0;"></canvas>'+
-                                                '<span>'+
-                                                (
-                                                    SPECIES_DISPLAY_NAMES[
-                                                        pet.species
-                                                    ] || pet.species
-                                                )+
-                                                ' — R'+
-                                                getPetStatLevel(pet,"range")+
-                                                ' E'+
-                                                getPetStatLevel(pet,"endurance")+
-                                                ' S'+
-                                                getPetStatLevel(pet,"survival")+
-                                                '</span>'+
-                                                '</button>';
-
-                                        }
-                                    );
-
-                                }
+                                    }
+                                );
 
                             }
 
@@ -22905,6 +23059,8 @@ function renderPlanetDetail(id){
 
                         html+=
                             '</div>';
+
+                        }
 
                     }
 
@@ -24500,6 +24656,161 @@ function renderPlanetDetail(id){
             'the Pets tab.'+
             '</div>';
 
+        /*
+         * Ready-to-launch cards — one per ship at this planet
+         * that already has a pilot assigned (from the ship's own
+         * Pilot Bay) but hasn't been sent off yet. Choosing a
+         * destination here just selects it; launching is its
+         * own separate, deliberate action.
+         */
+        const pendingShips=
+            ships.filter(
+                s => s.pendingPilot
+            );
+
+        if(pendingShips.length){
+
+            html+=
+                '<div style="font-size:9px;color:#8fa7c7;'+
+                'margin-top:8px;">Ready to launch:</div>';
+
+            pendingShips.forEach(
+                pShip=>{
+
+                    const pet=
+                        pShip.pendingPilot;
+
+                    const reachable=
+                        getReachablePlanets(
+                            id,
+                            getPetStatLevel(pet,"range")
+                        );
+
+                    const chosenDestId=
+                        pShip.pendingDestinationId;
+
+                    const chosenDest=
+                        chosenDestId
+                        ?reachable.find(
+                            d => d.id===chosenDestId
+                        )
+                        :null;
+
+                    let missionMeta="";
+
+                    if(chosenDest){
+
+                        const hops=
+                            computeHopDistance(
+                                id,chosenDestId
+                            );
+
+                        const duration=
+                            computeMissionDuration(
+                                hops,
+                                getPetStatLevel(pet,"endurance")
+                            );
+
+                        const survival=
+                            computeSurvivalChance(
+                                getPetStatLevel(pet,"survival"),
+                                duration
+                            );
+
+                        missionMeta=
+                            duration+'s · '+
+                            Math.round(survival*100)+
+                            '% survival';
+
+                    }
+
+                    html+=
+                        '<div class="ship-bay">'+
+                        '<div class="ship-bay-content">'+
+                        '<canvas id="pendingShipPreview_'+
+                        pShip.id+'" width="38" height="38" '+
+                        'style="flex-shrink:0;background:'+
+                        'rgba(0,0,0,.2);border-radius:10px;">'+
+                        '</canvas>'+
+                        '<div class="ship-bay-slot filled" '+
+                        'style="width:38px;height:38px;">'+
+                        (
+                            SPECIES_FLOURISH_ICONS[
+                                pet.species
+                            ] || "🐾"
+                        )+
+                        '</div>'+
+                        '<span style="font-size:10px;color:#8fa7c7;">'+
+                        (
+                            SPECIES_DISPLAY_NAMES[
+                                pet.species
+                            ] || pet.species
+                        )+
+                        (
+                            missionMeta
+                            ?' → '+chosenDest.name+
+                             '<br><span style="opacity:.7;'+
+                             'font-size:9px;">'+missionMeta+
+                             '</span>'
+                            :''
+                        )+
+                        '</span>'+
+                        '</div>'+
+                        '<div class="ship-bay-sub">'+
+                        '<span style="font-size:9px;color:#8fa7c7;">'+
+                        'Destination:</span>'+
+                        reachable.map(
+                            dest=>{
+
+                                const isChosen=
+                                    dest.id===chosenDestId;
+
+                                return(
+                                    '<button class="shape-btn" style="width:100%;'+
+                                    'text-align:left;padding:7px 10px;font-size:11px;'+
+                                    'display:flex;align-items:center;gap:6px;" '+
+                                    'data-action="set-pending-destination" data-ship="'+
+                                    pShip.id+'" data-destination="'+dest.id+'">'+
+                                    '<span>'+
+                                    (isChosen ? "▶ " : "")+
+                                    (
+                                        dest.id===id
+                                        ?'📍 Stay local'
+                                        :getPlanetIconHtml(dest.id)+' '+dest.name
+                                    )+
+                                    '</span>'+
+                                    '</button>'
+                                );
+
+                            }
+                        ).join('')+
+                        '<div style="display:flex;gap:6px;margin-top:6px;">'+
+                        '<button class="control-btn" style="flex:1;'+
+                        'padding:7px 10px;font-size:10px;" '+
+                        'data-action="cancel-pending-pilot" data-ship="'+
+                        pShip.id+'">Cancel</button>'+
+                        '<button class="control-btn" style="flex:2;'+
+                        'padding:7px 10px;font-size:10px;'+
+                        (
+                            chosenDestId
+                            ?'background:rgba(110,220,255,.18);'+
+                             'border-color:rgba(110,220,255,.45);'+
+                             'color:#bcecff;'
+                            :''
+                        )+
+                        '" data-action="launch-pending-mission" data-ship="'+
+                        pShip.id+'" '+
+                        (chosenDestId ? '' : 'disabled')+
+                        '>Send on Mission</button>'+
+                        '</div>'+
+                        '</div>'+
+                        '</div>';
+
+                }
+            );
+
+        }
+
         const log=
             getMissionLog(id);
 
@@ -25527,39 +25838,12 @@ document
                 ?null
                 :shipId;
 
-            pilotAssignmentPetId=
-                null;
-
             renderPlanetDetail(
                 planetDetailId
             );
 
         }else if(
-            action==="pick-ship-pilot"
-        ){
-
-            pilotAssignmentPetId=
-                target.getAttribute(
-                    "data-pet"
-                );
-
-            renderPlanetDetail(
-                planetDetailId
-            );
-
-        }else if(
-            action==="back-ship-pilot"
-        ){
-
-            pilotAssignmentPetId=
-                null;
-
-            renderPlanetDetail(
-                planetDetailId
-            );
-
-        }else if(
-            action==="send-ship-mission"
+            action==="assign-pending-pilot"
         ){
 
             const petId=
@@ -25567,16 +25851,43 @@ document
                     "data-pet"
                 );
 
+            assignPendingPilot(
+                planetDetailId,
+                shipId,
+                petId
+            );
+
+        }else if(
+            action==="cancel-pending-pilot"
+        ){
+
+            cancelPendingPilot(
+                planetDetailId,
+                shipId
+            );
+
+        }else if(
+            action==="set-pending-destination"
+        ){
+
             const destinationId=
                 target.getAttribute(
                     "data-destination"
                 );
 
-            sendPetOnMission(
+            setPendingMissionDestination(
                 planetDetailId,
                 shipId,
-                petId,
                 destinationId
+            );
+
+        }else if(
+            action==="launch-pending-mission"
+        ){
+
+            launchPendingMission(
+                planetDetailId,
+                shipId
             );
 
         }
@@ -43116,7 +43427,13 @@ function showShipToast(message) {
         toast.className = 'ship-toast';
         document.body.appendChild(toast);
     }
-    toast.textContent = message;
+    // innerHTML rather than textContent -- every existing caller
+    // still passes plain text, which renders identically either
+    // way, but this also lets callers pass real HTML (like
+    // COIN_ICON_HTML) so a toast mentioning coins matches every
+    // other coin reference in the game instead of showing the
+    // raw HTML tag as literal text.
+    toast.innerHTML = message;
     clearTimeout(shipToastTimer);
     requestAnimationFrame(() => toast.classList.add('show'));
     shipToastTimer = setTimeout(() => {
