@@ -19635,6 +19635,18 @@ function drawPlanetFocusScene(){
      */
     if(focusShips.length){
 
+        /*
+         * Whichever ship is actually selected under the Launch
+         * button — same resolution the launch preview itself
+         * uses, so the ship pictured sitting on the planet is
+         * always genuinely the one about to fly, not just
+         * whatever happened to be first in the docked list.
+         */
+        const chosenFocusShip=
+            selectedStartPlanet==="earth"
+            ?resolveEarthLaunchChoice()
+            :resolveLaunchShip(focusShips);
+
         const surfaceY=
             cy-radius;
 
@@ -19679,13 +19691,13 @@ function drawPlanetFocusScene(){
             c.shadowColor="#5ce4ff";
 
             /*
-             * The first actually-docked ship's real cargo, so a
-             * window shape shows whatever pet is genuinely
-             * aboard rather than a placeholder.
+             * The selected ship's real cargo, so a window shape
+             * shows whatever pet is genuinely aboard rather than
+             * a placeholder.
              */
             const focusCargoPetInfo=
                 getCargoPetPreviewInfo(
-                    focusShips[0]
+                    chosenFocusShip
                 );
 
             drawCargoAura(
@@ -19696,8 +19708,8 @@ function drawPlanetFocusScene(){
             for(
                 const shape of
                 getShipStyleShapes(
-                    focusShips[0]
-                    ?focusShips[0].styleId
+                    chosenFocusShip
+                    ?chosenFocusShip.styleId
                     :"custom1"
                 )
             ){
@@ -19713,9 +19725,9 @@ function drawPlanetFocusScene(){
                     c,
                     flightProgress>0,
                     focusCargoPetInfo,
-                    focusShips[0]
+                    chosenFocusShip
                     ?getPrimaryCargoPerkId(
-                        focusShips[0].cargoPets
+                        chosenFocusShip.cargoPets
                     )
                     :null
                 );
@@ -20120,9 +20132,11 @@ function renderPlanetFocus(){
     /*
      * Reuses the existing launch-preview logic so the focus view
      * always agrees with the map view about what's about to fly.
+     * The ship actually pictured sitting on the planet in this
+     * same view reads the same selection live, every frame, in
+     * drawPlanetFocusScene — no separate sync needed here.
      */
-    const chosenLaunchShip=
-        renderLaunchPreview();
+    renderLaunchPreview();
 
     const previewEl=
         document.getElementById(
@@ -20135,17 +20149,6 @@ function renderPlanetFocus(){
         previewEl
         ?previewEl.innerHTML
         :"";
-
-    /*
-     * innerHTML copies the canvas tag itself but never its drawn
-     * pixels, so the copy in the focus view starts out blank —
-     * this repaints it against the same chosen ship immediately
-     * after, rather than leaving it empty until the next
-     * selection change happens to trigger a real repaint.
-     */
-    paintLaunchShipPreviews(
-        chosenLaunchShip
-    );
 
     if(!planetFocusRaf){
 
@@ -21375,7 +21378,6 @@ function renderLaunchPreview(){
             resolveEarthLaunchChoice();
 
         el.innerHTML=
-            renderLaunchShipPreviewHtml(chosen)+
             '<div style="display:flex;flex-direction:column;gap:5px;">'+
             candidates.map(
                 ship=>
@@ -21385,8 +21387,6 @@ function renderLaunchPreview(){
                     )
             ).join('')+
             '</div>';
-
-        paintLaunchShipPreviews(chosen);
 
         return chosen;
 
@@ -21410,7 +21410,6 @@ function renderLaunchPreview(){
         resolveLaunchShip(ships);
 
     el.innerHTML=
-        renderLaunchShipPreviewHtml(chosen)+
         '<div style="display:flex;flex-direction:column;gap:5px;">'+
         ships.map(
             ship=>
@@ -21421,111 +21420,7 @@ function renderLaunchPreview(){
         ).join('')+
         '</div>';
 
-    paintLaunchShipPreviews(chosen);
-
     return chosen;
-
-}
-
-/*
- * A real preview of whichever docked ship is currently selected
- * (its actual style, perk, and cargo — not a generic rocket
- * icon), shown above the list so a player with multiple
- * differently-styled ships can see which one is actually about
- * to launch, before committing. Works from a shared class rather
- * than an id since this exact markup gets duplicated verbatim
- * into the home screen's focus view (see updateFocusView), which
- * would otherwise leave two elements sharing one id.
- */
-function renderLaunchShipPreviewHtml(ship){
-
-    if(!ship)
-        return '';
-
-    return(
-        '<canvas class="launch-ship-preview-canvas" '+
-        'width="64" height="64" style="display:block;'+
-        'margin:0 auto 6px;"></canvas>'
-    );
-
-}
-
-function paintLaunchShipPreviews(ship){
-
-    if(
-        !ship ||
-        typeof ShapeObject===
-        "undefined"
-    )
-        return;
-
-    const cargoPetInfo=
-        getCargoPetPreviewInfo(
-            ship
-        );
-
-    document.querySelectorAll(
-        ".launch-ship-preview-canvas"
-    ).forEach(
-        canvas=>{
-
-            const ctx2d=
-                canvas.getContext("2d");
-
-            ctx2d.clearRect(
-                0,0,
-                canvas.width,
-                canvas.height
-            );
-
-            try{
-
-                ctx2d.save();
-
-                ctx2d.translate(
-                    canvas.width/2,
-                    canvas.height/2
-                );
-
-                ctx2d.scale(.16,.16);
-
-                ctx2d.translate(
-                    -200,-140
-                );
-
-                drawCargoAura(
-                    ctx2d,
-                    cargoPetInfo
-                );
-
-                getShipStyleShapes(
-                    ship.styleId
-                ).forEach(
-                    shape=>{
-
-                        shape.draw(
-                            ctx2d,
-                            false,
-                            cargoPetInfo,
-                            ship.perk
-                        );
-
-                    }
-                );
-
-                ctx2d.restore();
-
-            }catch(error){
-
-                console.error(
-                    "Launch ship preview draw failed:",
-                    error
-                );
-
-            }
-
-        }
-    );
 
 }
 
