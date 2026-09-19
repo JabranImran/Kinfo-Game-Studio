@@ -7,8 +7,9 @@ const WORLD_WIDTH = 1200;
 const WORLD_HEIGHT = 800;
 
 const TICK = 1000 / 30;
-
 const TARGET_ASTEROIDS = 18;
+
+const INVULNERABILITY_SECONDS = 2.5;
 
 const players = new Map();
 const asteroids = new Map();
@@ -21,21 +22,15 @@ let asteroidID = 0;
 ========================================================= */
 
 function id(){
-    return Math.random()
-        .toString(36)
-        .slice(2,10);
+    return Math.random().toString(36).slice(2,10);
 }
 
 function random(a,b){
-    return a + Math.random()*(b-a);
+    return a + Math.random() * (b-a);
 }
 
 function clamp(v,a,b){
     return Math.max(a,Math.min(b,v));
-}
-
-function dist(a,b){
-    return Math.hypot(a.x-b.x,a.y-b.y);
 }
 
 function send(ws,data){
@@ -45,7 +40,7 @@ function send(ws,data){
 }
 
 function broadcast(data){
-    const text=JSON.stringify(data);
+    const text = JSON.stringify(data);
 
     for(const ws of wss.clients){
         if(ws.readyState === WebSocket.OPEN){
@@ -65,42 +60,32 @@ function asteroidRadius(size){
     return 13;
 }
 
-
 function asteroidSpeed(size){
     if(size === 3) return random(18,30);
     if(size === 2) return random(28,45);
     return random(45,70);
 }
 
-
-/*
- * Spawn from an edge, just like the original game.
- */
-
 function edgeSpawn(){
 
-    const side=
-        Math.floor(
-            Math.random()*4
-        );
+    const side = Math.floor(Math.random()*4);
+    const margin = 70;
 
-    const margin=70;
-
-    if(side===0){
+    if(side === 0){
         return {
             x:-margin,
             y:random(0,WORLD_HEIGHT)
         };
     }
 
-    if(side===1){
+    if(side === 1){
         return {
             x:WORLD_WIDTH+margin,
             y:random(0,WORLD_HEIGHT)
         };
     }
 
-    if(side===2){
+    if(side === 2){
         return {
             x:random(0,WORLD_WIDTH),
             y:-margin
@@ -114,67 +99,55 @@ function edgeSpawn(){
 }
 
 
-/*
- * Aim broadly towards the centre, matching the original
- * asteroid spawning behaviour.
- */
-
 function createAsteroid(
     x=null,
     y=null,
     size=null
 ){
 
-    const pos=
-        x===null
-        ?edgeSpawn()
-        :{x,y};
+    const pos =
+        x === null
+        ? edgeSpawn()
+        : {x,y};
 
-    const actualSize=
+    const actualSize =
         size ||
         (
-            Math.random()<.18
-            ?3
-            :Math.random()<.38
-            ?2
-            :1
+            Math.random() < .18
+            ? 3
+            : Math.random() < .38
+            ? 2
+            : 1
         );
 
-
-    const targetX=
-        WORLD_WIDTH/2+
+    const targetX =
+        WORLD_WIDTH/2 +
         random(
             -WORLD_WIDTH*.25,
             WORLD_WIDTH*.25
         );
 
-    const targetY=
-        WORLD_HEIGHT/2+
+    const targetY =
+        WORLD_HEIGHT/2 +
         random(
             -WORLD_HEIGHT*.25,
             WORLD_HEIGHT*.25
         );
 
+    const dx = targetX-pos.x;
+    const dy = targetY-pos.y;
 
-    const dx=
-        targetX-pos.x;
+    const length =
+        Math.hypot(dx,dy) || 1;
 
-    const dy=
-        targetY-pos.y;
-
-    const length=
-        Math.hypot(dx,dy)||1;
-
-    const speed=
+    const speed =
         asteroidSpeed(actualSize);
 
-
-    const asteroid={
+    const asteroid = {
 
         id:"a"+asteroidID++,
 
         x:pos.x,
-
         y:pos.y,
 
         size:actualSize,
@@ -200,12 +173,10 @@ function createAsteroid(
 
     };
 
-
     asteroids.set(
         asteroid.id,
         asteroid
     );
-
 
     return asteroid;
 }
@@ -214,7 +185,7 @@ function createAsteroid(
 function maintainAsteroids(){
 
     while(
-        asteroids.size<
+        asteroids.size <
         TARGET_ASTEROIDS
     ){
         createAsteroid();
@@ -229,36 +200,26 @@ function maintainAsteroids(){
 
 function updateAsteroids(dt){
 
-    const remove=[];
+    const remove = [];
 
     for(
         const a of asteroids.values()
     ){
 
-        a.x+=a.vx*dt;
-        a.y+=a.vy*dt;
+        a.x += a.vx * dt;
+        a.y += a.vy * dt;
 
-        a.angle+=
-            a.rotation*
-            dt*
+        a.angle +=
+            a.rotation *
+            dt *
             60;
 
-        if(a.hitFlash>0){
-            a.hitFlash-=dt;
+        if(a.hitFlash > 0){
+            a.hitFlash -= dt;
         }
 
-
-        /*
-         * IMPORTANT:
-         *
-         * No screen wrapping.
-         *
-         * Once an asteroid leaves the field it is simply
-         * removed and another is spawned.
-         */
-
-        const margin=
-            a.radius+80;
+        const margin =
+            a.radius + 80;
 
         if(
             a.x < -margin ||
@@ -266,52 +227,36 @@ function updateAsteroids(dt){
             a.y < -margin ||
             a.y > WORLD_HEIGHT+margin
         ){
-
             remove.push(a.id);
-
         }
 
     }
-
 
     for(const id of remove){
         asteroids.delete(id);
     }
 
-
     maintainAsteroids();
-
 }
 
 
 /* =========================================================
-   ASTEROID SERIALISATION
+   ASTEROID STATE
 ========================================================= */
 
 function asteroidState(a){
 
     return {
-
         id:a.id,
-
         x:a.x,
-
         y:a.y,
-
         vx:a.vx,
-
         vy:a.vy,
-
         size:a.size,
-
         radius:a.radius,
-
         angle:a.angle,
-
         rotation:a.rotation,
-
         hitFlash:a.hitFlash
-
     };
 
 }
@@ -329,22 +274,22 @@ function createPlayer(
     return {
 
         id,
-
         socket,
 
         x:WORLD_WIDTH/2,
-
         y:WORLD_HEIGHT/2,
 
         angle:-Math.PI/2,
 
         lives:3,
-
         score:0,
 
         alive:true,
 
-        respawnTimer:0,
+        /*
+         * Time until another asteroid can damage the player.
+         */
+        invulnerableUntil:0,
 
         name:"Rocket"
 
@@ -360,20 +305,281 @@ function playerState(p){
         id:p.id,
 
         x:p.x,
-
         y:p.y,
 
         angle:p.angle,
 
         lives:p.lives,
-
         score:p.score,
 
         alive:p.alive,
 
+        invulnerable:
+            Date.now() <
+            p.invulnerableUntil,
+
         name:p.name
 
     };
+
+}
+
+
+/* =========================================================
+   ROCKET HITBOX
+========================================================= */
+
+/*
+ * Coordinates are relative to the rocket centre.
+ *
+ * The rocket points upwards when angle = -PI/2.
+ *
+ * This polygon deliberately follows the visible rocket
+ * silhouette rather than using a large circular hitbox.
+ */
+
+const ROCKET_HITBOX = [
+
+    {x:0,   y:-22},
+
+    {x:-9,  y:9},
+
+    {x:-6,  y:13},
+
+    {x:0,   y:8},
+
+    {x:6,   y:13},
+
+    {x:9,   y:9}
+
+];
+
+
+function rotatePoint(
+    x,
+    y,
+    angle
+){
+
+    const c=Math.cos(angle);
+    const s=Math.sin(angle);
+
+    return {
+
+        x:
+            x*c -
+            y*s,
+
+        y:
+            x*s +
+            y*c
+
+    };
+
+}
+
+
+/*
+ * Closest-point distance from a point to a line segment.
+ */
+
+function pointSegmentDistance(
+    px,
+    py,
+    ax,
+    ay,
+    bx,
+    by
+){
+
+    const abx=bx-ax;
+    const aby=by-ay;
+
+    const ab2=
+        abx*abx+
+        aby*aby;
+
+    if(ab2===0){
+
+        return Math.hypot(
+            px-ax,
+            py-ay
+        );
+
+    }
+
+    const t=clamp(
+        (
+            (px-ax)*abx+
+            (py-ay)*aby
+        )/ab2,
+        0,
+        1
+    );
+
+    const cx=
+        ax+abx*t;
+
+    const cy=
+        ay+aby*t;
+
+    return Math.hypot(
+        px-cx,
+        py-cy
+    );
+
+}
+
+
+/*
+ * Point inside polygon.
+ */
+
+function pointInPolygon(
+    px,
+    py,
+    polygon
+){
+
+    let inside=false;
+
+    for(
+        let i=0,
+        j=polygon.length-1;
+
+        i<polygon.length;
+
+        j=i++
+    ){
+
+        const xi=polygon[i].x;
+        const yi=polygon[i].y;
+
+        const xj=polygon[j].x;
+        const yj=polygon[j].y;
+
+        const intersect =
+            (
+                yi>py
+            ) !== (
+                yj>py
+            ) &&
+            px <
+            (
+                xj-xi
+            ) *
+            (
+                py-yi
+            ) /
+            (
+                yj-yi
+            ) +
+            xi;
+
+        if(intersect){
+            inside=!inside;
+        }
+
+    }
+
+    return inside;
+
+}
+
+
+/*
+ * Test an asteroid circle against the rocket polygon.
+ *
+ * A tiny tolerance keeps the collision fair without making
+ * the hitbox visibly larger.
+ */
+
+function rocketHitsAsteroid(
+    player,
+    asteroid
+){
+
+    const polygon =
+        ROCKET_HITBOX.map(
+            point =>
+                rotatePoint(
+                    point.x,
+                    point.y,
+                    player.angle
+                )
+        );
+
+
+    /*
+     * Move polygon into world coordinates.
+     */
+
+    for(const p of polygon){
+
+        p.x+=player.x;
+        p.y+=player.y;
+
+    }
+
+
+    /*
+     * First test whether asteroid centre is inside the
+     * rocket polygon.
+     */
+
+    if(
+        pointInPolygon(
+            asteroid.x,
+            asteroid.y,
+            polygon
+        )
+    ){
+        return true;
+    }
+
+
+    /*
+     * Then test distance to each rocket edge.
+     */
+
+    for(
+        let i=0;
+        i<polygon.length;
+        i++
+    ){
+
+        const a=
+            polygon[i];
+
+        const b=
+            polygon[
+                (i+1)%
+                polygon.length
+            ];
+
+
+        const d=
+            pointSegmentDistance(
+                asteroid.x,
+                asteroid.y,
+                a.x,
+                a.y,
+                b.x,
+                b.y
+            );
+
+
+        if(
+            d<=
+            asteroid.radius
+        ){
+            return true;
+        }
+
+    }
+
+
+    return false;
 
 }
 
@@ -389,7 +595,6 @@ function worldState(){
         type:"world",
 
         width:WORLD_WIDTH,
-
         height:WORLD_HEIGHT,
 
         players:
@@ -404,11 +609,9 @@ function worldState(){
 
 }
 
-
 function sendWorld(ws){
     send(ws,worldState());
 }
-
 
 function broadcastWorld(){
     broadcast(worldState());
@@ -431,25 +634,14 @@ function detonateAsteroid(
         return;
     }
 
-
     /*
-     * Remove ONLY the asteroid that was actually tapped.
+     * Only the selected asteroid disappears.
      */
 
-    asteroids.delete(
-        target.id
-    );
+    asteroids.delete(target.id);
 
 
-    /*
-     * Original game's power scaling:
-     *
-     * size 3 = 1.8
-     * size 2 = 1.35
-     * size 1 = 1
-     */
-
-    const power=
+    const power =
         target.size===3
         ?1.8
         :target.size===2
@@ -457,19 +649,17 @@ function detonateAsteroid(
         :1;
 
 
-    const radius=
+    const radius =
         110*power;
 
 
     /*
      * Deflect nearby asteroids.
-     *
-     * They are NOT destroyed.
+     * They survive.
      */
 
     for(
-        const other
-        of asteroids.values()
+        const other of asteroids.values()
     ){
 
         const dx=
@@ -490,12 +680,11 @@ function detonateAsteroid(
         }
 
 
-        const falloff=
-            1-
-            distance/radius;
+        const falloff =
+            1-distance/radius;
 
 
-        const strength=
+        const strength =
             falloff*
             220*
             power;
@@ -508,27 +697,23 @@ function detonateAsteroid(
             dy/distance;
 
 
-        /*
-         * Radial push.
-         */
-
-        other.vx+=
+        other.vx +=
             nx*strength;
 
-        other.vy+=
+        other.vy +=
             ny*strength;
 
 
         /*
-         * Small tangential kick.
+         * Small tangential component.
          */
 
-        other.vx+=
+        other.vx +=
             -ny*
             strength*
             .35;
 
-        other.vy+=
+        other.vy +=
             nx*
             strength*
             .35;
@@ -538,11 +723,10 @@ function detonateAsteroid(
 
 
         /*
-         * Very small chance of a genuine chain reaction,
-         * matching the original concept.
+         * Very rare chain reaction.
          */
 
-        const chance=
+        const chance =
             .025+
             falloff*.12;
 
@@ -557,15 +741,14 @@ function detonateAsteroid(
             setTimeout(
                 ()=>{
 
-                    const current=
+                    const current =
                         asteroids.get(
                             other.id
                         );
 
                     if(current){
 
-                        current.chainQueued=
-                            false;
+                        current.chainQueued=false;
 
                         detonateAsteroid(
                             player,
@@ -585,18 +768,11 @@ function detonateAsteroid(
 
     /*
      * Split larger asteroids.
-     *
-     * Original:
-     *
-     * size 3 -> 3 size 2
-     * size 2 -> 2 size 1
      */
 
-    if(
-        target.size>1
-    ){
+    if(target.size>1){
 
-        const pieces=
+        const pieces =
             target.size===3
             ?3
             :2;
@@ -608,12 +784,12 @@ function detonateAsteroid(
             i++
         ){
 
-            const angle=
+            const angle =
                 Math.PI*2/pieces*i+
                 random(-.4,.4);
 
 
-            const child=
+            const child =
                 createAsteroid(
                     target.x+
                     Math.cos(angle)*15,
@@ -625,12 +801,7 @@ function detonateAsteroid(
                 );
 
 
-            /*
-             * Split pieces shoot away from the destroyed
-             * asteroid, as in the original.
-             */
-
-            const speed=
+            const speed =
                 random(50,120);
 
 
@@ -645,11 +816,7 @@ function detonateAsteroid(
     }
 
 
-    /*
-     * Score.
-     */
-
-    const points=
+    const points =
         target.size===3
         ?100
         :target.size===2
@@ -660,19 +827,11 @@ function detonateAsteroid(
     player.score+=points;
 
 
-    /*
-     * Send visual explosion.
-     *
-     * No asteroid list is sent here because the next world
-     * snapshot contains the authoritative result.
-     */
-
     broadcast({
 
         type:"blast",
 
         x:target.x,
-
         y:target.y,
 
         power,
@@ -695,9 +854,9 @@ function detonateAsteroid(
 }
 
 
-/*
- * Find the ONE asteroid under the tap.
- */
+/* =========================================================
+   TAP ASTEROID
+========================================================= */
 
 function blastAt(
     player,
@@ -711,13 +870,11 @@ function blastAt(
 
 
     let target=null;
-
     let closest=Infinity;
 
 
     for(
-        const asteroid
-        of asteroids.values()
+        const asteroid of asteroids.values()
     ){
 
         const d=
@@ -726,13 +883,6 @@ function blastAt(
                 asteroid.y-y
             );
 
-
-        /*
-         * Small forgiving hitbox.
-         *
-         * Crucially this is ONLY for selecting the asteroid.
-         * It is NOT the explosion radius.
-         */
 
         if(
             d<=
@@ -767,9 +917,11 @@ function blastAt(
 
 function checkPlayerCollisions(){
 
+    const now=Date.now();
+
+
     for(
-        const player
-        of players.values()
+        const player of players.values()
     ){
 
         if(!player.alive){
@@ -778,29 +930,29 @@ function checkPlayerCollisions(){
 
 
         /*
-         * Same basic collision concept as the original:
-         *
-         * player radius ≈ 30
+         * Temporary shield after a hit.
          */
 
+        if(
+            now <
+            player.invulnerableUntil
+        ){
+            continue;
+        }
+
+
         for(
-            const asteroid
-            of asteroids.values()
+            const asteroid of asteroids.values()
         ){
 
-            const d=
-                Math.hypot(
-                    player.x-asteroid.x,
-                    player.y-asteroid.y
-                );
-
-
             if(
-                d<
-                asteroid.radius+30
+                rocketHitsAsteroid(
+                    player,
+                    asteroid
+                )
             ){
 
-                killPlayer(
+                damagePlayer(
                     player
                 );
 
@@ -816,10 +968,10 @@ function checkPlayerCollisions(){
 
 
 /* =========================================================
-   PLAYER DEATH
+   PLAYER DAMAGE
 ========================================================= */
 
-function killPlayer(
+function damagePlayer(
     player
 ){
 
@@ -828,32 +980,41 @@ function killPlayer(
     }
 
 
+    const now=Date.now();
+
+
+    if(
+        now <
+        player.invulnerableUntil
+    ){
+        return;
+    }
+
+
     player.lives--;
 
-    player.alive=false;
 
-    player.respawnTimer=90;
+    /*
+     * The player DOES NOT respawn.
+     *
+     * They remain where they are.
+     */
 
-
-    send(
-        player.socket,
-        {
-
-            type:"death",
-
-            lives:player.lives
-
-        }
-    );
+    player.invulnerableUntil =
+        now+
+        INVULNERABILITY_SECONDS*1000;
 
 
     broadcast({
 
-        type:"playerDeath",
+        type:"playerHit",
 
         id:player.id,
 
-        lives:player.lives
+        lives:player.lives,
+
+        invulnerableUntil:
+            player.invulnerableUntil
 
     });
 
@@ -861,6 +1022,9 @@ function killPlayer(
     if(
         player.lives<=0
     ){
+
+        player.alive=false;
+
 
         send(
             player.socket,
@@ -873,95 +1037,34 @@ function killPlayer(
             }
         );
 
-    }
 
-}
+        broadcast({
 
+            type:"playerGameOver",
 
-/* =========================================================
-   RESPAWN
-========================================================= */
+            id:player.id
 
-function respawnPlayer(
-    player
-){
+        });
 
-    player.x=
-        WORLD_WIDTH/2+
-        random(-100,100);
+    }else{
 
-    player.y=
-        WORLD_HEIGHT/2+
-        random(-100,100);
+        /*
+         * The rocket remains alive and exactly where it is.
+         */
 
-    player.angle=
-        -Math.PI/2;
+        send(
+            player.socket,
+            {
 
-    player.alive=true;
+                type:"hit",
 
-    player.respawnTimer=0;
+                lives:player.lives,
 
+                invulnerableUntil:
+                    player.invulnerableUntil
 
-    send(
-        player.socket,
-        {
-
-            type:"respawn",
-
-            player:
-                playerState(player)
-
-        }
-    );
-
-
-    broadcast({
-
-        type:"playerRespawn",
-
-        player:
-            playerState(player)
-
-    });
-
-}
-
-
-/* =========================================================
-   UPDATE PLAYERS
-========================================================= */
-
-function updatePlayers(){
-
-    for(
-        const player
-        of players.values()
-    ){
-
-        if(player.alive){
-            continue;
-        }
-
-
-        if(
-            player.lives<=0
-        ){
-            continue;
-        }
-
-
-        player.respawnTimer--;
-
-
-        if(
-            player.respawnTimer<=0
-        ){
-
-            respawnPlayer(
-                player
-            );
-
-        }
+            }
+        );
 
     }
 
@@ -969,10 +1072,10 @@ function updatePlayers(){
 
 
 /* =========================================================
-   HTTP
+   CONNECTION
 ========================================================= */
 
-const httpServer=
+const httpServer =
     http.createServer(
         (req,res)=>{
 
@@ -992,11 +1095,7 @@ const httpServer=
     );
 
 
-/* =========================================================
-   WEBSOCKET
-========================================================= */
-
-const wss=
+const wss =
     new WebSocket.Server({
         server:httpServer
     });
@@ -1008,7 +1107,8 @@ wss.on(
 
         const playerID=id();
 
-        const player=
+
+        const player =
             createPlayer(
                 playerID,
                 socket
@@ -1049,9 +1149,7 @@ wss.on(
         );
 
 
-        sendWorld(
-            socket
-        );
+        sendWorld(socket);
 
 
         broadcast({
@@ -1095,16 +1193,13 @@ wss.on(
                 }
 
 
-                /* -----------------------------------------
-                   JOIN
-                ----------------------------------------- */
-
                 if(
                     msg.type==="join"
                 ){
 
                     if(
-                        typeof msg.name==="string"
+                        typeof msg.name===
+                        "string"
                     ){
 
                         p.name=
@@ -1122,10 +1217,6 @@ wss.on(
                     return;
                 }
 
-
-                /* -----------------------------------------
-                   PLAYER STATE
-                ----------------------------------------- */
 
                 if(
                     msg.type==="state"
@@ -1184,10 +1275,6 @@ wss.on(
                 }
 
 
-                /* -----------------------------------------
-                   BLAST
-                ----------------------------------------- */
-
                 if(
                     msg.type==="blast"
                 ){
@@ -1222,15 +1309,6 @@ wss.on(
         socket.on(
             "close",
             ()=>{
-
-                /*
-                 * IMPORTANT:
-                 *
-                 * Only a real WebSocket disconnect removes
-                 * the player.
-                 *
-                 * Dying does NOT create another player.
-                 */
 
                 players.delete(
                     playerID
@@ -1271,8 +1349,6 @@ setInterval(
             TICK/1000;
 
         updateAsteroids(dt);
-
-        updatePlayers();
 
         checkPlayerCollisions();
 
