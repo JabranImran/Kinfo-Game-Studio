@@ -944,6 +944,25 @@ body{
     opacity:.4;
 }
 
+/*
+ * A ship with a pet pilot assigned departs into Orbital Space
+ * instead of straight into the asteroid field — this violet/
+ * magenta tint distinguishes that launch at a glance from the
+ * usual blue one.
+ */
+.focus-btn.primary.orbital-ready{
+    border-color:rgba(220,140,255,.85);
+    background:
+        linear-gradient(
+            180deg,
+            rgba(170,90,255,.7),
+            rgba(110,45,190,.7)
+        );
+    box-shadow:
+        0 0 26px rgba(190,110,255,.45),
+        0 8px 20px rgba(0,0,0,.35);
+}
+
 
 /* =========================================================
    PLANET DETAIL — top-half sheet, not full-screen
@@ -4165,6 +4184,68 @@ let paused=false;
 let gameOver=false;
 
 let worldState="planet";
+
+/* =========================================================
+   ORBITAL SPACE
+   An intermediate mode between the land/depart menu and the
+   asteroid field, unlocked by launching a ship that has a pet
+   pilot assigned. The ship holds screen centre (same as every
+   other mode) while the WORLD moves around it — orbitalX/Y is
+   the ship's position in orbital space relative to the planet
+   at the origin, and everything drawn is offset by it.
+========================================================= */
+
+/*
+ * Tuning for orbital space. Distances are in the same units as
+ * orbitalX/Y, with the planet at the origin.
+ */
+
+/* Closer than this and the ship returns to the land/depart menu. */
+const ORBITAL_RETURN_RADIUS=150;
+
+/* Past this and the ship hands over to the normal asteroid field. */
+const ORBITAL_ESCAPE_RADIUS=1400;
+
+/* Where the ship starts when it first enters orbital space. */
+const ORBITAL_START_RADIUS=520;
+
+const ORBITAL_BASE_SPEED=170;
+const ORBITAL_MIN_SPEED=60;
+const ORBITAL_MAX_SPEED=430;
+
+/* How much a drag translates into turning / speed change. */
+const ORBITAL_TURN_PER_PX=.006;
+const ORBITAL_SPEED_PER_PX=1.1;
+
+/* Idle drift: seconds untouched before the ship eases outward. */
+const ORBITAL_IDLE_DRIFT_SECONDS=4;
+
+/* Ship position relative to the planet, which sits at (0,0). */
+let orbitalX=0;
+let orbitalY=0;
+
+/* Heading in radians, and current speed in units/second. */
+let orbitalHeading=-Math.PI/2;
+let orbitalSpeed=ORBITAL_BASE_SPEED;
+
+/*
+ * Drag state. Dragging steers: horizontal movement turns the
+ * ship, vertical movement changes speed (up = faster, matching
+ * the "push forward" intuition).
+ */
+let orbitalDragging=false;
+let orbitalDragLastX=0;
+let orbitalDragLastY=0;
+
+/*
+ * How long since the player last touched anything — after
+ * ORBITAL_IDLE_DRIFT_SECONDS with no input the ship gradually
+ * drifts outward on its own, so doing nothing eventually
+ * carries you into normal play rather than stranding you.
+ */
+let orbitalIdleTimer=0;
+
+let currentShipPendingPilotActive=false;
 
 let currentPlanetId="earth";
 
@@ -11482,9 +11563,35 @@ function resolveRunEndMaterials(){
  */
 function resolveRunEndCargoPets(){
 
+    /*
+     * The assigned pilot goes down with the ship too — same
+     * stakes as cargo. Cleared unconditionally (before the
+     * early return below) so a ship carrying only a pilot and
+     * no cargo still loses it.
+     */
+    const lostPilot=
+        !!currentShipPendingPilot;
+
+    currentShipPendingPilot=null;
+
+    currentShipPendingDestinationId=null;
+
+    currentShipPendingRouteStops=[];
+
     if(!currentShipCargoPets.length){
 
         currentShipCargoPets=[];
+
+        if(lostPilot){
+
+            floatingText(
+                "LOST THE ASSIGNED PILOT",
+                W/2,
+                H*.54,
+                "#ff8d8d"
+            );
+
+        }
 
         return;
 
@@ -20136,7 +20243,8 @@ function renderPlanetFocus(){
      * same view reads the same selection live, every frame, in
      * drawPlanetFocusScene — no separate sync needed here.
      */
-    renderLaunchPreview();
+    const chosenLaunchShip=
+        renderLaunchPreview();
 
     const previewEl=
         document.getElementById(
@@ -20149,6 +20257,41 @@ function renderPlanetFocus(){
         previewEl
         ?previewEl.innerHTML
         :"";
+
+    /*
+     * A ship with a pet pilot assigned launches into Orbital
+     * Space rather than straight into the asteroid field, so the
+     * button says so and is tinted to match — the player should
+     * be able to tell which kind of launch they're about to get
+     * before pressing it.
+     */
+    const launchBtn=
+        document.getElementById(
+            "focusLaunchBtn"
+        );
+
+    if(launchBtn){
+
+        const orbitalReady=
+            !!(
+                chosenLaunchShip &&
+                chosenLaunchShip.pendingPilot
+            );
+
+        launchBtn.innerHTML=
+            ROCKET_ICON_HTML+
+            (
+                orbitalReady
+                ?" Launch to Orbit"
+                :" Launch Mission"
+            );
+
+        launchBtn.classList.toggle(
+            "orbital-ready",
+            orbitalReady
+        );
+
+    }
 
     if(!planetFocusRaf){
 
@@ -23549,7 +23692,7 @@ function renderPlanetDetail(id){
                             '<div class="ship-bay-content">'+
                             '<div class="ship-bay-slot filled">👤</div>'+
                             '<span style="font-size:10px;color:#8fa7c7;">'+
-                            'Player — you fly this one</span>'+
+                            'Autopilot — you fly this one</span>'+
                             '</div>';
 
                         if(pilotOpen){
@@ -30861,6 +31004,28 @@ function syncCurrentShipFlightState(){
                 )
             );
 
+        /*
+         * Same pilot-assignment restore as the createShip branch
+         * in landOnPlanet — this path runs when the ship already
+         * had a docked record here, and would otherwise leave the
+         * carried-through assignment unwritten.
+         */
+        ship.pendingPilot=
+            currentShipPendingPilot;
+
+        ship.pendingDestinationId=
+            currentShipPendingDestinationId;
+
+        ship.pendingRouteStops=
+            currentShipPendingRouteStops || [];
+
+        ship.cargoPets=
+            Array.isArray(
+                currentShipCargoPets
+            )
+            ?currentShipCargoPets
+            :[];
+
         savePlanetProgress();
 
     }
@@ -36207,6 +36372,360 @@ function enterPlanetPhase(skipApproach){
 }
 
 
+/* =========================================================
+   ORBITAL SPACE
+========================================================= */
+
+/*
+ * Whether the ship currently being flown launched with a pet
+ * pilot aboard — the single condition that unlocks orbital
+ * space. Read at depart time rather than stored as its own
+ * flag so it can never drift out of sync with the actual pilot
+ * assignment.
+ */
+function isOrbitalUnlocked(){
+
+    return !!currentShipPendingPilot;
+
+}
+
+function enterOrbitalSpace(){
+
+    if(
+        !running ||
+        gameOver
+    )
+        return;
+
+    worldState=
+        "orbital";
+
+    worldTimer=0;
+
+    /*
+     * Same clean slate the asteroid field gets — orbital space
+     * shares every powerup and pickup system with normal play
+     * (pass three fills the field in), so it has to start from
+     * the same zeroed state rather than inheriting whatever was
+     * mid-flight when the player last departed.
+     */
+    asteroids=[];
+
+    coinPickups=[];
+
+    materialPickups=[];
+
+    beamEffects=[];
+
+    beamArmed=false;
+
+    ghostActive=false;
+
+    ghostTimer=0;
+
+    timeSlowActive=false;
+
+    timeSlowTimer=0;
+
+    ricochetArmed=false;
+
+    ricochetBall=null;
+
+    bladeArmed=false;
+
+    bladeActive=false;
+
+    bladeTrail=[];
+
+    bladeLastPoint=null;
+
+    singularityArmed=false;
+
+    singularity=null;
+
+    phaseUI.classList.remove(
+        "show"
+    );
+
+    destinationLayer.classList.remove(
+        "show"
+    );
+
+    closeStarMap();
+
+    /*
+     * Start out above the planet, heading away from it, at the
+     * usual cruising speed — so entering reads as "just left the
+     * surface" rather than dropping in at a random point.
+     */
+    orbitalX=0;
+
+    orbitalY=-ORBITAL_START_RADIUS;
+
+    orbitalHeading=
+        -Math.PI/2;
+
+    orbitalSpeed=
+        ORBITAL_BASE_SPEED;
+
+    orbitalDragging=false;
+
+    orbitalIdleTimer=0;
+
+    floatingText(
+        "ORBITAL SPACE",
+        W/2,
+        H*.28,
+        "#d79dff"
+    );
+
+    updateHUD();
+
+}
+
+function getOrbitalDistance(){
+
+    return Math.hypot(
+        orbitalX,
+        orbitalY
+    );
+
+}
+
+function updateOrbital(dt){
+
+    if(!orbitalDragging){
+
+        orbitalIdleTimer+=dt;
+
+    }
+
+    /*
+     * Untouched for long enough, the ship eases outward on its
+     * own — turning gently toward "directly away from the
+     * planet" and picking up speed, so leaving it alone
+     * eventually carries it into normal play instead of
+     * circling forever.
+     */
+    if(
+        orbitalIdleTimer>
+        ORBITAL_IDLE_DRIFT_SECONDS
+    ){
+
+        const awayHeading=
+            Math.atan2(
+                orbitalY,
+                orbitalX
+            );
+
+        let headingDelta=
+            awayHeading-
+            orbitalHeading;
+
+        while(headingDelta>Math.PI)
+            headingDelta-=Math.PI*2;
+
+        while(headingDelta<-Math.PI)
+            headingDelta+=Math.PI*2;
+
+        orbitalHeading+=
+            headingDelta*
+            Math.min(1,dt*.55);
+
+        orbitalSpeed+=
+            dt*26;
+
+    }
+
+    orbitalSpeed=
+        clamp(
+            orbitalSpeed,
+            ORBITAL_MIN_SPEED,
+            ORBITAL_MAX_SPEED
+        );
+
+    orbitalX+=
+        Math.cos(orbitalHeading)*
+        orbitalSpeed*dt;
+
+    orbitalY+=
+        Math.sin(orbitalHeading)*
+        orbitalSpeed*dt;
+
+    const distance=
+        getOrbitalDistance();
+
+    /*
+     * Close enough to the planet — drop back into the
+     * land/depart menu, reusing the existing approach animation
+     * so it matches arriving from anywhere else.
+     */
+    if(
+        distance<=
+        ORBITAL_RETURN_RADIUS
+    ){
+
+        returnFromOrbitToPlanet();
+
+        return;
+
+    }
+
+    /*
+     * Drifted far enough out that the planet no longer holds
+     * the ship — hand over to normal asteroid gameplay, drag
+     * control ends here.
+     */
+    if(
+        distance>=
+        ORBITAL_ESCAPE_RADIUS
+    ){
+
+        leaveOrbitForField();
+
+    }
+
+}
+
+function returnFromOrbitToPlanet(){
+
+    orbitalDragging=false;
+
+    /*
+     * The ship went back to dock, so it needs its record at
+     * this planet again — completeDeparture() released it on
+     * the way out, and landing normally is what would otherwise
+     * rebuild it.
+     */
+    restoreShipRecordAfterOrbit();
+
+    enterPlanetPhase(false);
+
+}
+
+function leaveOrbitForField(){
+
+    orbitalDragging=false;
+
+    floatingText(
+        "LEAVING ORBIT",
+        W/2,
+        H*.3,
+        "#8de7ff"
+    );
+
+    enterAsteroidField(
+        false
+    );
+
+}
+
+/*
+ * Rebuilds this ship's docked record after orbital space drops
+ * back to the planet menu. completeDeparture() deliberately
+ * removes the record on launch so a ship can't be docked and
+ * flying at once; coming back without ever reaching the field
+ * means the normal landing path never ran, so this does the
+ * same job for that one case.
+ */
+function restoreShipRecordAfterOrbit(){
+
+    const existing=
+        currentShipId &&
+        (
+            getShips(currentPlanetId) ||
+            []
+        ).find(
+            s => s.id===currentShipId
+        );
+
+    if(existing)
+        return;
+
+    const ship=
+        createShip(
+            currentPlanetId,
+            score,
+            runCoins,
+            currentShipEquipment,
+            wave,
+            lives,
+            runMaterials,
+            currentShipPerk,
+            currentShipMaterialCapBonus,
+            currentShipHasDualPerk,
+            currentShipPerk2,
+            currentShipCargoPetCapacity,
+            currentShipCargoPets,
+            currentShipStyleId
+        );
+
+    ship.pendingPilot=
+        currentShipPendingPilot;
+
+    ship.pendingDestinationId=
+        currentShipPendingDestinationId;
+
+    ship.pendingRouteStops=
+        currentShipPendingRouteStops || [];
+
+    currentShipId=
+        ship.id;
+
+    savePlanetProgress();
+
+}
+
+
+/*
+ * Draws the planet as seen from orbital space. The ship stays
+ * at screen centre (drawn by the normal drawPlayer path, same
+ * as every other mode), so the planet is placed by the ship's
+ * NEGATED orbital position — move right in orbital space and
+ * the planet slides left, which is what sells the movement.
+ */
+function drawOrbitalScene(){
+
+    const distance=
+        getOrbitalDistance();
+
+    /*
+     * Planet size falls off with distance so pulling away
+     * genuinely reads as pulling away, floored so it stays a
+     * visible landmark rather than vanishing entirely.
+     */
+    const planetRadius=
+        clamp(
+            (
+                ORBITAL_START_RADIUS/
+                Math.max(distance,1)
+            )*70,
+            14,
+            180
+        );
+
+    const planetScreenX=
+        W/2-orbitalX;
+
+    const planetScreenY=
+        H/2-orbitalY;
+
+    ctx.save();
+
+    drawSpacePlanet(
+        ctx,
+        currentPlanetId,
+        planetScreenX,
+        planetScreenY,
+        planetRadius,
+        {}
+    );
+
+    ctx.restore();
+
+}
+
+
 function enterAsteroidField(
     afterTravel=false
 ){
@@ -36870,6 +37389,21 @@ function landAtCurrentPlanetInner(){
                 currentShipStyleId
             );
 
+        /*
+         * The pilot assignment survives the player's own flight —
+         * createShip doesn't take these, so they're restored onto
+         * the freshly rebuilt docked record here. Without this the
+         * assigned pet was silently lost on landing.
+         */
+        ship.pendingPilot=
+            currentShipPendingPilot;
+
+        ship.pendingDestinationId=
+            currentShipPendingDestinationId;
+
+        ship.pendingRouteStops=
+            currentShipPendingRouteStops || [];
+
         currentShipId=
             ship.id;
 
@@ -37223,6 +37757,20 @@ function completeDeparture(){
 
     }
 
+    /*
+     * A ship with a pet pilot aboard departs into orbital space
+     * rather than straight into the asteroid field — the pilot
+     * is what makes the slower, steerable approach possible at
+     * all. Everything else launches exactly as before.
+     */
+    if(isOrbitalUnlocked()){
+
+        enterOrbitalSpace();
+
+        return;
+
+    }
+
     enterAsteroidField(
         false
     );
@@ -37361,6 +37909,19 @@ function update(dt){
             departPlanet();
 
         }
+
+    }
+
+
+    /*
+     * ORBITAL SPACE
+     */
+
+    else if(
+        worldState==="orbital"
+    ){
+
+        updateOrbital(dt);
 
     }
 
@@ -38334,6 +38895,14 @@ function draw(){
     ){
 
         drawPlanetBackground();
+
+    }
+
+    else if(
+        worldState==="orbital"
+    ){
+
+        drawOrbitalScene();
 
     }
 
@@ -39340,6 +39909,20 @@ let currentShipWasFresh=false;
  * capsule protection for cargo pets, unlike coins/materials.
  */
 let currentShipCargoPets=[];
+
+/*
+ * The pet assigned as this ship's pilot for an upcoming Pilot
+ * Training mission, carried through the player's own flight so
+ * it's still assigned when the ship lands. Without this the
+ * assignment was silently dropped at launch (the docked record
+ * is released on departure and rebuilt on landing), taking the
+ * pet with it.
+ */
+let currentShipPendingPilot=null;
+
+let currentShipPendingDestinationId=null;
+
+let currentShipPendingRouteStops=[];
 let currentShipCargoPetCapacity=1;
 
 let beamArmed=false;
@@ -39467,6 +40050,12 @@ function startGame(){
 
     let launchCargoPets=[];
 
+    let launchPendingPilot=null;
+
+    let launchPendingDestinationId=null;
+
+    let launchPendingRouteStops=[];
+
     let launchCargoPetCapacity=1;
 
     let launchWave=1;
@@ -39558,6 +40147,21 @@ function startGame(){
                 earthChoice.cargoPets
             )
             ?earthChoice.cargoPets
+            :[];
+
+        launchPendingPilot=
+            earthChoice.pendingPilot ||
+            null;
+
+        launchPendingDestinationId=
+            earthChoice.pendingDestinationId ||
+            null;
+
+        launchPendingRouteStops=
+            Array.isArray(
+                earthChoice.pendingRouteStops
+            )
+            ?earthChoice.pendingRouteStops
             :[];
 
         launchCargoPetCapacity=
@@ -39709,6 +40313,21 @@ function startGame(){
             ?ship.cargoPets
             :[];
 
+        launchPendingPilot=
+            ship.pendingPilot ||
+            null;
+
+        launchPendingDestinationId=
+            ship.pendingDestinationId ||
+            null;
+
+        launchPendingRouteStops=
+            Array.isArray(
+                ship.pendingRouteStops
+            )
+            ?ship.pendingRouteStops
+            :[];
+
         launchCargoPetCapacity=
             Math.max(
                 1,
@@ -39783,6 +40402,15 @@ function startGame(){
 
     currentShipCargoPets=
         launchCargoPets;
+
+    currentShipPendingPilot=
+        launchPendingPilot;
+
+    currentShipPendingDestinationId=
+        launchPendingDestinationId;
+
+    currentShipPendingRouteStops=
+        launchPendingRouteStops;
 
     currentShipCargoPetCapacity=
         launchCargoPetCapacity;
@@ -41266,10 +41894,101 @@ canvas.addEventListener(
     {passive:true}
 );
 
+/* =========================================================
+   ORBITAL SPACE — drag controls
+   Dragging left/right steers the ship; dragging up speeds it
+   up and dragging down slows it. Only active while actually in
+   orbital space, so it can never interfere with the normal
+   game's own tap and swipe handling.
+========================================================= */
+
+canvas.addEventListener(
+    "pointerdown",
+    event=>{
+
+        if(
+            worldState!=="orbital" ||
+            paused ||
+            gameOver
+        )
+            return;
+
+        orbitalDragging=true;
+
+        orbitalDragLastX=event.clientX;
+
+        orbitalDragLastY=event.clientY;
+
+        orbitalIdleTimer=0;
+
+    },
+    {passive:true}
+);
+
+canvas.addEventListener(
+    "pointermove",
+    event=>{
+
+        if(
+            !orbitalDragging ||
+            worldState!=="orbital"
+        )
+            return;
+
+        const dx=
+            event.clientX-
+            orbitalDragLastX;
+
+        const dy=
+            event.clientY-
+            orbitalDragLastY;
+
+        orbitalDragLastX=event.clientX;
+
+        orbitalDragLastY=event.clientY;
+
+        orbitalHeading+=
+            dx*ORBITAL_TURN_PER_PX;
+
+        /*
+         * Screen Y grows downward, so dragging UP is a negative
+         * dy — negated here so up genuinely means faster.
+         */
+        orbitalSpeed=
+            clamp(
+                orbitalSpeed-
+                dy*ORBITAL_SPEED_PER_PX*.1,
+                ORBITAL_MIN_SPEED,
+                ORBITAL_MAX_SPEED
+            );
+
+        orbitalIdleTimer=0;
+
+    },
+    {passive:true}
+);
+
+canvas.addEventListener(
+    "pointerup",
+    ()=>{
+
+        orbitalDragging=false;
+
+    },
+    {passive:true}
+);
+
+canvas.addEventListener(
+    "pointercancel",
+    ()=>{
+
+        orbitalDragging=false;
+
+    },
+    {passive:true}
+);
+
 /*
- * Whole-screen swipe-up was replaced by the ship-specific
- * gesture above — launching now requires actually dragging the
- * rocket, so a stray upward swipe on empty space can't fire a
  * mission by accident.
  */
 
