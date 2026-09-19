@@ -6936,6 +6936,16 @@ function feedPet(planetId,petId){
  */
 const PET_STAT_MAX_LEVEL=10;
 
+/*
+ * How many pets NOT native to this planet a Bio Dome here can
+ * have stationed at once — a pet that arrived via ship cargo
+ * from somewhere else, unloaded here rather than sent home.
+ * Doesn't limit the planet's own native pets at all, only
+ * foreign ones. Three further upgrade tiers each add more; see
+ * STRUCTURE_UPGRADES["bio-dome"].
+ */
+const BIO_DOME_BASE_FOREIGN_CAPACITY=2;
+
 
 /*
  * Range: how many hops from home a pilot can be sent.
@@ -7780,6 +7790,59 @@ const STRUCTURE_UPGRADES={
             effectType:"shipToggle",
             toggleId:"pet-bay"
         }
+    ],
+
+    "bio-dome":[
+        {
+            id:"bio-dome-habitat-1",
+            structureId:"bio-dome",
+            name:"Habitat Expansion",
+            icon:"🏝",
+            description:
+                "Raises how many foreign pets this Bio Dome can "+
+                "hold at once from 2 to 4 — the first of three "+
+                "tiers leading up to a cap of 8. Doesn't affect "+
+                "this planet's own native pets, only visiting ones.",
+            unlockMaterials:[
+                {materialId:"nova-dust",amount:4},
+                {materialId:"prime-core",amount:4}
+            ],
+            buyCost:25,
+            effectType:"bioDomeCapacity",
+            effectValue:2
+        },
+        {
+            id:"bio-dome-habitat-2",
+            structureId:"bio-dome",
+            name:"Habitat Expansion II",
+            icon:"🏝",
+            description:
+                "Second tier — raises the foreign pet cap "+
+                "further, from 4 to 6.",
+            unlockMaterials:[
+                {materialId:"nova-dust",amount:6},
+                {materialId:"prime-core",amount:6}
+            ],
+            buyCost:40,
+            effectType:"bioDomeCapacity",
+            effectValue:2
+        },
+        {
+            id:"bio-dome-habitat-3",
+            structureId:"bio-dome",
+            name:"Habitat Expansion III",
+            icon:"🏝",
+            description:
+                "Third and final tier — raises the foreign pet "+
+                "cap from 6 up to its full 8.",
+            unlockMaterials:[
+                {materialId:"nova-dust",amount:8},
+                {materialId:"prime-core",amount:8}
+            ],
+            buyCost:60,
+            effectType:"bioDomeCapacity",
+            effectValue:2
+        }
     ]
 
 };
@@ -7963,6 +8026,39 @@ function getPetStatMaxLevel(planetId){
         (max,u) => max+u.effectValue,
         PET_STAT_MAX_LEVEL
     );
+
+}
+
+function getBioDomeForeignCapacity(planetId){
+
+    const boosts=
+        getPurchasedUpgradesOfType(
+            planetId,
+            "bio-dome",
+            "bioDomeCapacity"
+        );
+
+    return boosts.reduce(
+        (max,u) => max+u.effectValue,
+        BIO_DOME_BASE_FOREIGN_CAPACITY
+    );
+
+}
+
+/*
+ * How many pets currently stationed at this planet are foreign
+ * to it — arrived via ship cargo from elsewhere rather than
+ * being native here. This is exactly what a Bio Dome's own
+ * capacity limits; a planet's native pets never count against
+ * it no matter how many there are.
+ */
+function getForeignPetCount(planetId){
+
+    return getPets(planetId).filter(
+        p =>
+            p.homePlanetId!==
+            planetId
+    ).length;
 
 }
 
@@ -12478,6 +12574,29 @@ function unloadPetFromCargo(planetId,shipId,petId){
         )
     )
         return;
+
+    /*
+     * A Bio Dome's foreign-pet capacity only applies to foreign
+     * pets — a planet's own native pets returning home are never
+     * blocked by it, no matter how full the dome is.
+     */
+    if(
+        !isHomePlanet &&
+        getForeignPetCount(planetId)>=
+        getBioDomeForeignCapacity(planetId)
+    ){
+
+        showShipToast(
+            "Bio Dome is full — "+
+            getForeignPetCount(planetId)+
+            "/"+
+            getBioDomeForeignCapacity(planetId)+
+            " foreign pets already stationed here."
+        );
+
+        return;
+
+    }
 
     ship.cargoPets.splice(
         petIndex,
@@ -22901,12 +23020,28 @@ function renderPlanetDetail(id){
                                 '<span style="font-size:9px;color:#8fa7c7;">'+
                                 'Carrying:</span>';
 
+                            const foreignPetCount=
+                                getForeignPetCount(id);
+
+                            const bioDomeCapacity=
+                                getBioDomeForeignCapacity(id);
+
+                            const bioDomeFull=
+                                foreignPetCount>=
+                                bioDomeCapacity;
+
                             cargoPets.forEach(
                                 pet=>{
 
-                                    const canUnloadHere=
-                                        hasBioDomeHere ||
+                                    const isHomePlanet=
                                         pet.homePlanetId===id;
+
+                                    const canUnloadHere=
+                                        isHomePlanet ||
+                                        (
+                                            hasBioDomeHere &&
+                                            !bioDomeFull
+                                        );
 
                                     html+=
                                         '<button class="shape-btn" style="width:100%;'+
@@ -22931,9 +23066,15 @@ function renderPlanetDetail(id){
                                         '%</span></span>'+
                                         '<span style="opacity:.6;font-size:9px;">'+
                                         (
-                                            canUnloadHere
+                                            isHomePlanet
                                             ?'Unload here'
-                                            :'Needs a Bio Dome here'
+                                            :!hasBioDomeHere
+                                            ?'Needs a Bio Dome here'
+                                            :bioDomeFull
+                                            ?'Bio Dome full ('+
+                                             foreignPetCount+'/'+
+                                             bioDomeCapacity+')'
+                                            :'Unload here'
                                         )+
                                         '</span></button>';
 
@@ -24477,6 +24618,22 @@ function renderPlanetDetail(id){
             'Built here — ships can unload cargo pets at this '+
             'planet from their Cargo section above.'+
             '</div>';
+
+        html+=
+            '<div class="selected-shape-info">'+
+            '<span>Foreign pets stationed here</span>'+
+            '<strong>'+
+            getForeignPetCount(id)+
+            '/'+
+            getBioDomeForeignCapacity(id)+
+            '</strong>'+
+            '</div>';
+
+        html+=
+            renderStructureUpgradesHtml(
+                id,
+                "bio-dome"
+            );
 
         html+=
             renderStructureDesignerHtml(
