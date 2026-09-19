@@ -6937,6 +6937,14 @@ function feedPet(planetId,petId){
 const PET_STAT_MAX_LEVEL=10;
 
 /*
+ * The absolute highest a stat can ever reach with every Pilot
+ * Training tier bought — used only to size the range/endurance/
+ * survival lookup tables below so they cover every level that
+ * could ever actually be reached, not just the unupgraded base.
+ */
+const PET_STAT_MAX_LEVEL_CEILING=50;
+
+/*
  * How many pets NOT native to this planet a Bio Dome here can
  * have stationed at once — a pet that arrived via ship cargo
  * from somewhere else, unloaded here rather than sent home.
@@ -6948,13 +6956,36 @@ const BIO_DOME_BASE_FOREIGN_CAPACITY=2;
 
 
 /*
- * Range: how many hops from home a pilot can be sent.
+ * These three tables were sized for the old pet stat cap of 3
+ * before Pilot Training's upgrade tiers raised it to 50 — left
+ * unextended, every level past 3 silently fell back to level 1's
+ * numbers (the "|| 0" / "|| PET_SURVIVAL_BASE[1]" fallbacks
+ * elsewhere), meaning training past level 3 did nothing at all.
+ * Generated in a loop now instead of hand-enumerated so they
+ * always cover the real cap, whatever it happens to be.
  */
-const PET_RANGE_HOPS={
-    1:0,
-    2:1,
-    3:2
-};
+
+/*
+ * Range: how many hops from home a pilot can be sent. One more
+ * hop every 5 levels — the actual route graph's max distance
+ * from any planet is only 4 hops (verified against ROUTES), so
+ * this reaches full map coverage around level 20 and simply
+ * holds there for the remaining levels, same as endurance and
+ * survival still have their own reasons to keep training past
+ * that point.
+ */
+const PET_RANGE_HOPS={};
+
+for(
+    let lvl=1;
+    lvl<=PET_STAT_MAX_LEVEL_CEILING;
+    lvl++
+){
+
+    PET_RANGE_HOPS[lvl]=
+        Math.floor(lvl/5);
+
+}
 
 /*
  * Endurance: bonus time (and proportional bonus yield) added
@@ -6963,29 +6994,46 @@ const PET_RANGE_HOPS={
  * lucrative, which is exactly why it also feeds survival risk
  * below rather than being a free upgrade.
  */
-const PET_ENDURANCE_BONUS_SECONDS={
-    1:0,
-    2:40,
-    3:85
-};
+const PET_ENDURANCE_BONUS_SECONDS={};
 
-const PET_ENDURANCE_BONUS_YIELD={
-    1:0,
-    2:3,
-    3:7
-};
+const PET_ENDURANCE_BONUS_YIELD={};
+
+for(
+    let lvl=1;
+    lvl<=PET_STAT_MAX_LEVEL_CEILING;
+    lvl++
+){
+
+    PET_ENDURANCE_BONUS_SECONDS[lvl]=
+        (lvl-1)*8;
+
+    PET_ENDURANCE_BONUS_YIELD[lvl]=
+        Math.round((lvl-1)*1);
+
+}
 
 /*
  * Survival: a base chance per level, BEFORE the duration
  * penalty below is applied — so training survival raises the
  * ceiling, but a longer trip (whether from range or endurance)
- * always eats into it.
+ * always eats into it. Approaches but never quite reaches the
+ * .99 ceiling computeSurvivalChance already clamps to.
  */
-const PET_SURVIVAL_BASE={
-    1:.9,
-    2:.95,
-    3:.98
-};
+const PET_SURVIVAL_BASE={};
+
+for(
+    let lvl=1;
+    lvl<=PET_STAT_MAX_LEVEL_CEILING;
+    lvl++
+){
+
+    PET_SURVIVAL_BASE[lvl]=
+        Math.min(
+            .99,
+            .85+(lvl-1)*.003
+        );
+
+}
 
 const PET_SURVIVAL_PENALTY_PER_MINUTE=.06;
 
@@ -7640,6 +7688,8 @@ function resolveMissions(planetId){
         let materialName=
             null;
 
+        let coinsBrought=0;
+
         if(survived){
 
             /*
@@ -7697,9 +7747,8 @@ function resolveMissions(planetId){
              * pays out in coins instead, so surviving the trip
              * always means bringing something home.
              */
-            let coinsBrought=0;
-
             if(material){
+
 
                 materialsBrought=
                     computeMissionYield(
@@ -7778,6 +7827,7 @@ function resolveMissions(planetId){
                 survived:survived,
                 materials:materialsBrought,
                 materialName:materialName,
+                coins:coinsBrought,
                 resolvedAt:Date.now()
             }
         );
@@ -8949,6 +8999,28 @@ function paintShipCargoPreviews(planetId,ships){
                 }
             );
 
+            if(ship.pendingPilot){
+
+                const pendingCanvas=
+                    document.getElementById(
+                        "pendingPilotPreview_"+
+                        ship.pendingPilot.id
+                    );
+
+                if(
+                    paintOneCargoPetPreview(
+                        pendingCanvas,
+                        ship.pendingPilot,
+                        planetId
+                    )
+                ){
+
+                    anyCanvas=true;
+
+                }
+
+            }
+
             getPets(planetId).forEach(
                 pet=>{
 
@@ -8986,6 +9058,36 @@ function paintShipCargoPreviews(planetId,ships){
 
                 }
             );
+
+        }
+    );
+
+    /*
+     * In-flight pet previews — these pets aren't on any docked
+     * ship at all (they're mid-mission, tracked separately in
+     * planetSave.missions), so they need their own lookup rather
+     * than falling out of the ships.forEach above.
+     */
+    getMissions(planetId).forEach(
+        mission=>{
+
+            const inFlightCanvas=
+                document.getElementById(
+                    "inFlightPetPreview_"+
+                    mission.pet.id
+                );
+
+            if(
+                paintOneCargoPetPreview(
+                    inFlightCanvas,
+                    mission.pet,
+                    planetId
+                )
+            ){
+
+                anyCanvas=true;
+
+            }
 
         }
     );
@@ -22961,13 +23063,11 @@ function renderPlanetDetail(id){
                                 '<div class="ship-bay">'+
                                 '<div class="ship-bay-label">Pilot Bay</div>'+
                                 '<div class="ship-bay-content">'+
-                                '<div class="ship-bay-slot filled">'+
-                                (
-                                    SPECIES_FLOURISH_ICONS[
-                                        ship.pendingPilot.species
-                                    ] || "🐾"
-                                )+
-                                '</div>'+
+                                '<canvas id="pendingPilotPreview_'+
+                                ship.pendingPilot.id+
+                                '" width="38" height="38" '+
+                                'class="ship-bay-slot filled" '+
+                                'style="padding:0;"></canvas>'+
                                 '<span style="font-size:10px;color:#8fa7c7;">'+
                                 (
                                     SPECIES_DISPLAY_NAMES[
@@ -23938,32 +24038,57 @@ function renderPlanetDetail(id){
 
                     html+=
                         '<div style="font-size:9px;color:#70ddff;">'+
-                        'Range Lv.'+rangeLevel+' · Endurance Lv.'+
-                        enduranceLevel+' · Survival Lv.'+
-                        survivalLevel+
-                        '</div>'+
-                        '<div style="font-size:9px;color:#ffd76b;">'+
                         '⭐ '+(pet.pilotPoints || 0)+
                         ' pilot points — earned from net score '+
                         'while this pet rides along as cargo'+
-                        '</div>'+
-                        '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+                        '</div>';
 
+                    /*
+                     * Each stat shown with what it actually does
+                     * and exactly what the next level changes,
+                     * rather than a bare level number — the
+                     * survival/range/endurance numbers all come
+                     * from the same functions the mission cards
+                     * themselves use, so this can never drift out
+                     * of sync with what training actually does.
+                     */
                     [
-                        ["range","Range"],
-                        ["endurance","Endurance"],
-                        ["survival","Survival"]
+                        ["range","Range","🧭",
+                         lvl =>
+                            (PET_RANGE_HOPS[lvl] || 0)+
+                            ' hop'+
+                            ((PET_RANGE_HOPS[lvl] || 0)===1 ? '' : 's')+
+                            ' away, max'
+                        ],
+                        ["endurance","Endurance","⏱",
+                         lvl =>
+                            '+'+
+                            (PET_ENDURANCE_BONUS_SECONDS[lvl] || 0)+
+                            's trip length, +'+
+                            (PET_ENDURANCE_BONUS_YIELD[lvl] || 0)+
+                            ' resources gathered'
+                        ],
+                        ["survival","Survival","🛡",
+                         lvl =>
+                            Math.round(
+                                (PET_SURVIVAL_BASE[lvl] || .85)*100
+                            )+
+                            '% base survival chance'
+                        ]
                     ].forEach(
-                        ([statKey,statLabel])=>{
+                        ([statKey,statLabel,statIcon,describe])=>{
 
                             const statLevel=
                                 getPetStatLevel(
                                     pet,statKey
                                 );
 
+                            const maxLevel=
+                                getPetStatMaxLevel(id);
+
                             const maxed=
                                 statLevel>=
-                                getPetStatMaxLevel(id);
+                                maxLevel;
 
                             const trainCost=
                                 computePilotPointTrainCost(
@@ -23971,8 +24096,15 @@ function renderPlanetDetail(id){
                                 );
 
                             html+=
+                                '<div style="margin-top:6px;padding:6px 8px;'+
+                                'border-radius:8px;background:rgba(0,0,0,.2);">'+
+                                '<div style="display:flex;align-items:center;'+
+                                'justify-content:space-between;">'+
+                                '<span style="font-size:10px;color:#bcecff;">'+
+                                statIcon+' '+statLabel+' Lv.'+statLevel+
+                                '</span>'+
                                 '<button class="control-btn" style="width:auto;'+
-                                'padding:6px 8px;font-size:10px;" '+
+                                'padding:5px 8px;font-size:9px;" '+
                                 'data-action="train-pet-stat" '+
                                 'data-pet="'+pet.id+'" data-stat="'+
                                 statKey+'" '+
@@ -23986,17 +24118,25 @@ function renderPlanetDetail(id){
                                 '>'+
                                 (
                                     maxed
-                                    ?statLabel+' maxed'
-                                    :'Train '+statLabel+
-                                     ' ('+trainCost+' ⭐)'
+                                    ?'Maxed'
+                                    :'Train ('+trainCost+' ⭐)'
                                 )+
-                                '</button>';
+                                '</button>'+
+                                '</div>'+
+                                '<div style="font-size:8.5px;color:#8fa7c7;'+
+                                'margin-top:3px;">'+
+                                'Now: '+describe(statLevel)+
+                                (
+                                    maxed
+                                    ?''
+                                    :'<br>Next: '+
+                                     describe(statLevel+1)
+                                )+
+                                '</div>'+
+                                '</div>';
 
                         }
                     );
-
-                    html+=
-                        '</div>';
 
                 }
 
@@ -24732,14 +24872,10 @@ function renderPlanetDetail(id){
                         'style="flex-shrink:0;background:'+
                         'rgba(0,0,0,.2);border-radius:10px;">'+
                         '</canvas>'+
-                        '<div class="ship-bay-slot filled" '+
-                        'style="width:38px;height:38px;">'+
-                        (
-                            SPECIES_FLOURISH_ICONS[
-                                pet.species
-                            ] || "🐾"
-                        )+
-                        '</div>'+
+                        '<canvas id="pendingPilotPreview_'+
+                        pet.id+'" width="38" height="38" '+
+                        'class="ship-bay-slot filled" '+
+                        'style="padding:0;"></canvas>'+
                         '<span style="font-size:10px;color:#8fa7c7;">'+
                         (
                             SPECIES_DISPLAY_NAMES[
@@ -24802,6 +24938,86 @@ function renderPlanetDetail(id){
                         pShip.id+'" '+
                         (chosenDestId ? '' : 'disabled')+
                         '>Send on Mission</button>'+
+                        '</div>'+
+                        '</div>'+
+                        '</div>';
+
+                }
+            );
+
+        }
+
+        /*
+         * In flight — ships and pilots currently out on a
+         * mission, so there's something to look at besides
+         * silence between sending one off and it resolving.
+         * Progress bar and remaining time both come from the
+         * exact same startedAt/durationSeconds the resolution
+         * logic itself uses, so it can never show something
+         * different from what's actually about to happen.
+         */
+        const flyingMissions=
+            getMissions(id);
+
+        if(flyingMissions.length){
+
+            html+=
+                '<div style="font-size:9px;color:#8fa7c7;'+
+                'margin-top:8px;">In flight:</div>';
+
+            flyingMissions.forEach(
+                mission=>{
+
+                    const elapsed=
+                        (
+                            Date.now()-
+                            mission.startedAt
+                        )/1000;
+
+                    const progress=
+                        clamp(
+                            elapsed/
+                            mission.durationSeconds,
+                            0,1
+                        );
+
+                    const destName=
+                        (
+                            getPlanet(
+                                mission.destinationId
+                            ) || {name:mission.destinationId}
+                        ).name;
+
+                    html+=
+                        '<div class="ship-bay">'+
+                        '<div class="ship-bay-content">'+
+                        '<canvas id="inFlightPetPreview_'+
+                        mission.pet.id+'" width="38" height="38" '+
+                        'class="ship-bay-slot filled" '+
+                        'style="padding:0;"></canvas>'+
+                        '<span style="font-size:10px;color:#8fa7c7;">'+
+                        (
+                            SPECIES_DISPLAY_NAMES[
+                                mission.pet.species
+                            ] || mission.pet.species
+                        )+
+                        ' → '+
+                        (
+                            mission.destinationId===id
+                            ?'local space'
+                            :destName
+                        )+
+                        '<br><span style="opacity:.7;font-size:9px;">'+
+                        formatRemaining(mission)+
+                        '</span>'+
+                        '</span>'+
+                        '</div>'+
+                        '<div style="margin-top:6px;height:4px;'+
+                        'border-radius:2px;background:'+
+                        'rgba(255,255,255,.1);overflow:hidden;">'+
+                        '<div style="height:100%;width:'+
+                        Math.round(progress*100)+
+                        '%;background:rgba(110,220,255,.55);">'+
                         '</div>'+
                         '</div>'+
                         '</div>';
