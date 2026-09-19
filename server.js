@@ -6,97 +6,52 @@ const PORT = process.env.PORT || 3000;
 const WORLD_WIDTH = 1200;
 const WORLD_HEIGHT = 800;
 
-const MAX_ASTEROIDS = 28;
+const TICK = 1000 / 30;
 
-const TICK_RATE = 30;
+const TARGET_ASTEROIDS = 18;
 
 const players = new Map();
 const asteroids = new Map();
 
-let asteroidCounter = 0;
+let asteroidID = 0;
 
 
 /* =========================================================
    UTILITIES
 ========================================================= */
 
-function makeID(){
-
+function id(){
     return Math.random()
         .toString(36)
-        .substring(2,10);
-
+        .slice(2,10);
 }
 
-
-function random(
-    min,
-    max
-){
-
-    return Math.random()*
-        (max-min)+min;
-
+function random(a,b){
+    return a + Math.random()*(b-a);
 }
 
-
-function distance(
-    a,
-    b
-){
-
-    return Math.hypot(
-        a.x-b.x,
-        a.y-b.y
-    );
-
+function clamp(v,a,b){
+    return Math.max(a,Math.min(b,v));
 }
 
+function dist(a,b){
+    return Math.hypot(a.x-b.x,a.y-b.y);
+}
 
-function send(
-    socket,
-    data
-){
-
-    if(
-        socket.readyState===
-        WebSocket.OPEN
-    ){
-
-        socket.send(
-            JSON.stringify(data)
-        );
-
+function send(ws,data){
+    if(ws && ws.readyState === WebSocket.OPEN){
+        ws.send(JSON.stringify(data));
     }
-
 }
 
+function broadcast(data){
+    const text=JSON.stringify(data);
 
-function broadcast(
-    data
-){
-
-    const message=
-        JSON.stringify(data);
-
-    for(
-        const socket
-        of wss.clients
-    ){
-
-        if(
-            socket.readyState===
-            WebSocket.OPEN
-        ){
-
-            socket.send(
-                message
-            );
-
+    for(const ws of wss.clients){
+        if(ws.readyState === WebSocket.OPEN){
+            ws.send(text);
         }
-
     }
-
 }
 
 
@@ -104,63 +59,144 @@ function broadcast(
    ASTEROIDS
 ========================================================= */
 
+function asteroidRadius(size){
+    if(size === 3) return 28;
+    if(size === 2) return 20;
+    return 13;
+}
+
+
+function asteroidSpeed(size){
+    if(size === 3) return random(18,30);
+    if(size === 2) return random(28,45);
+    return random(45,70);
+}
+
+
+/*
+ * Spawn from an edge, just like the original game.
+ */
+
+function edgeSpawn(){
+
+    const side=
+        Math.floor(
+            Math.random()*4
+        );
+
+    const margin=70;
+
+    if(side===0){
+        return {
+            x:-margin,
+            y:random(0,WORLD_HEIGHT)
+        };
+    }
+
+    if(side===1){
+        return {
+            x:WORLD_WIDTH+margin,
+            y:random(0,WORLD_HEIGHT)
+        };
+    }
+
+    if(side===2){
+        return {
+            x:random(0,WORLD_WIDTH),
+            y:-margin
+        };
+    }
+
+    return {
+        x:random(0,WORLD_WIDTH),
+        y:WORLD_HEIGHT+margin
+    };
+}
+
+
+/*
+ * Aim broadly towards the centre, matching the original
+ * asteroid spawning behaviour.
+ */
+
 function createAsteroid(
-    size=null,
     x=null,
-    y=null
+    y=null,
+    size=null
 ){
+
+    const pos=
+        x===null
+        ?edgeSpawn()
+        :{x,y};
+
+    const actualSize=
+        size ||
+        (
+            Math.random()<.18
+            ?3
+            :Math.random()<.38
+            ?2
+            :1
+        );
+
+
+    const targetX=
+        WORLD_WIDTH/2+
+        random(
+            -WORLD_WIDTH*.25,
+            WORLD_WIDTH*.25
+        );
+
+    const targetY=
+        WORLD_HEIGHT/2+
+        random(
+            -WORLD_HEIGHT*.25,
+            WORLD_HEIGHT*.25
+        );
+
+
+    const dx=
+        targetX-pos.x;
+
+    const dy=
+        targetY-pos.y;
+
+    const length=
+        Math.hypot(dx,dy)||1;
+
+    const speed=
+        asteroidSpeed(actualSize);
+
 
     const asteroid={
 
-        id:
-            `a${asteroidCounter++}`,
+        id:"a"+asteroidID++,
 
-        x:
-            x===null
-            ?random(
-                40,
-                WORLD_WIDTH-40
-            )
-            :x,
+        x:pos.x,
 
-        y:
-            y===null
-            ?random(
-                40,
-                WORLD_HEIGHT-40
-            )
-            :y,
+        y:pos.y,
+
+        size:actualSize,
+
+        radius:
+            asteroidRadius(actualSize),
 
         vx:
-            random(
-                -1.4,
-                1.4
-            ),
+            dx/length*speed,
 
         vy:
-            random(
-                -1.4,
-                1.4
-            ),
+            dy/length*speed,
 
-        size:
-            size ||
-            random(
-                22,
-                48
-            ),
+        angle:
+            random(0,Math.PI*2),
 
         rotation:
-            random(
-                0,
-                Math.PI*2
-            ),
+            random(-.015,.015),
 
-        rotationSpeed:
-            random(
-                -.025,
-                .025
-            )
+        hitFlash:0,
+
+        chainQueued:false
 
     };
 
@@ -172,35 +208,117 @@ function createAsteroid(
 
 
     return asteroid;
-
 }
 
 
-function fillAsteroids(){
+function maintainAsteroids(){
 
     while(
         asteroids.size<
-        MAX_ASTEROIDS
+        TARGET_ASTEROIDS
     ){
-
         createAsteroid();
-
     }
 
 }
 
 
-function removeAsteroid(
-    id
-){
+/* =========================================================
+   ASTEROID UPDATE
+========================================================= */
 
-    asteroids.delete(id);
+function updateAsteroids(dt){
+
+    const remove=[];
+
+    for(
+        const a of asteroids.values()
+    ){
+
+        a.x+=a.vx*dt;
+        a.y+=a.vy*dt;
+
+        a.angle+=
+            a.rotation*
+            dt*
+            60;
+
+        if(a.hitFlash>0){
+            a.hitFlash-=dt;
+        }
+
+
+        /*
+         * IMPORTANT:
+         *
+         * No screen wrapping.
+         *
+         * Once an asteroid leaves the field it is simply
+         * removed and another is spawned.
+         */
+
+        const margin=
+            a.radius+80;
+
+        if(
+            a.x < -margin ||
+            a.x > WORLD_WIDTH+margin ||
+            a.y < -margin ||
+            a.y > WORLD_HEIGHT+margin
+        ){
+
+            remove.push(a.id);
+
+        }
+
+    }
+
+
+    for(const id of remove){
+        asteroids.delete(id);
+    }
+
+
+    maintainAsteroids();
 
 }
 
 
 /* =========================================================
-   PLAYERS
+   ASTEROID SERIALISATION
+========================================================= */
+
+function asteroidState(a){
+
+    return {
+
+        id:a.id,
+
+        x:a.x,
+
+        y:a.y,
+
+        vx:a.vx,
+
+        vy:a.vy,
+
+        size:a.size,
+
+        radius:a.radius,
+
+        angle:a.angle,
+
+        rotation:a.rotation,
+
+        hitFlash:a.hitFlash
+
+    };
+
+}
+
+
+/* =========================================================
+   PLAYER
 ========================================================= */
 
 function createPlayer(
@@ -214,14 +332,11 @@ function createPlayer(
 
         socket,
 
-        x:
-            WORLD_WIDTH/2,
+        x:WORLD_WIDTH/2,
 
-        y:
-            WORLD_HEIGHT/2,
+        y:WORLD_HEIGHT/2,
 
-        angle:
-            -Math.PI/2,
+        angle:-Math.PI/2,
 
         lives:3,
 
@@ -238,70 +353,25 @@ function createPlayer(
 }
 
 
-function playerState(
-    player
-){
+function playerState(p){
 
     return {
 
-        id:
-            player.id,
+        id:p.id,
 
-        x:
-            player.x,
+        x:p.x,
 
-        y:
-            player.y,
+        y:p.y,
 
-        angle:
-            player.angle,
+        angle:p.angle,
 
-        lives:
-            player.lives,
+        lives:p.lives,
 
-        score:
-            player.score,
+        score:p.score,
 
-        alive:
-            player.alive,
+        alive:p.alive,
 
-        name:
-            player.name
-
-    };
-
-}
-
-
-function asteroidState(
-    asteroid
-){
-
-    return {
-
-        id:
-            asteroid.id,
-
-        x:
-            asteroid.x,
-
-        y:
-            asteroid.y,
-
-        vx:
-            asteroid.vx,
-
-        vy:
-            asteroid.vy,
-
-        size:
-            asteroid.size,
-
-        rotation:
-            asteroid.rotation,
-
-        rotationSpeed:
-            asteroid.rotationSpeed
+        name:p.name
 
     };
 
@@ -309,125 +379,340 @@ function asteroidState(
 
 
 /* =========================================================
-   WORLD STATE
+   WORLD
 ========================================================= */
 
-function sendWorld(
-    socket
-){
+function worldState(){
 
-    send(
-        socket,
-        {
+    return {
 
-            type:"world",
+        type:"world",
 
-            width:
-                WORLD_WIDTH,
+        width:WORLD_WIDTH,
 
-            height:
-                WORLD_HEIGHT,
+        height:WORLD_HEIGHT,
 
-            players:
-                Array.from(
-                    players.values()
-                ).map(
-                    playerState
-                ),
+        players:
+            [...players.values()]
+            .map(playerState),
 
-            asteroids:
-                Array.from(
-                    asteroids.values()
-                ).map(
-                    asteroidState
-                )
+        asteroids:
+            [...asteroids.values()]
+            .map(asteroidState)
 
-        }
-    );
+    };
 
 }
 
 
+function sendWorld(ws){
+    send(ws,worldState());
+}
+
+
 function broadcastWorld(){
+    broadcast(worldState());
+}
+
+
+/* =========================================================
+   EXPLOSION
+========================================================= */
+
+function detonateAsteroid(
+    player,
+    target
+){
+
+    if(
+        !target ||
+        !asteroids.has(target.id)
+    ){
+        return;
+    }
+
+
+    /*
+     * Remove ONLY the asteroid that was actually tapped.
+     */
+
+    asteroids.delete(
+        target.id
+    );
+
+
+    /*
+     * Original game's power scaling:
+     *
+     * size 3 = 1.8
+     * size 2 = 1.35
+     * size 1 = 1
+     */
+
+    const power=
+        target.size===3
+        ?1.8
+        :target.size===2
+        ?1.35
+        :1;
+
+
+    const radius=
+        110*power;
+
+
+    /*
+     * Deflect nearby asteroids.
+     *
+     * They are NOT destroyed.
+     */
+
+    for(
+        const other
+        of asteroids.values()
+    ){
+
+        const dx=
+            other.x-target.x;
+
+        const dy=
+            other.y-target.y;
+
+        const distance=
+            Math.hypot(dx,dy);
+
+
+        if(
+            distance>=radius ||
+            distance<=1
+        ){
+            continue;
+        }
+
+
+        const falloff=
+            1-
+            distance/radius;
+
+
+        const strength=
+            falloff*
+            220*
+            power;
+
+
+        const nx=
+            dx/distance;
+
+        const ny=
+            dy/distance;
+
+
+        /*
+         * Radial push.
+         */
+
+        other.vx+=
+            nx*strength;
+
+        other.vy+=
+            ny*strength;
+
+
+        /*
+         * Small tangential kick.
+         */
+
+        other.vx+=
+            -ny*
+            strength*
+            .35;
+
+        other.vy+=
+            nx*
+            strength*
+            .35;
+
+
+        other.hitFlash=.18;
+
+
+        /*
+         * Very small chance of a genuine chain reaction,
+         * matching the original concept.
+         */
+
+        const chance=
+            .025+
+            falloff*.12;
+
+
+        if(
+            Math.random()<chance &&
+            !other.chainQueued
+        ){
+
+            other.chainQueued=true;
+
+            setTimeout(
+                ()=>{
+
+                    const current=
+                        asteroids.get(
+                            other.id
+                        );
+
+                    if(current){
+
+                        current.chainQueued=
+                            false;
+
+                        detonateAsteroid(
+                            player,
+                            current
+                        );
+
+                    }
+
+                },
+                random(40,180)
+            );
+
+        }
+
+    }
+
+
+    /*
+     * Split larger asteroids.
+     *
+     * Original:
+     *
+     * size 3 -> 3 size 2
+     * size 2 -> 2 size 1
+     */
+
+    if(
+        target.size>1
+    ){
+
+        const pieces=
+            target.size===3
+            ?3
+            :2;
+
+
+        for(
+            let i=0;
+            i<pieces;
+            i++
+        ){
+
+            const angle=
+                Math.PI*2/pieces*i+
+                random(-.4,.4);
+
+
+            const child=
+                createAsteroid(
+                    target.x+
+                    Math.cos(angle)*15,
+
+                    target.y+
+                    Math.sin(angle)*15,
+
+                    target.size-1
+                );
+
+
+            /*
+             * Split pieces shoot away from the destroyed
+             * asteroid, as in the original.
+             */
+
+            const speed=
+                random(50,120);
+
+
+            child.vx=
+                Math.cos(angle)*speed;
+
+            child.vy=
+                Math.sin(angle)*speed;
+
+        }
+
+    }
+
+
+    /*
+     * Score.
+     */
+
+    const points=
+        target.size===3
+        ?100
+        :target.size===2
+        ?50
+        :24;
+
+
+    player.score+=points;
+
+
+    /*
+     * Send visual explosion.
+     *
+     * No asteroid list is sent here because the next world
+     * snapshot contains the authoritative result.
+     */
 
     broadcast({
 
-        type:"world",
+        type:"blast",
 
-        width:
-            WORLD_WIDTH,
+        x:target.x,
 
-        height:
-            WORLD_HEIGHT,
+        y:target.y,
 
-        players:
-            Array.from(
-                players.values()
-            ).map(
-                playerState
-            ),
+        power,
 
-        asteroids:
-            Array.from(
-                asteroids.values()
-            ).map(
-                asteroidState
-            )
+        asteroidId:target.id
+
+    });
+
+
+    broadcast({
+
+        type:"score",
+
+        playerId:player.id,
+
+        score:player.score
 
     });
 
 }
 
 
-/* =========================================================
-   ASTEROID EXPLOSION / DEFLECTION
-========================================================= */
-
 /*
- * IMPORTANT:
- *
- * The asteroid that was actually tapped is destroyed.
- *
- * The other asteroids nearby are NOT destroyed.
- *
- * They are simply pushed away by the explosion.
- *
- * This mirrors the original game's behaviour.
+ * Find the ONE asteroid under the tap.
  */
 
-function performBlast(
+function blastAt(
     player,
     x,
-    y,
-    blastSize
+    y
 ){
 
-    if(
-        !player.alive
-    ){
-
+    if(!player.alive){
         return;
-
     }
 
 
-    /*
-     * -------------------------------------------------------
-     * STEP 1
-     *
-     * Find the ONE asteroid actually being tapped.
-     * -------------------------------------------------------
-     *
-     * We choose the closest asteroid whose body is under
-     * the tap point.
-     *
-     * This is deliberately NOT the same as the explosion
-     * radius.
-     */
-
     let target=null;
 
-    let targetDistance=Infinity;
+    let closest=Infinity;
 
 
     for(
@@ -443,643 +728,111 @@ function performBlast(
 
 
         /*
-         * A generous tap hitbox makes mobile controls feel
-         * forgiving without allowing the blast to destroy
-         * everything nearby.
+         * Small forgiving hitbox.
+         *
+         * Crucially this is ONLY for selecting the asteroid.
+         * It is NOT the explosion radius.
          */
 
-        const hitRadius=
-            asteroid.size+
-            18;
-
-
         if(
-            d<=hitRadius &&
-            d<targetDistance
+            d<=
+            asteroid.radius+16 &&
+            d<closest
         ){
 
-            target=
-                asteroid;
-
-            targetDistance=
-                d;
+            closest=d;
+            target=asteroid;
 
         }
 
     }
 
-
-    /*
-     * If the player didn't actually tap an asteroid, the
-     * explosion does nothing.
-     */
 
     if(!target){
-
         return;
-
     }
 
 
-    /*
-     * -------------------------------------------------------
-     * STEP 2
-     *
-     * Remove ONLY the asteroid that was tapped.
-     * -------------------------------------------------------
-     */
-
-    const targetX=
-        target.x;
-
-    const targetY=
-        target.y;
-
-    const targetSize=
-        target.size;
-
-
-    removeAsteroid(
-        target.id
+    detonateAsteroid(
+        player,
+        target
     );
-
-
-    /*
-     * Score is based on the asteroid that was actually hit.
-     */
-
-    player.score+=
-        Math.round(
-            targetSize*10
-        );
-
-
-    /*
-     * -------------------------------------------------------
-     * STEP 3
-     *
-     * Explosion power.
-     *
-     * Larger asteroids create a stronger explosion.
-     * -------------------------------------------------------
-     */
-
-    let explosionPower=
-        targetSize>=40
-        ?1.8
-        :targetSize>=30
-        ?1.35
-        :1;
-
-
-    /*
-     * The physical blast radius.
-     */
-
-    const radius=
-        110*
-        explosionPower;
-
-
-    /*
-     * -------------------------------------------------------
-     * STEP 4
-     *
-     * DEFLECT nearby asteroids.
-     *
-     * They survive.
-     *
-     * Their velocity is changed.
-     * -------------------------------------------------------
-     */
-
-    for(
-        const other
-        of asteroids.values()
-    ){
-
-        const dx=
-            other.x-
-            targetX;
-
-        const dy=
-            other.y-
-            targetY;
-
-
-        const dist=
-            Math.hypot(
-                dx,
-                dy
-            );
-
-
-        /*
-         * Ignore rocks outside the explosion.
-         */
-
-        if(
-            dist>=radius ||
-            dist<=1
-        ){
-
-            continue;
-
-        }
-
-
-        /*
-         * How strong is the explosion at this distance?
-         *
-         * 1.0 = directly beside explosion
-         * 0.0 = edge of explosion
-         */
-
-        const falloff=
-            1-
-            dist/radius;
-
-
-        /*
-         * Same basic force relationship as the original game.
-         *
-         * The important part is that this changes velocity
-         * rather than deleting the asteroid.
-         */
-
-        const strength=
-            falloff*
-            220*
-            explosionPower;
-
-
-        /*
-         * Normal pointing AWAY from the explosion.
-         */
-
-        const nx=
-            dx/dist;
-
-        const ny=
-            dy/dist;
-
-
-        /*
-         * Radial kick.
-         */
-
-        other.vx+=
-            nx*
-            strength;
-
-        other.vy+=
-            ny*
-            strength;
-
-
-        /*
-         * Tangential kick.
-         *
-         * This gives the rocks a nice curved / chaotic
-         * deflection rather than every asteroid simply flying
-         * directly away from the blast.
-         */
-
-        other.vx+=
-            -ny*
-            strength*
-            .35;
-
-        other.vy+=
-            nx*
-            strength*
-            .35;
-
-
-        /*
-         * Give the client a little visual feedback.
-         */
-
-        other.hitFlash=
-            .18;
-
-
-        /*
-         * ---------------------------------------------------
-         * SMALL CHAIN REACTION CHANCE
-         * ---------------------------------------------------
-         *
-         * Being near a blast can occasionally trigger another
-         * asteroid.
-         *
-         * This is deliberately LOW.
-         *
-         * The normal behaviour is:
-         *
-         *       💥 asteroid
-         *          ↓
-         *      nearby rocks
-         *       ↙ ↓ ↘
-         *     💨 💨 💨
-         *
-         * NOT:
-         *
-         *       💥
-         *      💥💥💥
-         */
-
-        const chance=
-            .025+
-            falloff*
-            .12;
-
-
-        if(
-            Math.random()<
-            chance
-        ){
-
-            /*
-             * Queue a delayed chain reaction.
-             *
-             * Re-check that the asteroid still exists before
-             * detonating it.
-             */
-
-            const asteroidId=
-                other.id;
-
-
-            setTimeout(
-                ()=>{
-
-                    const chained=
-                        asteroids.get(
-                            asteroidId
-                        );
-
-
-                    if(
-                        !chained
-                    ){
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * Chain detonation destroys THIS asteroid,
-                     * then deflects the ones around it.
-                     */
-
-                    performChainExplosion(
-                        player,
-                        chained
-                    );
-
-                },
-                random(
-                    60,
-                    180
-                )
-            );
-
-        }
-
-    }
-
-
-    /*
-     * -------------------------------------------------------
-     * STEP 5
-     *
-     * Split the destroyed asteroid.
-     *
-     * This is intentionally done AFTER the explosion force is
-     * applied, so the nearby original rocks are pushed away.
-     * -------------------------------------------------------
-     */
-
-    if(
-        targetSize>34
-    ){
-
-        const childSize=
-            targetSize*.58;
-
-
-        const childCount=2;
-
-
-        for(
-            let i=0;
-            i<childCount;
-            i++
-        ){
-
-            const angle=
-                Math.PI*2/
-                childCount*
-                i+
-                random(
-                    -.4,
-                    .4
-                );
-
-
-            const child=
-                createAsteroid(
-                    childSize,
-
-                    targetX+
-                    Math.cos(angle)*
-                    15,
-
-                    targetY+
-                    Math.sin(angle)*
-                    15
-                );
-
-
-            /*
-             * Shards fly away from the destroyed asteroid.
-             */
-
-            const speed=
-                random(
-                    1.8,
-                    3.5
-                );
-
-
-            child.vx=
-                Math.cos(angle)*
-                speed;
-
-            child.vy=
-                Math.sin(angle)*
-                speed;
-
-        }
-
-    }
-
-
-    /*
-     * Send the visual explosion to everyone.
-     */
-
-    broadcast({
-
-        type:"blast",
-
-        playerId:
-            player.id,
-
-        x:
-            targetX,
-
-        y:
-            targetY,
-
-        size:
-            32,
-
-        destroyed:[
-            target.id
-        ]
-
-    });
-
-
-    /*
-     * Update score.
-
-     */
-
-    broadcast({
-
-        type:"score",
-
-        playerId:
-            player.id,
-
-        score:
-            player.score
-
-    });
 
 }
 
 
 /* =========================================================
-   CHAIN EXPLOSION
+   PLAYER COLLISION
 ========================================================= */
 
-/*
- * Same rules as a normal explosion, except there is no
- * additional player input.
- *
- * The asteroid itself dies.
- *
- * Nearby asteroids are deflected.
- */
-
-function performChainExplosion(
-    player,
-    target
-){
-
-    if(
-        !asteroids.has(
-            target.id
-        )
-    ){
-
-        return;
-
-    }
-
-
-    const targetX=
-        target.x;
-
-    const targetY=
-        target.y;
-
-    const targetSize=
-        target.size;
-
-
-    removeAsteroid(
-        target.id
-    );
-
-
-    player.score+=
-        Math.round(
-            targetSize*10
-        );
-
-
-    let explosionPower=
-        targetSize>=40
-        ?1.8
-        :targetSize>=30
-        ?1.35
-        :1;
-
-
-    const radius=
-        110*
-        explosionPower;
-
-
-    /*
-     * Deflect neighbours.
-     */
+function checkPlayerCollisions(){
 
     for(
-        const other
-        of asteroids.values()
+        const player
+        of players.values()
     ){
 
-        const dx=
-            other.x-
-            targetX;
-
-        const dy=
-            other.y-
-            targetY;
-
-        const dist=
-            Math.hypot(
-                dx,
-                dy
-            );
-
-
-        if(
-            dist>=radius ||
-            dist<=1
-        ){
-
+        if(!player.alive){
             continue;
-
         }
 
 
-        const falloff=
-            1-
-            dist/radius;
+        /*
+         * Same basic collision concept as the original:
+         *
+         * player radius ≈ 30
+         */
+
+        for(
+            const asteroid
+            of asteroids.values()
+        ){
+
+            const d=
+                Math.hypot(
+                    player.x-asteroid.x,
+                    player.y-asteroid.y
+                );
 
 
-        const strength=
-            falloff*
-            220*
-            explosionPower;
+            if(
+                d<
+                asteroid.radius+30
+            ){
 
+                killPlayer(
+                    player
+                );
 
-        const nx=
-            dx/dist;
+                break;
 
-        const ny=
-            dy/dist;
+            }
 
-
-        other.vx+=
-            nx*
-            strength;
-
-        other.vy+=
-            ny*
-            strength;
-
-
-        other.vx+=
-            -ny*
-            strength*
-            .35;
-
-        other.vy+=
-            nx*
-            strength*
-            .35;
-
-
-        other.hitFlash=
-            .18;
+        }
 
     }
-
-
-    /*
-     * Tell clients about the chain explosion.
-     */
-
-    broadcast({
-
-        type:"blast",
-
-        playerId:
-            player.id,
-
-        x:
-            targetX,
-
-        y:
-            targetY,
-
-        size:
-            32,
-
-        destroyed:[
-            target.id
-        ]
-
-    });
-
-
-    broadcast({
-
-        type:"score",
-
-        playerId:
-            player.id,
-
-        score:
-            player.score
-
-    });
 
 }
 
 
 /* =========================================================
-   PLAYER DAMAGE
+   PLAYER DEATH
 ========================================================= */
 
 function killPlayer(
     player
 ){
 
-    if(
-        !player.alive
-    ){
-
+    if(!player.alive){
         return;
-
     }
 
 
     player.lives--;
 
-    player.alive=
-        false;
+    player.alive=false;
 
-    player.respawnTimer=
-        90;
+    player.respawnTimer=90;
 
 
     send(
@@ -1088,8 +841,7 @@ function killPlayer(
 
             type:"death",
 
-            lives:
-                player.lives
+            lives:player.lives
 
         }
     );
@@ -1099,18 +851,12 @@ function killPlayer(
 
         type:"playerDeath",
 
-        id:
-            player.id,
+        id:player.id,
 
-        lives:
-            player.lives
+        lives:player.lives
 
     });
 
-
-    /*
-     * No lives remaining.
-     */
 
     if(
         player.lives<=0
@@ -1122,8 +868,7 @@ function killPlayer(
 
                 type:"gameOver",
 
-                score:
-                    player.score
+                score:player.score
 
             }
         );
@@ -1143,26 +888,18 @@ function respawnPlayer(
 
     player.x=
         WORLD_WIDTH/2+
-        random(
-            -120,
-            120
-        );
+        random(-100,100);
 
     player.y=
         WORLD_HEIGHT/2+
-        random(
-            -120,
-            120
-        );
+        random(-100,100);
 
     player.angle=
         -Math.PI/2;
 
-    player.alive=
-        true;
+    player.alive=true;
 
-    player.respawnTimer=
-        0;
+    player.respawnTimer=0;
 
 
     send(
@@ -1172,9 +909,7 @@ function respawnPlayer(
             type:"respawn",
 
             player:
-                playerState(
-                    player
-                )
+                playerState(player)
 
         }
     );
@@ -1185,9 +920,7 @@ function respawnPlayer(
         type:"playerRespawn",
 
         player:
-            playerState(
-                player
-            )
+            playerState(player)
 
     });
 
@@ -1195,201 +928,48 @@ function respawnPlayer(
 
 
 /* =========================================================
-   ASTEROID PHYSICS
+   UPDATE PLAYERS
 ========================================================= */
 
-function updateWorld(){
-
-    /*
-     * Move asteroids.
-     */
-
-    for(
-        const asteroid
-        of asteroids.values()
-    ){
-
-        asteroid.x+=
-            asteroid.vx;
-
-        asteroid.y+=
-            asteroid.vy;
-
-
-        asteroid.rotation+=
-            asteroid.rotationSpeed;
-
-
-        /*
-         * World wrapping.
-         */
-
-        if(
-            asteroid.x<
-            -asteroid.size
-        ){
-
-            asteroid.x=
-                WORLD_WIDTH+
-                asteroid.size;
-
-        }
-
-
-        if(
-            asteroid.x>
-            WORLD_WIDTH+
-            asteroid.size
-        ){
-
-            asteroid.x=
-                -asteroid.size;
-
-        }
-
-
-        if(
-            asteroid.y<
-            -asteroid.size
-        ){
-
-            asteroid.y=
-                WORLD_HEIGHT+
-                asteroid.size;
-
-        }
-
-
-        if(
-            asteroid.y>
-            WORLD_HEIGHT+
-            asteroid.size
-        ){
-
-            asteroid.y=
-                -asteroid.size;
-
-        }
-
-
-        /*
-         * Limit maximum speed.
-         *
-         * Explosions can give a very large impulse, so this
-         * keeps the field playable.
-         */
-
-        const speed=
-            Math.hypot(
-                asteroid.vx,
-                asteroid.vy
-            );
-
-
-        const maxSpeed=
-            7;
-
-
-        if(
-            speed>
-            maxSpeed
-        ){
-
-            asteroid.vx=
-                asteroid.vx/
-                speed*
-                maxSpeed;
-
-            asteroid.vy=
-                asteroid.vy/
-                speed*
-                maxSpeed;
-
-        }
-
-    }
-
-
-    /*
-     * Player collisions.
-     */
+function updatePlayers(){
 
     for(
         const player
         of players.values()
     ){
 
-        if(
-            !player.alive
-        ){
-
-            if(
-                player.respawnTimer>0
-            ){
-
-                player.respawnTimer--;
-
-            }
-
-
-            if(
-                player.respawnTimer<=0 &&
-                player.lives>0
-            ){
-
-                respawnPlayer(
-                    player
-                );
-
-            }
-
+        if(player.alive){
             continue;
-
         }
 
 
-        for(
-            const asteroid
-            of asteroids.values()
+        if(
+            player.lives<=0
+        ){
+            continue;
+        }
+
+
+        player.respawnTimer--;
+
+
+        if(
+            player.respawnTimer<=0
         ){
 
-            const d=
-                distance(
-                    player,
-                    asteroid
-                );
-
-
-            if(
-                d<
-                asteroid.size+
-                18
-            ){
-
-                killPlayer(
-                    player
-                );
-
-                break;
-
-            }
+            respawnPlayer(
+                player
+            );
 
         }
 
     }
 
-
-    /*
-     * Maintain asteroid population.
-     */
-
-    fillAsteroids();
-
 }
 
 
 /* =========================================================
-   HTTP SERVER
+   HTTP
 ========================================================= */
 
 const httpServer=
@@ -1413,15 +993,12 @@ const httpServer=
 
 
 /* =========================================================
-   WEBSOCKET SERVER
+   WEBSOCKET
 ========================================================= */
 
 const wss=
     new WebSocket.Server({
-
-        server:
-            httpServer
-
+        server:httpServer
     });
 
 
@@ -1429,36 +1006,30 @@ wss.on(
     "connection",
     socket=>{
 
-        const id=
-            makeID();
-
+        const playerID=id();
 
         const player=
             createPlayer(
-                id,
+                playerID,
                 socket
             );
 
 
         players.set(
-            id,
+            playerID,
             player
         );
 
 
-        socket.playerId=
-            id;
+        socket.playerID=
+            playerID;
 
 
         console.log(
             "Player connected:",
-            id
+            playerID
         );
 
-
-        /*
-         * Permanent ID for this connection.
-         */
 
         send(
             socket,
@@ -1466,7 +1037,7 @@ wss.on(
 
                 type:"welcome",
 
-                id,
+                id:playerID,
 
                 worldWidth:
                     WORLD_WIDTH,
@@ -1478,10 +1049,6 @@ wss.on(
         );
 
 
-        /*
-         * Send current universe.
-         */
-
         sendWorld(
             socket
         );
@@ -1492,9 +1059,7 @@ wss.on(
             type:"playerJoined",
 
             player:
-                playerState(
-                    player
-                )
+                playerState(player)
 
         });
 
@@ -1503,12 +1068,11 @@ wss.on(
             "message",
             raw=>{
 
-                let message;
-
+                let msg;
 
                 try{
 
-                    message=
+                    msg=
                         JSON.parse(
                             raw.toString()
                         );
@@ -1520,18 +1084,14 @@ wss.on(
                 }
 
 
-                const currentPlayer=
+                const p=
                     players.get(
-                        id
+                        playerID
                     );
 
 
-                if(
-                    !currentPlayer
-                ){
-
+                if(!p){
                     return;
-
                 }
 
 
@@ -1540,48 +1100,26 @@ wss.on(
                 ----------------------------------------- */
 
                 if(
-                    message.type===
-                    "join"
+                    msg.type==="join"
                 ){
 
                     if(
-                        typeof
-                        message.name===
-                        "string" &&
-                        message.name.trim()
+                        typeof msg.name==="string"
                     ){
 
-                        currentPlayer.name=
-                            message.name
+                        p.name=
+                            msg.name
                             .trim()
-                            .substring(
-                                0,
-                                16
-                            );
+                            .slice(0,16)
+                            ||
+                            "Rocket";
 
                     }
 
 
-                    sendWorld(
-                        socket
-                    );
-
-
-                    broadcast({
-
-                        type:
-                            "playerUpdated",
-
-                        player:
-                            playerState(
-                                currentPlayer
-                            )
-
-                    });
-
+                    sendWorld(socket);
 
                     return;
-
                 }
 
 
@@ -1590,79 +1128,59 @@ wss.on(
                 ----------------------------------------- */
 
                 if(
-                    message.type===
-                    "state"
+                    msg.type==="state"
                 ){
 
-                    if(
-                        !currentPlayer.alive
-                    ){
-
+                    if(!p.alive){
                         return;
-
                     }
 
 
-                    const x=
-                        Number(
-                            message.x
-                        );
-
-                    const y=
-                        Number(
-                            message.y
-                        );
-
-                    const angle=
-                        Number(
-                            message.angle
-                        );
-
-
                     if(
-                        Number.isFinite(x)
+                        Number.isFinite(
+                            Number(msg.x)
+                        )
                     ){
 
-                        currentPlayer.x=
-                            Math.max(
+                        p.x=
+                            clamp(
+                                Number(msg.x),
                                 0,
-                                Math.min(
-                                    WORLD_WIDTH,
-                                    x
-                                )
+                                WORLD_WIDTH
                             );
 
                     }
 
 
                     if(
-                        Number.isFinite(y)
+                        Number.isFinite(
+                            Number(msg.y)
+                        )
                     ){
 
-                        currentPlayer.y=
-                            Math.max(
+                        p.y=
+                            clamp(
+                                Number(msg.y),
                                 0,
-                                Math.min(
-                                    WORLD_HEIGHT,
-                                    y
-                                )
+                                WORLD_HEIGHT
                             );
 
                     }
 
 
                     if(
-                        Number.isFinite(angle)
+                        Number.isFinite(
+                            Number(msg.angle)
+                        )
                     ){
 
-                        currentPlayer.angle=
-                            angle;
+                        p.angle=
+                            Number(msg.angle);
 
                     }
 
 
                     return;
-
                 }
 
 
@@ -1671,82 +1189,30 @@ wss.on(
                 ----------------------------------------- */
 
                 if(
-                    message.type===
-                    "blast"
+                    msg.type==="blast"
                 ){
-
-                    if(
-                        !currentPlayer.alive
-                    ){
-
-                        return;
-
-                    }
-
 
                     const x=
-                        Number(
-                            message.x
-                        );
+                        Number(msg.x);
 
                     const y=
-                        Number(
-                            message.y
-                        );
+                        Number(msg.y);
 
 
                     if(
-                        !Number.isFinite(x) ||
-                        !Number.isFinite(y)
+                        Number.isFinite(x) &&
+                        Number.isFinite(y)
                     ){
 
-                        return;
+                        blastAt(
+                            p,
+                            x,
+                            y
+                        );
 
                     }
 
-
-                    /*
-                     * IMPORTANT:
-                     *
-                     * The server ignores the client's requested
-                     * blast size for destruction.
-                     *
-                     * It finds the actual asteroid under the tap.
-                     */
-
-                    performBlast(
-
-                        currentPlayer,
-
-                        x,
-
-                        y,
-
-                        32
-
-                    );
-
-
                     return;
-
-                }
-
-
-                /* -----------------------------------------
-                   REQUEST WORLD
-                ----------------------------------------- */
-
-                if(
-                    message.type===
-                    "requestWorld"
-                ){
-
-                    sendWorld(
-                        socket
-                    );
-
-                    return;
-
                 }
 
             }
@@ -1758,20 +1224,16 @@ wss.on(
             ()=>{
 
                 /*
-                 * Death does NOT reach this code.
+                 * IMPORTANT:
                  *
-                 * Only a genuine WebSocket disconnect removes
+                 * Only a real WebSocket disconnect removes
                  * the player.
+                 *
+                 * Dying does NOT create another player.
                  */
 
                 players.delete(
-                    id
-                );
-
-
-                console.log(
-                    "Player disconnected:",
-                    id
+                    playerID
                 );
 
 
@@ -1779,21 +1241,14 @@ wss.on(
 
                     type:"playerLeft",
 
-                    id
+                    id:playerID
 
                 });
 
-            }
-        );
-
-
-        socket.on(
-            "error",
-            error=>{
 
                 console.log(
-                    "WebSocket error:",
-                    error.message
+                    "Player disconnected:",
+                    playerID
                 );
 
             }
@@ -1803,55 +1258,40 @@ wss.on(
 
 
 /* =========================================================
-   INITIAL ASTEROIDS
+   START
 ========================================================= */
 
-fillAsteroids();
+maintainAsteroids();
 
-
-/* =========================================================
-   SERVER GAME LOOP
-========================================================= */
 
 setInterval(
-
     ()=>{
 
-        updateWorld();
+        const dt=
+            TICK/1000;
+
+        updateAsteroids(dt);
+
+        updatePlayers();
+
+        checkPlayerCollisions();
+
+        maintainAsteroids();
 
         broadcastWorld();
 
     },
-
-    1000/TICK_RATE
-
+    TICK
 );
 
 
-/* =========================================================
-   START SERVER
-========================================================= */
-
 httpServer.listen(
-
     PORT,
-
     "0.0.0.0",
-
     ()=>{
-
         console.log(
-            `Rocket Impact Multiplayer Server running on port ${PORT}`
+            "Rocket Impact Multiplayer running on port",
+            PORT
         );
-
-        console.log(
-            `World: ${WORLD_WIDTH} x ${WORLD_HEIGHT}`
-        );
-
-        console.log(
-            `Asteroids: ${MAX_ASTEROIDS}`
-        );
-
     }
-
 );
