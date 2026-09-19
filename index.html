@@ -3417,6 +3417,8 @@ and (max-height:500px){
 
             </button>
 
+            <div id="pauseShipCardContent"></div>
+
         </div>
 
         <div
@@ -6621,6 +6623,48 @@ function getPets(planetId){
 }
 
 /*
+ * A pet assigned as a ship's pending pilot is deliberately taken
+ * out of getPets(planetId) — it's committed to that ship, not
+ * available to feed to other ships or send on cargo runs. But it
+ * still needs to be feedable while it waits there, so anything
+ * that looks a pet up by id to act on it (feeding, mainly) should
+ * go through this instead of getPets().find() directly, since it
+ * checks both the planet's own roster and every docked ship's
+ * pendingPilot.
+ */
+function getPetByIdAtPlanet(planetId,petId){
+
+    const rosterPet=
+        getPets(planetId).find(
+            p => p.id===petId
+        );
+
+    if(rosterPet)
+        return rosterPet;
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    for(
+        const ship of ships
+    ){
+
+        if(
+            ship.pendingPilot &&
+            ship.pendingPilot.id===
+            petId
+        )
+            return ship.pendingPilot;
+
+    }
+
+    return null;
+
+}
+
+/*
  * Exponential per-planet pricing, as requested — each
  * additional pet costs meaningfully more than the last, at
  * whichever planet you're buying it at.
@@ -6875,12 +6919,9 @@ function buyPet(planetId){
 
 function feedPet(planetId,petId){
 
-    const pets=
-        getPets(planetId);
-
     const pet=
-        pets.find(
-            p => p.id===petId
+        getPetByIdAtPlanet(
+            planetId,petId
         );
 
     if(
@@ -6988,6 +7029,100 @@ for(
 }
 
 /*
+ * The actual route graph's max hop distance from any planet,
+ * verified by BFS against ROUTES — once a pilot's single-leg
+ * range reaches this, every planet is already reachable in one
+ * hop, so from here on, more range training instead unlocks
+ * multi-stop routes: visiting more than one planet on the same
+ * trip. Range levels that don't land on the next 5-level hop
+ * threshold aren't wasted either — PET_RANGE_BONUS_SECONDS below
+ * gives every single level its own small, immediate benefit.
+ */
+const MAP_MAX_HOPS=4;
+
+/*
+ * Flat extra time (and matching yield bonus, applied in
+ * launchPendingMission/resolveMissions) each stop past the
+ * first adds to a multi-stop route — representing time actually
+ * spent visiting and gathering there, on top of the travel time
+ * the hop-based formulas already account for.
+ */
+const MULTI_STOP_OVERHEAD_SECONDS=30;
+
+const MULTI_STOP_YIELD_BONUS=3;
+
+const MULTI_STOP_UNLOCK_LEVEL=
+    (
+        () => {
+
+            for(
+                let lvl=1;
+                lvl<=PET_STAT_MAX_LEVEL_CEILING;
+                lvl++
+            ){
+
+                if(
+                    PET_RANGE_HOPS[lvl]>=
+                    MAP_MAX_HOPS
+                )
+                    return lvl;
+
+            }
+
+            return PET_STAT_MAX_LEVEL_CEILING;
+
+        }
+    )();
+
+/*
+ * How many total destinations (first stop plus any added ones)
+ * a route can have at a given range level — 1 below the
+ * multi-stop unlock, then growing slowly past it.
+ */
+function getMaxRouteStops(rangeLevel){
+
+    if(rangeLevel<MULTI_STOP_UNLOCK_LEVEL)
+        return 1;
+
+    return Math.min(
+        5,
+        2+Math.floor(
+            (rangeLevel-MULTI_STOP_UNLOCK_LEVEL)/10
+        )
+    );
+
+}
+
+/*
+ * Bonus time (and proportional yield) from range levels that
+ * DON'T land on the next 5-level hop threshold — resets to 0
+ * right as a new hop unlocks, then climbs back up through that
+ * bracket, so every single point of range training does
+ * something immediately instead of four out of every five
+ * levels being invisible until the fifth landed.
+ */
+const PET_RANGE_BONUS_SECONDS={};
+
+const PET_RANGE_BONUS_YIELD={};
+
+for(
+    let lvl=1;
+    lvl<=PET_STAT_MAX_LEVEL_CEILING;
+    lvl++
+){
+
+    const bracketPosition=
+        lvl%5;
+
+    PET_RANGE_BONUS_SECONDS[lvl]=
+        bracketPosition*10;
+
+    PET_RANGE_BONUS_YIELD[lvl]=
+        bracketPosition;
+
+}
+
+/*
  * Endurance: bonus time (and proportional bonus yield) added
  * ON TOP of the base travel time for whatever distance was
  * chosen — training this makes every trip longer AND more
@@ -7036,6 +7171,19 @@ for(
 }
 
 const PET_SURVIVAL_PENALTY_PER_MINUTE=.06;
+
+/*
+ * How much energy a mission costs the pet, on top of whatever it
+ * already used up working the planet before launch — farther
+ * trips cost more. Applied once the mission resolves (survived
+ * or not), never at launch, so the survival roll above always
+ * uses the energy the pet actually had when it left.
+ */
+function computeMissionEnergyCost(hops){
+
+    return 20+hops*8;
+
+}
 
 function getPetStatLevel(pet,statName){
 
@@ -7233,23 +7381,37 @@ function getReachablePlanets(homeId,rangeLevel){
 
 }
 
-function computeMissionDuration(hops,enduranceLevel){
+function computeMissionDuration(hops,enduranceLevel,rangeLevel){
 
     return 45+hops*45+
         (
             PET_ENDURANCE_BONUS_SECONDS[
                 enduranceLevel
             ] || 0
+        )+
+        (
+            rangeLevel===undefined
+            ?0
+            :PET_RANGE_BONUS_SECONDS[
+                rangeLevel
+            ] || 0
         );
 
 }
 
-function computeMissionYield(hops,enduranceLevel){
+function computeMissionYield(hops,enduranceLevel,rangeLevel){
 
     return 2+hops*3+
         (
             PET_ENDURANCE_BONUS_YIELD[
                 enduranceLevel
+            ] || 0
+        )+
+        (
+            rangeLevel===undefined
+            ?0
+            :PET_RANGE_BONUS_YIELD[
+                rangeLevel
             ] || 0
         );
 
@@ -7260,7 +7422,7 @@ function computeMissionYield(hops,enduranceLevel){
  * from distance (range) or lingering (endurance) — training
  * survival raises the ceiling, but never removes the tradeoff.
  */
-function computeSurvivalChance(survivalLevel,totalDurationSeconds){
+function computeSurvivalChance(survivalLevel,totalDurationSeconds,energy){
 
     const base=
         PET_SURVIVAL_BASE[
@@ -7268,12 +7430,23 @@ function computeSurvivalChance(survivalLevel,totalDurationSeconds){
         ] ||
         PET_SURVIVAL_BASE[1];
 
-    const penalty=
+    const durationPenalty=
         (totalDurationSeconds/60)*
         PET_SURVIVAL_PENALTY_PER_MINUTE;
 
+    /*
+     * A tired pet is a riskier pilot — energy is 0-100, and
+     * anything below full costs a slice of survival chance on
+     * top of the usual duration penalty. At 0 energy that's a
+     * full 20-point hit; at 100 it's nothing at all.
+     */
+    const energyPenalty=
+        energy===undefined
+        ?0
+        :(100-energy)*.002;
+
     return clamp(
-        base-penalty,
+        base-durationPenalty-energyPenalty,
         .25,
         .99
     );
@@ -7413,6 +7586,8 @@ function assignPendingPilot(planetId,shipId,petId){
 
     ship.pendingDestinationId=null;
 
+    ship.pendingRouteStops=[];
+
     expandedShipPilotId=null;
 
     savePlanetProgress();
@@ -7466,6 +7641,8 @@ function cancelPendingPilot(planetId,shipId){
 
     ship.pendingDestinationId=null;
 
+    ship.pendingRouteStops=[];
+
     savePlanetProgress();
 
     showShipToast(
@@ -7500,6 +7677,124 @@ function setPendingMissionDestination(
 
     ship.pendingDestinationId=
         destinationId;
+
+    /*
+     * Changing the first stop invalidates any extra stops chosen
+     * after it — they were only reachable relative to the old
+     * first stop.
+     */
+    ship.pendingRouteStops=[];
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function addPendingStop(
+    planetId,shipId,destinationId
+){
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    const ship=
+        ships.find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !ship.pendingPilot ||
+        !ship.pendingDestinationId
+    )
+        return;
+
+    const pet=
+        ship.pendingPilot;
+
+    const rangeLevel=
+        getPetStatLevel(
+            pet,"range"
+        );
+
+    const route=
+        [
+            ship.pendingDestinationId
+        ].concat(
+            ship.pendingRouteStops || []
+        );
+
+    if(
+        route.length>=
+        getMaxRouteStops(rangeLevel)
+    )
+        return;
+
+    if(
+        route.includes(destinationId)
+    )
+        return;
+
+    const lastStop=
+        route[route.length-1];
+
+    const legHops=
+        computeHopDistance(
+            lastStop,
+            destinationId
+        );
+
+    const legRange=
+        PET_RANGE_HOPS[
+            rangeLevel
+        ] || 0;
+
+    if(legHops>legRange)
+        return;
+
+    if(!ship.pendingRouteStops){
+
+        ship.pendingRouteStops=[];
+
+    }
+
+    ship.pendingRouteStops.push(
+        destinationId
+    );
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
+function removePendingStop(planetId,shipId){
+
+    const ships=
+        planetId==="earth"
+        ?(planetSave.ships.earth || [])
+        :(getShips(planetId) || []);
+
+    const ship=
+        ships.find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !ship.pendingRouteStops ||
+        !ship.pendingRouteStops.length
+    )
+        return;
+
+    ship.pendingRouteStops.pop();
 
     savePlanetProgress();
 
@@ -7541,13 +7836,18 @@ function launchPendingMission(planetId,shipId){
     const pet=
         ship.pendingPilot;
 
-    const destinationId=
-        ship.pendingDestinationId;
-
-    const hops=
-        computeHopDistance(
-            planetId,
-            destinationId
+    /*
+     * The full route is the first-picked destination plus any
+     * extra stops added on top of it — for a pilot below the
+     * multi-stop unlock, pendingRouteStops is always empty, so
+     * this collapses back to exactly the old single-destination
+     * behavior.
+     */
+    const route=
+        [
+            ship.pendingDestinationId
+        ].concat(
+            ship.pendingRouteStops || []
         );
 
     const range=
@@ -7557,8 +7857,36 @@ function launchPendingMission(planetId,shipId){
             )
         ] || 0;
 
-    if(hops>range)
-        return;
+    let totalHops=0;
+
+    let legFrom=
+        planetId;
+
+    for(
+        const stopId of route
+    ){
+
+        const legHops=
+            computeHopDistance(
+                legFrom,
+                stopId
+            );
+
+        if(legHops>range)
+            return;
+
+        totalHops+=
+            legHops;
+
+        legFrom=
+            stopId;
+
+    }
+
+    const destinationId=
+        route[
+            route.length-1
+        ];
 
     ships.splice(
         shipIndex,
@@ -7568,6 +7896,8 @@ function launchPendingMission(planetId,shipId){
     ship.pendingPilot=null;
 
     ship.pendingDestinationId=null;
+
+    ship.pendingRouteStops=[];
 
     if(!planetSave.missions){
 
@@ -7592,16 +7922,33 @@ function launchPendingMission(planetId,shipId){
             pet,"endurance"
         );
 
+    const rangeLevel=
+        getPetStatLevel(
+            pet,"range"
+        );
+
     const survivalLevel=
         getPetStatLevel(
             pet,"survival"
         );
 
+    const extraStops=
+        route.length-1;
+
+    /*
+     * Each extra stop past the first adds a flat chunk of time
+     * (spent actually visiting and gathering there) and a flat
+     * yield bonus, on top of the usual hop/endurance/range-based
+     * formulas covering the travel itself.
+     */
     const durationSeconds=
         computeMissionDuration(
-            hops,
-            enduranceLevel
-        );
+            totalHops,
+            enduranceLevel,
+            rangeLevel
+        )+
+        extraStops*
+        MULTI_STOP_OVERHEAD_SECONDS;
 
     planetSave.missions[
         planetId
@@ -7609,8 +7956,11 @@ function launchPendingMission(planetId,shipId){
         ship:ship,
         pet:pet,
         destinationId:destinationId,
-        hops:hops,
+        route:route,
+        hops:totalHops,
+        extraStops:extraStops,
         survivalLevel:survivalLevel,
+        energyAtLaunch:pet.energy,
         startedAt:Date.now(),
         durationSeconds:durationSeconds
     });
@@ -7622,7 +7972,15 @@ function launchPendingMission(planetId,shipId){
         (
             getPlanet(destinationId) ||
             {name:destinationId}
-        ).name+"!"
+        ).name+
+        (
+            extraStops
+            ?" (via "+extraStops+
+             " extra stop"+
+             (extraStops===1 ? "" : "s")+
+             ")"
+            :""
+        )+"!"
     );
 
     renderPlanetDetail(
@@ -7680,7 +8038,11 @@ function resolveMissions(planetId){
                     mission.pet,
                     "survival"
                 ),
-                mission.durationSeconds
+                mission.durationSeconds,
+                mission.energyAtLaunch!==
+                undefined
+                ?mission.energyAtLaunch
+                :mission.pet.energy
             );
 
         let materialsBrought=0;
@@ -7703,29 +8065,39 @@ function resolveMissions(planetId){
                 mission.ship
             );
 
-            if(!planetSave.pets){
+            /*
+             * A mission costs energy whether it succeeds or
+             * not — this is applied after the survival roll
+             * above, which always used the energy the pet had
+             * AT LAUNCH, so a long string of missions gradually
+             * wears a pet down and makes the next one riskier,
+             * rather than every roll silently using an
+             * already-drained number.
+             */
+            mission.pet.energy=
+                clamp(
+                    mission.pet.energy-
+                    computeMissionEnergyCost(
+                        mission.hops
+                    ),
+                    0,100
+                );
 
-                planetSave.pets={};
+            /*
+             * The pilot stays with the ship that flew it rather
+             * than going back into the general roster — ready to
+             * be sent straight back out from the same Pilot
+             * Training card, destination re-picked from scratch.
+             * Feeding a tired pilot back up is still possible
+             * from right there while it's assigned, so a low
+             * survival chance on the next trip is never a dead
+             * end.
+             */
+            mission.ship.pendingPilot=
+                mission.pet;
 
-            }
-
-            if(
-                !planetSave.pets[
-                    planetId
-                ]
-            ){
-
-                planetSave.pets[
-                    planetId
-                ]=[];
-
-            }
-
-            planetSave.pets[
-                planetId
-            ].push(
-                mission.pet
-            );
+            mission.ship.pendingDestinationId=
+                null;
 
             const destinationSpecial=
                 getPlanetSpecial(
@@ -7740,23 +8112,58 @@ function resolveMissions(planetId){
                 :null;
 
             /*
-             * A successful mission should never come back
-             * completely empty-handed — if the destination has
-             * no special material of its own (Stay Local, or
-             * anywhere without one), the same yield formula
-             * pays out in coins instead, so surviving the trip
-             * always means bringing something home.
+             * Yield is randomised per mission rather than a
+             * fixed number for a given hop/endurance combo, and
+             * when a destination does have its own special
+             * material, the haul is split randomly between that
+             * material and coins rather than being all-or-
+             * nothing — so a mission to a material-rich planet
+             * still usually brings back some coins too, not just
+             * a stack of one material and nothing else.
              */
+            const baseYield=
+                computeMissionYield(
+                    mission.hops,
+                    getPetStatLevel(
+                        mission.pet,
+                        "endurance"
+                    ),
+                    getPetStatLevel(
+                        mission.pet,
+                        "range"
+                    )
+                )+
+                (mission.extraStops || 0)*
+                MULTI_STOP_YIELD_BONUS;
+
+            const totalYield=
+                Math.max(
+                    1,
+                    Math.round(
+                        baseYield*
+                        (.75+Math.random()*.5)
+                    )
+                );
+
             if(material){
 
+                const materialShare=
+                    .4+Math.random()*.4;
 
                 materialsBrought=
-                    computeMissionYield(
-                        mission.hops,
-                        getPetStatLevel(
-                            mission.pet,
-                            "endurance"
+                    Math.max(
+                        1,
+                        Math.round(
+                            totalYield*
+                            materialShare
                         )
+                    );
+
+                coinsBrought=
+                    Math.max(
+                        0,
+                        totalYield-
+                        materialsBrought
                     );
 
                 materialName=
@@ -7768,16 +8175,19 @@ function resolveMissions(planetId){
                     materialsBrought
                 );
 
+                if(coinsBrought>0){
+
+                    addToBank(
+                        planetId,
+                        coinsBrought
+                    );
+
+                }
+
             }else{
 
                 coinsBrought=
-                    computeMissionYield(
-                        mission.hops,
-                        getPetStatLevel(
-                            mission.pet,
-                            "endurance"
-                        )
-                    );
+                    totalYield;
 
                 addToBank(
                     planetId,
@@ -7794,7 +8204,14 @@ function resolveMissions(planetId){
                     ) || {name:mission.destinationId}
                 ).name+
                 (
-                    material
+                    materialsBrought &&
+                    coinsBrought
+                    ?" with "+
+                     materialsBrought+" "+
+                     materialName+" and "+
+                     coinsBrought+" "+
+                     COIN_ICON_HTML
+                    :materialsBrought
                     ?" with "+
                      materialsBrought+" "+
                      materialName
@@ -12384,8 +12801,8 @@ function feedPerkFoodToPet(planetId,petId,perkId){
         return;
 
     const pet=
-        getPets(planetId).find(
-            p => p.id===petId
+        getPetByIdAtPlanet(
+            planetId,petId
         );
 
     if(
@@ -23059,6 +23476,13 @@ function renderPlanetDetail(id){
 
                         if(ship.pendingPilot){
 
+                            const pilotFoodCost=
+                                PET_FOOD_COST;
+
+                            const canFeedPilot=
+                                ship.pendingPilot.energy<100 &&
+                                getBank(id)>=pilotFoodCost;
+
                             html+=
                                 '<div class="ship-bay">'+
                                 '<div class="ship-bay-label">Pilot Bay</div>'+
@@ -23075,12 +23499,24 @@ function renderPlanetDetail(id){
                                     ] || ship.pendingPilot.species
                                 )+
                                 ' assigned — pick a destination '+
-                                'in Pilot Training</span>'+
+                                'in Pilot Training'+
+                                '<br>Energy '+
+                                Math.round(ship.pendingPilot.energy)+
+                                '%</span>'+
                                 '</div>'+
-                                '<button class="control-btn" style="width:auto;'+
-                                'padding:6px 8px;margin-top:8px;font-size:10px;" '+
+                                '<div style="display:flex;gap:6px;margin-top:8px;">'+
+                                '<button class="control-btn" style="flex:1;'+
+                                'padding:6px 8px;font-size:10px;" '+
+                                'data-action="feed-pet" data-pet="'+
+                                ship.pendingPilot.id+'" '+
+                                (canFeedPilot ? '' : 'disabled')+
+                                '>Feed ('+pilotFoodCost+' '+
+                                COIN_ICON_HTML+')</button>'+
+                                '<button class="control-btn" style="flex:1;'+
+                                'padding:6px 8px;font-size:10px;" '+
                                 'data-action="cancel-pending-pilot" data-ship="'+
-                                ship.id+'">Cancel assignment</button>'+
+                                ship.id+'">Cancel</button>'+
+                                '</div>'+
                                 '</div>';
 
                         }else{
@@ -24058,7 +24494,13 @@ function renderPlanetDetail(id){
                             (PET_RANGE_HOPS[lvl] || 0)+
                             ' hop'+
                             ((PET_RANGE_HOPS[lvl] || 0)===1 ? '' : 's')+
-                            ' away, max'
+                            ' away, max'+
+                            (
+                                lvl<MULTI_STOP_UNLOCK_LEVEL
+                                ?''
+                                :', '+getMaxRouteStops(lvl)+
+                                 '-stop routes'
+                            )
                         ],
                         ["endurance","Endurance","⏱",
                          lvl =>
@@ -24820,10 +25262,13 @@ function renderPlanetDetail(id){
                     const pet=
                         pShip.pendingPilot;
 
+                    const rangeLevel=
+                        getPetStatLevel(pet,"range");
+
                     const reachable=
                         getReachablePlanets(
                             id,
-                            getPetStatLevel(pet,"range")
+                            rangeLevel
                         );
 
                     const chosenDestId=
@@ -24836,25 +25281,59 @@ function renderPlanetDetail(id){
                         )
                         :null;
 
+                    const routeStops=
+                        pShip.pendingRouteStops || [];
+
+                    const fullRoute=
+                        chosenDestId
+                        ?[chosenDestId].concat(routeStops)
+                        :[];
+
+                    const maxStops=
+                        getMaxRouteStops(rangeLevel);
+
+                    const multiStopUnlocked=
+                        rangeLevel>=
+                        MULTI_STOP_UNLOCK_LEVEL;
+
                     let missionMeta="";
 
                     if(chosenDest){
 
-                        const hops=
-                            computeHopDistance(
-                                id,chosenDestId
-                            );
+                        let totalHops=0;
+
+                        let legFrom=id;
+
+                        fullRoute.forEach(
+                            stopId=>{
+
+                                totalHops+=
+                                    computeHopDistance(
+                                        legFrom,stopId
+                                    );
+
+                                legFrom=stopId;
+
+                            }
+                        );
+
+                        const extraStops=
+                            fullRoute.length-1;
 
                         const duration=
                             computeMissionDuration(
-                                hops,
-                                getPetStatLevel(pet,"endurance")
-                            );
+                                totalHops,
+                                getPetStatLevel(pet,"endurance"),
+                                rangeLevel
+                            )+
+                            extraStops*
+                            MULTI_STOP_OVERHEAD_SECONDS;
 
                         const survival=
                             computeSurvivalChance(
                                 getPetStatLevel(pet,"survival"),
-                                duration
+                                duration,
+                                pet.energy
                             );
 
                         missionMeta=
@@ -24863,6 +25342,33 @@ function renderPlanetDetail(id){
                             '% survival';
 
                     }
+
+                    /*
+                     * Once range training has unlocked full
+                     * single-hop map coverage (see
+                     * MULTI_STOP_UNLOCK_LEVEL), more range levels
+                     * instead unlock chaining extra stops onto
+                     * the same trip — reachable relative to
+                     * wherever the route currently ends, not
+                     * back from the launch planet.
+                     */
+                    const canAddStop=
+                        multiStopUnlocked &&
+                        chosenDestId &&
+                        fullRoute.length<maxStops;
+
+                    const stopOptions=
+                        canAddStop
+                        ?getReachablePlanets(
+                            fullRoute[
+                                fullRoute.length-1
+                            ],
+                            rangeLevel
+                        ).filter(
+                            d =>
+                                !fullRoute.includes(d.id)
+                        )
+                        :[];
 
                     html+=
                         '<div class="ship-bay">'+
@@ -24882,9 +25388,17 @@ function renderPlanetDetail(id){
                                 pet.species
                             ] || pet.species
                         )+
+                        ' — Energy '+
+                        Math.round(pet.energy)+'%'+
                         (
                             missionMeta
-                            ?' → '+chosenDest.name+
+                            ?' → '+
+                             fullRoute.map(
+                                stopId =>
+                                    stopId===id
+                                    ?'local'
+                                    :(getPlanet(stopId) || {name:stopId}).name
+                             ).join(' → ')+
                              '<br><span style="opacity:.7;'+
                              'font-size:9px;">'+missionMeta+
                              '</span>'
@@ -24894,7 +25408,8 @@ function renderPlanetDetail(id){
                         '</div>'+
                         '<div class="ship-bay-sub">'+
                         '<span style="font-size:9px;color:#8fa7c7;">'+
-                        'Destination:</span>'+
+                        (chosenDestId ? 'First stop:' : 'Destination:')+
+                        '</span>'+
                         reachable.map(
                             dest=>{
 
@@ -24920,7 +25435,43 @@ function renderPlanetDetail(id){
 
                             }
                         ).join('')+
+                        (
+                            canAddStop && stopOptions.length
+                            ?'<span style="font-size:9px;color:#8fa7c7;'+
+                             'margin-top:6px;display:block;">'+
+                             'Add a stop ('+fullRoute.length+'/'+
+                             maxStops+'):</span>'+
+                             stopOptions.map(
+                                dest =>
+                                    '<button class="shape-btn" style="width:100%;'+
+                                    'text-align:left;padding:7px 10px;font-size:11px;" '+
+                                    'data-action="add-pending-stop" data-ship="'+
+                                    pShip.id+'" data-destination="'+dest.id+'">'+
+                                    getPlanetIconHtml(dest.id)+' '+dest.name+
+                                    '</button>'
+                             ).join('')
+                            :''
+                        )+
+                        (
+                            routeStops.length
+                            ?'<button class="control-btn" style="width:100%;'+
+                             'margin-top:6px;padding:6px 8px;font-size:10px;" '+
+                             'data-action="remove-pending-stop" data-ship="'+
+                             pShip.id+'">Remove last stop</button>'
+                            :''
+                        )+
                         '<div style="display:flex;gap:6px;margin-top:6px;">'+
+                        '<button class="control-btn" style="flex:1;'+
+                        'padding:7px 10px;font-size:10px;" '+
+                        'data-action="feed-pet" data-pet="'+
+                        pet.id+'" '+
+                        (
+                            pet.energy>=100 ||
+                            getBank(id)<PET_FOOD_COST
+                            ?'disabled'
+                            :''
+                        )+
+                        '>Feed</button>'+
                         '<button class="control-btn" style="flex:1;'+
                         'padding:7px 10px;font-size:10px;" '+
                         'data-action="cancel-pending-pilot" data-ship="'+
@@ -26095,6 +26646,30 @@ document
                 planetDetailId,
                 shipId,
                 destinationId
+            );
+
+        }else if(
+            action==="add-pending-stop"
+        ){
+
+            const destinationId=
+                target.getAttribute(
+                    "data-destination"
+                );
+
+            addPendingStop(
+                planetDetailId,
+                shipId,
+                destinationId
+            );
+
+        }else if(
+            action==="remove-pending-stop"
+        ){
+
+            removePendingStop(
+                planetDetailId,
+                shipId
             );
 
         }else if(
@@ -39451,6 +40026,8 @@ function pauseGame(){
         true
     );
 
+    renderPauseShipCard();
+
     pauseScreen.classList.remove(
         "hidden"
     );
@@ -41330,6 +41907,291 @@ function renderFleetOverview(){
 
     container.innerHTML=
         html;
+
+}
+
+/*
+ * A read-only view of the ship actually being flown right now —
+ * the ship-builder's own card stripped down to viewing only, no
+ * vault, no swapping style or equipment, since none of that
+ * makes sense mid-flight anyway. Shown at the top of the pause
+ * menu's own Menu tab, the first thing visible on pausing.
+ */
+function renderPauseShipCard(){
+
+    const container=
+        document.getElementById(
+            "pauseShipCardContent"
+        );
+
+    if(!container)
+        return;
+
+    if(!currentShipId){
+
+        container.innerHTML=
+            "";
+
+        return;
+
+    }
+
+    const equippedInfo=
+        getItemInfo(
+            currentShipEquipment
+        );
+
+    const perk=
+        currentShipPerk
+        ?PERKS[currentShipPerk]
+        :null;
+
+    const perk2=
+        currentShipHasDualPerk &&
+        currentShipPerk2
+        ?PERKS[currentShipPerk2]
+        :null;
+
+    const materialEntries=
+        Object.entries(
+            runMaterials || {}
+        ).filter(
+            ([,count]) => count>0
+        );
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+
+        ROCKET_ICON_HTML+' Current Ship</div>'+
+        '<div class="subtitle" style="text-align:center;'+
+        'margin-bottom:10px;">Read-only while flying — full '+
+        'editing is back at the ship\'s home planet</div>'+
+        '<canvas id="pauseShipPreview" width="90" height="90" '+
+        'style="display:block;margin:0 auto 10px;"></canvas>'+
+
+        '<div class="ship-bay">'+
+        '<div class="ship-bay-label">Equipped</div>'+
+        '<div class="ship-bay-content">'+
+        '<div class="ship-bay-slot filled">'+
+        getItemIconHtml(currentShipEquipment)+
+        '</div>'+
+        '<span style="font-size:10px;color:#8fa7c7;">'+
+        equippedInfo.name+'</span>'+
+        '</div></div>';
+
+    if(perk || perk2){
+
+        html+=
+            '<div class="ship-bay">'+
+            '<div class="ship-bay-label">Perks</div>'+
+            '<div class="ship-bay-content" style="flex-direction:'+
+            'column;align-items:flex-start;gap:4px;">';
+
+        if(perk){
+
+            html+=
+                '<span style="font-size:10px;color:#8fa7c7;">'+
+                perk.icon+' '+perk.name+'</span>';
+
+        }
+
+        if(perk2){
+
+            html+=
+                '<span style="font-size:10px;color:#8fa7c7;">'+
+                perk2.icon+' '+perk2.name+'</span>';
+
+        }
+
+        html+=
+            '</div></div>';
+
+    }
+
+    html+=
+        '<div class="ship-bay">'+
+        '<div class="ship-bay-label">Cargo</div>';
+
+    if(
+        currentShipCargoPets &&
+        currentShipCargoPets.length
+    ){
+
+        html+=
+            '<div class="ship-bay-sub">';
+
+        currentShipCargoPets.forEach(
+            pet=>{
+
+                html+=
+                    '<div style="display:flex;align-items:'+
+                    'center;gap:8px;padding:4px 0;">'+
+                    '<canvas id="pauseCargoPreview_'+pet.id+
+                    '" width="28" height="28"></canvas>'+
+                    '<span style="font-size:10px;color:#8fa7c7;">'+
+                    (
+                        SPECIES_DISPLAY_NAMES[pet.species] ||
+                        pet.species
+                    )+' — Energy '+
+                    Math.round(pet.energy)+'%</span>'+
+                    '</div>';
+
+            }
+        );
+
+        html+=
+            '</div>';
+
+    }else{
+
+        html+=
+            '<div class="ship-bay-content">'+
+            '<span style="font-size:10px;color:#5c7ba0;">'+
+            'No pets riding along this flight.</span>'+
+            '</div>';
+
+    }
+
+    html+=
+        '</div>';
+
+    if(materialEntries.length){
+
+        html+=
+            '<div class="ship-bay">'+
+            '<div class="ship-bay-label">Materials this run</div>'+
+            '<div class="ship-bay-content" style="flex-wrap:'+
+            'wrap;gap:8px;">';
+
+        materialEntries.forEach(
+            ([materialId,count])=>{
+
+                html+=
+                    '<span style="font-size:11px;'+
+                    'white-space:nowrap;">'+
+                    getMaterialIconHtml(materialId)+
+                    count+'</span>';
+
+            }
+        );
+
+        html+=
+            '</div></div>';
+
+    }
+
+    html+=
+        '</div>';
+
+    container.innerHTML=
+        html;
+
+    paintPauseShipPreview();
+
+}
+
+function paintPauseShipPreview(){
+
+    if(
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    const canvas=
+        document.getElementById(
+            "pauseShipPreview"
+        );
+
+    if(canvas){
+
+        const ctx2d=
+            canvas.getContext("2d");
+
+        ctx2d.clearRect(
+            0,0,
+            canvas.width,
+            canvas.height
+        );
+
+        const syntheticShip=
+            {
+                styleId:currentShipStyleId,
+                perk:currentShipPerk,
+                cargoPets:
+                    currentShipCargoPets || []
+            };
+
+        const cargoPetInfo=
+            getCargoPetPreviewInfo(
+                syntheticShip
+            );
+
+        try{
+
+            ctx2d.save();
+
+            ctx2d.translate(
+                canvas.width/2,
+                canvas.height/2
+            );
+
+            ctx2d.scale(.16,.16);
+
+            ctx2d.translate(
+                -200,-140
+            );
+
+            drawCargoAura(
+                ctx2d,
+                cargoPetInfo
+            );
+
+            getShipStyleShapes(
+                currentShipStyleId
+            ).forEach(
+                shape=>{
+
+                    shape.draw(
+                        ctx2d,
+                        false,
+                        cargoPetInfo,
+                        currentShipPerk
+                    );
+
+                }
+            );
+
+            ctx2d.restore();
+
+        }catch(error){
+
+            console.error(
+                "Pause ship preview draw failed:",
+                error
+            );
+
+        }
+
+    }
+
+    (currentShipCargoPets || []).forEach(
+        pet=>{
+
+            const petCanvas=
+                document.getElementById(
+                    "pauseCargoPreview_"+
+                    pet.id
+                );
+
+            paintOneCargoPetPreview(
+                petCanvas,
+                pet,
+                pet.homePlanetId
+            );
+
+        }
+    );
 
 }
 
