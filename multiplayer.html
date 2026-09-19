@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
 <meta charset="UTF-8">
@@ -48,8 +49,10 @@ canvas{
     left:0;
     width:100%;
     padding:12px 14px;
+
     display:flex;
     justify-content:space-between;
+
     z-index:5;
     pointer-events:none;
 }
@@ -84,12 +87,16 @@ canvas{
 
 #status{
     position:fixed;
+
     top:70px;
     left:50%;
+
     transform:translateX(-50%);
+
     z-index:5;
 
     padding:5px 12px;
+
     border-radius:20px;
 
     background:
@@ -102,19 +109,25 @@ canvas{
 
 #dot{
     display:inline-block;
+
     width:7px;
     height:7px;
+
     border-radius:50%;
+
     background:#ff4d4d;
+
     margin-right:5px;
 }
 
 .overlay{
     position:fixed;
     inset:0;
+
     z-index:20;
 
     display:flex;
+
     align-items:center;
     justify-content:center;
 
@@ -130,6 +143,7 @@ canvas{
 
 .panel{
     width:min(400px,100%);
+
     padding:30px 22px;
 
     text-align:center;
@@ -165,13 +179,16 @@ h1{
 
 button{
     width:100%;
+
     padding:16px;
+
     margin-top:10px;
 
     border:0;
     border-radius:14px;
 
     color:white;
+
     font-size:17px;
     font-weight:800;
 
@@ -202,11 +219,88 @@ button{
     margin:15px;
 }
 
+
+/* =========================================================
+   SUBTLE HITBOX INDICATOR
+========================================================= */
+
+#hitboxHint{
+    position:fixed;
+
+    left:50%;
+    top:50%;
+
+    width:50px;
+    height:66px;
+
+    transform:
+        translate(-50%,-50%)
+        rotate(0deg);
+
+    border:
+        1px solid
+        rgba(90,220,255,.22);
+
+    border-radius:
+        48% 48% 42% 42%;
+
+    box-shadow:
+        0 0 7px
+        rgba(70,210,255,.16);
+
+    pointer-events:none;
+
+    z-index:4;
+
+    opacity:.65;
+
+    transition:
+        opacity .2s,
+        box-shadow .2s;
+}
+
+#hitboxHint.dragging{
+    opacity:.95;
+
+    border-color:
+        rgba(100,230,255,.5);
+
+    box-shadow:
+        0 0 12px
+        rgba(70,220,255,.32);
+}
+
+#hitboxHint.invulnerable{
+    animation:
+        shieldPulse .55s
+        ease-in-out
+        infinite alternate;
+}
+
+@keyframes shieldPulse{
+
+    from{
+        opacity:.35;
+        box-shadow:
+            0 0 5px
+            rgba(100,220,255,.15);
+    }
+
+    to{
+        opacity:.9;
+        box-shadow:
+            0 0 13px
+            rgba(100,220,255,.42);
+    }
+
+}
+
 </style>
 
 </head>
 
 <body>
+
 
 <canvas id="game"></canvas>
 
@@ -259,6 +353,9 @@ button{
 </div>
 
 
+<div id="hitboxHint"></div>
+
+
 <div
     class="overlay"
     id="menu"
@@ -280,20 +377,17 @@ button{
 
             <br><br>
 
-            Tap an asteroid to destroy it.
+            Tap asteroids to destroy them.
 
             <br>
 
-            The explosion blasts nearby
-            asteroids away.
+            Drag from your rocket to move.
 
         </div>
-
 
         <button id="play">
             ▶ PLAY
         </button>
-
 
         <button
             class="secondary"
@@ -322,8 +416,10 @@ button{
             GAME OVER
         </h1>
 
-        <div class="finalScore"
-             id="finalScore">
+        <div
+            class="finalScore"
+            id="finalScore"
+        >
             0
         </div>
 
@@ -331,11 +427,9 @@ button{
             SCORE
         </div>
 
-
         <button id="again">
             🚀 PLAY AGAIN
         </button>
-
 
         <button
             class="secondary"
@@ -350,6 +444,7 @@ button{
 
 
 <script>
+
 
 /* =========================================================
    SERVER
@@ -381,23 +476,14 @@ function resize(){
             2
         );
 
-    W=
-        innerWidth;
+    W=innerWidth;
+    H=innerHeight;
 
-    H=
-        innerHeight;
+    canvas.width=W*dpr;
+    canvas.height=H*dpr;
 
-    canvas.width=
-        W*dpr;
-
-    canvas.height=
-        H*dpr;
-
-    canvas.style.width=
-        W+"px";
-
-    canvas.style.height=
-        H+"px";
+    canvas.style.width=W+"px";
+    canvas.style.height=H+"px";
 
     ctx.setTransform(
         dpr,0,0,dpr,0,0
@@ -442,11 +528,9 @@ let score=0;
 
 let lives=3;
 
-let players=
-    new Map();
+let players=new Map();
 
-let asteroids=
-    new Map();
+let asteroids=new Map();
 
 let particles=[];
 
@@ -456,31 +540,212 @@ let shockwaves=[];
 
 
 /* =========================================================
-   PLAYER
+   LOCAL PLAYER
 ========================================================= */
 
 const me={
 
     x:600,
-
     y:400,
 
     angle:-Math.PI/2,
 
-    alive:true
+    alive:true,
+
+    invulnerableUntil:0
 
 };
 
 
-let targetX=
-    W/2;
-
-let targetY=
-    H/2;
-
 let vx=0;
-
 let vy=0;
+
+
+/*
+ * Movement is now based on a drag that begins on the rocket.
+ */
+
+let dragging=false;
+
+let pointerID=null;
+
+let dragStartX=0;
+let dragStartY=0;
+
+let targetX=W/2;
+let targetY=H/2;
+
+
+/* =========================================================
+   HITBOX GEOMETRY
+========================================================= */
+
+const ROCKET_HITBOX=[
+
+    {x:0,y:-22},
+
+    {x:-9,y:9},
+
+    {x:-6,y:13},
+
+    {x:0,y:8},
+
+    {x:6,y:13},
+
+    {x:9,y:9}
+
+];
+
+
+/*
+ * Same polygon is used visually and for determining whether
+ * a pointer-down started on the rocket.
+ */
+
+function rotatePoint(
+    x,
+    y,
+    angle
+){
+
+    const c=Math.cos(angle);
+    const s=Math.sin(angle);
+
+    return {
+
+        x:x*c-y*s,
+        y:x*s+y*c
+
+    };
+
+}
+
+
+function pointInPolygon(
+    px,
+    py,
+    polygon
+){
+
+    let inside=false;
+
+    for(
+        let i=0,
+        j=polygon.length-1;
+
+        i<polygon.length;
+
+        j=i++
+    ){
+
+        const xi=polygon[i].x;
+        const yi=polygon[i].y;
+
+        const xj=polygon[j].x;
+        const yj=polygon[j].y;
+
+
+        const intersect=
+            (
+                yi>py
+            ) !==
+            (
+                yj>py
+            ) &&
+            px<
+            (
+                xj-xi
+            )*
+            (
+                py-yi
+            )/
+            (
+                yj-yi
+            )+
+            xi;
+
+
+        if(intersect){
+            inside=!inside;
+        }
+
+    }
+
+    return inside;
+
+}
+
+
+function pointerInsideRocket(
+    screenX,
+    screenY
+){
+
+    /*
+     * Local rocket is centred on screen.
+     */
+
+    const dx=
+        screenX-W/2;
+
+    const dy=
+        screenY-H/2;
+
+
+    /*
+     * Transform pointer into rocket-local coordinates.
+     */
+
+    const local=
+        rotatePoint(
+            dx,
+            dy,
+            -(
+                me.angle+
+                Math.PI/2
+            )
+        );
+
+
+    /*
+     * Small 5px tolerance so the ship doesn't feel
+     * frustratingly difficult to grab.
+     */
+
+    const polygon=
+        ROCKET_HITBOX.map(
+            p=>({
+
+                x:p.x,
+                y:p.y
+
+            })
+        );
+
+
+    if(
+        pointInPolygon(
+            local.x,
+            local.y,
+            polygon
+        )
+    ){
+        return true;
+    }
+
+
+    /*
+     * Slight forgiving area around the hull.
+     */
+
+    return (
+        Math.hypot(
+            local.x,
+            local.y
+        )<16
+    );
+
+}
 
 
 /* =========================================================
@@ -498,7 +763,6 @@ for(
     stars.push({
 
         x:Math.random(),
-
         y:Math.random(),
 
         r:
@@ -540,14 +804,16 @@ const dot=
 const finalScore=
     document.getElementById("finalScore");
 
+const hitboxHint=
+    document.getElementById("hitboxHint");
+
 
 function status(
     text,
     online
 ){
 
-    statusText.textContent=
-        text;
+    statusText.textContent=text;
 
     dot.style.background=
         online
@@ -574,14 +840,44 @@ function updateHUD(){
 
     }
 
-    livesUI.textContent=
-        hearts;
+    livesUI.textContent=hearts;
 
-    scoreUI.textContent=
-        score;
+    scoreUI.textContent=score;
 
     playersUI.textContent=
         players.size;
+
+}
+
+
+function updateHitboxUI(){
+
+    hitboxHint.classList.toggle(
+        "dragging",
+        dragging
+    );
+
+
+    const invulnerable=
+        Date.now()<
+        me.invulnerableUntil;
+
+
+    hitboxHint.classList.toggle(
+        "invulnerable",
+        invulnerable
+    );
+
+
+    /*
+     * Match the actual rocket orientation.
+     */
+
+    hitboxHint.style.transform=
+        `
+        translate(-50%,-50%)
+        rotate(${me.angle+Math.PI/2}rad)
+        `;
 
 }
 
@@ -631,7 +927,6 @@ function connect(){
         send({
 
             type:"join",
-
             name:"Rocket"
 
         });
@@ -645,12 +940,16 @@ function connect(){
             let m;
 
             try{
+
                 m=
                     JSON.parse(
                         event.data
                     );
+
             }catch{
+
                 return;
+
             }
 
             receive(m);
@@ -674,8 +973,7 @@ function connect(){
                 setTimeout(
                     ()=>{
 
-                        reconnectTimer=
-                            null;
+                        reconnectTimer=null;
 
                         connect();
 
@@ -720,7 +1018,7 @@ function send(data){
 
 
 /* =========================================================
-   RECEIVE WORLD
+   RECEIVE
 ========================================================= */
 
 function receive(m){
@@ -731,11 +1029,8 @@ function receive(m){
 
         myID=m.id;
 
-        worldW=
-            m.worldWidth;
-
-        worldH=
-            m.worldHeight;
+        worldW=m.worldWidth;
+        worldH=m.worldHeight;
 
         return;
 
@@ -760,11 +1055,17 @@ function receive(m){
         players.set(
             m.player.id,
             {
+
                 ...m.player,
 
                 drawX:m.player.x,
                 drawY:m.player.y,
-                drawAngle:m.player.angle
+                drawAngle:m.player.angle,
+
+                netX:m.player.x,
+                netY:m.player.y,
+                netAngle:m.player.angle
+
             }
         );
 
@@ -779,9 +1080,7 @@ function receive(m){
         m.type==="playerLeft"
     ){
 
-        players.delete(
-            m.id
-        );
+        players.delete(m.id);
 
         updateHUD();
 
@@ -791,43 +1090,75 @@ function receive(m){
 
 
     if(
-        m.type==="playerDeath"
+        m.type==="playerHit"
     ){
 
         const p=
-            players.get(
-                m.id
+            players.get(m.id);
+
+
+        if(p){
+
+            p.lives=m.lives;
+
+        }
+
+
+        if(
+            m.id===myID
+        ){
+
+            lives=m.lives;
+
+            me.invulnerableUntil=
+                m.invulnerableUntil;
+
+
+            createExplosion(
+                me.x,
+                me.y,
+                .75
             );
+
+
+            updateHUD();
+
+        }
+
+        return;
+
+    }
+
+
+    if(
+        m.type==="hit"
+    ){
+
+        lives=m.lives;
+
+        me.invulnerableUntil=
+            m.invulnerableUntil;
+
+        updateHUD();
+
+        return;
+
+    }
+
+
+    if(
+        m.type==="playerGameOver"
+    ){
+
+        const p=
+            players.get(m.id);
+
 
         if(p){
 
             p.alive=false;
 
         }
-
-        updateHUD();
-
-        return;
-
-    }
-
-
-    if(
-        m.type==="playerRespawn"
-    ){
-
-        players.set(
-            m.player.id,
-            {
-                ...m.player,
-
-                drawX:m.player.x,
-                drawY:m.player.y,
-                drawAngle:m.player.angle
-            }
-        );
-
-        updateHUD();
 
         return;
 
@@ -842,8 +1173,7 @@ function receive(m){
             m.playerId===myID
         ){
 
-            score=
-                m.score;
+            score=m.score;
 
             scoreUI.textContent=
                 score;
@@ -871,64 +1201,10 @@ function receive(m){
 
 
     if(
-        m.type==="death"
-    ){
-
-        lives=
-            m.lives;
-
-        me.alive=false;
-
-        createExplosion(
-            me.x,
-            me.y,
-            1.3
-        );
-
-        updateHUD();
-
-        return;
-
-    }
-
-
-    if(
-        m.type==="respawn"
-    ){
-
-        me.x=
-            m.player.x;
-
-        me.y=
-            m.player.y;
-
-        me.angle=
-            m.player.angle;
-
-        me.alive=true;
-
-        lives=
-            m.player.lives;
-
-        score=
-            m.player.score;
-
-        vx=0;
-        vy=0;
-
-        updateHUD();
-
-        return;
-
-    }
-
-
-    if(
         m.type==="gameOver"
     ){
 
-        score=
-            m.score;
+        score=m.score;
 
         showGameOver();
 
@@ -947,23 +1223,16 @@ function syncWorld(m){
     worldH=m.height;
 
 
-    /*
-     * Players.
-     */
-
     const newPlayers=
         new Map();
 
 
     for(
-        const p
-        of m.players
+        const p of m.players
     ){
 
         const old=
-            players.get(
-                p.id
-            );
+            players.get(p.id);
 
 
         if(old){
@@ -975,7 +1244,9 @@ function syncWorld(m){
             old.alive=p.alive;
             old.lives=p.lives;
             old.score=p.score;
-            old.name=p.name;
+
+            old.invulnerable=
+                p.invulnerable;
 
             newPlayers.set(
                 p.id,
@@ -1009,32 +1280,19 @@ function syncWorld(m){
     }
 
 
-    players=
-        newPlayers;
+    players=newPlayers;
 
-
-    /*
-     * Asteroids.
-     *
-     * The server is authoritative.
-     *
-     * We interpolate the trajectory but never invent
-     * another asteroid.
-     */
 
     const newAsteroids=
         new Map();
 
 
     for(
-        const a
-        of m.asteroids
+        const a of m.asteroids
     ){
 
         const old=
-            asteroids.get(
-                a.id
-            );
+            asteroids.get(a.id);
 
 
         if(old){
@@ -1091,30 +1349,25 @@ function syncWorld(m){
     }
 
 
-    asteroids=
-        newAsteroids;
+    asteroids=newAsteroids;
 
-
-    /*
-     * Local player state.
-     */
 
     const mine=
-        players.get(
-            myID
-        );
+        players.get(myID);
 
 
     if(mine){
 
-        lives=
-            mine.lives;
+        lives=mine.lives;
 
-        score=
-            mine.score;
+        score=mine.score;
 
-        me.alive=
-            mine.alive;
+        me.alive=mine.alive;
+
+        me.invulnerableUntil=
+            mine.invulnerable
+            ?Date.now()+100
+            :0;
 
     }
 
@@ -1125,7 +1378,7 @@ function syncWorld(m){
 
 
 /* =========================================================
-   ASTEROID INTERPOLATION
+   ASTEROIDS
 ========================================================= */
 
 function updateAsteroids(){
@@ -1135,16 +1388,8 @@ function updateAsteroids(){
 
 
     for(
-        const a
-        of asteroids.values()
+        const a of asteroids.values()
     ){
-
-        /*
-         * Predict only a tiny amount ahead.
-         *
-         * This keeps the original trajectory smooth while
-         * avoiding the huge jumps of the previous version.
-         */
 
         const dt=
             Math.min(
@@ -1159,7 +1404,6 @@ function updateAsteroids(){
         const predictedX=
             a.netX+
             a.netVX*dt;
-
 
         const predictedY=
             a.netY+
@@ -1180,8 +1424,7 @@ function updateAsteroids(){
             )*.24;
 
 
-        a.drawAngle=
-            a.angle;
+        a.drawAngle=a.angle;
 
     }
 
@@ -1189,35 +1432,17 @@ function updateAsteroids(){
 
 
 /* =========================================================
-   PLAYER INTERPOLATION
+   REMOTE PLAYERS
 ========================================================= */
 
 function updateRemotePlayers(){
 
     for(
-        const p
-        of players.values()
+        const p of players.values()
     ){
 
-        if(
-            p.id===myID
-        ){
+        if(p.id===myID){
             continue;
-        }
-
-
-        if(
-            p.drawX===undefined
-        ){
-
-            p.drawX=p.x;
-            p.drawY=p.y;
-            p.drawAngle=p.angle;
-
-            p.netX=p.x;
-            p.netY=p.y;
-            p.netAngle=p.angle;
-
         }
 
 
@@ -1256,16 +1481,29 @@ function updateRemotePlayers(){
 
 
 /* =========================================================
-   PLAYER MOVEMENT
+   ROCKET MOVEMENT
 ========================================================= */
 
 function updatePlayer(){
 
     if(
         !playing ||
-        !me.alive
+        !me.alive ||
+        !dragging
     ){
+
+        /*
+         * Smoothly settle when the user releases.
+         */
+
+        vx*=.86;
+        vy*=.86;
+
+        me.x+=vx;
+        me.y+=vy;
+
         return;
+
     }
 
 
@@ -1286,7 +1524,7 @@ function updatePlayer(){
     let wantedY=0;
 
 
-    if(d>10){
+    if(d>5){
 
         const speed=
             Math.min(
@@ -1311,16 +1549,10 @@ function updatePlayer(){
     }
 
 
-    /*
-     * This is intentionally retained from the smoother
-     * version you liked.
-     */
-
     vx+=
         (
             wantedX-vx
         )*.20;
-
 
     vy+=
         (
@@ -1403,14 +1635,137 @@ function sendPlayer(){
         type:"state",
 
         x:me.x,
-
         y:me.y,
-
         angle:me.angle
 
     });
 
 }
+
+
+/* =========================================================
+   POINTER CONTROL
+========================================================= */
+
+canvas.addEventListener(
+    "pointerdown",
+    e=>{
+
+        if(
+            !playing ||
+            !me.alive
+        ){
+            return;
+        }
+
+
+        /*
+         * IMPORTANT:
+         *
+         * Movement begins ONLY if the pointer starts on
+         * the rocket.
+         */
+
+        if(
+            pointerInsideRocket(
+                e.clientX,
+                e.clientY
+            )
+        ){
+
+            dragging=true;
+
+            pointerID=e.pointerId;
+
+            dragStartX=e.clientX;
+            dragStartY=e.clientY;
+
+            targetX=e.clientX;
+            targetY=e.clientY;
+
+            canvas.setPointerCapture(
+                e.pointerId
+            );
+
+            updateHitboxUI();
+
+            return;
+
+        }
+
+
+        /*
+         * Otherwise this is an asteroid tap.
+         *
+         * It does NOT influence movement.
+         */
+
+        const point=
+            screenToWorld(
+                e.clientX,
+                e.clientY
+            );
+
+
+        send({
+
+            type:"blast",
+
+            x:point.x,
+            y:point.y
+
+        });
+
+    }
+);
+
+
+canvas.addEventListener(
+    "pointermove",
+    e=>{
+
+        if(
+            !dragging ||
+            e.pointerId!==pointerID
+        ){
+            return;
+        }
+
+
+        targetX=e.clientX;
+        targetY=e.clientY;
+
+    }
+);
+
+
+function releasePointer(e){
+
+    if(
+        e.pointerId!==pointerID
+    ){
+        return;
+    }
+
+
+    dragging=false;
+
+    pointerID=null;
+
+    updateHitboxUI();
+
+}
+
+
+canvas.addEventListener(
+    "pointerup",
+    releasePointer
+);
+
+canvas.addEventListener(
+    "pointercancel",
+    releasePointer
+);
 
 
 /* =========================================================
@@ -1459,58 +1814,6 @@ function worldToScreen(
     };
 
 }
-
-
-/* =========================================================
-   TAP
-========================================================= */
-
-canvas.addEventListener(
-    "pointermove",
-    e=>{
-
-        targetX=e.clientX;
-        targetY=e.clientY;
-
-    }
-);
-
-
-canvas.addEventListener(
-    "pointerdown",
-    e=>{
-
-        targetX=e.clientX;
-        targetY=e.clientY;
-
-
-        if(
-            !playing ||
-            !me.alive
-        ){
-            return;
-        }
-
-
-        const point=
-            screenToWorld(
-                e.clientX,
-                e.clientY
-            );
-
-
-        send({
-
-            type:"blast",
-
-            x:point.x,
-
-            y:point.y
-
-        });
-
-    }
-);
 
 
 /* =========================================================
@@ -1563,8 +1866,7 @@ function drawSpace(){
 
 
     for(
-        const s
-        of stars
+        const s of stars
     ){
 
         ctx.globalAlpha=s.a;
@@ -1592,7 +1894,7 @@ function drawSpace(){
 
 
 /* =========================================================
-   ASTEROID DRAW
+   ASTEROID
 ========================================================= */
 
 function drawAsteroid(a){
@@ -1616,21 +1918,17 @@ function drawAsteroid(a){
 
     ctx.save();
 
-
     ctx.translate(
         p.x,
         p.y
     );
-
 
     ctx.rotate(
         a.drawAngle
     );
 
 
-    const radius=
-        a.radius;
-
+    const radius=a.radius;
 
     const points=
         a.size===3
@@ -1648,16 +1946,6 @@ function drawAsteroid(a){
         i<points;
         i++
     ){
-
-        const angle=
-            Math.PI*2/
-            points*
-            i;
-
-
-        /*
-         * Deterministic irregularity based on the asteroid ID.
-         */
 
         let seed=0;
 
@@ -1687,13 +1975,15 @@ function drawAsteroid(a){
             .78+
             (
                 seed%100
-            )/100*
-            .4;
+            )/100*.4;
 
 
         const r=
-            radius*
-            variation;
+            radius*variation;
+
+
+        const angle=
+            Math.PI*2/points*i;
 
 
         const x=
@@ -1740,10 +2030,6 @@ function drawAsteroid(a){
     ctx.stroke();
 
 
-    /*
-     * Small internal details.
-     */
-
     ctx.globalAlpha=.28;
 
     ctx.fillStyle=
@@ -1756,21 +2042,15 @@ function drawAsteroid(a){
         i++
     ){
 
-        const ang=
-            i*2.2;
+        const ang=i*2.2;
 
 
         ctx.beginPath();
 
         ctx.arc(
-            Math.cos(ang)*
-                radius*.28,
-
-            Math.sin(ang)*
-                radius*.28,
-
+            Math.cos(ang)*radius*.28,
+            Math.sin(ang)*radius*.28,
             radius*.08,
-
             0,
             Math.PI*2
         );
@@ -1798,12 +2078,7 @@ function drawRocket(
 
     ctx.save();
 
-
-    ctx.translate(
-        x,
-        y
-    );
-
+    ctx.translate(x,y);
 
     ctx.rotate(
         angle+
@@ -1811,16 +2086,19 @@ function drawRocket(
     );
 
 
+    const invulnerable=
+        local &&
+        Date.now()<
+        me.invulnerableUntil;
+
+
     /*
-     * Engine.
+     * Engine flame.
      */
 
     ctx.beginPath();
 
-    ctx.moveTo(
-        -6,
-        11
-    );
+    ctx.moveTo(-6,11);
 
     ctx.lineTo(
         0,
@@ -1828,13 +2106,9 @@ function drawRocket(
         Math.random()*5
     );
 
-    ctx.lineTo(
-        6,
-        11
-    );
+    ctx.lineTo(6,11);
 
     ctx.closePath();
-
 
     ctx.fillStyle=
         "#ffb12b";
@@ -1843,30 +2117,18 @@ function drawRocket(
 
 
     /*
-     * Rocket.
+     * Rocket hull.
      */
 
     ctx.beginPath();
 
-    ctx.moveTo(
-        0,
-        -21
-    );
+    ctx.moveTo(0,-21);
 
-    ctx.lineTo(
-        -11,
-        12
-    );
+    ctx.lineTo(-11,12);
 
-    ctx.lineTo(
-        0,
-        7
-    );
+    ctx.lineTo(0,7);
 
-    ctx.lineTo(
-        11,
-        12
-    );
+    ctx.lineTo(11,12);
 
     ctx.closePath();
 
@@ -1902,17 +2164,83 @@ function drawRocket(
         Math.PI*2
     );
 
-
     ctx.fillStyle=
         "#08162a";
 
     ctx.fill();
 
-
     ctx.strokeStyle=
         "#70dcff";
 
     ctx.stroke();
+
+
+    /*
+     * Very subtle local hitbox.
+     *
+     * This uses the same shape as the server collision
+     * polygon.
+     */
+
+    if(local){
+
+        ctx.globalAlpha=
+            invulnerable
+            ?(
+                .22+
+                Math.sin(
+                    performance.now()*.012
+                )*.13
+            )
+            :.20;
+
+
+        ctx.strokeStyle=
+            "#69e5ff";
+
+        ctx.lineWidth=1;
+
+
+        ctx.shadowBlur=
+            invulnerable
+            ?9
+            :4;
+
+        ctx.shadowColor=
+            "#69e5ff";
+
+
+        ctx.beginPath();
+
+
+        ROCKET_HITBOX.forEach(
+            (p,i)=>{
+
+                if(i===0){
+
+                    ctx.moveTo(
+                        p.x,
+                        p.y
+                    );
+
+                }else{
+
+                    ctx.lineTo(
+                        p.x,
+                        p.y
+                    );
+
+                }
+
+            }
+        );
+
+
+        ctx.closePath();
+
+        ctx.stroke();
+
+    }
 
 
     ctx.restore();
@@ -1937,7 +2265,6 @@ function createExplosion(
     explosions.push({
 
         x,
-
         y,
 
         radius:5,
@@ -1956,7 +2283,6 @@ function createExplosion(
     shockwaves.push({
 
         x,
-
         y,
 
         radius:5,
@@ -1969,11 +2295,6 @@ function createExplosion(
 
     });
 
-
-    /*
-     * Same basic particle count/speed relationship as the
-     * original game.
-     */
 
     const count=
         Math.floor(
@@ -2008,7 +2329,6 @@ function createExplosion(
         particles.push({
 
             x,
-
             y,
 
             vx:
@@ -2035,40 +2355,28 @@ function createExplosion(
 
 
 /* =========================================================
-   EFFECTS
+   EFFECT UPDATE
 ========================================================= */
 
 function updateEffects(dt){
 
     for(
-        let i=
-            particles.length-1;
+        let i=particles.length-1;
         i>=0;
         i--
     ){
 
-        const p=
-            particles[i];
+        const p=particles[i];
 
-
-        p.x+=
-            p.vx*dt;
-
-        p.y+=
-            p.vy*dt;
-
+        p.x+=p.vx*dt;
+        p.y+=p.vy*dt;
 
         p.life-=dt;
 
 
-        if(
-            p.life<=0
-        ){
+        if(p.life<=0){
 
-            particles.splice(
-                i,
-                1
-            );
+            particles.splice(i,1);
 
         }
 
@@ -2076,15 +2384,12 @@ function updateEffects(dt){
 
 
     for(
-        let i=
-            explosions.length-1;
+        let i=explosions.length-1;
         i>=0;
         i--
     ){
 
-        const e=
-            explosions[i];
-
+        const e=explosions[i];
 
         e.life+=dt;
 
@@ -2109,10 +2414,7 @@ function updateEffects(dt){
             e.maxLife
         ){
 
-            explosions.splice(
-                i,
-                1
-            );
+            explosions.splice(i,1);
 
         }
 
@@ -2120,25 +2422,23 @@ function updateEffects(dt){
 
 
     for(
-        let i=
-            shockwaves.length-1;
+        let i=shockwaves.length-1;
         i>=0;
         i--
     ){
 
-        const s=
-            shockwaves[i];
-
+        const s=shockwaves[i];
 
         s.life+=dt;
 
 
-        const p=
+        const progress=
             s.life/s.maxLife;
 
 
         s.radius=
-            s.maxRadius*p;
+            s.maxRadius*
+            progress;
 
 
         if(
@@ -2146,10 +2446,7 @@ function updateEffects(dt){
             s.maxLife
         ){
 
-            shockwaves.splice(
-                i,
-                1
-            );
+            shockwaves.splice(i,1);
 
         }
 
@@ -2165,8 +2462,7 @@ function updateEffects(dt){
 function drawEffects(){
 
     for(
-        const p
-        of particles
+        const p of particles
     ){
 
         const pos=
@@ -2201,8 +2497,7 @@ function drawEffects(){
 
 
     for(
-        const e
-        of explosions
+        const e of explosions
     ){
 
         const pos=
@@ -2267,8 +2562,7 @@ function drawEffects(){
 
 
     for(
-        const s
-        of shockwaves
+        const s of shockwaves
     ){
 
         const pos=
@@ -2289,7 +2583,6 @@ function drawEffects(){
 
         ctx.strokeStyle=
             "#6ce7ff";
-
 
         ctx.lineWidth=2;
 
@@ -2315,24 +2608,21 @@ function drawEffects(){
 
 
 /* =========================================================
-   START / STOP
+   GAME CONTROL
 ========================================================= */
 
 function startGame(){
 
     playing=true;
 
-    menu.style.display=
-        "none";
-
-    gameOver.style.display=
-        "none";
-
+    menu.style.display="none";
+    gameOver.style.display="none";
 
     if(!connected){
         connect();
     }
 
+    dragging=false;
 
     vx=0;
     vy=0;
@@ -2341,6 +2631,8 @@ function startGame(){
     explosions=[];
     shockwaves=[];
 
+    updateHitboxUI();
+
 }
 
 
@@ -2348,11 +2640,15 @@ function showGameOver(){
 
     playing=false;
 
+    dragging=false;
+
     finalScore.textContent=
         score;
 
     gameOver.style.display=
         "flex";
+
+    updateHitboxUI();
 
 }
 
@@ -2361,11 +2657,15 @@ function showMenu(){
 
     playing=false;
 
+    dragging=false;
+
     gameOver.style.display=
         "none";
 
     menu.style.display=
         "flex";
+
+    updateHitboxUI();
 
 }
 
@@ -2431,17 +2731,14 @@ function loop(){
 
     updateEffects(dt);
 
+    updateHitboxUI();
+
 
     drawSpace();
 
 
-    /*
-     * Asteroids.
-     */
-
     for(
-        const a
-        of asteroids.values()
+        const a of asteroids.values()
     ){
 
         drawAsteroid(a);
@@ -2449,13 +2746,8 @@ function loop(){
     }
 
 
-    /*
-     * Other rockets.
-     */
-
     for(
-        const p
-        of players.values()
+        const p of players.values()
     ){
 
         if(
@@ -2483,10 +2775,6 @@ function loop(){
     }
 
 
-    /*
-     * Local rocket.
-     */
-
     if(
         playing &&
         me.alive
@@ -2505,9 +2793,7 @@ function loop(){
     drawEffects();
 
 
-    requestAnimationFrame(
-        loop
-    );
+    requestAnimationFrame(loop);
 
 }
 
@@ -2519,4 +2805,5 @@ loop();
 </script>
 
 </body>
+
 </html>
