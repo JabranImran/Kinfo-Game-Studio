@@ -4219,8 +4219,18 @@ const ORBITAL_BASE_SPEED=170;
 const ORBITAL_MIN_SPEED=60;
 const ORBITAL_MAX_SPEED=430;
 
-/* How much a drag translates into turning / speed change. */
-const ORBITAL_TURN_PER_PX=.006;
+/*
+ * How much a drag translates into turning / speed change.
+ *
+ * The turn rate matters more than it looks: at the original
+ * .006 a full 180-degree reversal needed over 500px of
+ * horizontal drag — wider than a phone screen, so turning
+ * around to head back toward the planet was effectively
+ * impossible in a single gesture. At .014 a half-turn takes a
+ * comfortable ~225px swipe, so any direction is reachable
+ * without fighting the controls.
+ */
+const ORBITAL_TURN_PER_PX=.014;
 const ORBITAL_SPEED_PER_PX=1.1;
 
 /* Idle drift: seconds untouched before the ship eases outward. */
@@ -36677,16 +36687,20 @@ function updateOrbital(dt){
     }
 
     /*
-     * Idle drift — only after a genuinely long hands-off pause,
-     * and it ramps in over several more seconds rather than
-     * snapping on. This used to fire after a few seconds and
-     * immediately wrench the heading to "directly away from the
-     * planet", which fought the player constantly: since the
-     * ship starts above the planet, away meant up, so flying
-     * felt biased upward and steering back toward the planet was
-     * undone within seconds. Now it's a gentle nudge that only
-     * takes over when the player really has stopped playing, and
-     * any touch resets it completely.
+     * Idle drift — after a long hands-off pause the ship simply
+     * picks up speed in whatever direction it's already facing.
+     *
+     * It deliberately does NOT touch the heading. An earlier
+     * version rotated the ship to point away from the planet,
+     * which is what made steering feel permanently biased
+     * upward: the ship starts above the planet, so "away" meant
+     * up, and any heading the player chose was quietly rotated
+     * back toward up whenever they stopped dragging. Steering is
+     * the player's alone now. Adding speed is enough on its own
+     * to satisfy "drifts into normal play if untouched", because
+     * travelling in a straight line from the planet always
+     * crosses the escape radius eventually, whichever way it
+     * points.
      */
     const driftElapsed=
         orbitalIdleTimer-
@@ -36699,29 +36713,6 @@ function updateOrbital(dt){
                 driftElapsed/
                 ORBITAL_IDLE_DRIFT_RAMP_SECONDS,
                 0,1
-            );
-
-        const awayHeading=
-            Math.atan2(
-                orbitalY,
-                orbitalX
-            );
-
-        let headingDelta=
-            awayHeading-
-            orbitalHeading;
-
-        while(headingDelta>Math.PI)
-            headingDelta-=Math.PI*2;
-
-        while(headingDelta<-Math.PI)
-            headingDelta+=Math.PI*2;
-
-        orbitalHeading+=
-            headingDelta*
-            Math.min(
-                1,
-                dt*.5*driftStrength
             );
 
         orbitalSpeed+=
