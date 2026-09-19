@@ -20121,7 +20121,8 @@ function renderPlanetFocus(){
      * Reuses the existing launch-preview logic so the focus view
      * always agrees with the map view about what's about to fly.
      */
-    renderLaunchPreview();
+    const chosenLaunchShip=
+        renderLaunchPreview();
 
     const previewEl=
         document.getElementById(
@@ -20134,6 +20135,17 @@ function renderPlanetFocus(){
         previewEl
         ?previewEl.innerHTML
         :"";
+
+    /*
+     * innerHTML copies the canvas tag itself but never its drawn
+     * pixels, so the copy in the focus view starts out blank —
+     * this repaints it against the same chosen ship immediately
+     * after, rather than leaving it empty until the next
+     * selection change happens to trigger a real repaint.
+     */
+    paintLaunchShipPreviews(
+        chosenLaunchShip
+    );
 
     if(!planetFocusRaf){
 
@@ -21363,6 +21375,7 @@ function renderLaunchPreview(){
             resolveEarthLaunchChoice();
 
         el.innerHTML=
+            renderLaunchShipPreviewHtml(chosen)+
             '<div style="display:flex;flex-direction:column;gap:5px;">'+
             candidates.map(
                 ship=>
@@ -21373,7 +21386,9 @@ function renderLaunchPreview(){
             ).join('')+
             '</div>';
 
-        return;
+        paintLaunchShipPreviews(chosen);
+
+        return chosen;
 
     }
 
@@ -21387,7 +21402,7 @@ function renderLaunchPreview(){
         el.innerHTML=
             "No ship available here.";
 
-        return;
+        return null;
 
     }
 
@@ -21395,6 +21410,7 @@ function renderLaunchPreview(){
         resolveLaunchShip(ships);
 
     el.innerHTML=
+        renderLaunchShipPreviewHtml(chosen)+
         '<div style="display:flex;flex-direction:column;gap:5px;">'+
         ships.map(
             ship=>
@@ -21404,6 +21420,112 @@ function renderLaunchPreview(){
                 )
         ).join('')+
         '</div>';
+
+    paintLaunchShipPreviews(chosen);
+
+    return chosen;
+
+}
+
+/*
+ * A real preview of whichever docked ship is currently selected
+ * (its actual style, perk, and cargo — not a generic rocket
+ * icon), shown above the list so a player with multiple
+ * differently-styled ships can see which one is actually about
+ * to launch, before committing. Works from a shared class rather
+ * than an id since this exact markup gets duplicated verbatim
+ * into the home screen's focus view (see updateFocusView), which
+ * would otherwise leave two elements sharing one id.
+ */
+function renderLaunchShipPreviewHtml(ship){
+
+    if(!ship)
+        return '';
+
+    return(
+        '<canvas class="launch-ship-preview-canvas" '+
+        'width="64" height="64" style="display:block;'+
+        'margin:0 auto 6px;"></canvas>'
+    );
+
+}
+
+function paintLaunchShipPreviews(ship){
+
+    if(
+        !ship ||
+        typeof ShapeObject===
+        "undefined"
+    )
+        return;
+
+    const cargoPetInfo=
+        getCargoPetPreviewInfo(
+            ship
+        );
+
+    document.querySelectorAll(
+        ".launch-ship-preview-canvas"
+    ).forEach(
+        canvas=>{
+
+            const ctx2d=
+                canvas.getContext("2d");
+
+            ctx2d.clearRect(
+                0,0,
+                canvas.width,
+                canvas.height
+            );
+
+            try{
+
+                ctx2d.save();
+
+                ctx2d.translate(
+                    canvas.width/2,
+                    canvas.height/2
+                );
+
+                ctx2d.scale(.16,.16);
+
+                ctx2d.translate(
+                    -200,-140
+                );
+
+                drawCargoAura(
+                    ctx2d,
+                    cargoPetInfo
+                );
+
+                getShipStyleShapes(
+                    ship.styleId
+                ).forEach(
+                    shape=>{
+
+                        shape.draw(
+                            ctx2d,
+                            false,
+                            cargoPetInfo,
+                            ship.perk
+                        );
+
+                    }
+                );
+
+                ctx2d.restore();
+
+            }catch(error){
+
+                console.error(
+                    "Launch ship preview draw failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
 
 }
 
@@ -36898,6 +37020,17 @@ function landAtCurrentPlanetInner(){
                     currentShipId
             );
 
+        /*
+         * The empty-stats test alone isn't enough to call a ship
+         * "worth cleaning up" — a ship carrying a pet in its
+         * cargo hold (or with one already assigned as its pilot
+         * for an upcoming mission) genuinely has something on it
+         * worth keeping, even if the flight itself scored
+         * nothing. This was the actual bug: an immediate launch-
+         * and-land with a pet loaded looked identical to a truly
+         * empty fresh ship by the score/coins/materials test
+         * alone, and the pet vanished along with the ship.
+         */
         if(
             earthShip &&
             earthShip.score<=0 &&
@@ -36905,7 +37038,12 @@ function landAtCurrentPlanetInner(){
             !Object.keys(
                 earthShip.materials ||
                 {}
-            ).length
+            ).length &&
+            !(
+                earthShip.cargoPets &&
+                earthShip.cargoPets.length
+            ) &&
+            !earthShip.pendingPilot
         ){
 
             removeShip(
@@ -42055,33 +42193,31 @@ function renderPauseShipCard(){
     html+=
         '</div>';
 
-    if(materialEntries.length){
-
-        html+=
-            '<div class="ship-bay">'+
-            '<div class="ship-bay-label">Materials this run</div>'+
-            '<div class="ship-bay-content" style="flex-wrap:'+
-            'wrap;gap:8px;">';
-
-        materialEntries.forEach(
-            ([materialId,count])=>{
-
-                html+=
-                    '<span style="font-size:11px;'+
+    html+=
+        '<div class="ship-bay">'+
+        '<div class="ship-bay-label">Storage Bay</div>'+
+        '<div class="ship-bay-content" style="flex-wrap:'+
+        'wrap;gap:10px;">'+
+        '<span style="font-size:12px;">'+
+        (score || 0).toLocaleString()+' pts</span>'+
+        '<span style="font-size:12px;">'+
+        COIN_ICON_HTML+(runCoins || 0)+'</span>'+
+        (
+            materialEntries.length
+            ?materialEntries.map(
+                ([materialId,count])=>
+                    '<span style="font-size:12px;'+
                     'white-space:nowrap;">'+
                     getMaterialIconHtml(materialId)+
-                    count+'</span>';
-
-            }
-        );
-
-        html+=
-            '</div></div>';
-
-    }
+                    count+'</span>'
+            ).join('')
+            :''
+        )+
+        '</div></div>';
 
     html+=
         '</div>';
+
 
     container.innerHTML=
         html;
