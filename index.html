@@ -4206,8 +4206,14 @@ const ORBITAL_RETURN_RADIUS=150;
 /* Past this and the ship hands over to the normal asteroid field. */
 const ORBITAL_ESCAPE_RADIUS=1400;
 
-/* Where the ship starts when it first enters orbital space. */
-const ORBITAL_START_RADIUS=520;
+/*
+ * Where the ship starts when it first enters orbital space.
+ * Kept close enough that the planet is actually on screen at
+ * launch — starting further out meant entering orbital space
+ * with nothing visible anywhere, no reference point for which
+ * way "back" even was.
+ */
+const ORBITAL_START_RADIUS=300;
 
 const ORBITAL_BASE_SPEED=170;
 const ORBITAL_MIN_SPEED=60;
@@ -4218,7 +4224,37 @@ const ORBITAL_TURN_PER_PX=.006;
 const ORBITAL_SPEED_PER_PX=1.1;
 
 /* Idle drift: seconds untouched before the ship eases outward. */
-const ORBITAL_IDLE_DRIFT_SECONDS=4;
+/*
+ * Idle drift: seconds untouched before the ship starts easing
+ * outward, and how long it then takes to ramp to full strength.
+ * Deliberately long — the drift is a safety net for a player who
+ * has stopped playing, NOT something that should ever fight
+ * someone who is actively flying.
+ */
+const ORBITAL_IDLE_DRIFT_SECONDS=12;
+
+const ORBITAL_IDLE_DRIFT_RAMP_SECONDS=6;
+
+/*
+ * How long the ship holds at the planet, decelerating with it
+ * large on screen, before the land/depart menu takes over — so
+ * the arrival is actually seen rather than cutting instantly.
+ */
+const ORBITAL_ARRIVAL_HOLD_SECONDS=1.5;
+
+let orbitalArrivalTimer=0;
+
+/*
+ * Entry/exit fade, 0 = fully clear, 1 = fully black. Used to
+ * ease into orbital space on departure and out of it at either
+ * boundary, so no transition is a hard cut.
+ */
+let orbitalFade=0;
+
+let orbitalFadeTarget=0;
+
+let orbitalFadeRaf=null;
+
 
 /*
  * How strongly the starfield reacts to orbital movement. Well
@@ -36565,6 +36601,16 @@ function enterOrbitalSpace(){
 
     orbitalIdleTimer=0;
 
+    orbitalArrivalTimer=0;
+
+    /*
+     * Enter mid-fade and clear to nothing, so arriving in
+     * orbital space eases in rather than cutting hard.
+     */
+    orbitalFade=1;
+
+    orbitalFadeTarget=0;
+
     floatingText(
         "ORBITAL SPACE",
         W/2,
@@ -36587,6 +36633,43 @@ function getOrbitalDistance(){
 
 function updateOrbital(dt){
 
+    /*
+     * Ease the entry/exit fade toward its target every tick —
+     * set to 1 on entry (clearing to 0) and pushed back to 1 as
+     * either boundary is crossed, so both ends are a smooth
+     * dissolve rather than a cut.
+     */
+    if(
+        orbitalFade!==
+        orbitalFadeTarget
+    ){
+
+        const fadeStep=
+            dt*1.8;
+
+        if(
+            orbitalFade<
+            orbitalFadeTarget
+        ){
+
+            orbitalFade=
+                Math.min(
+                    orbitalFadeTarget,
+                    orbitalFade+fadeStep
+                );
+
+        }else{
+
+            orbitalFade=
+                Math.max(
+                    orbitalFadeTarget,
+                    orbitalFade-fadeStep
+                );
+
+        }
+
+    }
+
     if(!orbitalDragging){
 
         orbitalIdleTimer+=dt;
@@ -36594,16 +36677,29 @@ function updateOrbital(dt){
     }
 
     /*
-     * Untouched for long enough, the ship eases outward on its
-     * own — turning gently toward "directly away from the
-     * planet" and picking up speed, so leaving it alone
-     * eventually carries it into normal play instead of
-     * circling forever.
+     * Idle drift — only after a genuinely long hands-off pause,
+     * and it ramps in over several more seconds rather than
+     * snapping on. This used to fire after a few seconds and
+     * immediately wrench the heading to "directly away from the
+     * planet", which fought the player constantly: since the
+     * ship starts above the planet, away meant up, so flying
+     * felt biased upward and steering back toward the planet was
+     * undone within seconds. Now it's a gentle nudge that only
+     * takes over when the player really has stopped playing, and
+     * any touch resets it completely.
      */
-    if(
-        orbitalIdleTimer>
-        ORBITAL_IDLE_DRIFT_SECONDS
-    ){
+    const driftElapsed=
+        orbitalIdleTimer-
+        ORBITAL_IDLE_DRIFT_SECONDS;
+
+    if(driftElapsed>0){
+
+        const driftStrength=
+            clamp(
+                driftElapsed/
+                ORBITAL_IDLE_DRIFT_RAMP_SECONDS,
+                0,1
+            );
 
         const awayHeading=
             Math.atan2(
@@ -36623,10 +36719,13 @@ function updateOrbital(dt){
 
         orbitalHeading+=
             headingDelta*
-            Math.min(1,dt*.55);
+            Math.min(
+                1,
+                dt*.5*driftStrength
+            );
 
         orbitalSpeed+=
-            dt*26;
+            dt*22*driftStrength;
 
     }
 
@@ -36649,26 +36748,88 @@ function updateOrbital(dt){
         getOrbitalDistance();
 
     /*
-     * Close enough to the planet — drop back into the
-     * land/depart menu, reusing the existing approach animation
-     * so it matches arriving from anywhere else.
+     * Close enough to the planet — but don't cut away
+     * instantly. orbitalArrivalTimer runs a brief hold where the
+     * planet is large and centred on screen, so the approach is
+     * actually seen before the land/depart menu replaces it.
      */
     if(
         distance<=
         ORBITAL_RETURN_RADIUS
     ){
 
-        returnFromOrbitToPlanet();
+        if(orbitalArrivalTimer===0){
+
+            floatingText(
+                "APPROACHING "+
+                (
+                    getPlanet(
+                        currentPlanetId
+                    ) || {name:"PLANET"}
+                ).name.toUpperCase(),
+                W/2,
+                H*.3,
+                "#d79dff"
+            );
+
+        }
+
+        orbitalArrivalTimer+=dt;
+
+        /*
+         * Ease to a stop as the planet fills the view, so the
+         * arrival settles rather than barrelling through.
+         */
+        orbitalSpeed=
+            Math.max(
+                0,
+                orbitalSpeed-dt*220
+            );
+
+        /*
+         * Fade out over the back half of the hold, so the
+         * planet is clearly seen first and the handover to the
+         * land/depart menu lands on a dissolve.
+         */
+        if(
+            orbitalArrivalTimer>
+            ORBITAL_ARRIVAL_HOLD_SECONDS*.45
+        ){
+
+            orbitalFadeTarget=1;
+
+        }
+
+        if(
+            orbitalArrivalTimer>=
+            ORBITAL_ARRIVAL_HOLD_SECONDS
+        ){
+
+            returnFromOrbitToPlanet();
+
+        }
 
         return;
 
     }
 
+    orbitalArrivalTimer=0;
+
     /*
      * Drifted far enough out that the planet no longer holds
      * the ship — hand over to normal asteroid gameplay, drag
-     * control ends here.
+     * control ends here. The fade begins slightly before the
+     * boundary so the handover dissolves rather than cutting.
      */
+    if(
+        distance>=
+        ORBITAL_ESCAPE_RADIUS*.94
+    ){
+
+        orbitalFadeTarget=1;
+
+    }
+
     if(
         distance>=
         ORBITAL_ESCAPE_RADIUS
@@ -36684,6 +36845,8 @@ function returnFromOrbitToPlanet(){
 
     orbitalDragging=false;
 
+    orbitalArrivalTimer=0;
+
     /*
      * The ship went back to dock, so it needs its record at
      * this planet again — completeDeparture() released it on
@@ -36694,11 +36857,24 @@ function returnFromOrbitToPlanet(){
 
     enterPlanetPhase(false);
 
+    /*
+     * Leave the screen mid-dissolve and clear from there, so the
+     * planet menu fades up instead of appearing behind a stuck
+     * black overlay.
+     */
+    orbitalFade=1;
+
+    orbitalFadeTarget=0;
+
+    clearOrbitalFadeOverTime();
+
 }
 
 function leaveOrbitForField(){
 
     orbitalDragging=false;
+
+    orbitalArrivalTimer=0;
 
     floatingText(
         "LEAVING ORBIT",
@@ -36710,6 +36886,64 @@ function leaveOrbitForField(){
     enterAsteroidField(
         false
     );
+
+    orbitalFade=1;
+
+    orbitalFadeTarget=0;
+
+    clearOrbitalFadeOverTime();
+
+}
+
+/*
+ * updateOrbital drives the fade while in orbital space, but it
+ * stops running the moment worldState changes — so the tail of
+ * the dissolve (fading back UP into whatever replaced it) needs
+ * its own ticker, which stops as soon as it reaches clear.
+ */
+function clearOrbitalFadeOverTime(){
+
+    if(orbitalFadeRaf){
+
+        cancelAnimationFrame(
+            orbitalFadeRaf
+        );
+
+    }
+
+    let lastStamp=null;
+
+    const step=
+        stamp=>{
+
+            const dt=
+                lastStamp
+                ?(stamp-lastStamp)/1000
+                :0;
+
+            lastStamp=stamp;
+
+            orbitalFade=
+                Math.max(
+                    0,
+                    orbitalFade-dt*1.8
+                );
+
+            if(orbitalFade>0){
+
+                orbitalFadeRaf=
+                    requestAnimationFrame(step);
+
+            }else{
+
+                orbitalFadeRaf=null;
+
+            }
+
+        };
+
+    orbitalFadeRaf=
+        requestAnimationFrame(step);
 
 }
 
@@ -36906,6 +37140,82 @@ function drawOrbitalScene(){
     );
 
     ctx.restore();
+
+    /*
+     * Off-screen planet indicator — once the planet has drifted
+     * out of view there's otherwise nothing at all showing which
+     * way home is, which makes deliberately flying back nearly
+     * impossible. A small arrow pinned inside the screen edge,
+     * pointing along the true direction to the planet, fixes
+     * that without cluttering the view when it's already
+     * visible.
+     */
+    const margin=34;
+
+    const planetOffScreen=
+        planetScreenX<-planetRadius ||
+        planetScreenX>W+planetRadius ||
+        planetScreenY<-planetRadius ||
+        planetScreenY>H+planetRadius;
+
+    if(planetOffScreen){
+
+        const toPlanet=
+            Math.atan2(
+                -orbitalY,
+                -orbitalX
+            );
+
+        const indicatorX=
+            clamp(
+                W/2+
+                Math.cos(toPlanet)*
+                Math.max(W,H),
+                margin,
+                W-margin
+            );
+
+        const indicatorY=
+            clamp(
+                H/2+
+                Math.sin(toPlanet)*
+                Math.max(W,H),
+                margin,
+                H-margin
+            );
+
+        ctx.save();
+
+        ctx.translate(
+            indicatorX,
+            indicatorY
+        );
+
+        ctx.rotate(toPlanet);
+
+        ctx.globalAlpha=.75;
+
+        ctx.fillStyle="#d79dff";
+
+        ctx.shadowBlur=12;
+
+        ctx.shadowColor="#d79dff";
+
+        ctx.beginPath();
+
+        ctx.moveTo(13,0);
+
+        ctx.lineTo(-8,8);
+
+        ctx.lineTo(-8,-8);
+
+        ctx.closePath();
+
+        ctx.fill();
+
+        ctx.restore();
+
+    }
 
 }
 
@@ -39655,6 +39965,28 @@ function draw(){
 
 
     ctx.restore();
+
+    /*
+     * Orbital space entry/exit dissolve — drawn last, outside the
+     * restore above, so it covers absolutely everything including
+     * the ship and HUD overlays. Held here rather than inside
+     * drawOrbitalScene because that runs during the background
+     * phase, long before the ship is painted.
+     */
+    if(orbitalFade>0){
+
+        ctx.save();
+
+        ctx.globalAlpha=
+            clamp(orbitalFade,0,1);
+
+        ctx.fillStyle="#02030b";
+
+        ctx.fillRect(0,0,W,H);
+
+        ctx.restore();
+
+    }
 
 }
 
