@@ -4220,6 +4220,13 @@ const ORBITAL_SPEED_PER_PX=1.1;
 /* Idle drift: seconds untouched before the ship eases outward. */
 const ORBITAL_IDLE_DRIFT_SECONDS=4;
 
+/*
+ * How strongly the starfield reacts to orbital movement. Well
+ * below 1 so stars read as distant background parallax rather
+ * than nearby objects rushing past.
+ */
+const ORBITAL_STAR_PARALLAX=.35;
+
 /* Ship position relative to the planet, which sits at (0,0). */
 let orbitalX=0;
 let orbitalY=0;
@@ -27203,24 +27210,92 @@ function createStars(){
 
 function updateStars(dt){
 
+    /*
+     * In orbital space the ship is genuinely moving through the
+     * world, so the starfield has to move with it — otherwise
+     * steering and accelerating produce no visible change at all
+     * and the mode reads as static. Stars drift opposite the
+     * ship's heading (move right, stars slide left) at a
+     * fraction of true speed, so they read as distant parallax
+     * rather than debris flying past.
+     */
+    let orbitalDriftX=0;
+
+    let orbitalDriftY=0;
+
+    if(
+        worldState==="orbital"
+    ){
+
+        orbitalDriftX=
+            -Math.cos(orbitalHeading)*
+            orbitalSpeed*dt*
+            ORBITAL_STAR_PARALLAX;
+
+        orbitalDriftY=
+            -Math.sin(orbitalHeading)*
+            orbitalSpeed*dt*
+            ORBITAL_STAR_PARALLAX;
+
+    }
+
     for(
         const s of stars
     ){
 
-        s.y+=
-            s.speed*
-            dt*
-            60;
-
         if(
-            s.y>
-            H+3
+            worldState==="orbital"
         ){
 
-            s.y=-3;
+            /*
+             * Per-star depth: the existing per-star speed doubles
+             * as a parallax depth cue here, so nearer stars sweep
+             * past faster than far ones.
+             */
+            const depth=
+                .5+s.speed*.9;
 
-            s.x=
-                Math.random()*W;
+            s.x+=
+                orbitalDriftX*depth;
+
+            s.y+=
+                orbitalDriftY*depth;
+
+            /*
+             * Wrap in both axes — orbital movement is omni-
+             * directional, unlike the normal one-way downward
+             * scroll, so a star can leave by any edge.
+             */
+            if(s.x<-3)
+                s.x=W+3;
+
+            if(s.x>W+3)
+                s.x=-3;
+
+            if(s.y<-3)
+                s.y=H+3;
+
+            if(s.y>H+3)
+                s.y=-3;
+
+        }else{
+
+            s.y+=
+                s.speed*
+                dt*
+                60;
+
+            if(
+                s.y>
+                H+3
+            ){
+
+                s.y=-3;
+
+                s.x=
+                    Math.random()*W;
+
+            }
 
         }
 
@@ -31357,6 +31432,24 @@ function drawPlayer(){
         x,
         y
     );
+
+    /*
+     * In orbital space the ship genuinely has a heading, so it
+     * turns to face where it's going. The ship art points "up"
+     * (-Y) at rest, while orbitalHeading is measured from +X,
+     * hence the quarter-turn correction. Every other mode leaves
+     * the ship upright exactly as before.
+     */
+    if(
+        worldState==="orbital"
+    ){
+
+        ctx.rotate(
+            orbitalHeading+
+            Math.PI/2
+        );
+
+    }
 
     const pulse=
         Math.sin(
@@ -36688,6 +36781,97 @@ function drawOrbitalScene(){
 
     const distance=
         getOrbitalDistance();
+
+    /*
+     * Proximity tint — a full-screen wash that warns which
+     * boundary you're drifting toward before you actually cross
+     * it. Warm violet nearing the planet (you're about to drop
+     * back to the land/depart menu), cold cyan nearing the
+     * escape radius (you're about to hand over to the asteroid
+     * field). Both ramp from 0 only inside their own warning
+     * band, so the middle of orbital space stays untinted.
+     */
+    const returnBandOuter=
+        ORBITAL_RETURN_RADIUS*2.6;
+
+    const escapeBandInner=
+        ORBITAL_ESCAPE_RADIUS*.72;
+
+    let tintColor=null;
+
+    let tintStrength=0;
+
+    if(
+        distance<returnBandOuter
+    ){
+
+        tintColor="170,90,255";
+
+        tintStrength=
+            clamp(
+                (
+                    returnBandOuter-distance
+                )/
+                (
+                    returnBandOuter-
+                    ORBITAL_RETURN_RADIUS
+                ),
+                0,1
+            );
+
+    }else if(
+        distance>escapeBandInner
+    ){
+
+        tintColor="80,210,255";
+
+        tintStrength=
+            clamp(
+                (
+                    distance-escapeBandInner
+                )/
+                (
+                    ORBITAL_ESCAPE_RADIUS-
+                    escapeBandInner
+                ),
+                0,1
+            );
+
+    }
+
+    if(
+        tintColor &&
+        tintStrength>0
+    ){
+
+        const tint=
+            ctx.createRadialGradient(
+                W/2,H/2,0,
+                W/2,H/2,
+                Math.max(W,H)*.75
+            );
+
+        tint.addColorStop(
+            0,
+            "rgba("+tintColor+","+
+            (tintStrength*.06).toFixed(3)+")"
+        );
+
+        tint.addColorStop(
+            1,
+            "rgba("+tintColor+","+
+            (tintStrength*.30).toFixed(3)+")"
+        );
+
+        ctx.save();
+
+        ctx.fillStyle=tint;
+
+        ctx.fillRect(0,0,W,H);
+
+        ctx.restore();
+
+    }
 
     /*
      * Planet size falls off with distance so pulling away
@@ -44483,8 +44667,23 @@ class ShapeObject {
                 const phase = this.id * 1000;
                 const time = performance.now();
                 const flicker = 0.82 + Math.sin(time * 0.014 + phase) * 0.12 + Math.sin(time * 0.037 + phase * 1.7) * 0.06;
-                const flameLength = 46 * this.scale * flicker;
-                const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1);
+
+                // In orbital space the thruster is a live readout of
+                // actual speed -- a longer, fatter flame when running
+                // fast and a stubby one when crawling. Every other mode
+                // passes through at 1 and looks exactly as before.
+                let thrustScale = 1;
+
+                if (typeof worldState !== 'undefined' && worldState === 'orbital') {
+                    const speedRange = ORBITAL_MAX_SPEED - ORBITAL_MIN_SPEED;
+                    const speedFraction = speedRange > 0
+                        ? (orbitalSpeed - ORBITAL_MIN_SPEED) / speedRange
+                        : 0;
+                    thrustScale = 0.45 + Math.max(0, Math.min(1, speedFraction)) * 1.05;
+                }
+
+                const flameLength = 46 * this.scale * flicker * thrustScale;
+                const flameWidth = 15 * this.scale * (0.9 + Math.sin(time * 0.02 + phase) * 0.1) * (0.7 + thrustScale * 0.3);
 
                 // Bright nozzle dot at the mount point
                 ctx.shadowBlur = 14;
