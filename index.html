@@ -4434,13 +4434,34 @@ const ROAM_LOOKUP_GRACE_SECONDS=.4;
 const ROAM_RETURN_ANGLE=.22;
 
 /*
- * The ship's own latitude — just south of the true pole (see
- * shipProj in drawPlanetFocusScene for why it can't sit exactly
- * on it) but still comfortably above SURFACE_ITEM_LAT_OFFSET
- * below, so it stays visually above the structures.
+ * How far south of the pole the band of surface items sits —
+ * structures, idle pets, AND the ship all share this exact same
+ * value now. Small, so when not roaming they appear across the
+ * top of the planet exactly as they always have — this is the
+ * same familiar layout, just expressed as real positions on a
+ * sphere so it can rotate.
+ */
+const SURFACE_ITEM_LAT_OFFSET=.55;
+
+/*
+ * The ship's own latitude — deliberately the exact same distance
+ * from the pole as everything else on the surface, not its own
+ * special case. It used to sit much closer to the true pole than
+ * structures did, which meant it rotated at a completely
+ * different, much slower rate than everything else as the world
+ * turned: a point near the pole barely moves at all when the
+ * sphere spins around its own axis, while a point further out
+ * sweeps a much wider circle for the exact same rotation. That's
+ * what made the ship look like it wasn't moving "with" the
+ * structures — it wasn't a different KIND of motion, just a much
+ * smaller amount of the same motion. Giving it the identical
+ * offset means it now genuinely moves in lockstep with
+ * everything else, which is the whole point of it all sitting on
+ * one shared sphere in the first place.
  */
 const SHIP_LAT=
-    Math.PI/2-.08;
+    Math.PI/2-
+    SURFACE_ITEM_LAT_OFFSET;
 
 /*
  * How far south of the ship the pet steps out when roaming
@@ -4449,15 +4470,6 @@ const SHIP_LAT=
  * so it doesn't count as having already arrived.
  */
 const ROAM_START_LAT_OFFSET=.42;
-
-/*
- * How far south of the pole the band of surface items
- * (structures and idle pets) sits. Small, so when not roaming
- * they appear across the top of the planet exactly as they
- * always have — this is the same familiar layout, just
- * expressed as real positions on a sphere so it can rotate.
- */
-const SURFACE_ITEM_LAT_OFFSET=.55;
 
 /*
  * Where the camera sits when NOT roaming — a tilted side-on view
@@ -19700,6 +19712,25 @@ function drawPlanetFocusScene(){
 
     if(roamingActive){
 
+        /*
+         * Fixed-position diagnostic — a small green square pinned
+         * to the top-left corner of the SCREEN itself, not tied to
+         * cx/cy or anything else that could be wrong. This is the
+         * most basic possible check: is roamingActive genuinely
+         * true during an actual render? If this doesn't show up
+         * after swiping down, the problem is upstream of
+         * everything else here — the swipe gesture likely isn't
+         * calling startRoaming at all, rather than anything in
+         * this function's own drawing logic.
+         */
+        c.save();
+
+        c.fillStyle="#4ade80";
+
+        c.fillRect(12,12,26,26);
+
+        c.restore();
+
         updateRoamingMovement();
 
         /*
@@ -21204,7 +21235,34 @@ function drawPlanetFocusScene(){
              * ever actually drawn even once, which reads to the
              * player as "the pet doesn't show at all" even though
              * the underlying data was never actually wrong.
+             *
+             * A visible marker for the whole grace window, not
+             * just on failure — if THIS shows up, roaming is
+             * genuinely active and the lookup is genuinely coming
+             * up empty, which is real, useful information toward
+             * narrowing down what's actually wrong. If nothing at
+             * all shows up (not even this), the problem is further
+             * upstream than any of this code — roaming likely
+             * isn't becoming active in the first place.
              */
+            c.save();
+
+            c.fillStyle="#ffd43b";
+
+            c.beginPath();
+
+            c.moveTo(cx,cy-24);
+
+            c.lineTo(cx+21,cy+12);
+
+            c.lineTo(cx-21,cy+12);
+
+            c.closePath();
+
+            c.fill();
+
+            c.restore();
+
             if(!roamingLookupMissSince){
 
                 roamingLookupMissSince=
