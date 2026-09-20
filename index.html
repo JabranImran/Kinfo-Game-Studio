@@ -4229,7 +4229,16 @@ const ORBITAL_TURN_RESPONSE=.06;
 
 const ORBITAL_DRAG_DEADZONE=1.5;
 
-const ORBITAL_SPEED_PER_PX=1.1;
+/*
+ * Speed-by-distance drag control: a small deadzone right at the
+ * ship (screen centre) holds minimum speed, ramping to maximum
+ * by the outer radius — both in canvas-logical pixels, so they
+ * scale the same way on any screen size. The max radius is
+ * computed live against W/H where it's used (they're both still
+ * 0 at this point in load order, before the canvas has sized
+ * itself), not baked into a constant here.
+ */
+const ORBITAL_SPEED_DRAG_DEADZONE=26;
 
 /* Idle drift: seconds untouched before the ship eases outward. */
 /*
@@ -4262,6 +4271,28 @@ let orbitalFade=0;
 let orbitalFadeTarget=0;
 
 let orbitalFadeRaf=null;
+
+/*
+ * Rolling record of recent kill timestamps (performance.now()
+ * values) — the "clearing pressure" signal. A mostly-static
+ * field is otherwise trivial to just steer around once
+ * memorised, so clearing rocks quickly is rewarded with more of
+ * them, on top of the normal distance-based ramp. Pruned lazily
+ * wherever it's read, not on its own timer.
+ */
+let orbitalRecentKillTimes=[];
+
+/*
+ * How far back "recent" reaches, and how much extra density a
+ * fully-pressured window adds on top of the distance-based
+ * ramp. ORBITAL_KILL_PRESSURE_THRESHOLD kills inside the window
+ * reaches full extra pressure; fewer scales down linearly.
+ */
+const ORBITAL_KILL_PRESSURE_WINDOW_SECONDS=6;
+
+const ORBITAL_KILL_PRESSURE_THRESHOLD=5;
+
+const ORBITAL_KILL_PRESSURE_MAX_BONUS=.55;
 
 
 /*
@@ -30410,6 +30441,23 @@ function detonateAsteroid(
     );
 
     /*
+     * Feeds the orbital "clearing pressure" tracker — a rolling
+     * count of recent kills that pushes spawn density up when
+     * the player is actively clearing rocks quickly, since a
+     * mostly-static field is otherwise trivial to just steer
+     * around once memorised. No-op outside orbital space.
+     */
+    if(
+        worldState==="orbital"
+    ){
+
+        orbitalRecentKillTimes.push(
+            performance.now()
+        );
+
+    }
+
+    /*
      * A stuck partner (Sticky Comet) resumes independent
      * movement the moment this one is destroyed — it already
      * has its own velocity from the moment they fused, so
@@ -35577,7 +35625,10 @@ function activateEMP(){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field" ||
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        ) ||
         empCooldown>0
     ){
 
@@ -35725,7 +35776,10 @@ function activateRegenCoil(){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field" ||
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        ) ||
         empCooldown>0 ||
         lives>=3
     ){
@@ -35785,7 +35839,10 @@ function activateGhostShield(){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field" ||
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        ) ||
         empCooldown>0 ||
         ghostActive
     ){
@@ -35846,7 +35903,10 @@ function activateChronoField(){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field" ||
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        ) ||
         empCooldown>0 ||
         timeSlowActive
     ){
@@ -35959,7 +36019,10 @@ function activateNovaBurst(){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field" ||
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        ) ||
         empCooldown>0
     ){
 
@@ -36574,6 +36637,8 @@ function enterOrbitalSpace(){
 
     beamEffects=[];
 
+    orbitalRecentKillTimes=[];
+
     beamArmed=false;
 
     ghostActive=false;
@@ -36741,6 +36806,37 @@ function getOrbitalDistance(){
  * creates genuinely denser bands and sparser pockets to fly
  * through rather than a uniform sprinkle.
  */
+/*
+ * Prunes kills outside the rolling window and returns how many
+ * remain, 0 to ORBITAL_KILL_PRESSURE_THRESHOLD-and-above. Prunes
+ * in place each call rather than on a separate timer, since this
+ * is only ever read once per frame at most (from
+ * computeOrbitalSpawnInterval) — a dedicated ticker would just
+ * be extra bookkeeping for no benefit.
+ */
+function getOrbitalKillPressure(){
+
+    const cutoff=
+        performance.now()-
+        ORBITAL_KILL_PRESSURE_WINDOW_SECONDS*1000;
+
+    while(
+        orbitalRecentKillTimes.length &&
+        orbitalRecentKillTimes[0]<cutoff
+    ){
+
+        orbitalRecentKillTimes.shift();
+
+    }
+
+    return clamp(
+        orbitalRecentKillTimes.length/
+        ORBITAL_KILL_PRESSURE_THRESHOLD,
+        0,1
+    );
+
+}
+
 function getOrbitalDensity(){
 
     const distance=
@@ -36766,8 +36862,28 @@ function getOrbitalDensity(){
             ORBITAL_BAND_FREQUENCY
         )*.32;
 
+    const baseDensity=
+        clamp(
+            ramp*band,
+            0,1
+        );
+
+    /*
+     * Clearing rocks quickly pushes density up further still, on
+     * top of wherever the distance-based ramp already has it —
+     * so a player actively working through the field keeps
+     * finding more to do, rather than the field staying at a
+     * fixed pace regardless of how fast it's being cleared. Only
+     * ever adds; it can't push density below the distance-based
+     * baseline.
+     */
+    const pressureBonus=
+        getOrbitalKillPressure()*
+        ORBITAL_KILL_PRESSURE_MAX_BONUS;
+
     return clamp(
-        ramp*band,
+        baseDensity+
+        pressureBonus,
         0,1
     );
 
@@ -40324,7 +40440,10 @@ function updateHUD(){
     const ready=
         empCharge>=EMP_MAX &&
         empCooldown<=0 &&
-        worldState==="field" &&
+        (
+            worldState==="field" ||
+            worldState==="orbital"
+        ) &&
         (
             currentShipEquipment!==
             "regen-coil" ||
@@ -42705,10 +42824,12 @@ canvas.addEventListener(
 
 /* =========================================================
    ORBITAL SPACE — drag controls
-   Dragging left/right steers the ship; dragging up speeds it
-   up and dragging down slows it. Only active while actually in
-   orbital space, so it can never interfere with the normal
-   game's own tap and swipe handling.
+   Steering follows the direction the finger is actually
+   dragging. Speed is set by how far the current touch point is
+   from the ship (which always sits at screen centre) — drag out
+   further to go faster, bring it in closer to slow down. Only
+   active while actually in orbital space, so it can never
+   interfere with the normal game's own tap and swipe handling.
 ========================================================= */
 
 canvas.addEventListener(
@@ -42729,6 +42850,10 @@ canvas.addEventListener(
         orbitalDragLastY=event.clientY;
 
         orbitalIdleTimer=0;
+
+        updateOrbitalSpeedFromDrag(
+            event
+        );
 
     },
     {passive:true}
@@ -42803,23 +42928,66 @@ canvas.addEventListener(
 
         }
 
-        /*
-         * Screen Y grows downward, so dragging UP is a negative
-         * dy — negated here so up genuinely means faster.
-         */
-        orbitalSpeed=
-            clamp(
-                orbitalSpeed-
-                dy*ORBITAL_SPEED_PER_PX*.1,
-                ORBITAL_MIN_SPEED,
-                ORBITAL_MAX_SPEED
-            );
+        updateOrbitalSpeedFromDrag(
+            event
+        );
 
         orbitalIdleTimer=0;
 
     },
     {passive:true}
 );
+
+/*
+ * Speed from how far the current touch point sits from the
+ * ship, which is always pinned at screen centre — a small
+ * deadzone right at the ship holds minimum speed, then it ramps
+ * up to maximum by ORBITAL_SPEED_DRAG_MAX_RADIUS pixels out.
+ * Bringing the finger back in slows down exactly the same way,
+ * since this reads the current distance fresh every call rather
+ * than accumulating anything.
+ */
+function updateOrbitalSpeedFromDrag(event){
+
+    /*
+     * Reuses the same rect-relative conversion pointerPosition()
+     * already uses everywhere else — the canvas's CSS size is
+     * always exactly W×H (see resize()), so no extra scale
+     * factor is needed here.
+     */
+    const p=
+        pointerPosition(event);
+
+    const distance=
+        Math.hypot(
+            p.x-W/2,
+            p.y-H/2
+        );
+
+    const maxRadius=
+        Math.min(W,H)*.42;
+
+    const fraction=
+        clamp(
+            (
+                distance-
+                ORBITAL_SPEED_DRAG_DEADZONE
+            )/
+            (
+                maxRadius-
+                ORBITAL_SPEED_DRAG_DEADZONE
+            ),
+            0,1
+        );
+
+    orbitalSpeed=
+        ORBITAL_MIN_SPEED+
+        (
+            ORBITAL_MAX_SPEED-
+            ORBITAL_MIN_SPEED
+        )*fraction;
+
+}
 
 canvas.addEventListener(
     "pointerup",
@@ -42876,7 +43044,10 @@ empButton.addEventListener(
                 !running ||
                 paused ||
                 gameOver ||
-                worldState!=="field" ||
+                (
+                    worldState!=="field" &&
+                    worldState!=="orbital"
+                ) ||
                 empCooldown>0
             ){
 
@@ -42902,7 +43073,10 @@ empButton.addEventListener(
                 !running ||
                 paused ||
                 gameOver ||
-                worldState!=="field" ||
+                (
+                    worldState!=="field" &&
+                    worldState!=="orbital"
+                ) ||
                 empCooldown>0 ||
                 capsuleActive ||
                 (
@@ -42957,7 +43131,10 @@ empButton.addEventListener(
                 !running ||
                 paused ||
                 gameOver ||
-                worldState!=="field" ||
+                (
+                    worldState!=="field" &&
+                    worldState!=="orbital"
+                ) ||
                 empCooldown>0 ||
                 ricochetBall
             ){
@@ -42984,7 +43161,10 @@ empButton.addEventListener(
                 !running ||
                 paused ||
                 gameOver ||
-                worldState!=="field" ||
+                (
+                    worldState!=="field" &&
+                    worldState!=="orbital"
+                ) ||
                 empCooldown>0 ||
                 bladeActive
             ){
@@ -43022,7 +43202,10 @@ empButton.addEventListener(
                 !running ||
                 paused ||
                 gameOver ||
-                worldState!=="field" ||
+                (
+                    worldState!=="field" &&
+                    worldState!=="orbital"
+                ) ||
                 empCooldown>0 ||
                 singularity
             ){
