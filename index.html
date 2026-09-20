@@ -4227,7 +4227,21 @@ const ORBITAL_MAX_SPEED=430;
  */
 const ORBITAL_TURN_RESPONSE=.06;
 
+/*
+ * Per-frame movement below this is treated as jitter within an
+ * already-confirmed drag, not a real steering intent.
+ */
 const ORBITAL_DRAG_DEADZONE=1.5;
+
+/*
+ * Total movement from where a touch first landed, measured once
+ * per touch rather than frame-to-frame — this is what actually
+ * separates a tap (meant to shoot) from a drag (meant to steer).
+ * Deliberately larger than the per-frame deadzone above: a tap's
+ * natural finger jitter can easily exceed 1.5px in one frame, but
+ * rarely covers this much ground before lifting off.
+ */
+const ORBITAL_DRAG_CONFIRM_THRESHOLD=14;
 
 /*
  * Speed-by-distance drag control: a small deadzone right at the
@@ -4331,11 +4345,23 @@ let orbitalHeading=-Math.PI/2;
 let orbitalSpeed=ORBITAL_BASE_SPEED;
 
 /*
- * Drag state. Dragging steers: horizontal movement turns the
- * ship, vertical movement changes speed (up = faster, matching
- * the "push forward" intuition).
+ * Drag state. Steering follows the direction the finger is
+ * actually moving; speed follows how far the current touch
+ * point sits from the ship (always screen centre).
+ *
+ * orbitalDragging tracks a finger simply being down, since a tap
+ * meant purely to shoot still needs that finger tracked for its
+ * own hit-test. orbitalDragConfirmed is the real gate on whether
+ * that touch is allowed to move the ship at all — it only flips
+ * true once total movement from orbitalDragStartX/Y clears
+ * ORBITAL_DRAG_CONFIRM_THRESHOLD, so a stationary tap (or one
+ * with only natural finger jitter) never steers or re-speeds the
+ * ship, only a deliberate drag does.
  */
 let orbitalDragging=false;
+let orbitalDragConfirmed=false;
+let orbitalDragStartX=0;
+let orbitalDragStartY=0;
 let orbitalDragLastX=0;
 let orbitalDragLastY=0;
 
@@ -19755,15 +19781,40 @@ function drawPlanetFocusScene(){
                         ?targetAngle+wander*.4
                         :idleAngle+wander;
 
+                    /*
+                     * Radial wander — every pet previously sat on
+                     * the exact same circle as the planet's own
+                     * edge, varying only by angle, which is why
+                     * they read as confined to one fixed ring
+                     * "on top of" the planet. A slow, gentle bob
+                     * toward and away from that line (a different
+                     * phase per pet, so they don't all breathe in
+                     * sync) lets them roam a little more of the
+                     * visible surface without ever drifting far
+                     * enough to look like they've floated off it
+                     * or sunk into it.
+                     */
+                    const radialWander=
+                        Math.sin(
+                            time*.55+
+                            seed*1.7+
+                            petIndex*2.3
+                        )*
+                        radius*.05;
+
+                    const petRadius=
+                        radius+
+                        radialWander;
+
                     const px=
                         cx+
                         Math.cos(petAngle)*
-                        radius;
+                        petRadius;
 
                     const py=
                         cy+
                         Math.sin(petAngle)*
-                        radius;
+                        petRadius;
 
                     const petSize=
                         Math.max(
@@ -36692,6 +36743,8 @@ function enterOrbitalSpace(){
 
     orbitalDragging=false;
 
+    orbitalDragConfirmed=false;
+
     orbitalIdleTimer=0;
 
     orbitalArrivalTimer=0;
@@ -37198,6 +37251,8 @@ function returnFromOrbitToPlanet(){
 
     orbitalDragging=false;
 
+    orbitalDragConfirmed=false;
+
     orbitalArrivalTimer=0;
 
     /*
@@ -37226,6 +37281,8 @@ function returnFromOrbitToPlanet(){
 function leaveOrbitForField(){
 
     orbitalDragging=false;
+
+    orbitalDragConfirmed=false;
 
     orbitalArrivalTimer=0;
 
@@ -42843,17 +42900,24 @@ canvas.addEventListener(
         )
             return;
 
+        /*
+         * Tracks a potential drag without yet DOING anything to
+         * the ship — orbitalDragConfirmed only flips true once
+         * movement clears ORBITAL_DRAG_CONFIRM_THRESHOLD in
+         * pointermove below. Nothing here touches heading or
+         * speed.
+         */
         orbitalDragging=true;
+
+        orbitalDragConfirmed=false;
+
+        orbitalDragStartX=event.clientX;
+
+        orbitalDragStartY=event.clientY;
 
         orbitalDragLastX=event.clientX;
 
         orbitalDragLastY=event.clientY;
-
-        orbitalIdleTimer=0;
-
-        updateOrbitalSpeedFromDrag(
-            event
-        );
 
     },
     {passive:true}
@@ -42880,6 +42944,41 @@ canvas.addEventListener(
         orbitalDragLastX=event.clientX;
 
         orbitalDragLastY=event.clientY;
+
+        /*
+         * A plain tap — meant purely to destroy whatever's under
+         * the finger, handled entirely by handlePointer's own
+         * hit-test — was ALSO steering and re-speeding the ship,
+         * because every pointerdown immediately counted as drag
+         * input regardless of whether the finger actually moved.
+         * That's what made it feel uncontrollable: aiming a shot
+         * at a rock kept nudging the ship straight toward it.
+         *
+         * Fixed by requiring real, deliberate movement first —
+         * measured from where the touch actually started, not
+         * frame-to-frame — before any steering or speed change
+         * happens at all. A tap that stays within the threshold
+         * never touches the ship, no matter how it's released.
+         */
+        if(!orbitalDragConfirmed){
+
+            const totalDistance=
+                Math.hypot(
+                    event.clientX-
+                    orbitalDragStartX,
+                    event.clientY-
+                    orbitalDragStartY
+                );
+
+            if(
+                totalDistance<
+                ORBITAL_DRAG_CONFIRM_THRESHOLD
+            )
+                return;
+
+            orbitalDragConfirmed=true;
+
+        }
 
         /*
          * Absolute steering: the ship turns toward the direction
@@ -42995,6 +43094,8 @@ canvas.addEventListener(
 
         orbitalDragging=false;
 
+        orbitalDragConfirmed=false;
+
     },
     {passive:true}
 );
@@ -43005,9 +43106,12 @@ canvas.addEventListener(
 
         orbitalDragging=false;
 
+        orbitalDragConfirmed=false;
+
     },
     {passive:true}
 );
+
 
 /*
  * mission by accident.
