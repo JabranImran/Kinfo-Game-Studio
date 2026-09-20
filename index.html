@@ -4337,6 +4337,21 @@ let roamingDragLastX=0;
 let roamingDragLastY=0;
 
 /*
+ * When the current roaming session began (performance.now()) —
+ * the return-to-ship check below is disabled until
+ * ROAM_RETURN_GRACE_SECONDS has passed since this. The pet
+ * starts at the exact same position as the ship (see
+ * startRoaming), which is precisely 0 world-space distance away
+ * — without this grace period, "close enough to return" was true
+ * on the very first frame after starting, so roaming visually
+ * began for one frame and then instantly ended again: the brief
+ * flash back to the normal home screen.
+ */
+let roamingStartTime=0;
+
+const ROAM_RETURN_GRACE_SECONDS=.6;
+
+/*
  * How close (in that same world coordinate space) the pet needs
  * to get to the ship's position before roaming ends and it's
  * considered "back aboard, ready to launch".
@@ -18711,6 +18726,9 @@ function startRoaming(ship){
 
     roamingDragging=false;
 
+    roamingStartTime=
+        performance.now();
+
     toggleRoamingUI(true);
 
     renderPlanetFocus();
@@ -19214,7 +19232,14 @@ function drawPlanetFocusScene(){
             Math.sin(roamingAngle)*
             roamingRadius;
 
+        const withinGrace=
+            performance.now()-
+            roamingStartTime<
+            ROAM_RETURN_GRACE_SECONDS*
+            1000;
+
         if(
+            !withinGrace &&
             Math.hypot(
                 petWorldX-shipWorldX,
                 petWorldY-shipWorldY
