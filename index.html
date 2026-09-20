@@ -4220,17 +4220,15 @@ const ORBITAL_MIN_SPEED=60;
 const ORBITAL_MAX_SPEED=430;
 
 /*
- * How much a drag translates into turning / speed change.
- *
- * The turn rate matters more than it looks: at the original
- * .006 a full 180-degree reversal needed over 500px of
- * horizontal drag — wider than a phone screen, so turning
- * around to head back toward the planet was effectively
- * impossible in a single gesture. At .014 a half-turn takes a
- * comfortable ~225px swipe, so any direction is reachable
- * without fighting the controls.
+ * Steering response. The ship turns toward the drag direction
+ * rather than being rudder-steered, so these govern how quickly
+ * it swings round and how much movement counts as a deliberate
+ * drag rather than jitter.
  */
-const ORBITAL_TURN_PER_PX=.014;
+const ORBITAL_TURN_RESPONSE=.06;
+
+const ORBITAL_DRAG_DEADZONE=1.5;
+
 const ORBITAL_SPEED_PER_PX=1.1;
 
 /* Idle drift: seconds untouched before the ship eases outward. */
@@ -4272,6 +4270,26 @@ let orbitalFadeRaf=null;
  * than nearby objects rushing past.
  */
 const ORBITAL_STAR_PARALLAX=.35;
+
+/*
+ * Orbital asteroid field tuning. Density ramps outward from the
+ * planet and is modulated by a slow sine over distance, giving
+ * denser bands and calmer pockets.
+ */
+const ORBITAL_SPAWN_INTERVAL_MAX=2.6;
+
+const ORBITAL_SPAWN_INTERVAL_MIN=.55;
+
+/* Lower = wider, more gradual density bands. */
+const ORBITAL_BAND_FREQUENCY=.011;
+
+/*
+ * Orbital rocks drift more slowly than field ones — here the
+ * ship is doing most of the moving, so fast rocks on top of
+ * that read as chaotic rather than challenging.
+ */
+const ORBITAL_ASTEROID_DRIFT=.45;
+
 
 /* Ship position relative to the planet, which sits at (0,0). */
 let orbitalX=0;
@@ -36641,6 +36659,135 @@ function getOrbitalDistance(){
 
 }
 
+/*
+ * How thick the asteroid field is at the ship's current
+ * distance from the planet, 0 (clear) to 1 (as busy as orbital
+ * space gets).
+ *
+ * Two things combine: a steady ramp outward, so close to the
+ * planet is calm and the field builds toward the escape
+ * boundary rather than starting abruptly when normal play
+ * begins; and a slow sine over distance laid on top, which
+ * creates genuinely denser bands and sparser pockets to fly
+ * through rather than a uniform sprinkle.
+ */
+function getOrbitalDensity(){
+
+    const distance=
+        getOrbitalDistance();
+
+    const ramp=
+        clamp(
+            (
+                distance-
+                ORBITAL_RETURN_RADIUS*1.5
+            )/
+            (
+                ORBITAL_ESCAPE_RADIUS-
+                ORBITAL_RETURN_RADIUS*1.5
+            ),
+            0,1
+        );
+
+    const band=
+        .68+
+        Math.sin(
+            distance*
+            ORBITAL_BAND_FREQUENCY
+        )*.32;
+
+    return clamp(
+        ramp*band,
+        0,1
+    );
+
+}
+
+function computeOrbitalSpawnInterval(){
+
+    const density=
+        getOrbitalDensity();
+
+    /*
+     * Near-silent when density is ~0, down to a brisk but still
+     * gentler-than-normal pace at full density.
+     */
+    return(
+        ORBITAL_SPAWN_INTERVAL_MAX-
+        (
+            ORBITAL_SPAWN_INTERVAL_MAX-
+            ORBITAL_SPAWN_INTERVAL_MIN
+        )*density
+    );
+
+}
+
+/*
+ * Spawns an asteroid using exactly the same size, type and
+ * special-kind rolls as normal play, so orbital rocks behave
+ * identically — Twin Rock still pairs up, Sticky Comet still
+ * fuses, and every powerup interacts the same way. The only
+ * differences are where it enters from and that it drifts more
+ * slowly, since the ship is doing most of the moving here.
+ */
+function spawnOrbitalAsteroid(){
+
+    const pos=
+        edgeSpawn();
+
+    const asteroid=
+        new Asteroid(
+            pos.x,
+            pos.y,
+            rollAsteroidSize(),
+            getAsteroidType(),
+            rollSpecialKind()
+        );
+
+    asteroid.vx*=
+        ORBITAL_ASTEROID_DRIFT;
+
+    asteroid.vy*=
+        ORBITAL_ASTEROID_DRIFT;
+
+    asteroids.push(
+        asteroid
+    );
+
+    if(
+        asteroid.special===
+        "twin"
+    ){
+
+        const partner=
+            new Asteroid(
+                W-pos.x,
+                H-pos.y,
+                asteroid.size,
+                asteroid.typeId,
+                "twin"
+            );
+
+        partner.vx=
+            -asteroid.vx;
+
+        partner.vy=
+            -asteroid.vy;
+
+        asteroid.twinPartner=
+            partner;
+
+        partner.twinPartner=
+            asteroid;
+
+        asteroids.push(
+            partner
+        );
+
+    }
+
+}
+
 function updateOrbital(dt){
 
     /*
@@ -36655,7 +36802,7 @@ function updateOrbital(dt){
     ){
 
         const fadeStep=
-            dt*1.8;
+            dt*4.5;
 
         if(
             orbitalFade<
@@ -36778,13 +36925,16 @@ function updateOrbital(dt){
             );
 
         /*
-         * Fade out over the back half of the hold, so the
-         * planet is clearly seen first and the handover to the
-         * land/depart menu lands on a dissolve.
+         * Start the fade late enough that it finishes right as
+         * the hold ends. Beginning it at 45% meant the screen
+         * hit full black well before the handover and then sat
+         * there — which is why the transition sometimes felt
+         * long and sometimes instant, depending on approach
+         * speed. At 80% the dissolve lands just in time.
          */
         if(
             orbitalArrivalTimer>
-            ORBITAL_ARRIVAL_HOLD_SECONDS*.45
+            ORBITAL_ARRIVAL_HOLD_SECONDS*.8
         ){
 
             orbitalFadeTarget=1;
@@ -36917,7 +37067,7 @@ function clearOrbitalFadeOverTime(){
             orbitalFade=
                 Math.max(
                     0,
-                    orbitalFade-dt*1.8
+                    orbitalFade-dt*4.5
                 );
 
             if(orbitalFade>0){
@@ -38399,29 +38549,54 @@ function update(dt){
 
 
     /*
-     * ORBITAL SPACE
+     * ORBITAL SPACE + ASTEROID FIELD
+     *
+     * Orbital space deliberately shares this whole block rather
+     * than duplicating it, so every asteroid behaviour, powerup,
+     * pickup and collision rule is literally the same code as
+     * normal play — they can't drift apart later. The handful of
+     * genuinely field-only parts (difficulty ramp, wave
+     * progression, exiting to interplanetary) are guarded with
+     * inOrbital below; spawning is the one behaviour orbital
+     * overrides, since its density depends on distance from the
+     * planet rather than on wave number.
      */
 
     else if(
+        worldState==="field" ||
         worldState==="orbital"
     ){
 
-        updateOrbital(dt);
+        const inOrbital=
+            worldState==="orbital";
 
-    }
+        if(inOrbital){
 
+            updateOrbital(dt);
 
-    /*
-     * ASTEROID FIELD
-     */
+            /*
+             * updateOrbital can hand over to another world
+             * (arriving back at the planet, or escaping to the
+             * field) — if it did, stop here rather than running
+             * a frame of field logic against the new state.
+             */
+            if(
+                worldState!=="orbital"
+            ){
 
-    else if(
-        worldState==="field"
-    ){
+                return;
 
-        updateDifficulty(dt);
+            }
 
-        updateAIDifficulty(dt);
+        }
+
+        if(!inOrbital){
+
+            updateDifficulty(dt);
+
+            updateAIDifficulty(dt);
+
+        }
 
 
         if(ghostActive){
@@ -38645,38 +38820,62 @@ function update(dt){
 
 
         if(
-            worldTimer>3 &&
             spawnTimer<=0 &&
             capsuleMode!==
-            "death"
+            "death" &&
+            (
+                inOrbital ||
+                worldTimer>3
+            )
         ){
 
-            /*
-             * Higher floor and gentler ramp than
-             * before, so the ambient spawn rate
-             * never accelerates into a bullet-hell
-             * pace even at high waves. The AI
-             * difficulty multiplier (see ADAPTIVE
-             * DIFFICULTY below) then nudges this
-             * pace up or down based on how the
-             * player is actually doing right now.
-             */
-            spawnTimer=
-                computeSpawnInterval();
+            if(inOrbital){
 
-            spawnAsteroid();
+                /*
+                 * Orbital density is driven by distance from the
+                 * planet rather than wave number: close in is
+                 * nearly clear, and it thickens steadily toward
+                 * the escape boundary so the field builds into
+                 * normal play rather than starting abruptly.
+                 * A slow sine over distance layers denser and
+                 * sparser bands on top of that, so there are
+                 * genuinely calm pockets and busy ones.
+                 */
+                spawnTimer=
+                    computeOrbitalSpawnInterval();
 
-            if(
-                wave>8 &&
-                Math.random()<
-                Math.min(
-                    .18,
-                    wave*.01
-                )*
-                aiModel.difficulty
-            ){
+                spawnOrbitalAsteroid();
+
+            }else{
+
+                /*
+                 * Higher floor and gentler ramp than
+                 * before, so the ambient spawn rate
+                 * never accelerates into a bullet-hell
+                 * pace even at high waves. The AI
+                 * difficulty multiplier (see ADAPTIVE
+                 * DIFFICULTY below) then nudges this
+                 * pace up or down based on how the
+                 * player is actually doing right now.
+                 */
+                spawnTimer=
+                    computeSpawnInterval();
 
                 spawnAsteroid();
+
+                if(
+                    wave>8 &&
+                    Math.random()<
+                    Math.min(
+                        .18,
+                        wave*.01
+                    )*
+                    aiModel.difficulty
+                ){
+
+                    spawnAsteroid();
+
+                }
 
             }
 
@@ -38951,11 +39150,15 @@ function update(dt){
 
         /*
          * Destination field -> planet.
+         * Orbital space has its own boundaries (return radius
+         * and escape radius, handled in updateOrbital), so the
+         * field's score-based transitions are skipped there.
          */
 
         if(
             running &&
             !gameOver &&
+            !inOrbital &&
             !pendingFieldExit &&
             capsuleMode!=="death" &&
             planetPhasePending &&
@@ -42454,8 +42657,52 @@ canvas.addEventListener(
 
         orbitalDragLastY=event.clientY;
 
-        orbitalHeading+=
-            dx*ORBITAL_TURN_PER_PX;
+        /*
+         * Absolute steering: the ship turns toward the direction
+         * the finger is actually moving, rather than treating
+         * horizontal drag as a rudder.
+         *
+         * The rudder model inverted itself whenever the nose
+         * pointed downward — rotating "clockwise" always turns
+         * the same way in screen space, so with the nose south a
+         * rightward drag swung it visibly left. Pointing the
+         * ship straight at the drag direction has no such
+         * failure case: drag where you want to go and the ship
+         * goes there, at any heading.
+         */
+        const dragDistance=
+            Math.hypot(dx,dy);
+
+        if(dragDistance>ORBITAL_DRAG_DEADZONE){
+
+            const targetHeading=
+                Math.atan2(dy,dx);
+
+            let headingDelta=
+                targetHeading-
+                orbitalHeading;
+
+            while(headingDelta>Math.PI)
+                headingDelta-=Math.PI*2;
+
+            while(headingDelta<-Math.PI)
+                headingDelta+=Math.PI*2;
+
+            /*
+             * Eased rather than snapped, so the ship banks round
+             * to the new heading instead of teleporting its nose
+             * — and so tiny jitters in a slow drag don't make it
+             * twitch.
+             */
+            orbitalHeading+=
+                headingDelta*
+                Math.min(
+                    1,
+                    dragDistance*
+                    ORBITAL_TURN_RESPONSE
+                );
+
+        }
 
         /*
          * Screen Y grows downward, so dragging UP is a negative
