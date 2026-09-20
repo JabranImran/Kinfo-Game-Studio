@@ -4453,6 +4453,40 @@ const PLANET_VIEW_LAT=
     Math.PI/2-1.1;
 
 /*
+ * Earth's continents as fixed positions on the sphere — the
+ * original hand-authored layout (flat x/y offsets as fractions
+ * of radius) converted to lat/lon so they're real points on the
+ * globe rather than a flat texture painted over it, and so they
+ * rotate in lockstep with the structures and the surface pattern
+ * instead of staying static while everything else turns.
+ *
+ * Converted relative to the DEFAULT camera angle (PLANET_VIEW_LAT,
+ * lon 0) specifically so the familiar layout — the one the game
+ * has always shown — is exactly what's visible when not roaming;
+ * only walking around actually moves them.
+ */
+const EARTH_CONTINENTS_3D=
+    [
+        [-.38,-.25,.22,.13],
+        [-.12,-.48,.14,.20],
+        [.20,-.27,.28,.15],
+        [.35,.03,.20,.18],
+        [-.28,.18,.18,.23],
+        [.02,.28,.16,.11],
+        [.38,.34,.13,.09]
+    ].map(
+        ([lon,latOffset,rx,ry],i) => ({
+            lon,
+            lat:
+                PLANET_VIEW_LAT-
+                latOffset,
+            rx,
+            ry,
+            seed:i
+        })
+    );
+
+/*
  * Fixed scattering of surface markings across the whole sphere,
  * including the far side — generated once at load from a simple
  * deterministic sequence rather than Math.random(), so the
@@ -19841,14 +19875,39 @@ function drawPlanetFocusScene(){
 
     try{
 
-        drawPlanetSurface(
-            planet,
-            cx,
-            cy,
-            radius,
-            time,
-            c
-        );
+        /*
+         * Earth specifically gets the rotating 3D surface — real
+         * continents and clouds on the sphere, turning in lockstep
+         * with the structures standing on it, rather than a flat
+         * texture painted underneath them. Every other planet
+         * keeps its existing flat drawPlanetSurface rendering for
+         * now; the request was to start with Earth and move on to
+         * the rest afterward.
+         */
+        if(planet.id==="earth"){
+
+            drawEarthContinents3D(
+                c,
+                cx,
+                cy,
+                radius,
+                roamViewLat,
+                roamViewLon,
+                time
+            );
+
+        }else{
+
+            drawPlanetSurface(
+                planet,
+                cx,
+                cy,
+                radius,
+                time,
+                c
+            );
+
+        }
 
     }catch(error){
 
@@ -19860,6 +19919,7 @@ function drawPlanetFocusScene(){
     }
 
     c.restore();
+
 
     /*
      * A thin bright rim along the horizon line sells the
@@ -20843,6 +20903,32 @@ function drawPlanetFocusScene(){
 
         c.translate(shipX,shipY);
 
+        /*
+         * Same Paper-Mario billboard tilt structures get — without
+         * it the ship stayed perfectly upright no matter where the
+         * planet's rotation put it, which is why it only ever
+         * looked like it was sliding in a flat X/Y square rather
+         * than actually standing on a curved, turning surface the
+         * way everything else on the planet does. Eased out during
+         * a launch/landing though (by shipEase, which is 0 at rest
+         * and 1 mid-flight) — the ship should straighten up as it
+         * lifts off toward screen centre, not stay tilted while
+         * flying.
+         */
+        const shipUpAngle=
+            Math.atan2(
+                surfaceY-cy,
+                surfaceX-cx
+            );
+
+        c.rotate(
+            (
+                shipUpAngle+
+                Math.PI/2
+            )*
+            (1-shipEase)
+        );
+
         const pulse=
             Math.sin(time*3)*1.5;
 
@@ -21000,11 +21086,24 @@ function drawPlanetFocusScene(){
 
             try{
 
+                /*
+                 * (cx,cy) here, not the literal screen centre —
+                 * that was a leftover from before the sphere
+                 * rewrite. The planet's own body is drawn around
+                 * (cx,cy), and projectSphere guarantees the pet's
+                 * OWN projected position lands exactly there too
+                 * (its lat/lon and the view lat/lon are the same
+                 * point). Drawing the pet at the literal screen
+                 * centre instead meant it and the planet visibly
+                 * disagreed about where "here" was — the planet
+                 * sits below true centre in the normal framing, so
+                 * the pet looked like it was floating above it.
+                 */
                 drawSpacePet(
                     c,
                     selectedStartPlanet,
-                    width/2,
-                    height/2,
+                    cx,
+                    cy,
                     roamPetSize,
                     pet.energy,
                     roamAnimSeed,
@@ -31198,6 +31297,149 @@ function projectSphere(
  * it crosses.
  */
 const SPHERE_VISIBILITY_Z=.04;
+
+/*
+ * Earth's surface, drawn as real features on the sphere rather
+ * than a flat texture — continents and cloud bands both go
+ * through projectSphere, exactly like structures and the base
+ * surface pattern do, so they turn in lockstep with everything
+ * else instead of staying fixed while the world rotates round
+ * them. Only Earth for now; every other planet keeps its
+ * existing flat drawPlanetSurface rendering untouched.
+ */
+function drawEarthContinents3D(
+    c,cx,cy,radius,
+    viewLat,viewLon,time
+){
+
+    c.save();
+
+    c.fillStyle=
+        "rgba(55,175,91,.8)";
+
+    for(
+        const land of
+        EARTH_CONTINENTS_3D
+    ){
+
+        /*
+         * The same gentle wobble the original had, just applied
+         * to longitude now instead of a raw pixel offset.
+         */
+        const wobbleLon=
+            land.lon+
+            Math.sin(
+                time*.08+land.seed
+            )*.02;
+
+        const proj=
+            projectSphere(
+                land.lat,
+                wobbleLon,
+                viewLat,
+                viewLon,
+                cx,
+                cy,
+                radius
+            );
+
+        if(!proj.visible)
+            continue;
+
+        c.globalAlpha=
+            .8*
+            Math.min(
+                1,
+                proj.z*2.5
+            );
+
+        c.beginPath();
+
+        c.ellipse(
+            proj.x,
+            proj.y,
+            land.rx*radius*proj.scale,
+            land.ry*radius*
+            proj.scale*
+            Math.max(.3,proj.z),
+            land.lon,
+            0,
+            Math.PI*2
+        );
+
+        c.fill();
+
+    }
+
+    /*
+     * Cloud bands — four rows at fixed latitudes, each slowly
+     * drifting in longitude, the same idle motion the original
+     * flat clouds had.
+     */
+    c.strokeStyle=
+        "rgba(255,255,255,.22)";
+
+    for(
+        let i=0;
+        i<4;
+        i++
+    ){
+
+        const cloudLat=
+            PLANET_VIEW_LAT+
+            (.55-i*.31);
+
+        const cloudLon=
+            Math.sin(
+                time*.08+i
+            )*.3;
+
+        const proj=
+            projectSphere(
+                cloudLat,
+                cloudLon,
+                viewLat,
+                viewLon,
+                cx,
+                cy,
+                radius
+            );
+
+        if(!proj.visible)
+            continue;
+
+        c.globalAlpha=
+            .22*
+            Math.min(
+                1,
+                proj.z*2.5
+            );
+
+        c.lineWidth=
+            radius*.055*
+            proj.scale;
+
+        c.beginPath();
+
+        c.ellipse(
+            proj.x,
+            proj.y,
+            radius*.5*proj.scale,
+            radius*.045*
+            proj.scale*
+            Math.max(.3,proj.z),
+            -.15,
+            0,
+            Math.PI*2
+        );
+
+        c.stroke();
+
+    }
+
+    c.restore();
+
+}
 
 
 function edgeSpawn(){
