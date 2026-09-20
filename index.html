@@ -4373,6 +4373,14 @@ let roamingFacingTarget=1;
 let roamingFacingScale=1;
 
 /*
+ * Smoothed (low-pass filtered) version of the joystick's raw
+ * horizontal offset, used only to decide the facing target — see
+ * updateRoamingMovement for why this exists on top of the
+ * deadzone and easing above.
+ */
+let roamingSmoothedJoyDx=0;
+
+/*
  * Eases toward the joystick's raw current fraction rather than
  * applying it directly — a fast flick of the finger can land far
  * from the drag's start point in a single move event, and without
@@ -4428,12 +4436,15 @@ const ROAM_MAX_RADIAL_SPEED=170;
 const ROAM_SPEED_EASE_SECONDS=.22;
 
 /*
- * Facing: how much horizontal joystick offset counts as a real
+ * Facing: how much SMOOTHED horizontal offset counts as a real
  * directional intent rather than noise from an otherwise-vertical
- * drag, and how quickly the drawn facing scale eases toward
- * whichever direction that intent currently points.
+ * (or genuinely wavering) drag, how quickly that smoothing itself
+ * settles, and how quickly the drawn facing scale then eases
+ * toward whichever direction the smoothed signal currently points.
  */
 const ROAM_FACING_DEADZONE_PX=6;
+
+const ROAM_FACING_SMOOTH_RATE=6;
 
 const ROAM_FACING_EASE_RATE=9;
 
@@ -4445,21 +4456,9 @@ const ROAM_FACING_EASE_RATE=9;
 const ROAM_WALK_ANIM_BOOST=7;
 
 /*
- * How far the pet can wander — angle in radians either side of
- * straight up (where the ship sits), radius as a fraction of the
- * planet's own drawn radius.
- *
- * Widened from an earlier, much narrower range that made the
- * player feel like they'd hit a wall well before actually running
- * out of visible planet to walk on. But there's a real geometric
- * ceiling here, not just an arbitrary one: past PI/2 either way,
- * sin(angle) turns positive and the walk position drops below the
- * planet's own centre height — off the visible upper dome
- * entirely, looking like it's floating in space beneath the
- * planet rather than standing on it. 1.52 sits just under that
- * ceiling. Genuinely walking all the way around means the planet
- * needs to turn to reveal its far side, which is exactly the 3D
- * rotation piece left for later rather than attempted here.
+ * Radius range — how close to the pole (small radius) or out
+ * toward the horizon (radius close to the planet's own drawn
+ * radius) the pet can walk.
  *
  * Max radius is capped at the planet's own drawn radius, not
  * beyond it — it was previously allowed past 1.0, which let the
@@ -4469,11 +4468,35 @@ const ROAM_WALK_ANIM_BOOST=7;
  * approaching the pole reads as "nearly there" rather than
  * hitting an arbitrary stop well short of the centre.
  */
-const ROAM_ANGLE_RANGE=1.52;
-
 const ROAM_MIN_RADIUS_FRACTION=.03;
 
 const ROAM_MAX_RADIUS_FRACTION=.98;
+
+/*
+ * The angular boundary is no longer a clamp on the walking pet
+ * at all — it's genuinely free to walk all the way around (see
+ * roamRotate in drawPlanetFocusScene). This is instead the
+ * geometric point past which something else's ROTATED position
+ * drops below the planet's own centre height — off the visible
+ * upper dome, the same as if it had gone around to the sphere's
+ * far side. Structures, idle pets and the ship all check their
+ * own rotated sin(angle) against this and simply aren't drawn
+ * once past it, which is what actually makes walking far enough
+ * around hide things behind the horizon.
+ *
+ * ROAM_VISIBILITY_ANGLE_LIMIT is kept in radians (1.52, just
+ * under the true PI/2 ceiling where sin turns positive) so the
+ * sin-space limit below is computed from it rather than a
+ * separately hand-derived number — change the angle and the
+ * visibility threshold stays correct automatically.
+ */
+const ROAM_VISIBILITY_ANGLE_LIMIT=1.52;
+
+const ROAM_VISIBILITY_SIN_LIMIT=
+    Math.sin(
+        -Math.PI/2+
+        ROAM_VISIBILITY_ANGLE_LIMIT
+    );
 
 /*
  * The planet's true (pre-camera-shift) centre and radius from
@@ -18858,6 +18881,8 @@ function updateRoamingMovement(){
 
         roamingIsMoving=false;
 
+        roamingSmoothedJoyDx=0;
+
         /*
          * Speed eases back down to 0 even after letting go —
          * without this, releasing mid-stride and immediately
@@ -18890,6 +18915,8 @@ function updateRoamingMovement(){
 
         roamingIsMoving=false;
 
+        roamingSmoothedJoyDx=0;
+
         roamingSpeedFraction=
             Math.max(
                 0,
@@ -18903,21 +18930,37 @@ function updateRoamingMovement(){
 
     roamingIsMoving=true;
 
+
     /*
-     * Facing only updates its TARGET when the drag is clearly
-     * more horizontal than a small noise threshold — a mostly-
-     * vertical drag (walking straight up or down) has a joyDx
-     * that hovers right around 0, and without this, tiny sign
-     * flips in that noise were enough to flip the target every
-     * few frames.
+     * Smoothed over time before being used for facing at all —
+     * a real dragging finger wavers slightly even when the
+     * player's intent is a single steady direction, and that
+     * natural tremor can cross a plain magnitude deadzone in
+     * both directions repeatedly, which is exactly what kept
+     * causing jitter even after the deadzone and easing were
+     * added: those only softened each individual flip, they
+     * didn't stop the target from being recalculated off noisy
+     * per-frame data in the first place. Smoothing joyDx itself
+     * first, then deciding the target from THAT, filters out the
+     * tremor before it ever reaches the decision.
      */
+    roamingSmoothedJoyDx+=
+        (
+            joyDx-
+            roamingSmoothedJoyDx
+        )*
+        Math.min(
+            1,
+            dt*ROAM_FACING_SMOOTH_RATE
+        );
+
     if(
-        Math.abs(joyDx)>
+        Math.abs(roamingSmoothedJoyDx)>
         ROAM_FACING_DEADZONE_PX
     ){
 
         roamingFacingTarget=
-            joyDx<0 ? -1 : 1;
+            roamingSmoothedJoyDx<0 ? -1 : 1;
 
     }
 
@@ -18970,16 +19013,26 @@ function updateRoamingMovement(){
     const dirY=
         joyDy/joyDistance;
 
+    /*
+     * No clamp here anymore — the walking pet itself never hits
+     * a boundary at all now, since it's always drawn at screen
+     * centre by definition (see roamRotate). It's genuinely free
+     * to walk all the way around; what used to be its own hard
+     * limit is now the visibility threshold everything ELSE
+     * disappears past instead (see ROAM_VISIBILITY_SIN_LIMIT),
+     * which is what actually makes this read as walking around a
+     * sphere rather than hitting an invisible wall. Wrapped into
+     * a bounded range purely so the underlying number doesn't
+     * grow without limit over a long play session — this has no
+     * visual effect, sin/cos are periodic regardless.
+     */
     roamingAngle=
-        clamp(
+        wrapAngle(
             roamingAngle+
             dirX*roamingSpeedFraction*
-            ROAM_MAX_ANGULAR_SPEED*dt,
-            -Math.PI/2-
-            ROAM_ANGLE_RANGE,
-            -Math.PI/2+
-            ROAM_ANGLE_RANGE
+            ROAM_MAX_ANGULAR_SPEED*dt
         );
+
 
     /*
      * Joystick pulled UP (negative dirY) walks further out toward
@@ -19037,7 +19090,10 @@ function startRoaming(ship){
 
     roamingFacingScale=1;
 
+    roamingSmoothedJoyDx=0;
+
     roamingSpeedFraction=0;
+
 
     roamingStartTime=
         performance.now();
@@ -19487,10 +19543,8 @@ function drawPlanetFocusScene(){
         planetParallaxY;
 
     /*
-     * True (pre-shift) values kept for startRoaming and the
-     * return-to-ship distance check — recorded before any
-     * roaming camera shift below moves cx/cy for this frame's
-     * drawing.
+     * True (pre-shift, pre-rotation) values kept for startRoaming
+     * and the return-to-ship distance check.
      */
     lastDrawnPlanetCx=cx;
 
@@ -19499,34 +19553,54 @@ function drawPlanetFocusScene(){
     lastDrawnPlanetRadius=radius;
 
     /*
-     * Roaming camera follow: shifts cx/cy (and so, transitively,
-     * every structure/pet/ship position computed from them below)
-     * so the roaming pet's own position lands at screen centre.
-     * A plain offset rather than touching each position
-     * individually, since everything downstream already derives
-     * from cx/cy — shifting it once here is equivalent to moving
-     * the camera, and keeps hit-testing (which reads those same
-     * computed positions) automatically correct too.
+     * Roaming: the planet genuinely turns beneath the pet as it
+     * walks, rather than the camera just sliding to follow it.
+     *
+     * planetRotationOffset is how far the world has turned — every
+     * structure, idle pet and the ship subtracts this from their
+     * own fixed angle before being drawn (see roamRotate below),
+     * which is a real rotation of their position around the same
+     * centre, not an approximation of one. The walking pet itself
+     * is, by definition, always exactly at the front after this
+     * rotation (angle -PI/2) — so unlike before, cx/cy no longer
+     * need to shift by anything depending on the pet's angle at
+     * all, only by its radius, to keep it sitting at true screen
+     * centre regardless of how far toward the pole or the horizon
+     * it's currently walked.
+     *
+     * The previous version instead translated cx/cy by the pet's
+     * own on-screen offset — which keeps the pet centred too, but
+     * only APPROXIMATES a rotation for anything else near it: it
+     * correctly slides nearby structures out of the way for small
+     * movements, but doesn't actually preserve their true angular
+     * relationship to the pet for larger ones, which is what made
+     * the old boundary behave inconsistently depending on the
+     * exact path walked to reach it — sometimes right at the
+     * edge, sometimes stuck well short of it.
      */
+    let roamRotate=0;
+
     if(roamingActive){
 
         updateRoamingMovement();
 
-        const naturalRoamX=
-            cx+
-            Math.cos(roamingAngle)*
+        roamRotate=
+            roamingAngle+
+            Math.PI/2;
+
+        /*
+         * The pet's natural position after rotation is always
+         * exactly (cx, cy-roamingRadius) — cos(-PI/2)=0 leaves
+         * cx untouched by angle entirely, and sin(-PI/2)=-1 makes
+         * radius the only thing that matters for its height. So
+         * recentring it is just these two direct assignments,
+         * not a computed offset the way it was before.
+         */
+        cx=width/2;
+
+        cy=
+            height/2+
             roamingRadius;
-
-        const naturalRoamY=
-            cy+
-            Math.sin(roamingAngle)*
-            roamingRadius;
-
-        cx+=
-            width/2-naturalRoamX;
-
-        cy+=
-            height/2-naturalRoamY;
 
         /*
          * Close enough to the ship's true (unshifted) position —
@@ -19991,7 +20065,13 @@ function drawPlanetFocusScene(){
                 /*
                  * -PI/2 is the top of the circle in canvas
                  * coordinates, i.e. the point of the planet
-                 * closest to the camera.
+                 * closest to the camera. This is the structure's
+                 * fixed, un-rotated position on the sphere —
+                 * structureAngles stores THIS base value, not the
+                 * rotated one, so anything reading it back (idle
+                 * pets walking toward what they're doing) applies
+                 * rotation itself rather than getting it baked in
+                 * twice.
                  */
                 const angle=
                     -Math.PI/2+t;
@@ -20006,14 +20086,45 @@ function drawPlanetFocusScene(){
 
                 }
 
+                /*
+                 * Actually displayed at this angle, rotated by
+                 * however far the roaming pet has walked — see
+                 * roamRotate above. 0 when not roaming, so this
+                 * is a no-op otherwise.
+                 */
+                const displayAngle=
+                    angle-roamRotate;
+
+                /*
+                 * Past a real geometric limit (see
+                 * ROAM_VISIBILITY_ANGLE_LIMIT for the derivation),
+                 * a rotated position drops below the planet's own
+                 * centre height — off the visible upper dome and
+                 * around what would be the sphere's far side.
+                 * Skipping the rest of this item entirely (no
+                 * draw, no hit-area) is what makes walking far
+                 * enough around genuinely hide things behind the
+                 * horizon, the way the far side of an actual
+                 * sphere would be hidden.
+                 */
+                if(
+                    roamingActive &&
+                    Math.sin(displayAngle)>
+                    ROAM_VISIBILITY_SIN_LIMIT
+                ){
+
+                    return;
+
+                }
+
                 const ix=
                     cx+
-                    Math.cos(angle)*
+                    Math.cos(displayAngle)*
                     radius;
 
                 const iy=
                     cy+
-                    Math.sin(angle)*
+                    Math.sin(displayAngle)*
                     radius;
 
                 c.save();
@@ -20026,8 +20137,9 @@ function drawPlanetFocusScene(){
                  * leaning outward near the edges of the curve.
                  */
                 c.rotate(
-                    angle+Math.PI/2
+                    displayAngle+Math.PI/2
                 );
+
 
                 /*
                  * Structures drawn at double their old size, per
@@ -20427,14 +20539,33 @@ function drawPlanetFocusScene(){
                         radius+
                         radialWander;
 
+                    /*
+                     * Rotated the same way structures are — see
+                     * roamRotate — and hidden past the same
+                     * visibility boundary once rotated far enough
+                     * to drop below the planet's own centre height.
+                     */
+                    const petDisplayAngle=
+                        petAngle-roamRotate;
+
+                    if(
+                        roamingActive &&
+                        Math.sin(petDisplayAngle)>
+                        ROAM_VISIBILITY_SIN_LIMIT
+                    ){
+
+                        return;
+
+                    }
+
                     const px=
                         cx+
-                        Math.cos(petAngle)*
+                        Math.cos(petDisplayAngle)*
                         petRadius;
 
                     const py=
                         cy+
-                        Math.sin(petAngle)*
+                        Math.sin(petDisplayAngle)*
                         petRadius;
 
                     const petSize=
@@ -20514,7 +20645,25 @@ function drawPlanetFocusScene(){
      * back down during a landing), which is what makes the
      * transition read as the vessel actually flying.
      */
-    if(focusShips.length){
+    /*
+     * The ship's own position is rotated exactly the same way as
+     * everything else — its base angle is always -PI/2 (dead
+     * centre-top, the same "front" position roamRotate is defined
+     * relative to), so its display angle is simply that rotated
+     * by however far the pet has walked.
+     */
+    const shipDisplayAngle=
+        -Math.PI/2-roamRotate;
+
+    const shipVisible=
+        !roamingActive ||
+        Math.sin(shipDisplayAngle)<=
+        ROAM_VISIBILITY_SIN_LIMIT;
+
+    if(
+        focusShips.length &&
+        shipVisible
+    ){
 
         /*
          * Whichever ship is actually selected under the Launch
@@ -20528,26 +20677,44 @@ function drawPlanetFocusScene(){
             ?resolveEarthLaunchChoice()
             :resolveLaunchShip(focusShips);
 
+        const surfaceX=
+            cx+
+            Math.cos(shipDisplayAngle)*
+            radius;
+
         const surfaceY=
-            cy-radius;
+            cy+
+            Math.sin(shipDisplayAngle)*
+            radius;
+
+        const centreX=
+            width*.5;
 
         const centreY=
             height*.5;
 
+        const shipEase=
+            easeZoom(flightProgress);
+
+        const shipX=
+            surfaceX+
+            (centreX-surfaceX)*
+            shipEase;
+
         const shipY=
             surfaceY+
             (centreY-surfaceY)*
-            easeZoom(flightProgress);
+            shipEase;
 
         canvas._shipHitArea={
-            x:cx,
+            x:shipX,
             y:shipY,
             r:Math.max(38,width*.11)
         };
 
         c.save();
 
-        c.translate(cx,shipY);
+        c.translate(shipX,shipY);
 
         const pulse=
             Math.sin(time*3)*1.5;
@@ -30743,6 +30910,37 @@ function clamp(
             value
         )
     );
+
+}
+
+/*
+ * Wraps an angle in radians into (-PI, PI], purely to keep the
+ * underlying number bounded over a long play session — sin/cos
+ * are periodic regardless, so this has no effect on anything
+ * actually drawn. Used by roaming's free-walking angle, which no
+ * longer has any clamp to keep it in range otherwise.
+ */
+function wrapAngle(angle){
+
+    let wrapped=
+        angle%
+        (Math.PI*2);
+
+    if(wrapped>Math.PI){
+
+        wrapped-=
+            Math.PI*2;
+
+    }else if(
+        wrapped<=-Math.PI
+    ){
+
+        wrapped+=
+            Math.PI*2;
+
+    }
+
+    return wrapped;
 
 }
 
