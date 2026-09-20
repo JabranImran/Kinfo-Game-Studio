@@ -570,6 +570,21 @@ body{
 }
 
 /*
+ * Applied to the title, leaderboard button, rank circle and the
+ * launch/ship-select bottom bar while a pilot pet is roaming the
+ * planet — everything a normal launch decision needs, hidden so
+ * roaming reads as its own calmer mode rather than the usual
+ * planet screen with an extra pet wandering around on it.
+ * Structures, other pets and the background are deliberately
+ * left untouched by this class.
+ */
+.roam-hidden{
+    opacity:0 !important;
+    pointer-events:none !important;
+    transition:opacity .35s ease;
+}
+
+/*
  * Sits between the title and the background planets — the only
  * top-of-screen control now that Star Map has been folded into
  * simply tapping a background planet.
@@ -4285,6 +4300,80 @@ let orbitalFade=0;
 let orbitalFadeTarget=0;
 
 let orbitalFadeRaf=null;
+
+/* =========================================================
+   PLANET ROAMING MODE
+   Swiping DOWN on a ship that has a pet assigned to pilot it
+   pops that pet out to walk the planet directly, camera
+   following it, until it's walked back to the ship.
+   Deliberately never touches save data — the pet stays
+   ship.pendingPilot the entire time, roaming is purely a visual/
+   input state layered on top, so a page reload always shows the
+   pilot still aboard the ship, never mid-roam.
+========================================================= */
+
+let roamingActive=false;
+
+/* Which docked ship's pendingPilot is currently roaming. */
+let roamingShipId=null;
+
+/*
+ * Position in the same (angle, radius-from-planet-centre)
+ * system structures and idle pets already use — angle governs
+ * left/right position around the visible arc, radius governs
+ * how far up toward the pole (small radius) or out toward the
+ * horizon (radius close to the planet's own edge) the pet has
+ * walked. Starts at the ship's own position (angle -PI/2, at
+ * the surface) each time roaming begins.
+ */
+let roamingAngle=-Math.PI/2;
+
+let roamingRadius=0;
+
+let roamingDragging=false;
+
+let roamingDragLastX=0;
+
+let roamingDragLastY=0;
+
+/*
+ * How close (in that same world coordinate space) the pet needs
+ * to get to the ship's position before roaming ends and it's
+ * considered "back aboard, ready to launch".
+ */
+const ROAM_RETURN_DISTANCE=46;
+
+/* How much a drag pixel translates into angle/radius change. */
+const ROAM_ANGLE_PER_PX=.0034;
+
+const ROAM_RADIUS_PER_PX=1.15;
+
+/*
+ * How far the pet can wander — angle in radians either side of
+ * straight up (where the ship sits), radius as a fraction of the
+ * planet's own drawn radius. Deliberately less than the full
+ * hemisphere: past this the far side of the sphere would need to
+ * actually be visible, which is exactly the 3D rotation piece
+ * left for later rather than attempted here.
+ */
+const ROAM_ANGLE_RANGE=1.35;
+
+const ROAM_MIN_RADIUS_FRACTION=.12;
+
+const ROAM_MAX_RADIUS_FRACTION=1.08;
+
+/*
+ * The planet's true (pre-camera-shift) centre and radius from
+ * the most recent frame — startRoaming and the return-to-ship
+ * check both need these, and recomputing the whole framing
+ * calculation independently would risk drifting out of sync
+ * with whatever drawPlanetFocusScene actually drew this frame.
+ */
+let lastDrawnPlanetCx=0;
+
+let lastDrawnPlanetCy=0;
+
+let lastDrawnPlanetRadius=150;
 
 /*
  * Rolling record of recent kill timestamps (performance.now()
@@ -18589,6 +18678,103 @@ function getNextTierPlanets(planetId){
 
 }
 
+/*
+ * Starts planet roaming: the given ship's pending pilot pops out
+ * to walk the planet directly. ship.pendingPilot itself is never
+ * touched — roaming is purely a visual/input overlay, so nothing
+ * here needs undoing if the app closes mid-roam.
+ */
+function startRoaming(ship){
+
+    if(
+        !ship ||
+        !ship.pendingPilot
+    )
+        return;
+
+    roamingActive=true;
+
+    roamingShipId=ship.id;
+
+    /*
+     * Starts exactly at the ship's own position — same angle and
+     * radius the ship itself sits at (see the shipY placement in
+     * drawPlanetFocusScene) — so the pet visibly steps off the
+     * ship rather than popping into existence somewhere else on
+     * the planet.
+     */
+    roamingAngle=-Math.PI/2;
+
+    roamingRadius=
+        lastDrawnPlanetRadius ||
+        150;
+
+    roamingDragging=false;
+
+    toggleRoamingUI(true);
+
+    renderPlanetFocus();
+
+}
+
+/*
+ * Ends roaming — the pet is simply back where ship.pendingPilot
+ * already says it is, since that was never touched. Nothing to
+ * restore, only the visual/input state to clear.
+ */
+function endRoaming(){
+
+    if(!roamingActive)
+        return;
+
+    roamingActive=false;
+
+    roamingShipId=null;
+
+    roamingDragging=false;
+
+    toggleRoamingUI(false);
+
+    sound("click");
+
+    renderPlanetFocus();
+
+}
+
+/*
+ * Shows/hides exactly the elements the player asked to have
+ * disappear while roaming — everything a launch decision needs
+ * (title, leaderboard, rank, launch button, ship select).
+ * Structures, other pets and the background are never touched by
+ * this, since those explicitly stay.
+ */
+function toggleRoamingUI(hidden){
+
+    [
+        "focusLogo",
+        "focusLeaderboardBtn",
+        "rankCircleWrap",
+        "focusBottom"
+    ].forEach(
+        id=>{
+
+            const el=
+                document.getElementById(id);
+
+            if(el){
+
+                el.classList.toggle(
+                    "roam-hidden",
+                    hidden
+                );
+
+            }
+
+        }
+    );
+
+}
+
 function drawPlanetFocusScene(){
 
     const canvas=
@@ -18940,7 +19126,7 @@ function drawPlanetFocusScene(){
         homeRadius+
         (departRadius-homeRadius)*flight;
 
-    const cx=
+    let cx=
         width/2+
         planetParallaxX;
 
@@ -18960,10 +19146,101 @@ function drawPlanetFocusScene(){
     const planetEase=
         Math.pow(flight,.75);
 
-    const cy=
+    let cy=
         homeCy+
         (departCy-homeCy)*planetEase+
         planetParallaxY;
+
+    /*
+     * True (pre-shift) values kept for startRoaming and the
+     * return-to-ship distance check — recorded before any
+     * roaming camera shift below moves cx/cy for this frame's
+     * drawing.
+     */
+    lastDrawnPlanetCx=cx;
+
+    lastDrawnPlanetCy=cy;
+
+    lastDrawnPlanetRadius=radius;
+
+    /*
+     * Roaming camera follow: shifts cx/cy (and so, transitively,
+     * every structure/pet/ship position computed from them below)
+     * so the roaming pet's own position lands at screen centre.
+     * A plain offset rather than touching each position
+     * individually, since everything downstream already derives
+     * from cx/cy — shifting it once here is equivalent to moving
+     * the camera, and keeps hit-testing (which reads those same
+     * computed positions) automatically correct too.
+     */
+    if(roamingActive){
+
+        const naturalRoamX=
+            cx+
+            Math.cos(roamingAngle)*
+            roamingRadius;
+
+        const naturalRoamY=
+            cy+
+            Math.sin(roamingAngle)*
+            roamingRadius;
+
+        cx+=
+            width/2-naturalRoamX;
+
+        cy+=
+            height/2-naturalRoamY;
+
+        /*
+         * Close enough to the ship's true (unshifted) position —
+         * end roaming. Checked here, once per frame, against the
+         * world-space positions rather than anything screen-
+         * relative, so it's unaffected by the shift just applied.
+         */
+        const shipWorldX=
+            lastDrawnPlanetCx;
+
+        const shipWorldY=
+            lastDrawnPlanetCy-
+            lastDrawnPlanetRadius;
+
+        const petWorldX=
+            lastDrawnPlanetCx+
+            Math.cos(roamingAngle)*
+            roamingRadius;
+
+        const petWorldY=
+            lastDrawnPlanetCy+
+            Math.sin(roamingAngle)*
+            roamingRadius;
+
+        if(
+            Math.hypot(
+                petWorldX-shipWorldX,
+                petWorldY-shipWorldY
+            )<=ROAM_RETURN_DISTANCE
+        ){
+
+            /*
+             * Deferred to the next frame rather than called here
+             * directly — this check runs mid-draw, and ending
+             * roaming immediately would flip roamingActive
+             * partway through the very frame that's using it (the
+             * camera shift above already happened, but the idle-
+             * pets loop later in this same function would then
+             * see roaming as already over and draw this pet at
+             * its normal idle position instead of where it
+             * actually is) — a one-frame position pop. Finishing
+             * this frame consistently as "still roaming", then
+             * ending cleanly before the next one, avoids that.
+             */
+            requestAnimationFrame(
+                endRoaming
+            );
+
+        }
+
+    }
 
     const palette=
         getPlanetPalette(
@@ -20017,6 +20294,91 @@ function drawPlanetFocusScene(){
     }else{
 
         canvas._shipHitArea=null;
+
+    }
+
+    /*
+     * The roaming pet, drawn topmost and always exactly at screen
+     * centre by construction — the camera shift earlier in this
+     * function was computed specifically so this pet's true
+     * (angle, radius) position lands here. ship.pendingPilot is
+     * never touched by any of this; roamingActive is purely
+     * which pet to draw and where, layered on top of data that
+     * hasn't changed at all.
+     */
+    if(roamingActive){
+
+        const ship=
+            (
+                getShips(
+                    selectedStartPlanet
+                ) || []
+            ).find(
+                s => s.id===roamingShipId
+            );
+
+        const pet=
+            ship &&
+            ship.pendingPilot;
+
+        if(pet){
+
+            let roamSeed=0;
+
+            for(
+                let i=0;
+                i<pet.id.length;
+                i++
+            ){
+
+                roamSeed+=
+                    pet.id.charCodeAt(i);
+
+            }
+
+            const roamPetSize=
+                Math.max(
+                    26,
+                    width*.075
+                );
+
+            try{
+
+                drawSpacePet(
+                    c,
+                    selectedStartPlanet,
+                    width/2,
+                    height/2,
+                    roamPetSize,
+                    pet.energy,
+                    roamSeed,
+                    pet.species,
+                    false,
+                    "builder"
+                );
+
+            }catch(roamPetDrawError){
+
+                console.error(
+                    "Roaming pet draw failed:",
+                    roamPetDrawError
+                );
+
+            }
+
+        }else{
+
+            /*
+             * The ship or its pilot vanished out from under
+             * roaming (sold, reassigned elsewhere) — end
+             * cleanly rather than continuing to draw a pet that
+             * no longer exists.
+             */
+            requestAnimationFrame(
+                endRoaming
+            );
+
+        }
 
     }
 
@@ -42545,6 +42907,16 @@ document
         "pointerdown",
         event=>{
 
+            /*
+             * Roaming has its own dedicated drag listeners below
+             * (movement only, no tap-to-open-menu or swipe-to-
+             * launch) — this tap/swipe handler steps aside
+             * entirely while it's active, rather than the two
+             * competing for the same pointer events.
+             */
+            if(roamingActive)
+                return;
+
             resetHomeIdleTimer();
 
             downX=event.clientX;
@@ -42662,7 +43034,169 @@ document
                  */
                 launchWithAnimation();
 
+                return;
+
             }
+
+            /*
+             * Clear DOWNWARD drag starting on the ship, and only
+             * when it has a pet actually assigned to pilot it —
+             * pops that pilot out to walk the planet directly
+             * instead of launching. A ship the player would fly
+             * themselves has no pilot to send walking, so this
+             * does nothing for it; swiping down there is simply
+             * not a gesture that means anything.
+             */
+            if(
+                downArea &&
+                downArea.swipeable &&
+                duration<=SWIPE_MAX_DURATION &&
+                dy>=SWIPE_MIN_DISTANCE &&
+                Math.abs(dy)>Math.abs(dx)*1.2
+            ){
+
+                const chosenShip=
+                    selectedStartPlanet==="earth"
+                    ?resolveEarthLaunchChoice()
+                    :resolveLaunchShip(
+                        getShips(
+                            selectedStartPlanet
+                        ) || []
+                    );
+
+                if(
+                    chosenShip &&
+                    chosenShip.pendingPilot
+                ){
+
+                    sound("click");
+
+                    startRoaming(
+                        chosenShip
+                    );
+
+                }
+
+            }
+
+        },
+        {passive:true}
+    );
+
+})();
+
+
+/* =========================================================
+   PLANET ROAMING MODE — drag controls
+   Only active while roamingActive is true, so these never
+   compete with the tap/swipe handler above, which steps aside
+   entirely for the same reason. Horizontal drag changes angle
+   (walking left/right around the visible arc), vertical drag
+   changes radius (walking up toward the pole or out toward the
+   horizon). Return to the ship by walking back to it — no tap
+   gesture ends roaming, only reaching it does.
+========================================================= */
+
+(function(){
+
+    const focusCanvas=
+        document.getElementById(
+            "planetFocusCanvas"
+        );
+
+    if(!focusCanvas)
+        return;
+
+    focusCanvas.addEventListener(
+        "pointerdown",
+        event=>{
+
+            if(!roamingActive)
+                return;
+
+            roamingDragging=true;
+
+            roamingDragLastX=
+                event.clientX;
+
+            roamingDragLastY=
+                event.clientY;
+
+        },
+        {passive:true}
+    );
+
+    focusCanvas.addEventListener(
+        "pointermove",
+        event=>{
+
+            if(
+                !roamingDragging ||
+                !roamingActive
+            )
+                return;
+
+            const dx=
+                event.clientX-
+                roamingDragLastX;
+
+            const dy=
+                event.clientY-
+                roamingDragLastY;
+
+            roamingDragLastX=
+                event.clientX;
+
+            roamingDragLastY=
+                event.clientY;
+
+            roamingAngle=
+                clamp(
+                    roamingAngle+
+                    dx*ROAM_ANGLE_PER_PX,
+                    -Math.PI/2-
+                    ROAM_ANGLE_RANGE,
+                    -Math.PI/2+
+                    ROAM_ANGLE_RANGE
+                );
+
+            /*
+             * Dragging UP walks the pet further from the planet's
+             * centre (out toward the horizon), matching the same
+             * "up = further/faster" intuition orbital space's own
+             * drag controls use — so dy is subtracted, not added.
+             */
+            roamingRadius=
+                clamp(
+                    roamingRadius-
+                    dy*ROAM_RADIUS_PER_PX,
+                    lastDrawnPlanetRadius*
+                    ROAM_MIN_RADIUS_FRACTION,
+                    lastDrawnPlanetRadius*
+                    ROAM_MAX_RADIUS_FRACTION
+                );
+
+            resetHomeIdleTimer();
+
+        },
+        {passive:true}
+    );
+
+    focusCanvas.addEventListener(
+        "pointerup",
+        ()=>{
+
+            roamingDragging=false;
+
+        },
+        {passive:true}
+    );
+
+    focusCanvas.addEventListener(
+        "pointercancel",
+        ()=>{
+
+            roamingDragging=false;
 
         },
         {passive:true}
