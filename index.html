@@ -4318,17 +4318,23 @@ let roamingActive=false;
 let roamingShipId=null;
 
 /*
- * Position in the same (angle, radius-from-planet-centre)
- * system structures and idle pets already use — angle governs
- * left/right position around the visible arc, radius governs
- * how far up toward the pole (small radius) or out toward the
- * horizon (radius close to the planet's own edge) the pet has
- * walked. Starts at the ship's own position (angle -PI/2, at
- * the surface) each time roaming begins.
+ * The pet's position on the planet as TRUE SPHERICAL
+ * COORDINATES — latitude (up/down, -PI/2 at the south pole to
+ * +PI/2 at the north) and longitude (around the equator,
+ * wrapping freely).
+ *
+ * This replaces the old flat (angle, radius-from-centre) pair,
+ * which could only ever describe points on the visible front
+ * disc of a circle — there was no way to express "round the
+ * back", which is why walking far enough always ran into some
+ * boundary no matter how it was tuned. Latitude/longitude can
+ * describe every point on a real sphere, so the pet can now
+ * genuinely walk anywhere on it, and the planet rotates
+ * underneath to keep the pet facing the camera.
  */
-let roamingAngle=-Math.PI/2;
+let roamingLat=0;
 
-let roamingRadius=0;
+let roamingLon=0;
 
 let roamingDragging=false;
 
@@ -4405,11 +4411,89 @@ let roamingStartTime=0;
 const ROAM_RETURN_GRACE_SECONDS=.6;
 
 /*
- * How close (in that same world coordinate space) the pet needs
- * to get to the ship's position before roaming ends and it's
- * considered "back aboard, ready to launch".
+ * How close the pet needs to get to the ship before roaming ends
+ * and it's considered "back aboard, ready to launch" — measured
+ * as a true angle across the sphere's surface (radians), not a
+ * flat screen distance, so it means the same thing wherever on
+ * the planet the approach happens to come from.
  */
-const ROAM_RETURN_DISTANCE=46;
+const ROAM_RETURN_ANGLE=.22;
+
+/*
+ * How far south of the ship (which sits at the north pole) the
+ * pet steps out when roaming begins — far enough that it's
+ * clearly standing beside the ship rather than inside it, and
+ * comfortably outside ROAM_RETURN_ANGLE so it doesn't count as
+ * having already arrived.
+ */
+const ROAM_START_LAT_OFFSET=.42;
+
+/*
+ * How far south of the pole the band of surface items
+ * (structures and idle pets) sits. Small, so when not roaming
+ * they appear across the top of the planet exactly as they
+ * always have — this is the same familiar layout, just
+ * expressed as real positions on a sphere so it can rotate.
+ */
+const SURFACE_ITEM_LAT_OFFSET=.55;
+
+/*
+ * Fixed scattering of surface markings across the whole sphere,
+ * including the far side — generated once at load from a simple
+ * deterministic sequence rather than Math.random(), so the
+ * planet's pattern is stable frame to frame (a re-randomised
+ * pattern every frame would shimmer rather than rotate) and
+ * identical across sessions.
+ *
+ * Spread by golden-angle increments in longitude with latitude
+ * stepped evenly, which distributes them fairly evenly over a
+ * sphere instead of clumping at the poles the way naive uniform
+ * random lat/lon does.
+ */
+const PLANET_SURFACE_BLOTCHES=
+    (
+        () => {
+
+            const blotches=[];
+
+            const count=48;
+
+            const goldenAngle=
+                Math.PI*(3-Math.sqrt(5));
+
+            for(
+                let i=0;
+                i<count;
+                i++
+            ){
+
+                /*
+                 * Even spacing in sin(lat) rather than lat gives
+                 * equal-area bands, which is what keeps the
+                 * density even from equator to pole.
+                 */
+                const sinLat=
+                    1-
+                    (i+.5)/count*2;
+
+                blotches.push({
+                    lat:
+                        Math.asin(sinLat),
+                    lon:
+                        wrapAngle(
+                            i*goldenAngle
+                        ),
+                    r:
+                        .07+
+                        (i%5)*.018
+                });
+
+            }
+
+            return blotches;
+
+        }
+    )();
 
 /*
  * Movement is a virtual joystick: the touch's CURRENT offset
@@ -4426,7 +4510,7 @@ const ROAM_JOYSTICK_DEADZONE_PX=8;
 
 const ROAM_MAX_ANGULAR_SPEED=1.1;
 
-const ROAM_MAX_RADIAL_SPEED=170;
+
 
 /*
  * How long the eased speed fraction takes to catch up to the
@@ -4454,49 +4538,6 @@ const ROAM_FACING_EASE_RATE=9;
  * pace — see the roamAnimSeed comment where this is used.
  */
 const ROAM_WALK_ANIM_BOOST=7;
-
-/*
- * Radius range — how close to the pole (small radius) or out
- * toward the horizon (radius close to the planet's own drawn
- * radius) the pet can walk.
- *
- * Max radius is capped at the planet's own drawn radius, not
- * beyond it — it was previously allowed past 1.0, which let the
- * pet walk out past the visible edge of the sphere and look like
- * it was floating in space rather than standing on the ground.
- * Min radius is small rather than a hard wall partway in, so
- * approaching the pole reads as "nearly there" rather than
- * hitting an arbitrary stop well short of the centre.
- */
-const ROAM_MIN_RADIUS_FRACTION=.03;
-
-const ROAM_MAX_RADIUS_FRACTION=.98;
-
-/*
- * The angular boundary is no longer a clamp on the walking pet
- * at all — it's genuinely free to walk all the way around (see
- * roamRotate in drawPlanetFocusScene). This is instead the
- * geometric point past which something else's ROTATED position
- * drops below the planet's own centre height — off the visible
- * upper dome, the same as if it had gone around to the sphere's
- * far side. Structures, idle pets and the ship all check their
- * own rotated sin(angle) against this and simply aren't drawn
- * once past it, which is what actually makes walking far enough
- * around hide things behind the horizon.
- *
- * ROAM_VISIBILITY_ANGLE_LIMIT is kept in radians (1.52, just
- * under the true PI/2 ceiling where sin turns positive) so the
- * sin-space limit below is computed from it rather than a
- * separately hand-derived number — change the angle and the
- * visibility threshold stays correct automatically.
- */
-const ROAM_VISIBILITY_ANGLE_LIMIT=1.52;
-
-const ROAM_VISIBILITY_SIN_LIMIT=
-    Math.sin(
-        -Math.PI/2+
-        ROAM_VISIBILITY_ANGLE_LIMIT
-    );
 
 /*
  * The planet's true (pre-camera-shift) centre and radius from
@@ -19016,38 +19057,34 @@ function updateRoamingMovement(){
     /*
      * No clamp here anymore — the walking pet itself never hits
      * a boundary at all now, since it's always drawn at screen
-     * centre by definition (see roamRotate). It's genuinely free
-     * to walk all the way around; what used to be its own hard
-     * limit is now the visibility threshold everything ELSE
-     * disappears past instead (see ROAM_VISIBILITY_SIN_LIMIT),
-     * which is what actually makes this read as walking around a
-     * sphere rather than hitting an invisible wall. Wrapped into
-     * a bounded range purely so the underlying number doesn't
-     * grow without limit over a long play session — this has no
-     * visual effect, sin/cos are periodic regardless.
+     * centre by definition. It's genuinely free to walk all the
+     * way around the sphere in every direction now — there is no
+     * boundary of any kind, because latitude and longitude can
+     * describe every point on a real sphere, including the far
+     * side. Both are wrapped purely so the underlying numbers
+     * stay bounded over a long session; sin/cos are periodic, so
+     * this has no visual effect at all.
      */
-    roamingAngle=
+    roamingLon=
         wrapAngle(
-            roamingAngle+
+            roamingLon+
             dirX*roamingSpeedFraction*
             ROAM_MAX_ANGULAR_SPEED*dt
         );
 
-
     /*
-     * Joystick pulled UP (negative dirY) walks further out toward
-     * the horizon, matching orbital space's own "up = further/
-     * faster" convention — so dirY is subtracted, not added.
+     * Joystick pulled UP (negative dirY) walks the pet NORTH,
+     * increasing latitude — so dirY is subtracted. Walking far
+     * enough carries it right over a pole and down the other
+     * side, at which point the planet is genuinely upside-down
+     * relative to where it started, and everything standing on
+     * it tips over with it.
      */
-    roamingRadius=
-        clamp(
-            roamingRadius-
+    roamingLat=
+        wrapAngle(
+            roamingLat-
             dirY*roamingSpeedFraction*
-            ROAM_MAX_RADIAL_SPEED*dt,
-            lastDrawnPlanetRadius*
-            ROAM_MIN_RADIUS_FRACTION,
-            lastDrawnPlanetRadius*
-            ROAM_MAX_RADIUS_FRACTION
+            ROAM_MAX_ANGULAR_SPEED*dt
         );
 
 }
@@ -19065,20 +19102,16 @@ function startRoaming(ship){
     roamingShipId=ship.id;
 
     /*
-     * Starts at the same angle as the ship but a smaller radius —
-     * stepped down onto the surface just below/in front of it,
-     * not sitting exactly on top of it. Starting at the ship's
-     * exact radius was also why the return-to-ship grace period
-     * was needed at all; now there's genuine starting distance,
-     * though the grace period stays as a second layer of safety.
+     * The ship sits at the planet's north pole (latitude +PI/2 —
+     * dead centre-top of the visible disc when not roaming). The
+     * pet starts a little south of it, so it steps out onto the
+     * surface just below the ship rather than standing inside it.
      */
-    roamingAngle=-Math.PI/2;
+    roamingLat=
+        Math.PI/2-
+        ROAM_START_LAT_OFFSET;
 
-    roamingRadius=
-        (
-            lastDrawnPlanetRadius ||
-            150
-        )*.82;
+    roamingLon=0;
 
     roamingDragging=false;
 
@@ -19553,77 +19586,57 @@ function drawPlanetFocusScene(){
     lastDrawnPlanetRadius=radius;
 
     /*
-     * Roaming: the planet genuinely turns beneath the pet as it
-     * walks, rather than the camera just sliding to follow it.
+     * Roaming: the planet is a genuine sphere that turns beneath
+     * the pet as it walks, in both axes.
      *
-     * planetRotationOffset is how far the world has turned — every
-     * structure, idle pet and the ship subtracts this from their
-     * own fixed angle before being drawn (see roamRotate below),
-     * which is a real rotation of their position around the same
-     * centre, not an approximation of one. The walking pet itself
-     * is, by definition, always exactly at the front after this
-     * rotation (angle -PI/2) — so unlike before, cx/cy no longer
-     * need to shift by anything depending on the pet's angle at
-     * all, only by its radius, to keep it sitting at true screen
-     * centre regardless of how far toward the pole or the horizon
-     * it's currently walked.
+     * viewLat/viewLon below is simply the pet's own position —
+     * everything drawn on the planet is projected through
+     * projectSphere() relative to it, which rotates the whole
+     * world so the pet's spot faces the camera. That's what makes
+     * the pet appear to run in place on a turning ball, with
+     * structures rising over the horizon ahead and dropping away
+     * behind, and tipping right over as it crosses a pole.
      *
-     * The previous version instead translated cx/cy by the pet's
-     * own on-screen offset — which keeps the pet centred too, but
-     * only APPROXIMATES a rotation for anything else near it: it
-     * correctly slides nearby structures out of the way for small
-     * movements, but doesn't actually preserve their true angular
-     * relationship to the pet for larger ones, which is what made
-     * the old boundary behave inconsistently depending on the
-     * exact path walked to reach it — sometimes right at the
-     * edge, sometimes stuck well short of it.
+     * cx/cy stay at the planet's normal drawn position while
+     * roaming — the pet is centred by the ROTATION itself (its
+     * own projection always lands dead centre), not by shifting
+     * the camera, so no offset is needed here at all.
      */
-    let roamRotate=0;
+    const roamViewLat=
+        roamingActive
+        ?roamingLat
+        :Math.PI/2;
+
+    const roamViewLon=
+        roamingActive
+        ?roamingLon
+        :0;
 
     if(roamingActive){
 
         updateRoamingMovement();
 
-        roamRotate=
-            roamingAngle+
+        /*
+         * Distance back to the ship, measured as a true angle
+         * across the sphere's surface rather than a flat screen
+         * distance — the ship sits at the north pole, so this is
+         * just how far the pet's latitude has fallen from it,
+         * combined with how far round it's walked.
+         */
+        const shipLat=
             Math.PI/2;
 
-        /*
-         * The pet's natural position after rotation is always
-         * exactly (cx, cy-roamingRadius) — cos(-PI/2)=0 leaves
-         * cx untouched by angle entirely, and sin(-PI/2)=-1 makes
-         * radius the only thing that matters for its height. So
-         * recentring it is just these two direct assignments,
-         * not a computed offset the way it was before.
-         */
-        cx=width/2;
-
-        cy=
-            height/2+
-            roamingRadius;
-
-        /*
-         * Close enough to the ship's true (unshifted) position —
-         * end roaming. Checked here, once per frame, against the
-         * world-space positions rather than anything screen-
-         * relative, so it's unaffected by the shift just applied.
-         */
-        const shipWorldX=
-            lastDrawnPlanetCx;
-
-        const shipWorldY=
-            lastDrawnPlanetCy-
-            lastDrawnPlanetRadius;
-
-        const petWorldX=
-            lastDrawnPlanetCx+
-            Math.cos(roamingAngle)*
-            roamingRadius;
-
-        const petWorldY=
-            lastDrawnPlanetCy+
-            Math.sin(roamingAngle)*
-            roamingRadius;
+        const angularDistance=
+            Math.acos(
+                clamp(
+                    Math.sin(shipLat)*
+                    Math.sin(roamingLat)+
+                    Math.cos(shipLat)*
+                    Math.cos(roamingLat)*
+                    Math.cos(roamingLon),
+                    -1,1
+                )
+            );
 
         const withinGrace=
             performance.now()-
@@ -19633,10 +19646,8 @@ function drawPlanetFocusScene(){
 
         if(
             !withinGrace &&
-            Math.hypot(
-                petWorldX-shipWorldX,
-                petWorldY-shipWorldY
-            )<=ROAM_RETURN_DISTANCE
+            angularDistance<=
+            ROAM_RETURN_ANGLE
         ){
 
             /*
@@ -19854,6 +19865,86 @@ function drawPlanetFocusScene(){
     c.restore();
 
     /*
+     * Rotating surface pattern — the thing that actually makes
+     * the planet read as a turning ball rather than a flat disc
+     * with sprites sliding across it. A scattering of blotches at
+     * fixed latitude/longitude positions on the sphere, projected
+     * through exactly the same function everything else uses, so
+     * they sweep round the horizon in perfect lockstep with the
+     * structures standing on them. Each shrinks toward the edges
+     * (foreshortening) and fades as it approaches the horizon, so
+     * they appear to curve away over the surface instead of
+     * sliding flatly across it.
+     */
+    c.save();
+
+    c.beginPath();
+
+    c.arc(
+        cx,
+        cy,
+        radius,
+        0,
+        Math.PI*2
+    );
+
+    c.clip();
+
+    for(
+        let i=0;
+        i<PLANET_SURFACE_BLOTCHES.length;
+        i++
+    ){
+
+        const blotch=
+            PLANET_SURFACE_BLOTCHES[i];
+
+        const bp=
+            projectSphere(
+                blotch.lat,
+                blotch.lon,
+                roamViewLat,
+                roamViewLon,
+                cx,
+                cy,
+                radius
+            );
+
+        if(!bp.visible)
+            continue;
+
+        c.globalAlpha=
+            .16*
+            Math.min(
+                1,
+                bp.z*2.2
+            );
+
+        c.fillStyle=
+            i%3===0
+            ?palette.light
+            :palette.dark;
+
+        c.beginPath();
+
+        c.ellipse(
+            bp.x,
+            bp.y,
+            blotch.r*radius*bp.scale,
+            blotch.r*radius*bp.scale*
+            Math.max(.25,bp.z),
+            0,
+            0,
+            Math.PI*2
+        );
+
+        c.fill();
+
+    }
+
+    c.restore();
+
+    /*
      * Moved up from further below — needed here now so the
      * always-present fallback Fleet/Pets icons (added right
      * after the shop/vault ones) can know whether a real ship
@@ -20063,18 +20154,27 @@ function drawPlanetFocusScene(){
                     );
 
                 /*
-                 * -PI/2 is the top of the circle in canvas
-                 * coordinates, i.e. the point of the planet
-                 * closest to the camera. This is the structure's
-                 * fixed, un-rotated position on the sphere —
-                 * structureAngles stores THIS base value, not the
-                 * rotated one, so anything reading it back (idle
+                 * Each surface item's fixed home on the sphere.
+                 * The spread value t (which used to be an offset
+                 * around a flat arc) becomes longitude, and
+                 * everything sits on the equator band nearest the
+                 * pole where the ship is — so the familiar
+                 * left-to-right layout is unchanged when not
+                 * roaming, but it's now a real position on a
+                 * sphere that can rotate anywhere.
+                 *
+                 * structureAngles stores THIS base longitude, not
+                 * a rotated one, so anything reading it back (idle
                  * pets walking toward what they're doing) applies
                  * rotation itself rather than getting it baked in
                  * twice.
                  */
-                const angle=
-                    -Math.PI/2+t;
+                const itemLon=
+                    t;
+
+                const itemLat=
+                    Math.PI/2-
+                    SURFACE_ITEM_LAT_OFFSET;
 
                 if(
                     item.kind==="structure"
@@ -20082,62 +20182,68 @@ function drawPlanetFocusScene(){
 
                     structureAngles[
                         item.structureId
-                    ]=angle;
+                    ]=itemLon;
 
                 }
 
                 /*
-                 * Actually displayed at this angle, rotated by
-                 * however far the roaming pet has walked — see
-                 * roamRotate above. 0 when not roaming, so this
-                 * is a no-op otherwise.
+                 * Projected through the sphere relative to
+                 * wherever the pet currently stands — this is
+                 * what rotates the whole world around it, and
+                 * what genuinely hides things once they pass
+                 * round the back.
                  */
-                const displayAngle=
-                    angle-roamRotate;
+                const proj=
+                    projectSphere(
+                        itemLat,
+                        itemLon,
+                        roamViewLat,
+                        roamViewLon,
+                        cx,
+                        cy,
+                        radius
+                    );
 
-                /*
-                 * Past a real geometric limit (see
-                 * ROAM_VISIBILITY_ANGLE_LIMIT for the derivation),
-                 * a rotated position drops below the planet's own
-                 * centre height — off the visible upper dome and
-                 * around what would be the sphere's far side.
-                 * Skipping the rest of this item entirely (no
-                 * draw, no hit-area) is what makes walking far
-                 * enough around genuinely hide things behind the
-                 * horizon, the way the far side of an actual
-                 * sphere would be hidden.
-                 */
-                if(
-                    roamingActive &&
-                    Math.sin(displayAngle)>
-                    ROAM_VISIBILITY_SIN_LIMIT
-                ){
+                if(!proj.visible){
 
                     return;
 
                 }
 
                 const ix=
-                    cx+
-                    Math.cos(displayAngle)*
-                    radius;
+                    proj.x;
 
                 const iy=
-                    cy+
-                    Math.sin(displayAngle)*
-                    radius;
+                    proj.y;
 
                 c.save();
 
                 c.translate(ix,iy);
 
                 /*
-                 * Rotating by the surface angle makes each item
-                 * stand perpendicular to the ground beneath it,
-                 * leaning outward near the edges of the curve.
+                 * Paper-Mario-style billboard: each item stays a
+                 * flat 2D cutout, but stands perpendicular to the
+                 * ground beneath it on the sphere.
+                 *
+                 * "Up" at any point on the visible sphere is
+                 * simply the direction away from the planet's
+                 * centre on screen, so the angle from the centre
+                 * out to the item's projected position IS its
+                 * upright direction — no separate 3D orientation
+                 * needed. This is also what makes structures
+                 * genuinely tip over and end up upside-down as
+                 * the pet walks over a pole: their projected
+                 * position swings round to the far side of the
+                 * centre, and this angle follows it all the way.
                  */
+                const upAngle=
+                    Math.atan2(
+                        iy-cy,
+                        ix-cx
+                    );
+
                 c.rotate(
-                    displayAngle+Math.PI/2
+                    upAngle+Math.PI/2
                 );
 
 
@@ -20509,64 +20615,58 @@ function drawPlanetFocusScene(){
 
                     }
 
-                    const petAngle=
+                    const petLon=
                         targetAngle!==null
                         ?targetAngle+wander*.4
                         :idleAngle+wander;
 
                     /*
-                     * Radial wander — every pet previously sat on
-                     * the exact same circle as the planet's own
-                     * edge, varying only by angle, which is why
-                     * they read as confined to one fixed ring
-                     * "on top of" the planet. A slow, gentle bob
-                     * toward and away from that line (a different
-                     * phase per pet, so they don't all breathe in
-                     * sync) lets them roam a little more of the
-                     * visible surface without ever drifting far
-                     * enough to look like they've floated off it
-                     * or sunk into it.
+                     * Latitude wander — pets drift a little north
+                     * and south of the main surface band as they
+                     * mill about (a different phase per pet, so
+                     * they don't all move in sync), rather than
+                     * being pinned to one exact line of latitude.
                      */
-                    const radialWander=
+                    const latWander=
                         Math.sin(
                             time*.55+
                             seed*1.7+
                             petIndex*2.3
-                        )*
-                        radius*.05;
+                        )*.12;
 
-                    const petRadius=
-                        radius+
-                        radialWander;
+                    const petLat=
+                        Math.PI/2-
+                        SURFACE_ITEM_LAT_OFFSET+
+                        latWander;
 
                     /*
-                     * Rotated the same way structures are — see
-                     * roamRotate — and hidden past the same
-                     * visibility boundary once rotated far enough
-                     * to drop below the planet's own centre height.
+                     * Projected through the sphere exactly like
+                     * structures, so idle pets rotate round the
+                     * planet with everything else and hide behind
+                     * the horizon at the same point.
                      */
-                    const petDisplayAngle=
-                        petAngle-roamRotate;
+                    const petProj=
+                        projectSphere(
+                            petLat,
+                            petLon,
+                            roamViewLat,
+                            roamViewLon,
+                            cx,
+                            cy,
+                            radius
+                        );
 
-                    if(
-                        roamingActive &&
-                        Math.sin(petDisplayAngle)>
-                        ROAM_VISIBILITY_SIN_LIMIT
-                    ){
+                    if(!petProj.visible){
 
                         return;
 
                     }
 
                     const px=
-                        cx+
-                        Math.cos(petDisplayAngle)*
-                        petRadius;
+                        petProj.x;
 
                     const py=
-                        cy+
-                        Math.sin(petDisplayAngle)*
-                        petRadius;
+                        petProj.y;
 
                     const petSize=
                         Math.max(
@@ -20646,19 +20746,26 @@ function drawPlanetFocusScene(){
      * transition read as the vessel actually flying.
      */
     /*
-     * The ship's own position is rotated exactly the same way as
-     * everything else — its base angle is always -PI/2 (dead
-     * centre-top, the same "front" position roamRotate is defined
-     * relative to), so its display angle is simply that rotated
-     * by however far the pet has walked.
+     * The ship sits at the planet's north pole, projected through
+     * the sphere exactly like everything else — so it stays put
+     * on the surface as the world rotates, slides round the
+     * horizon as the pet walks away from it, and comes back into
+     * view as the pet returns.
      */
-    const shipDisplayAngle=
-        -Math.PI/2-roamRotate;
+    const shipProj=
+        projectSphere(
+            Math.PI/2,
+            0,
+            roamViewLat,
+            roamViewLon,
+            cx,
+            cy,
+            radius
+        );
 
     const shipVisible=
         !roamingActive ||
-        Math.sin(shipDisplayAngle)<=
-        ROAM_VISIBILITY_SIN_LIMIT;
+        shipProj.visible;
 
     if(
         focusShips.length &&
@@ -20678,14 +20785,10 @@ function drawPlanetFocusScene(){
             :resolveLaunchShip(focusShips);
 
         const surfaceX=
-            cx+
-            Math.cos(shipDisplayAngle)*
-            radius;
+            shipProj.x;
 
         const surfaceY=
-            cy+
-            Math.sin(shipDisplayAngle)*
-            radius;
+            shipProj.y;
 
         const centreX=
             width*.5;
@@ -30943,6 +31046,134 @@ function wrapAngle(angle){
     return wrapped;
 
 }
+
+/* =========================================================
+   SPHERE PROJECTION
+   Turns a point on the planet's surface, given as latitude and
+   longitude, into where it actually appears on screen once the
+   planet has been rotated so the roaming pet faces the camera.
+
+   The whole 3D model is just this one function — everything
+   drawn on the planet (structures, pets, the ship, the surface
+   pattern itself) goes through it, so they can never disagree
+   about where "round the back" is.
+========================================================= */
+
+/*
+ * viewLat/viewLon is where the camera is centred — i.e. the
+ * pet's own position, since the planet always turns to keep the
+ * pet facing us.
+ *
+ * Returns screen x/y, a depth value (z, +1 dead centre facing
+ * the camera, -1 directly behind the planet), whether it's on
+ * the visible near side at all, and a scale factor for
+ * foreshortening things near the edges.
+ */
+function projectSphere(
+    lat,lon,
+    viewLat,viewLon,
+    cx,cy,radius
+){
+
+    /*
+     * Unit vector for the point, in the planet's own fixed
+     * frame: longitude sweeps around the equator, latitude
+     * lifts toward the poles.
+     */
+    const cosLat=
+        Math.cos(lat);
+
+    let px=
+        cosLat*Math.sin(lon);
+
+    let py=
+        Math.sin(lat);
+
+    let pz=
+        cosLat*Math.cos(lon);
+
+    /*
+     * Rotate the world by -viewLon about the vertical axis, so
+     * the viewed longitude swings round to face us.
+     */
+    const cosLon=
+        Math.cos(-viewLon);
+
+    const sinLon=
+        Math.sin(-viewLon);
+
+    const rx=
+        px*cosLon+pz*sinLon;
+
+    const rz=
+        -px*sinLon+pz*cosLon;
+
+    px=rx;
+
+    pz=rz;
+
+    /*
+     * Then by +viewLat about the horizontal axis, so the viewed
+     * latitude tilts to the middle — this is what lets the pet
+     * walk over the poles and round the underside, with
+     * everything else tipping over as it goes.
+     *
+     * Note this is +viewLat where the longitude step above used
+     * -viewLon: latitude and canvas-y run in opposite directions
+     * (latitude grows upward, y grows downward), so the two
+     * rotations genuinely need opposite senses to both bring
+     * their viewed coordinate to the centre facing the camera.
+     */
+    const cosVLat=
+        Math.cos(viewLat);
+
+    const sinVLat=
+        Math.sin(viewLat);
+
+    const ry=
+        py*cosVLat-pz*sinVLat;
+
+    const rz2=
+        py*sinVLat+pz*cosVLat;
+
+    py=ry;
+
+    pz=rz2;
+
+    return{
+
+        x:cx+px*radius,
+
+        /*
+         * Canvas y grows downward while latitude grows upward,
+         * hence the negation.
+         */
+        y:cy-py*radius,
+
+        z:pz,
+
+        visible:pz>SPHERE_VISIBILITY_Z,
+
+        /*
+         * Things near the silhouette edge are being seen at a
+         * glancing angle, so they're drawn slightly smaller —
+         * enough to read as curvature without shrinking them to
+         * nothing.
+         */
+        scale:
+            .55+
+            Math.max(0,pz)*.45
+
+    };
+
+}
+
+/*
+ * Slightly above 0 (the exact horizon) so something doesn't
+ * linger for a frame exactly edge-on, flickering in and out as
+ * it crosses.
+ */
+const SPHERE_VISIBILITY_Z=.04;
 
 
 function edgeSpawn(){
