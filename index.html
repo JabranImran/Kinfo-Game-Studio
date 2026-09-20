@@ -4411,6 +4411,20 @@ let roamingStartTime=0;
 const ROAM_RETURN_GRACE_SECONDS=.6;
 
 /*
+ * When the ship/pilot lookup in drawPlanetFocusScene first came
+ * up empty (performance.now(), 0 = not currently missing) — a
+ * short grace window, same idea as ROAM_RETURN_GRACE_SECONDS
+ * above, before treating a failed lookup as the ship or pilot
+ * genuinely having vanished and ending roaming. Without this, a
+ * single transient miss (say, right on the very first frame
+ * roaming becomes active, before everything's settled) would end
+ * roaming before the pet was ever drawn even once.
+ */
+let roamingLookupMissSince=0;
+
+const ROAM_LOOKUP_GRACE_SECONDS=.4;
+
+/*
  * How close the pet needs to get to the ship before roaming ends
  * and it's considered "back aboard, ready to launch" — measured
  * as a true angle across the sphere's surface (radians), not a
@@ -4420,11 +4434,19 @@ const ROAM_RETURN_GRACE_SECONDS=.6;
 const ROAM_RETURN_ANGLE=.22;
 
 /*
- * How far south of the ship (which sits at the north pole) the
- * pet steps out when roaming begins — far enough that it's
- * clearly standing beside the ship rather than inside it, and
- * comfortably outside ROAM_RETURN_ANGLE so it doesn't count as
- * having already arrived.
+ * The ship's own latitude — just south of the true pole (see
+ * shipProj in drawPlanetFocusScene for why it can't sit exactly
+ * on it) but still comfortably above SURFACE_ITEM_LAT_OFFSET
+ * below, so it stays visually above the structures.
+ */
+const SHIP_LAT=
+    Math.PI/2-.08;
+
+/*
+ * How far south of the ship the pet steps out when roaming
+ * begins — far enough that it's clearly standing beside the ship
+ * rather than inside it, and comfortably outside ROAM_RETURN_ANGLE
+ * so it doesn't count as having already arrived.
  */
 const ROAM_START_LAT_OFFSET=.42;
 
@@ -19151,14 +19173,15 @@ function startRoaming(ship){
     roamingShipId=ship.id;
 
     /*
-     * The ship sits at the planet's north pole (latitude +PI/2 —
-     * dead centre-top of the visible disc when not roaming). The
-     * pet starts a little south of it, so it steps out onto the
-     * surface just below the ship rather than standing inside it.
+     * The ship sits at SHIP_LAT, just shy of the true pole. The
+     * pet starts a little further south of THAT, so it steps out
+     * onto the surface just below the ship rather than standing
+     * inside it.
      */
     roamingLat=
-        Math.PI/2-
+        SHIP_LAT-
         ROAM_START_LAT_OFFSET;
+
 
     roamingLon=0;
 
@@ -19179,6 +19202,8 @@ function startRoaming(ship){
 
     roamingStartTime=
         performance.now();
+
+    roamingLookupMissSince=0;
 
 
     toggleRoamingUI(true);
@@ -19205,7 +19230,10 @@ function endRoaming(){
 
     roamingIsMoving=false;
 
+    roamingLookupMissSince=0;
+
     toggleRoamingUI(false);
+
 
 
     sound("click");
@@ -19677,12 +19705,13 @@ function drawPlanetFocusScene(){
         /*
          * Distance back to the ship, measured as a true angle
          * across the sphere's surface rather than a flat screen
-         * distance — the ship sits at the north pole, so this is
-         * just how far the pet's latitude has fallen from it,
-         * combined with how far round it's walked.
+         * distance — SHIP_LAT is right near the pole, so this is
+         * essentially how far the pet's latitude has fallen from
+         * it, combined with how far round it's walked.
          */
         const shipLat=
-            Math.PI/2;
+            SHIP_LAT;
+
 
         const angularDistance=
             Math.acos(
@@ -20830,15 +20859,22 @@ function drawPlanetFocusScene(){
      * transition read as the vessel actually flying.
      */
     /*
-     * The ship sits at the planet's north pole, projected through
-     * the sphere exactly like everything else — so it stays put
-     * on the surface as the world rotates, slides round the
-     * horizon as the pet walks away from it, and comes back into
-     * view as the pet returns.
+     * The ship sits JUST off the planet's exact north pole —
+     * not exactly on it. A point exactly at the pole sits ON the
+     * sphere's own rotation axis, and rotating a sphere around an
+     * axis can never move a point that's sitting exactly on that
+     * axis (imagine spinning a globe: the pole itself never
+     * slides anywhere, only the equator and everything else
+     * does). That's exactly why the ship only ever appeared to
+     * move vertically — its longitude literally couldn't affect
+     * its position while it sat exactly on the axis longitude
+     * rotates around. SHIP_LAT, just shy of the pole, is what
+     * SURFACE_ITEM_LAT_OFFSET already does for every structure,
+     * which is why they never had this problem.
      */
     const shipProj=
         projectSphere(
-            Math.PI/2,
+            SHIP_LAT,
             0,
             roamViewLat,
             roamViewLon,
@@ -20848,6 +20884,7 @@ function drawPlanetFocusScene(){
         );
 
     const shipVisible=
+
         !roamingActive ||
         shipProj.visible;
 
@@ -21047,6 +21084,8 @@ function drawPlanetFocusScene(){
 
         if(pet){
 
+            roamingLookupMissSince=0;
+
             let roamSeed=0;
 
             for(
@@ -21121,19 +21160,70 @@ function drawPlanetFocusScene(){
                     roamPetDrawError
                 );
 
+                /*
+                 * A visible fallback rather than nothing at all —
+                 * if drawSpacePet itself is throwing for some
+                 * reason, this at least confirms roaming is still
+                 * genuinely active and exactly where the pet
+                 * should be, which is real information toward
+                 * finding what's actually wrong with the pet's own
+                 * draw call specifically.
+                 */
+                c.save();
+
+                c.fillStyle="#ff6b6b";
+
+                c.beginPath();
+
+                c.arc(
+                    cx,cy,
+                    roamPetSize*.4,
+                    0,
+                    Math.PI*2
+                );
+
+                c.fill();
+
+                c.restore();
+
             }
 
         }else{
 
             /*
-             * The ship or its pilot vanished out from under
-             * roaming (sold, reassigned elsewhere) — end
-             * cleanly rather than continuing to draw a pet that
-             * no longer exists.
+             * The ship or its pilot genuinely vanished out from
+             * under roaming (sold, reassigned elsewhere) — end
+             * cleanly rather than continuing to draw a pet that no
+             * longer exists.
+             *
+             * Given a short grace window first though, the same
+             * way the return-to-ship check already does — a
+             * transient lookup miss on a single frame (getShips
+             * momentarily out of sync right as roaming begins,
+             * say) would otherwise end roaming before the pet was
+             * ever actually drawn even once, which reads to the
+             * player as "the pet doesn't show at all" even though
+             * the underlying data was never actually wrong.
              */
-            requestAnimationFrame(
-                endRoaming
-            );
+            if(!roamingLookupMissSince){
+
+                roamingLookupMissSince=
+                    performance.now();
+
+            }
+
+            if(
+                performance.now()-
+                roamingLookupMissSince>
+                ROAM_LOOKUP_GRACE_SECONDS*
+                1000
+            ){
+
+                requestAnimationFrame(
+                    endRoaming
+                );
+
+            }
 
         }
 
