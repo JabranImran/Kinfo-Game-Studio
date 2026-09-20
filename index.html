@@ -4332,9 +4332,32 @@ let roamingRadius=0;
 
 let roamingDragging=false;
 
+/* Fixed joystick centre — screen position where the drag began. */
 let roamingDragLastX=0;
 
 let roamingDragLastY=0;
+
+/* Updated continuously on pointermove — the joystick's current position. */
+let roamingDragCurrentX=0;
+
+let roamingDragCurrentY=0;
+
+/*
+ * Last frame's timestamp, so updateRoamingMovement can compute
+ * its own dt — drawPlanetFocusScene runs off planetFocusLoop's
+ * requestAnimationFrame, which doesn't hand it one directly.
+ */
+let roamingLastFrameTime=0;
+
+/*
+ * Whether the joystick is currently displaced enough to count as
+ * genuinely walking, and which way it's facing — both read by
+ * the roaming pet's own draw call to drive its walk-cycle speed
+ * and left/right orientation.
+ */
+let roamingIsMoving=false;
+
+let roamingFacingLeft=false;
 
 /*
  * When the current roaming session began (performance.now()) —
@@ -4359,9 +4382,29 @@ const ROAM_RETURN_GRACE_SECONDS=.6;
 const ROAM_RETURN_DISTANCE=46;
 
 /* How much a drag pixel translates into angle/radius change. */
-const ROAM_ANGLE_PER_PX=.0034;
+/*
+ * Movement is a virtual joystick: the touch's CURRENT offset
+ * from where the drag started (not the delta since the last
+ * move event) drives ongoing movement every frame, for as long
+ * as the touch is held — dragging out in a direction and
+ * holding it there keeps walking that way without needing to
+ * keep sliding the finger further. Releasing (or dragging back
+ * to the start point) stops movement.
+ */
+const ROAM_JOYSTICK_MAX_PX=70;
 
-const ROAM_RADIUS_PER_PX=1.15;
+const ROAM_JOYSTICK_DEADZONE_PX=8;
+
+const ROAM_MAX_ANGULAR_SPEED=1.1;
+
+const ROAM_MAX_RADIAL_SPEED=170;
+
+/*
+ * How much faster the shared bob/leg-cycle animation runs while
+ * the roaming pet is actively walking versus its normal idle
+ * pace — see the roamAnimSeed comment where this is used.
+ */
+const ROAM_WALK_ANIM_BOOST=7;
 
 /*
  * How far the pet can wander — angle in radians either side of
@@ -4370,12 +4413,20 @@ const ROAM_RADIUS_PER_PX=1.15;
  * hemisphere: past this the far side of the sphere would need to
  * actually be visible, which is exactly the 3D rotation piece
  * left for later rather than attempted here.
+ *
+ * Max radius is capped at the planet's own drawn radius, not
+ * beyond it — it was previously allowed past 1.0, which let the
+ * pet walk out past the visible edge of the sphere and look like
+ * it was floating in space rather than standing on the ground.
+ * Min radius is small rather than a hard wall partway in, so
+ * approaching the pole reads as "nearly there" rather than
+ * hitting an arbitrary stop well short of the centre.
  */
 const ROAM_ANGLE_RANGE=1.35;
 
-const ROAM_MIN_RADIUS_FRACTION=.12;
+const ROAM_MIN_RADIUS_FRACTION=.03;
 
-const ROAM_MAX_RADIUS_FRACTION=1.08;
+const ROAM_MAX_RADIUS_FRACTION=.98;
 
 /*
  * The planet's true (pre-camera-shift) centre and radius from
@@ -16783,7 +16834,28 @@ function drawPetActivityOverlay(c,x,y,size,energy,walkSeed,hatId){
 
 }
 
-function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatId){
+function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatId,flipX){
+
+    /*
+     * Optional facing flip — mirrors everything this call draws
+     * around the (x,y) point itself, so it works uniformly
+     * across every species branch below (each with its own
+     * internal transforms) without needing to touch any of
+     * them individually. Backward compatible: every existing
+     * caller omits flipX, which is falsy, so this is a no-op
+     * for them.
+     */
+    c.save();
+
+    if(flipX){
+
+        c.translate(x,y);
+
+        c.scale(-1,1);
+
+        c.translate(-x,-y);
+
+    }
 
     if(species==="penguin"){
 
@@ -17078,6 +17150,8 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatI
         );
 
     }
+
+    c.restore();
 
 }
 
@@ -18699,6 +18773,103 @@ function getNextTierPlanets(planetId){
  * touched — roaming is purely a visual/input overlay, so nothing
  * here needs undoing if the app closes mid-roam.
  */
+/*
+ * Reads the joystick's current offset from its fixed centre and
+ * turns it into ongoing angle/radius movement, scaled by how far
+ * out it's held (soft-edged, not just on/off past the deadzone) —
+ * called every frame from drawPlanetFocusScene, not just when a
+ * pointermove event happens to fire, which is what makes holding
+ * a direction keep walking rather than needing repeated drags.
+ */
+function updateRoamingMovement(){
+
+    const now=
+        performance.now();
+
+    const dt=
+        roamingLastFrameTime
+        ?Math.min(
+            .1,
+            (now-roamingLastFrameTime)/1000
+        )
+        :0;
+
+    roamingLastFrameTime=now;
+
+    if(!roamingDragging){
+
+        roamingIsMoving=false;
+
+        return;
+
+    }
+
+    const joyDx=
+        roamingDragCurrentX-
+        roamingDragLastX;
+
+    const joyDy=
+        roamingDragCurrentY-
+        roamingDragLastY;
+
+    const joyDistance=
+        Math.hypot(joyDx,joyDy);
+
+    if(joyDistance<ROAM_JOYSTICK_DEADZONE_PX){
+
+        roamingIsMoving=false;
+
+        return;
+
+    }
+
+    roamingIsMoving=true;
+
+    roamingFacingLeft=
+        joyDx<0;
+
+    const fraction=
+        clamp(
+            joyDistance/
+            ROAM_JOYSTICK_MAX_PX,
+            0,1
+        );
+
+    const dirX=
+        joyDx/joyDistance;
+
+    const dirY=
+        joyDy/joyDistance;
+
+    roamingAngle=
+        clamp(
+            roamingAngle+
+            dirX*fraction*
+            ROAM_MAX_ANGULAR_SPEED*dt,
+            -Math.PI/2-
+            ROAM_ANGLE_RANGE,
+            -Math.PI/2+
+            ROAM_ANGLE_RANGE
+        );
+
+    /*
+     * Joystick pulled UP (negative dirY) walks further out toward
+     * the horizon, matching orbital space's own "up = further/
+     * faster" convention — so dirY is subtracted, not added.
+     */
+    roamingRadius=
+        clamp(
+            roamingRadius-
+            dirY*fraction*
+            ROAM_MAX_RADIAL_SPEED*dt,
+            lastDrawnPlanetRadius*
+            ROAM_MIN_RADIUS_FRACTION,
+            lastDrawnPlanetRadius*
+            ROAM_MAX_RADIUS_FRACTION
+        );
+
+}
+
 function startRoaming(ship){
 
     if(
@@ -18712,22 +18883,30 @@ function startRoaming(ship){
     roamingShipId=ship.id;
 
     /*
-     * Starts exactly at the ship's own position — same angle and
-     * radius the ship itself sits at (see the shipY placement in
-     * drawPlanetFocusScene) — so the pet visibly steps off the
-     * ship rather than popping into existence somewhere else on
-     * the planet.
+     * Starts at the same angle as the ship but a smaller radius —
+     * stepped down onto the surface just below/in front of it,
+     * not sitting exactly on top of it. Starting at the ship's
+     * exact radius was also why the return-to-ship grace period
+     * was needed at all; now there's genuine starting distance,
+     * though the grace period stays as a second layer of safety.
      */
     roamingAngle=-Math.PI/2;
 
     roamingRadius=
-        lastDrawnPlanetRadius ||
-        150;
+        (
+            lastDrawnPlanetRadius ||
+            150
+        )*.82;
 
     roamingDragging=false;
 
+    roamingIsMoving=false;
+
+    roamingLastFrameTime=0;
+
     roamingStartTime=
         performance.now();
+
 
     toggleRoamingUI(true);
 
@@ -18751,7 +18930,10 @@ function endRoaming(){
 
     roamingDragging=false;
 
+    roamingIsMoving=false;
+
     toggleRoamingUI(false);
+
 
     sound("click");
 
@@ -19192,6 +19374,8 @@ function drawPlanetFocusScene(){
      * computed positions) automatically correct too.
      */
     if(roamingActive){
+
+        updateRoamingMovement();
 
         const naturalRoamX=
             cx+
@@ -20361,6 +20545,24 @@ function drawPlanetFocusScene(){
 
             }
 
+            /*
+             * Walking animation while actually moving: walkSeed
+             * is added directly into the same time*K+walkSeed
+             * expressions the bob/leg-cycle animation already
+             * uses (shared with every idle pet), so making
+             * walkSeed itself grow over time speeds that same
+             * cycle up rather than needing a separate animation
+             * system — a boosted, faster shuffle while the
+             * joystick is held out, and the calm idle cycle the
+             * instant it's released.
+             */
+            const roamAnimSeed=
+                roamingIsMoving
+                ?roamSeed+
+                 performance.now()/1000*
+                 ROAM_WALK_ANIM_BOOST
+                :roamSeed;
+
             const roamPetSize=
                 Math.max(
                     26,
@@ -20376,10 +20578,11 @@ function drawPlanetFocusScene(){
                     height/2,
                     roamPetSize,
                     pet.energy,
-                    roamSeed,
+                    roamAnimSeed,
                     pet.species,
                     false,
-                    "builder"
+                    "builder",
+                    roamingFacingLeft
                 );
 
             }catch(roamPetDrawError){
@@ -43115,11 +43318,16 @@ document
    PLANET ROAMING MODE — drag controls
    Only active while roamingActive is true, so these never
    compete with the tap/swipe handler above, which steps aside
-   entirely for the same reason. Horizontal drag changes angle
-   (walking left/right around the visible arc), vertical drag
-   changes radius (walking up toward the pole or out toward the
-   horizon). Return to the ship by walking back to it — no tap
-   gesture ends roaming, only reaching it does.
+   entirely for the same reason.
+
+   A virtual joystick, not delta-dragging: the touch's CURRENT
+   offset from where it first landed is read fresh every frame
+   in drawPlanetFocusScene (via updateRoamingMovement), for as
+   long as it's held — so walking continues on its own while a
+   direction is held out, rather than needing repeated swipes.
+   Horizontal offset steers angle (left/right around the arc),
+   vertical offset steers radius (toward the pole or the
+   horizon). Return to the ship by walking back to it.
 ========================================================= */
 
 (function(){
@@ -43141,10 +43349,21 @@ document
 
             roamingDragging=true;
 
+            /*
+             * Fixed for the whole hold — this is the joystick's
+             * centre point, everything else is read relative to
+             * it.
+             */
             roamingDragLastX=
                 event.clientX;
 
             roamingDragLastY=
+                event.clientY;
+
+            roamingDragCurrentX=
+                event.clientX;
+
+            roamingDragCurrentY=
                 event.clientY;
 
         },
@@ -43161,45 +43380,18 @@ document
             )
                 return;
 
-            const dx=
-                event.clientX-
-                roamingDragLastX;
-
-            const dy=
-                event.clientY-
-                roamingDragLastY;
-
-            roamingDragLastX=
+            /*
+             * Just records where the touch currently is —
+             * updateRoamingMovement (called every frame from
+             * drawPlanetFocusScene) is what actually turns this
+             * into ongoing movement, continuously, not only when
+             * a move event happens to fire.
+             */
+            roamingDragCurrentX=
                 event.clientX;
 
-            roamingDragLastY=
+            roamingDragCurrentY=
                 event.clientY;
-
-            roamingAngle=
-                clamp(
-                    roamingAngle+
-                    dx*ROAM_ANGLE_PER_PX,
-                    -Math.PI/2-
-                    ROAM_ANGLE_RANGE,
-                    -Math.PI/2+
-                    ROAM_ANGLE_RANGE
-                );
-
-            /*
-             * Dragging UP walks the pet further from the planet's
-             * centre (out toward the horizon), matching the same
-             * "up = further/faster" intuition orbital space's own
-             * drag controls use — so dy is subtracted, not added.
-             */
-            roamingRadius=
-                clamp(
-                    roamingRadius-
-                    dy*ROAM_RADIUS_PER_PX,
-                    lastDrawnPlanetRadius*
-                    ROAM_MIN_RADIUS_FRACTION,
-                    lastDrawnPlanetRadius*
-                    ROAM_MAX_RADIUS_FRACTION
-                );
 
             resetHomeIdleTimer();
 
@@ -43224,6 +43416,7 @@ document
             roamingDragging=false;
 
         },
+
         {passive:true}
     );
 
