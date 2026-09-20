@@ -36650,6 +36650,76 @@ function enterOrbitalSpace(){
 
 }
 
+/*
+ * Nudges every world object that persists across frames by the
+ * ship's own movement, negated — the same camera trick already
+ * used for the planet (planetScreenX = W/2 - orbitalX), applied
+ * to everything sharing that world with it. Momentary one-frame
+ * visuals (explosions, particles, shockwaves) are deliberately
+ * left alone: they finish well before a shift would ever be
+ * visible, and touching them adds risk for nothing seen.
+ */
+function shiftOrbitalWorldObjects(dx,dy){
+
+    for(
+        const a of asteroids
+    ){
+
+        a.x+=dx;
+        a.y+=dy;
+
+    }
+
+    for(
+        const c of coinPickups
+    ){
+
+        c.x+=dx;
+        c.y+=dy;
+
+    }
+
+    for(
+        const m of materialPickups
+    ){
+
+        m.x+=dx;
+        m.y+=dy;
+
+    }
+
+    if(ricochetBall){
+
+        ricochetBall.x+=dx;
+        ricochetBall.y+=dy;
+
+    }
+
+    if(singularity){
+
+        singularity.x+=dx;
+        singularity.y+=dy;
+
+    }
+
+    for(
+        const point of bladeTrail
+    ){
+
+        point.x+=dx;
+        point.y+=dy;
+
+    }
+
+    if(bladeLastPoint){
+
+        bladeLastPoint.x+=dx;
+        bladeLastPoint.y+=dy;
+
+    }
+
+}
+
 function getOrbitalDistance(){
 
     return Math.hypot(
@@ -36874,13 +36944,39 @@ function updateOrbital(dt){
             ORBITAL_MAX_SPEED
         );
 
-    orbitalX+=
+    const orbitalMoveX=
         Math.cos(orbitalHeading)*
         orbitalSpeed*dt;
 
-    orbitalY+=
+    const orbitalMoveY=
         Math.sin(orbitalHeading)*
         orbitalSpeed*dt;
+
+    orbitalX+=
+        orbitalMoveX;
+
+    orbitalY+=
+        orbitalMoveY;
+
+    /*
+     * The ship stays pinned at screen centre in every mode — it
+     * never actually moves in screen space here, only the world
+     * around it does (same trick the planet already uses:
+     * planetScreenX = W/2 - orbitalX). Asteroids, pickups and
+     * the active powerup entities all still store screen-space
+     * x/y though, updated only by their own velocity, with zero
+     * awareness of the ship's orbital motion — which is exactly
+     * why they appeared to drag along with the ship instead of
+     * staying fixed around the planet: nothing was ever shifting
+     * them opposite the ship's movement the way the planet is
+     * shifted. This nudges everything else by the ship's
+     * movement, negated, every frame, so they hold their true
+     * position in the world while the ship flies past them.
+     */
+    shiftOrbitalWorldObjects(
+        -orbitalMoveX,
+        -orbitalMoveY
+    );
 
     const distance=
         getOrbitalDistance();
@@ -41450,7 +41546,10 @@ function handlePointer(event){
         !running ||
         paused ||
         gameOver ||
-        worldState!=="field"
+        (
+            worldState!=="field" &&
+            worldState!=="orbital"
+        )
     ){
 
         return;
