@@ -4351,13 +4351,35 @@ let roamingLastFrameTime=0;
 
 /*
  * Whether the joystick is currently displaced enough to count as
- * genuinely walking, and which way it's facing — both read by
- * the roaming pet's own draw call to drive its walk-cycle speed
- * and left/right orientation.
+ * genuinely walking — read by the roaming pet's own draw call to
+ * drive its walk-cycle speed.
  */
 let roamingIsMoving=false;
 
-let roamingFacingLeft=false;
+/*
+ * Facing direction as a continuous value, not a boolean — -1 is
+ * fully facing left, +1 fully facing right, and roamingFacingScale
+ * eases toward whichever roamingFacingTarget currently is rather
+ * than snapping straight there. A canvas mirror has no real
+ * halfway point of its own, so easing the actual scale factor
+ * through the middle is what makes a direction change read as a
+ * quick turn instead of an instant flash between two orientations
+ * — which is what a plain boolean flip was doing before, made
+ * worse by flipping on every tiny sign change in a mostly-vertical
+ * drag's horizontal noise.
+ */
+let roamingFacingTarget=1;
+
+let roamingFacingScale=1;
+
+/*
+ * Eases toward the joystick's raw current fraction rather than
+ * applying it directly — a fast flick of the finger can land far
+ * from the drag's start point in a single move event, and without
+ * this, that jump translated into an immediate burst of top speed
+ * rather than a smooth ramp up to it.
+ */
+let roamingSpeedFraction=0;
 
 /*
  * When the current roaming session began (performance.now()) —
@@ -4381,7 +4403,6 @@ const ROAM_RETURN_GRACE_SECONDS=.6;
  */
 const ROAM_RETURN_DISTANCE=46;
 
-/* How much a drag pixel translates into angle/radius change. */
 /*
  * Movement is a virtual joystick: the touch's CURRENT offset
  * from where the drag started (not the delta since the last
@@ -4400,6 +4421,23 @@ const ROAM_MAX_ANGULAR_SPEED=1.1;
 const ROAM_MAX_RADIAL_SPEED=170;
 
 /*
+ * How long the eased speed fraction takes to catch up to the
+ * joystick's raw current reading — bigger means a gentler ramp
+ * up (and down), smaller means closer to instant response.
+ */
+const ROAM_SPEED_EASE_SECONDS=.22;
+
+/*
+ * Facing: how much horizontal joystick offset counts as a real
+ * directional intent rather than noise from an otherwise-vertical
+ * drag, and how quickly the drawn facing scale eases toward
+ * whichever direction that intent currently points.
+ */
+const ROAM_FACING_DEADZONE_PX=6;
+
+const ROAM_FACING_EASE_RATE=9;
+
+/*
  * How much faster the shared bob/leg-cycle animation runs while
  * the roaming pet is actively walking versus its normal idle
  * pace — see the roamAnimSeed comment where this is used.
@@ -4409,10 +4447,19 @@ const ROAM_WALK_ANIM_BOOST=7;
 /*
  * How far the pet can wander — angle in radians either side of
  * straight up (where the ship sits), radius as a fraction of the
- * planet's own drawn radius. Deliberately less than the full
- * hemisphere: past this the far side of the sphere would need to
- * actually be visible, which is exactly the 3D rotation piece
- * left for later rather than attempted here.
+ * planet's own drawn radius.
+ *
+ * Widened from an earlier, much narrower range that made the
+ * player feel like they'd hit a wall well before actually running
+ * out of visible planet to walk on. But there's a real geometric
+ * ceiling here, not just an arbitrary one: past PI/2 either way,
+ * sin(angle) turns positive and the walk position drops below the
+ * planet's own centre height — off the visible upper dome
+ * entirely, looking like it's floating in space beneath the
+ * planet rather than standing on it. 1.52 sits just under that
+ * ceiling. Genuinely walking all the way around means the planet
+ * needs to turn to reveal its far side, which is exactly the 3D
+ * rotation piece left for later rather than attempted here.
  *
  * Max radius is capped at the planet's own drawn radius, not
  * beyond it — it was previously allowed past 1.0, which let the
@@ -4422,7 +4469,7 @@ const ROAM_WALK_ANIM_BOOST=7;
  * approaching the pole reads as "nearly there" rather than
  * hitting an arbitrary stop well short of the centre.
  */
-const ROAM_ANGLE_RANGE=1.35;
+const ROAM_ANGLE_RANGE=1.52;
 
 const ROAM_MIN_RADIUS_FRACTION=.03;
 
@@ -16834,24 +16881,35 @@ function drawPetActivityOverlay(c,x,y,size,energy,walkSeed,hatId){
 
 }
 
-function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatId,flipX){
+function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatId,facingScale){
 
     /*
-     * Optional facing flip — mirrors everything this call draws
-     * around the (x,y) point itself, so it works uniformly
-     * across every species branch below (each with its own
-     * internal transforms) without needing to touch any of
-     * them individually. Backward compatible: every existing
-     * caller omits flipX, which is falsy, so this is a no-op
-     * for them.
+     * Optional facing — mirrors everything this call draws around
+     * the (x,y) point itself, so it works uniformly across every
+     * species branch below (each with its own internal transforms)
+     * without needing to touch any of them individually.
+     *
+     * facingScale is a continuous value, not a boolean flip: 1 is
+     * facing right, -1 is facing left, and anything in between is
+     * a real in-progress mirror (the caller eases toward whichever
+     * side it wants over several frames, rather than snapping),
+     * which is what makes a direction change read as a quick turn
+     * instead of an instant flash between two fixed orientations.
+     * Backward compatible: every existing caller omits this,
+     * which resolves to 1 (unflipped, exactly as before).
      */
+    const effectiveFacingScale=
+        facingScale===undefined
+        ?1
+        :facingScale;
+
     c.save();
 
-    if(flipX){
+    if(effectiveFacingScale!==1){
 
         c.translate(x,y);
 
-        c.scale(-1,1);
+        c.scale(effectiveFacingScale,1);
 
         c.translate(-x,-y);
 
@@ -18800,6 +18858,19 @@ function updateRoamingMovement(){
 
         roamingIsMoving=false;
 
+        /*
+         * Speed eases back down to 0 even after letting go —
+         * without this, releasing mid-stride and immediately
+         * dragging again would resume at whatever speed was
+         * already reached, rather than a fresh, gentle start.
+         */
+        roamingSpeedFraction=
+            Math.max(
+                0,
+                roamingSpeedFraction-
+                dt/ROAM_SPEED_EASE_SECONDS
+            );
+
         return;
 
     }
@@ -18819,20 +18890,78 @@ function updateRoamingMovement(){
 
         roamingIsMoving=false;
 
+        roamingSpeedFraction=
+            Math.max(
+                0,
+                roamingSpeedFraction-
+                dt/ROAM_SPEED_EASE_SECONDS
+            );
+
         return;
 
     }
 
     roamingIsMoving=true;
 
-    roamingFacingLeft=
-        joyDx<0;
+    /*
+     * Facing only updates its TARGET when the drag is clearly
+     * more horizontal than a small noise threshold — a mostly-
+     * vertical drag (walking straight up or down) has a joyDx
+     * that hovers right around 0, and without this, tiny sign
+     * flips in that noise were enough to flip the target every
+     * few frames.
+     */
+    if(
+        Math.abs(joyDx)>
+        ROAM_FACING_DEADZONE_PX
+    ){
 
-    const fraction=
+        roamingFacingTarget=
+            joyDx<0 ? -1 : 1;
+
+    }
+
+    /*
+     * The actual scale used for drawing eases toward that target
+     * rather than snapping to it — a canvas mirror has no real
+     * in-between state, so "drifting" toward a flip means easing
+     * the scale factor itself through the middle, which reads as
+     * a quick turn rather than an instant, jarring flash from one
+     * orientation to the other.
+     */
+    roamingFacingScale+=
+        (
+            roamingFacingTarget-
+            roamingFacingScale
+        )*
+        Math.min(
+            1,
+            dt*ROAM_FACING_EASE_RATE
+        );
+
+    /*
+     * The RAW joystick fraction can jump almost instantly (a fast
+     * flick of the finger lands far from the drag's start point
+     * in a single move event) — easing a separate value toward it
+     * rather than applying it directly is what stops a sudden big
+     * drag from producing an immediate burst of top speed; this
+     * is what "accelerates too fast sometimes" actually was.
+     */
+    const targetFraction=
         clamp(
             joyDistance/
             ROAM_JOYSTICK_MAX_PX,
             0,1
+        );
+
+    roamingSpeedFraction+=
+        (
+            targetFraction-
+            roamingSpeedFraction
+        )*
+        Math.min(
+            1,
+            dt/ROAM_SPEED_EASE_SECONDS
         );
 
     const dirX=
@@ -18844,7 +18973,7 @@ function updateRoamingMovement(){
     roamingAngle=
         clamp(
             roamingAngle+
-            dirX*fraction*
+            dirX*roamingSpeedFraction*
             ROAM_MAX_ANGULAR_SPEED*dt,
             -Math.PI/2-
             ROAM_ANGLE_RANGE,
@@ -18860,7 +18989,7 @@ function updateRoamingMovement(){
     roamingRadius=
         clamp(
             roamingRadius-
-            dirY*fraction*
+            dirY*roamingSpeedFraction*
             ROAM_MAX_RADIAL_SPEED*dt,
             lastDrawnPlanetRadius*
             ROAM_MIN_RADIUS_FRACTION,
@@ -18903,6 +19032,12 @@ function startRoaming(ship){
     roamingIsMoving=false;
 
     roamingLastFrameTime=0;
+
+    roamingFacingTarget=1;
+
+    roamingFacingScale=1;
+
+    roamingSpeedFraction=0;
 
     roamingStartTime=
         performance.now();
@@ -20582,8 +20717,9 @@ function drawPlanetFocusScene(){
                     pet.species,
                     false,
                     "builder",
-                    roamingFacingLeft
+                    roamingFacingScale
                 );
+
 
             }catch(roamPetDrawError){
 
