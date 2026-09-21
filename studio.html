@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>HTML Game Studio</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #070910;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+    overflow: hidden;
+}
+
+/* -----------------------------
+   BACKGROUND
+----------------------------- */
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(80,120,255,.12), transparent 30%),
+        radial-gradient(circle at 80% 70%, rgba(180,70,255,.10), transparent 30%),
+        radial-gradient(circle at 50% 100%, rgba(0,220,255,.08), transparent 35%);
+    pointer-events: none;
+}
+
+/* -----------------------------
+   APP
+----------------------------- */
+
+#app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* -----------------------------
+   HEADER
+----------------------------- */
+
+header {
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: rgba(8,10,20,.75);
+    backdrop-filter: blur(20px);
+    z-index: 10;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+}
+
+.logoIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg,#5d7cff,#b05cff);
+    box-shadow: 0 0 25px rgba(100,100,255,.35);
+}
+
+.status {
+    font-size: 12px;
+    color: #8d96a8;
+}
+
+/* -----------------------------
+   NAV
+----------------------------- */
+
+nav {
+    height: 64px;
+    display: flex;
+    padding: 8px;
+    gap: 8px;
+    background: rgba(5,7,14,.85);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.navButton {
+    flex: 1;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: #8d96a8;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.navButton.active {
+    color: white;
+    background: rgba(255,255,255,.09);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+/* -----------------------------
+   MAIN
+----------------------------- */
+
+main {
+    flex: 1;
+    overflow: hidden;
+}
+
+.page {
+    display: none;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.page.active {
+    display: block;
+}
+
+/* -----------------------------
+   LIBRARY
+----------------------------- */
+
+.libraryTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 27px;
+}
+
+.subtitle {
+    margin-top: 5px;
+    color: #8992a5;
+    font-size: 13px;
+}
+
+button {
+    font-family: inherit;
+}
+
+.primary {
+    border: 0;
+    padding: 12px 16px;
+    border-radius: 12px;
+    color: white;
+    background: linear-gradient(135deg,#5c79ff,#9b54ff);
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(90,80,255,.2);
+}
+
+.secondary {
+    border: 1px solid rgba(255,255,255,.1);
+    padding: 11px 15px;
+    border-radius: 12px;
+    color: white;
+    background: rgba(255,255,255,.05);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.gameGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill,minmax(220px,1fr));
+    gap: 18px;
+}
+
+.gameCard {
+    position: relative;
+    min-height: 170px;
+    padding: 20px;
+    border-radius: 20px;
+    overflow: hidden;
+    cursor: pointer;
+
+    background:
+        linear-gradient(145deg,
+        rgba(70,90,180,.22),
+        rgba(20,25,45,.9));
+
+    border: 1px solid rgba(255,255,255,.09);
+
+    transition: transform .2s, border .2s, box-shadow .2s;
+}
+
+.gameCard:hover {
+    transform: translateY(-4px);
+    border-color: rgba(130,150,255,.5);
+    box-shadow: 0 15px 40px rgba(0,0,0,.35);
+}
+
+.gameIcon {
+    width: 58px;
+    height: 58px;
+    border-radius: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 27px;
+    margin-bottom: 20px;
+    background: rgba(255,255,255,.1);
+}
+
+.gameName {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.gameFile {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #7e8798;
+}
+
+.empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: #737c8f;
+    border: 1px dashed rgba(255,255,255,.12);
+    border-radius: 20px;
+}
+
+/* -----------------------------
+   GENERATOR
+----------------------------- */
+
+.generator {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    height: calc(100vh - 154px);
+}
+
+.panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: rgba(15,18,30,.75);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    overflow: hidden;
+}
+
+.panelHeader {
+    min-height: 58px;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.panelTitle {
+    font-weight: 800;
+}
+
+.panelControls {
+    display: flex;
+    gap: 7px;
+}
+
+.smallButton {
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.05);
+    color: white;
+    border-radius: 9px;
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.blockList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+/* -----------------------------
+   CODE BLOCK
+----------------------------- */
+
+.codeBlock {
+    margin-bottom: 12px;
+    border-radius: 13px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+    background: #0b0e18;
+}
+
+.blockTop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(255,255,255,.04);
+}
+
+.blockName {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: white;
+    font-weight: 700;
+    padding: 5px;
+}
+
+.typeSelect {
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 7px;
+    padding: 6px;
+    background: #151a28;
+    color: white;
+}
+
+.deleteBlock {
+    border: 0;
+    background: transparent;
+    color: #ff6f7f;
+    font-size: 17px;
+    cursor: pointer;
+}
+
+textarea {
+    display: block;
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    border: 0;
+    outline: 0;
+    padding: 14px;
+    color: #dce2ef;
+    background: #080b13;
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+/* -----------------------------
+   OUTPUT
+----------------------------- */
+
+.outputArea {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#outputCode {
+    flex: 1;
+    min-height: 0;
+    resize: none;
+}
+
+.preview {
+    height: 50%;
+    min-height: 200px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    background: white;
+}
+
+.preview iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: white;
+}
+
+/* -----------------------------
+   GENERATOR TOOLBAR
+----------------------------- */
+
+.generatorToolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+
+/* -----------------------------
+   MOBILE
+----------------------------- */
+
+@media(max-width:800px) {
+
+    header {
+        height: 62px;
+        padding: 0 14px;
+    }
+
+    .logo {
+        font-size: 17px;
+    }
+
+    .status {
+        display: none;
+    }
+
+    nav {
+        height: 58px;
+    }
+
+    .page {
+        padding: 14px;
+    }
+
+    .libraryTop {
+        align-items: flex-start;
+    }
+
+    .gameGrid {
+        grid-template-columns: repeat(2,1fr);
+        gap: 12px;
+    }
+
+    .gameCard {
+        min-height: 145px;
+        padding: 15px;
+    }
+
+    .gameIcon {
+        width: 48px;
+        height: 48px;
+        font-size: 22px;
+    }
+
+    .gameName {
+        font-size: 15px;
+    }
+
+    .generator {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .panel {
+        min-height: 420px;
+    }
+
+    .outputArea {
+        min-height: 600px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+<header>
+    <div class="logo">
+        <div class="logoIcon">🎮</div>
+        HTML Game Studio
+    </div>
+
+    <div class="status">
+        Version 0
+    </div>
+</header>
+
+<nav>
+    <button class="navButton active" onclick="showPage('library',this)">
+        🎮 Games
+    </button>
+
+    <button class="navButton" onclick="showPage('generator',this)">
+        🛠️ Generator
+    </button>
+</nav>
+
+<main>
+
+<!-- =====================================================
+     GAME LIBRARY
+===================================================== -->
+
+<section id="library" class="page active">
+
+    <div class="libraryTop">
+
+        <div>
+            <h1>Game Library</h1>
+            <div class="subtitle">
+                Your HTML games
+            </div>
+        </div>
+
+        <div>
+            <button class="primary" onclick="chooseGames()">
+                📂 Find Games
+            </button>
+        </div>
+
+    </div>
+
+    <div id="gameGrid" class="gameGrid">
+
+        <div class="empty" style="grid-column:1/-1">
+
+            <div style="font-size:40px;margin-bottom:15px">
+                🚀
+            </div>
+
+            <div style="font-size:18px;font-weight:800;color:white">
+                No games loaded
+            </div>
+
+            <div style="margin-top:8px">
+                Tap <b>Find Games</b> to select your HTML games.
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     GAME GENERATOR
+===================================================== -->
+
+<section id="generator" class="page">
+
+<div class="generator">
+
+    <!-- LEFT -->
+    <div class="panel">
+
+        <div class="panelHeader">
+
+            <div class="panelTitle">
+                🧩 Core Code Blocks
+            </div>
+
+            <div class="panelControls">
+
+                <button class="smallButton"
+                        onclick="addBlock()">
+                    ＋ Block
+                </button>
+
+                <button class="smallButton"
+                        onclick="loadExample()">
+                    Example
+                </button>
+
+            </div>
+
+        </div>
+
+        <div id="blockList" class="blockList">
+
+        </div>
+
+    </div>
+
+
+    <!-- RIGHT -->
+    <div class="panel">
+
+        <div class="panelHeader">
+
+            <div class="panelTitle">
+                ⚙️ Generated Game
+            </div>
+
+        </div>
+
+        <div class="outputArea">
+
+            <textarea
+                id="outputCode"
+                spellcheck="false"
+                placeholder="Your complete HTML game will appear here...">
+            </textarea>
+
+            <div class="preview">
+
+                <iframe
+                    id="previewFrame"
+                    sandbox="allow-scripts allow-pointer-lock">
+                </iframe>
+
+            </div>
+
+        </div>
+
+        <div class="generatorToolbar">
+
+            <button class="primary"
+                    onclick="buildGame()">
+                🔨 Build Game
+            </button>
+
+            <button class="secondary"
+                    onclick="runGame()">
+                ▶️ Test
+            </button>
+
+            <button class="secondary"
+                    onclick="downloadGame()">
+                💾 Download
+            </button>
+
+            <button class="secondary"
+                    onclick="clearGenerator()">
+                🗑️ Clear
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+</section>
+
+</main>
+
+</div>
+
+
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
+<script>
+
+let blocks = [];
+
+let blockCounter = 0;
+
+
+/* =====================================================
+   NAVIGATION
+===================================================== */
+
+function showPage(page, button) {
+
+    document.querySelectorAll(".page")
+        .forEach(p => p.classList.remove("active"));
+
+    document.querySelectorAll(".navButton")
+        .forEach(b => b.classList.remove("active"));
+
+    document.getElementById(page)
+        .classList.add("active");
+
+    button.classList.add("active");
+}
+
+
+/* =====================================================
+   CODE BLOCK SYSTEM
+===================================================== */
+
+function addBlock(
+    name = "",
+    type = "js",
+    code = ""
+) {
+
+    blockCounter++;
+
+    const block = {
+
+        id: blockCounter,
+
+        name:
+            name ||
+            "Code Block " + blockCounter,
+
+        type: type,
+
+        code: code
+
+    };
+
+    blocks.push(block);
+
+    renderBlocks();
+}
+
+
+function deleteBlock(id) {
+
+    blocks =
+        blocks.filter(block => block.id !== id);
+
+    renderBlocks();
+}
+
+
+function renderBlocks() {
+
+    const container =
+        document.getElementById("blockList");
+
+    container.innerHTML = "";
+
+    if (blocks.length === 0) {
+
+        container.innerHTML = `
+            <div class="empty">
+                Add your first code block.
+            </div>
+        `;
+
+        return;
+    }
+
+
+    blocks.forEach(block => {
+
+        const wrapper =
+            document.createElement("div");
+
+        wrapper.className = "codeBlock";
+
+
+        wrapper.innerHTML = `
+
+            <div class="blockTop">
+
+                <input
+                    class="blockName"
+                    value="${escapeAttribute(block.name)}"
+                    placeholder="Block name">
+
+                <select class="typeSelect">
+
+                    <option value="html"
+                        ${block.type==="html"?"selected":""}>
+                        HTML
+                    </option>
+
+                    <option value="css"
+                        ${block.type==="css"?"selected":""}>
+                        CSS
+                    </option>
+
+                    <option value="js"
+                        ${block.type==="js"?"selected":""}>
+                        JS
+                    </option>
+
+                </select>
+
+                <button class="deleteBlock">
+                    ×
+                </button>
+
+            </div>
+
+            <textarea
+                spellcheck="false"
+                placeholder="Enter code here..."></textarea>
+
+        `;
+
+
+        const nameInput =
+            wrapper.querySelector(".blockName");
+
+        const select =
+            wrapper.querySelector(".typeSelect");
+
+        const textarea =
+            wrapper.querySelector("textarea");
+
+        const deleteButton =
+            wrapper.querySelector(".deleteBlock");
+
+
+        nameInput.value = block.name;
+
+        textarea.value = block.code;
+
+
+        nameInput.addEventListener(
+            "input",
+            e => {
+                block.name = e.target.value;
+            }
+        );
+
+
+        select.addEventListener(
+            "change",
+            e => {
+                block.type = e.target.value;
+            }
+        );
+
+
+        textarea.addEventListener(
+            "input",
+            e => {
+                block.code = e.target.value;
+            }
+        );
+
+
+        deleteButton.addEventListener(
+            "click",
+            () => deleteBlock(block.id)
+        );
+
+
+        container.appendChild(wrapper);
+
+    });
+}
+
+
+/* =====================================================
+   BUILD GAME
+===================================================== */
+
+function buildGame() {
+
+    let html = [];
+    let css = [];
+    let js = [];
+
+
+    blocks.forEach(block => {
+
+        if (!block.code.trim())
+            return;
+
+        if (block.type === "html")
+            html.push(
+                `\n<!-- ${block.name} -->\n` +
+                block.code
+            );
+
+        if (block.type === "css")
+            css.push(
+                `\n/* ${block.name} */\n` +
+                block.code
+            );
+
+        if (block.type === "js")
+            js.push(
+                `\n// ${block.name}\n` +
+                block.code
+            );
+
+    });
+
+
+    const result = `<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width,
+      initial-scale=1.0,
+      maximum-scale=1.0,
+      user-scalable=no">
+
+<title>Generated HTML Game</title>
+
+<style>
+
+/* =========================
+   GENERATED CSS
+========================= */
+
+${css.join("\n")}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- =========================
+     GENERATED HTML
+========================= -->
+
+${html.join("\n")}
+
+
+<script>
+
+/* =========================
+   GENERATED JAVASCRIPT
+========================= */
+
+${js.join("\n")}
+
+<\/script>
+
+</body>
+
+</html>`;
+
+
+    document.getElementById("outputCode")
+        .value = result;
+
+
+    runGame();
+
+}
+
+
+/* =====================================================
+   RUN GAME
+===================================================== */
+
+function runGame() {
+
+    const code =
+        document.getElementById("outputCode")
+            .value;
+
+    const frame =
+        document.getElementById("previewFrame");
+
+    frame.srcdoc = code;
+
+}
+
+
+/* =====================================================
+   DOWNLOAD GAME
+===================================================== */
+
+function downloadGame() {
+
+    let code =
+        document.getElementById("outputCode")
+            .value;
+
+    if (!code.trim()) {
+
+        buildGame();
+
+        code =
+            document.getElementById("outputCode")
+                .value;
+    }
+
+
+    const blob =
+        new Blob(
+            [code],
+            {type:"text/html"}
+        );
+
+
+    const url =
+        URL.createObjectURL(blob);
+
+
+    const a =
+        document.createElement("a");
+
+    a.href = url;
+
+    a.download =
+        "my-game.html";
+
+    a.click();
+
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+/* =====================================================
+   EXAMPLE GAME
+===================================================== */
+
+function loadExample() {
+
+    blocks = [];
+
+    blockCounter = 0;
+
+
+    addBlock(
+        "Game HTML",
+        "html",
+        `<canvas id="game"></canvas>`
+    );
+
+
+    addBlock(
+        "Game CSS",
+        "css",
+        `html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #050816;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}`
+    );
+
+
+    addBlock(
+        "Game Engine",
+        "js",
+        `const canvas =
+    document.getElementById("game");
+
+const ctx =
+    canvas.getContext("2d");
+
+function resize() {
+
+    canvas.width =
+        window.innerWidth;
+
+    canvas.height =
+        window.innerHeight;
+
+}
+
+window.addEventListener(
+    "resize",
+    resize
+);
+
+resize();
+
+
+let x = canvas.width / 2;
+let y = canvas.height / 2;
+
+let vx = 2;
+let vy = 1.5;
+
+
+function loop() {
+
+    ctx.fillStyle = "#050816";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    x += vx;
+    y += vy;
+
+
+    if (
+        x < 30 ||
+        x > canvas.width - 30
+    ) {
+        vx *= -1;
+    }
+
+
+    if (
+        y < 30 ||
+        y > canvas.height - 30
+    ) {
+        vy *= -1;
+    }
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        30,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        "#6f8cff";
+
+    ctx.fill();
+
+
+    requestAnimationFrame(loop);
+
+}
+
+loop();`
+    );
+
+
+    buildGame();
+
+}
+
+
+/* =====================================================
+   CLEAR
+===================================================== */
+
+function clearGenerator() {
+
+    blocks = [];
+
+    blockCounter = 0;
+
+    document.getElementById("outputCode")
+        .value = "";
+
+    document.getElementById("previewFrame")
+        .srcdoc = "";
+
+    renderBlocks();
+
+}
+
+
+/* =====================================================
+   GAME FILE PICKER
+===================================================== */
+
+async function chooseGames() {
+
+    /*
+        Modern browsers supporting
+        showDirectoryPicker can access
+        HTML files in a selected folder.
+    */
+
+    if ("showDirectoryPicker" in window) {
+
+        try {
+
+            const directory =
+                await window.showDirectoryPicker();
+
+
+            const games = [];
+
+
+            for await (
+                const [name, handle]
+                of directory.entries()
+            ) {
+
+                if (
+                    handle.kind === "file" &&
+                    name.toLowerCase().endsWith(".html")
+                ) {
+
+                    games.push({
+                        name: name,
+                        handle: handle
+                    });
+
+                }
+
+            }
+
+
+            displayGames(games);
+
+        }
+
+        catch(error) {
+
+            console.log(
+                "Folder selection cancelled."
+            );
+
+        }
+
+        return;
+    }
+
+
+    /*
+        Fallback for browsers without
+        showDirectoryPicker.
+    */
+
+    const input =
+        document.createElement("input");
+
+    input.type = "file";
+
+    input.multiple = true;
+
+    input.accept = ".html,text/html";
+
+
+    input.addEventListener(
+        "change",
+        () => {
+
+            const games =
+                Array.from(input.files)
+                    .map(file => ({
+                        name: file.name,
+                        file: file
+                    }));
+
+            displayGames(games);
+
+        }
+    );
+
+
+    input.click();
+
+}
+
+
+/* =====================================================
+   DISPLAY GAMES
+===================================================== */
+
+function displayGames(games) {
+
+    const grid =
+        document.getElementById("gameGrid");
+
+    grid.innerHTML = "";
+
+
+    if (!games.length) {
+
+        grid.innerHTML = `
+            <div class="empty"
+                 style="grid-column:1/-1">
+
+                No HTML games found.
+
+            </div>
+        `;
+
+        return;
+    }
+
+
+    games.forEach((game,index) => {
+
+        const card =
+            document.createElement("div");
+
+        card.className = "gameCard";
+
+
+        card.innerHTML = `
+
+            <div class="gameIcon">
+                ${getGameIcon(index)}
+            </div>
+
+            <div class="gameName">
+                ${escapeHTML(
+                    game.name
+                        .replace(/\.html$/i,"")
+                )}
+            </div>
+
+            <div class="gameFile">
+                ${escapeHTML(game.name)}
+            </div>
+
+        `;
+
+
+        card.addEventListener(
+            "click",
+            async () => {
+
+                if (game.handle) {
+
+                    const file =
+                        await game.handle.getFile();
+
+                    const url =
+                        URL.createObjectURL(file);
+
+                    window.location.href = url;
+
+                }
+
+                else if (game.file) {
+
+                    const url =
+                        URL.createObjectURL(game.file);
+
+                    window.location.href = url;
+
+                }
+
+            }
+        );
+
+
+        grid.appendChild(card);
+
+    });
+
+}
+
+
+/* =====================================================
+   ICONS
+===================================================== */
+
+function getGameIcon(index) {
+
+    const icons = [
+        "🚀",
+        "🌌",
+        "🏎️",
+        "🧟",
+        "🤖",
+        "👾",
+        "⚔️",
+        "🛸",
+        "🌍",
+        "💥"
+    ];
+
+    return icons[index % icons.length];
+
+}
+
+
+/* =====================================================
+   SECURITY HELPERS
+===================================================== */
+
+function escapeHTML(value) {
+
+    return String(value)
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+
+}
+
+
+function escapeAttribute(value) {
+
+    return escapeHTML(value);
+
+}
+
+
+/* =====================================================
+   STARTUP
+===================================================== */
+
+addBlock(
+    "Game HTML",
+    "html",
+    `<canvas id="game"></canvas>`
+);
+
+
+addBlock(
+    "Game CSS",
+    "css",
+    `html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}`
+);
+
+
+addBlock(
+    "Game JavaScript",
+    "js",
+    `const canvas =
+    document.getElementById("game");
+
+const ctx =
+    canvas.getContext("2d");
+
+canvas.width =
+    window.innerWidth;
+
+canvas.height =
+    window.innerHeight;
+
+ctx.fillStyle = "#080b18";
+
+ctx.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+);
+
+ctx.fillStyle = "white";
+
+ctx.font = "30px sans-serif";
+
+ctx.textAlign = "center";
+
+ctx.fillText(
+    "Your game starts here!",
+    canvas.width / 2,
+    canvas.height / 2
+);`
+);
+
+
+buildGame();
+
+</script>
+
+</body>
+</html>
