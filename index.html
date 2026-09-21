@@ -20022,71 +20022,104 @@ function drawPlanetFocusScene(){
      */
     c.save();
 
-    c.beginPath();
-
-    c.arc(
-        cx,
-        cy,
-        radius,
-        0,
-        Math.PI*2
-    );
-
-    c.clip();
-
-    for(
-        let i=0;
-        i<PLANET_SURFACE_BLOTCHES.length;
-        i++
-    ){
-
-        const blotch=
-            PLANET_SURFACE_BLOTCHES[i];
-
-        const bp=
-            projectSphere(
-                blotch.lat,
-                blotch.lon,
-                roamViewLat,
-                roamViewLon,
-                cx,
-                cy,
-                radius
-            );
-
-        if(!bp.visible)
-            continue;
-
-        c.globalAlpha=
-            .16*
-            Math.min(
-                1,
-                bp.z*2.2
-            );
-
-        c.fillStyle=
-            i%3===0
-            ?palette.light
-            :palette.dark;
+    try{
 
         c.beginPath();
 
-        c.ellipse(
-            bp.x,
-            bp.y,
-            blotch.r*radius*bp.scale,
-            blotch.r*radius*bp.scale*
-            Math.max(.25,bp.z),
-            0,
+        c.arc(
+            cx,
+            cy,
+            radius,
             0,
             Math.PI*2
         );
 
-        c.fill();
+        c.clip();
+
+        for(
+            let i=0;
+            i<PLANET_SURFACE_BLOTCHES.length;
+            i++
+        ){
+
+            const blotch=
+                PLANET_SURFACE_BLOTCHES[i];
+
+            const bp=
+                projectSphere(
+                    blotch.lat,
+                    blotch.lon,
+                    roamViewLat,
+                    roamViewLon,
+                    cx,
+                    cy,
+                    radius
+                );
+
+            if(!bp.visible)
+                continue;
+
+            c.globalAlpha=
+                .16*
+                Math.min(
+                    1,
+                    bp.z*2.2
+                );
+
+            c.fillStyle=
+                i%3===0
+                ?palette.light
+                :palette.dark;
+
+            c.beginPath();
+
+            c.ellipse(
+                bp.x,
+                bp.y,
+                blotch.r*radius*bp.scale,
+                blotch.r*radius*bp.scale*
+                Math.max(.25,bp.z),
+                0,
+                0,
+                Math.PI*2
+            );
+
+            c.fill();
+
+        }
+
+    }catch(blotchError){
+
+        console.error(
+            "Surface blotch draw failed:",
+            blotchError
+        );
 
     }
 
     c.restore();
+
+    /*
+     * Diagnostic checkpoint 2 — a blue square, top-left, just
+     * under the green one. If green shows but this doesn't, the
+     * problem is somewhere between here and there (the return-
+     * to-ship check, the atmosphere halo, the planet body, the
+     * surface/blotches). If both show, everything up to this
+     * point in the function ran cleanly and the problem is
+     * further down (structures, pets, ship, or the pet's own
+     * draw call at the very end).
+     */
+    if(roamingActive){
+
+        c.save();
+
+        c.fillStyle="#38bdf8";
+
+        c.fillRect(12,46,26,26);
+
+        c.restore();
+
+    }
 
     /*
      * Moved up from further below — needed here now so the
@@ -20658,6 +20691,22 @@ function drawPlanetFocusScene(){
         );
 
         /*
+         * Diagnostic checkpoint 3 — orange square. Structures
+         * loop finished without throwing if this shows.
+         */
+        if(roamingActive){
+
+            c.save();
+
+            c.fillStyle="#fb923c";
+
+            c.fillRect(12,80,26,26);
+
+            c.restore();
+
+        }
+
+        /*
          * Pets, drawn individually — each one wanders idly near
          * its own spot unless it has a task, in which case it
          * drifts toward wherever that task actually is on
@@ -20875,6 +20924,23 @@ function drawPlanetFocusScene(){
             );
 
         }
+
+        c.restore();
+
+    }
+
+    /*
+     * Diagnostic checkpoint 4 — purple square. Idle pets loop
+     * (and everything before it) finished without throwing if
+     * this shows.
+     */
+    if(roamingActive){
+
+        c.save();
+
+        c.fillStyle="#c084fc";
+
+        c.fillRect(12,114,26,26);
 
         c.restore();
 
