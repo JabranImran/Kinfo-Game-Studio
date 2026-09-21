@@ -18,6 +18,27 @@ h1{margin:0 0 8px;font-size:32px}p{color:#a5b0cb;line-height:1.5;font-size:14px}
 input,button{width:100%;padding:13px;border-radius:12px;border:1px solid #384a78;background:#111a38;color:white;font:inherit}button{margin-top:10px;background:#4d73ff;border-color:#6d8bff;font-weight:900}
 #notice{font-size:11px;color:#7180a5;margin-top:14px;min-height:16px}
  #damageFlash{position:fixed;inset:0;background:rgba(255,45,70,.28);opacity:0;pointer-events:none;transition:opacity .08s;z-index:8}#hitMessage{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:1000;letter-spacing:2px;color:#ff8b9b;text-shadow:0 0 18px #ff274d;opacity:0;pointer-events:none;z-index:9}.hidden{display:none!important}#gameOver{position:fixed;inset:0;display:grid;place-items:center;background:#02040bd9;z-index:10}.final{font-size:44px;font-weight:1000;margin:4px 0}.card button{cursor:pointer}</style>
+
+<!-- GameMonetize HTML5 SDK
+     Replace YOUR_GAMEMONETIZE_GAME_ID with the Game ID from your GameMonetize dashboard.
+     The SDK is loaded but ads are only requested from gameplay transitions, not on page load. -->
+<script type="text/javascript">
+window.SDK_OPTIONS = {
+  gameId: "YOUR_GAMEMONETIZE_GAME_ID",
+  onEvent: function (a) {
+    if (window.gameAdEvent) window.gameAdEvent(a.name);
+  }
+};
+(function (a, b, c) {
+  var d = a.getElementsByTagName(b)[0];
+  if (!a.getElementById(c)) {
+    a = a.createElement(b);
+    a.id = c;
+    a.src = "https://api.gamemonetize.com/sdk.js";
+    d.parentNode.insertBefore(a, d);
+  }
+})(document, "script", "gamemonetize-sdk");
+</script>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -37,7 +58,7 @@ input,button{width:100%;padding:13px;border-radius:12px;border:1px solid #384a78
   <p>Survive the asteroid field. Tap an asteroid to destroy it. The blast pushes other asteroids away.</p>
   <input id="name" maxlength="16" value="Player" placeholder="Rocket name"><input id="colour" type="color" value="#60e9ff" style="height:46px;margin-top:8px;padding:5px">
   <button id="play">PLAY</button>
-  <div id="notice"></div>
+  <div id="notice">Ads are shown between play sessions. Your gameplay stays unobstructed.</div>
  </div>
 </div>
 <script>
@@ -52,13 +73,26 @@ let down=false,drag=false,pid=null,sx=0,sy=0,targetX=W/2,targetY=H/2;const DRAG=
 let pointerDownAt=0;
 let prevShipX=me.x,prevShipY=me.y;
 let hitFlashTimer=0,screenShake=0,neonPulse=0,leaderTimer=0;
+let gameAdPaused=false;
+window.gameAdEvent=function(name){
+  if(name==='SDK_GAME_PAUSE') gameAdPaused=true;
+  if(name==='SDK_GAME_START') gameAdPaused=false;
+};
+function showGameAd(){
+  // GameMonetize requires the game to pause/mute while an ad is shown.
+  // We do not call this on page load.
+  if(typeof sdk!=='undefined' && typeof sdk.showBanner==='function'){
+    try{ sdk.showBanner(); }catch(e){}
+  }
+}
+
 // Adaptive asteroid-field telemetry. These counters are deliberately local so the
 // server is not flooded with gameplay telemetry.
 let telemetryWindow=0, asteroidKillsWindow=0, crashHitsWindow=0, playerKillsWindow=0;
 let adaptiveSpawnEvery=1.35, adaptiveCap=14, lastFieldAdjust=performance.now()/1000;
 const POLY=[[0,-19],[7,-5],[11,11],[3,8],[0,15],[-3,8],[-11,11],[-7,-5]];
 for(let i=0;i<150;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:.2+Math.random()*1.4,a:.18+Math.random()*.65});
-for(let i=0;i<14;i++)planets.push({x:180+Math.random()*(Math.max(2200,W*2.5)-360),y:160+Math.random()*(Math.max(1800,H*2.5)-320),r:28+Math.random()*90,ring:Math.random()<.35,phase:Math.random()*7});
+for(let i=0;i<14;i++)planets.push({x:180+Math.random()*(Math.max(2200,W*2.5)-360),y:160+Math.random()*(Math.max(1800,H*2.5)-320),r:28+Math.random()*90,ring:Math.random()<.35,phase:Math.random()*7,ad:Math.random()<.28});
 function wrap(v,m){v%=m;if(v<0)v+=m;return v} function clamp(v,a,b){return Math.max(a,Math.min(b,v))} function camera(){return{x:clamp(me.x-W/2,0,Math.max(0,WORLD_W-W)),y:clamp(me.y-H/2,0,Math.max(0,WORLD_H-H))}}
 function background(t){ctx.fillStyle='#03050d';ctx.fillRect(0,0,W,H);ctx.save();ctx.globalAlpha=.13;ctx.strokeStyle='#263b65';ctx.lineWidth=1;const g=90,ox=(t*.008)%g,oy=(t*.004)%g;for(let x=-g+ox;x<W+g;x+=g){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=-g+oy;y<H+g;y+=g){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}ctx.restore();stars.forEach(s=>{ctx.globalAlpha=s.a;ctx.fillStyle='#d9ecff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()});ctx.globalAlpha=1;ctx.save();ctx.globalAlpha=.2;ctx.strokeStyle='#5b7bb5';ctx.setLineDash([3,8]);ctx.beginPath();ctx.arc(W/2,H/2,Math.min(W,H)*.34,0,7);ctx.stroke();ctx.restore()}
 function makeAst(x,y,s,vx,vy){const pts=[],n=8+Math.floor(Math.random()*4);for(let i=0;i<n;i++){let a=i/n*Math.PI*2,r=s*(.72+Math.random()*.5);pts.push([Math.cos(a)*r,Math.sin(a)*r])}return{x,y,s,vx,vy,r:Math.random()*7,spin:(Math.random()-.5)*1.5,pts,neon:Math.random()<.16}}
@@ -96,7 +130,7 @@ function shipPoly(){let ca=Math.cos(me.angle),sa=Math.sin(me.angle);return POLY.
 function hitShip(cx,cy,r){let p=shipPoly(),inside=false;for(let i=0,j=p.length-1;i<p.length;j=i++){if(((p[i].y>cy)!=(p[j].y>cy))&&cx<(p[j].x-p[i].x)*(cy-p[i].y)/(p[j].y-p[i].y)+p[i].x)inside=!inside}if(inside)return true;for(let i=0;i<p.length;i++){let a=p[i],b=p[(i+1)%p.length];if(pointSeg(cx,cy,a.x,a.y,b.x,b.y)<=r)return true}return false}
 function damage(sourceAsteroid){let now=performance.now()/1000;
  if(sourceAsteroid && now>=(sourceAsteroid.deflectedUntil||0)) crashHitsWindow++; else if(sourceAsteroid) playerKillsWindow+=0;if(!me.active||over||now<me.inv)return false;me.lives--;me.inv=now+INV;me.hit=.8;livesEl.textContent=me.lives;burst(me.x,me.y,70,'#ff405f');shock.push({x:me.x,y:me.y,r:5,l:.7});screenShake=12;hitFlashTimer=.28;const f=document.getElementById('damageFlash');f.style.opacity='1';setTimeout(()=>f.style.opacity='0',220);const h=document.getElementById('hitMessage');h.textContent=me.lives>0?`HIT!  ${me.lives} LIFE${me.lives===1?'':'S'} LEFT`:'SHIP LOST';h.style.opacity='1';setTimeout(()=>h.style.opacity='0',850);if(connected)send({type:'hit',lives:me.lives,score:me.score});if(me.lives<=0)endGame();else{targetX=me.x;targetY=me.y;}return true}
-function endGame(){over=true;me.active=false;drag=false;down=false;document.getElementById('finalScore').textContent=me.score.toLocaleString();const go=document.getElementById('gameOver');go.classList.remove('hidden');go.style.pointerEvents='auto';if(connected)send({type:'death',score:me.score,lives:0})}
+function endGame(){over=true;me.active=false;drag=false;down=false;document.getElementById('finalScore').textContent=me.score.toLocaleString();const go=document.getElementById('gameOver');go.classList.remove('hidden');go.style.pointerEvents='auto';if(connected)send({type:'death',score:me.score,lives:0});setTimeout(showGameAd,250)}
 function start(){over=false;started=true;me.active=true;me.lives=3;me.score=0;me.x=WORLD_W/2;me.y=WORLD_H/2;me.angle=-Math.PI/2;me.inv=performance.now()/1000+1.5;me.hit=0;me.power='tow';me.powerCharge=100;me.towed=null;me.nextSpecial=Math.floor(me.score/1000+1)*1000;targetX=me.x;targetY=me.y;prevShipX=me.x;prevShipY=me.y;down=false;drag=false;pid=null;hitFlashTimer=0;screenShake=0;livesEl.textContent='3';scoreEl.textContent='0';const go=document.getElementById('gameOver');go.classList.add('hidden');go.style.pointerEvents='none';menu.style.display='none';menu.style.pointerEvents='none';resetAst();if(ws&&ws.readyState===1)send({type:'restart',name:me.name,colour:me.colour,x:me.x,y:me.y,angle:me.angle,lives:3,score:0});else connect()}
 function send(m){if(ws&&ws.readyState===1)ws.send(JSON.stringify(m))}
 function connect(){if(ws&&(ws.readyState===0||ws.readyState===1))return;statusEl.textContent='CONNECTING';try{ws=new WebSocket(SERVER_URL);ws.onopen=()=>{connected=true;statusEl.textContent='ONLINE';send({type:'join',name:me.name,colour:me.colour,x:me.x,y:me.y,angle:me.angle,lives:me.lives,score:me.score})};ws.onclose=()=>{connected=false;statusEl.textContent='OFFLINE';playersEl.textContent='1'};ws.onerror=()=>{connected=false;statusEl.textContent='OFFLINE'};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==='welcome')me.id=m.id;if(m.type==='players'){remote.clear();(m.players||[]).forEach(p=>{if(p.id!==me.id&&p.lives>0)remote.set(p.id,p)});playersEl.textContent=Math.max(1,(m.players||[]).filter(p=>p.lives>0).length)}if(m.type==='blast'&&m.from!==me.id)blast(+m.x||0,+m.y||0,+m.power||260,false);if(m.type==='playerHit'){let p=remote.get(m.id);if(p)p.lives=m.lives}if(m.type==='kill'){playerKillsWindow++;}}}catch{statusEl.textContent='OFFLINE'}}
@@ -105,7 +139,15 @@ c.addEventListener('pointerdown',e=>{if(!me.active||over)return;e.preventDefault
 c.addEventListener('pointermove',e=>{if(!down||e.pointerId!==pid||!me.active||over)return;e.preventDefault();if(!drag&&Math.hypot(e.clientX-sx,e.clientY-sy)>=DRAG)drag=true;if(drag){let p=pt(e);targetX=p.x;targetY=p.y}},{passive:false});
 function up(e){if(!down||e.pointerId!==pid)return;e.preventDefault();if(!drag&&me.active&&!over){let p=pt(e),best=-1,bestD=Infinity;for(let i=ast.length-1;i>=0;i--){let d=Math.hypot(ast[i].x-p.x,ast[i].y-p.y);if(d<=ast[i].s+30&&d<bestD){best=i;bestD=d}}if(best>=0)blast(ast[best].x,ast[best].y)}down=false;drag=false;pid=null}
 c.addEventListener('pointerup',up,{passive:false});c.addEventListener('pointercancel',up,{passive:false});
-document.getElementById('play').onclick=()=>{me.name=(nameInput.value.trim()||'Player').slice(0,16);me.colour=colourInput.value||'#60e9ff';start()};document.getElementById('playAgain').onclick=start;
+document.getElementById('play').onclick=()=>{
+ me.name=(nameInput.value.trim()||'Player').slice(0,16);
+ me.colour=colourInput.value||'#60e9ff';
+ start();
+ setTimeout(showGameAd,450);
+};document.getElementById('playAgain').onclick=()=>{
+ start();
+ setTimeout(showGameAd,450);
+};
 function adjustAsteroidField(dt){
  const now=performance.now()/1000; telemetryWindow+=dt;
  if(telemetryWindow<10)return;
@@ -135,10 +177,33 @@ function maintainAsteroidField(){
  const count=room>=3 && Math.random()<.34 ? Math.min(room,2+Math.floor(Math.random()*3)) : 1;
  if(count>1)spawnCluster(count); else spawnAst(18,42);
 }
-function update(dt){if(!started)return;let now=performance.now()/1000;if(me.active&&!over){prevShipX=me.x;prevShipY=me.y;if(drag){let dx=targetX-me.x,dy=targetY-me.y,d=Math.hypot(dx,dy);if(d>2){let want=Math.atan2(dy,dx),da=want-me.angle;while(da>Math.PI)da-=Math.PI*2;while(da<-Math.PI)da+=Math.PI*2;me.angle+=da*Math.min(1,dt*TURN);let v=Math.min(me.speedUntil>now?470:SHIP_SPEED,90+d*.75);me.x+=Math.cos(me.angle)*v*dt;me.y+=Math.sin(me.angle)*v*dt}}else{let v=me.speedUntil>now?145:72;me.x+=Math.cos(me.angle)*v*dt;me.y+=Math.sin(me.angle)*v*dt}me.x=wrap(me.x,WORLD_W);me.y=wrap(me.y,WORLD_H);spawn+=dt;if(me.score>=me.nextSpecial){spawnPowerAsteroid();me.nextSpecial+=1000}adjustAsteroidField(dt);if(spawn>adaptiveSpawnEvery&&ast.length<adaptiveCap){spawn=0;maintainAsteroidField()}for(const a of ast){if(a.towed){a.x=me.x-Math.cos(me.angle)*48;a.y=me.y-Math.sin(me.angle)*48;a.vx=0;a.vy=0}else{a.x+=a.vx*dt;a.y+=a.vy*dt;let margin=a.s+20;if(a.x<margin){a.x=margin;a.vx=Math.abs(a.vx)*.82}if(a.x>WORLD_W-margin){a.x=WORLD_W-margin;a.vx=-Math.abs(a.vx)*.82}if(a.y<margin){a.y=margin;a.vy=Math.abs(a.vy)*.82}if(a.y>WORLD_H-margin){a.y=WORLD_H-margin;a.vy=-Math.abs(a.vy)*.82}a.vx=clamp(a.vx,-125,125);a.vy=clamp(a.vy,-125,125);} a.r+=a.spin*dt;let swept=pointSeg(a.x,a.y,prevShipX,prevShipY,me.x,me.y)<=a.s*.82+10;let overlap=hitShip(a.x,a.y,a.s*.82);if((swept||overlap)&&a.special){collectPower(a);ast.splice(ast.indexOf(a),1);continue}if((swept||overlap)&&!a.towed&&damage(a)){let dx=me.x-a.x,dy=me.y-a.y,l=Math.hypot(dx,dy)||1;a.x=clamp(me.x-dx/l*(a.s+55),a.s+20,WORLD_W-a.s-20);a.y=clamp(me.y-dy/l*(a.s+55),a.s+20,WORLD_H-a.s-20);a.vx-=dx/l*120;a.vy-=dy/l*120;break}}rechargePower();if((leaderTimer+=dt)>.15){leaderTimer=0;updateLeaderboard()}if(connected&&++sendTick>5){sendTick=0;sendWS()}}if(hitFlashTimer>0)hitFlashTimer-=dt;if(screenShake>0)screenShake=Math.max(0,screenShake-dt*35);for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.98;p.vy*=.98;p.l-=dt;if(p.l<=0)particles.splice(i,1)}for(let i=shock.length-1;i>=0;i--){shock[i].r+=420*dt;shock[i].l-=dt;if(shock[i].l<=0)shock.splice(i,1)}remote.forEach(p=>{p._x??=p.x;p._y??=p.y;p._a??=p.angle;p._x+=(p.x-p._x)*Math.min(1,dt*12);p._y+=(p.y-p._y)*Math.min(1,dt*12);let da=p.angle-p._a;while(da>Math.PI)da-=Math.PI*2;while(da<-Math.PI)da+=Math.PI*2;p._a+=da*Math.min(1,dt*12)})}
+function update(dt){if(!started)return;if(gameAdPaused)return;let now=performance.now()/1000;if(me.active&&!over){prevShipX=me.x;prevShipY=me.y;if(drag){let dx=targetX-me.x,dy=targetY-me.y,d=Math.hypot(dx,dy);if(d>2){let want=Math.atan2(dy,dx),da=want-me.angle;while(da>Math.PI)da-=Math.PI*2;while(da<-Math.PI)da+=Math.PI*2;me.angle+=da*Math.min(1,dt*TURN);let v=Math.min(me.speedUntil>now?470:SHIP_SPEED,90+d*.75);me.x+=Math.cos(me.angle)*v*dt;me.y+=Math.sin(me.angle)*v*dt}}else{let v=me.speedUntil>now?145:72;me.x+=Math.cos(me.angle)*v*dt;me.y+=Math.sin(me.angle)*v*dt}me.x=wrap(me.x,WORLD_W);me.y=wrap(me.y,WORLD_H);spawn+=dt;if(me.score>=me.nextSpecial){spawnPowerAsteroid();me.nextSpecial+=1000}adjustAsteroidField(dt);if(spawn>adaptiveSpawnEvery&&ast.length<adaptiveCap){spawn=0;maintainAsteroidField()}for(const a of ast){if(a.towed){a.x=me.x-Math.cos(me.angle)*48;a.y=me.y-Math.sin(me.angle)*48;a.vx=0;a.vy=0}else{a.x+=a.vx*dt;a.y+=a.vy*dt;let margin=a.s+20;if(a.x<margin){a.x=margin;a.vx=Math.abs(a.vx)*.82}if(a.x>WORLD_W-margin){a.x=WORLD_W-margin;a.vx=-Math.abs(a.vx)*.82}if(a.y<margin){a.y=margin;a.vy=Math.abs(a.vy)*.82}if(a.y>WORLD_H-margin){a.y=WORLD_H-margin;a.vy=-Math.abs(a.vy)*.82}a.vx=clamp(a.vx,-125,125);a.vy=clamp(a.vy,-125,125);} a.r+=a.spin*dt;let swept=pointSeg(a.x,a.y,prevShipX,prevShipY,me.x,me.y)<=a.s*.82+10;let overlap=hitShip(a.x,a.y,a.s*.82);if((swept||overlap)&&a.special){collectPower(a);ast.splice(ast.indexOf(a),1);continue}if((swept||overlap)&&!a.towed&&damage(a)){let dx=me.x-a.x,dy=me.y-a.y,l=Math.hypot(dx,dy)||1;a.x=clamp(me.x-dx/l*(a.s+55),a.s+20,WORLD_W-a.s-20);a.y=clamp(me.y-dy/l*(a.s+55),a.s+20,WORLD_H-a.s-20);a.vx-=dx/l*120;a.vy-=dy/l*120;break}}rechargePower();if((leaderTimer+=dt)>.15){leaderTimer=0;updateLeaderboard()}if(connected&&++sendTick>5){sendTick=0;sendWS()}}if(hitFlashTimer>0)hitFlashTimer-=dt;if(screenShake>0)screenShake=Math.max(0,screenShake-dt*35);for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.98;p.vy*=.98;p.l-=dt;if(p.l<=0)particles.splice(i,1)}for(let i=shock.length-1;i>=0;i--){shock[i].r+=420*dt;shock[i].l-=dt;if(shock[i].l<=0)shock.splice(i,1)}remote.forEach(p=>{p._x??=p.x;p._y??=p.y;p._a??=p.angle;p._x+=(p.x-p._x)*Math.min(1,dt*12);p._y+=(p.y-p._y)*Math.min(1,dt*12);let da=p.angle-p._a;while(da>Math.PI)da-=Math.PI*2;while(da<-Math.PI)da+=Math.PI*2;p._a+=da*Math.min(1,dt*12)})}
 function sendWS(){send({type:'state',name:me.name,colour:me.colour,x:me.x,y:me.y,angle:me.angle,lives:me.lives,score:me.score})}
 function rocket(x,y,a,name,other=false,inv=false,otherColour){ctx.save();ctx.translate(x,y);ctx.rotate(a+Math.PI/2);if(!other){ctx.save();ctx.globalAlpha=inv?.6:.25;ctx.strokeStyle=inv?'#fff':'#6feaff';ctx.lineWidth=1.5;ctx.shadowBlur=inv?14:7;ctx.shadowColor=ctx.strokeStyle;ctx.beginPath();POLY.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.stroke();ctx.restore();if(inv){ctx.save();ctx.globalAlpha=.55+.25*Math.sin(performance.now()/65);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.shadowBlur=18;ctx.shadowColor='#fff';ctx.beginPath();ctx.arc(0,0,20,0,7);ctx.stroke();ctx.restore()}}let col=other?(otherColour||'#ff9d65'):me.colour;ctx.fillStyle=col;ctx.shadowBlur=15;ctx.shadowColor=col;ctx.beginPath();ctx.moveTo(0,-19);ctx.lineTo(7,-5);ctx.lineTo(11,11);ctx.lineTo(3,8);ctx.lineTo(0,15);ctx.lineTo(-3,8);ctx.lineTo(-11,11);ctx.lineTo(-7,-5);ctx.closePath();ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,-5,4,0,7);ctx.fill();ctx.fillStyle='#ffbd32';ctx.beginPath();ctx.moveTo(-4,10);ctx.lineTo(0,23+Math.random()*5);ctx.lineTo(4,10);ctx.fill();ctx.restore();ctx.textAlign='center';ctx.font='11px system-ui';ctx.fillStyle=other?'#ffc0a0':'#b4f6ff';ctx.fillText(name,x,y-29)}
-function draw(t){ctx.save();if(screenShake>0){ctx.translate((Math.random()-.5)*screenShake,(Math.random()-.5)*screenShake)}background(t);const cam=camera();ctx.save();ctx.translate(-cam.x,-cam.y);planets.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);let grd=ctx.createRadialGradient(-p.r*.3,-p.r*.35,p.r*.08,0,0,p.r);grd.addColorStop(0,'#7b9cff');grd.addColorStop(.55,'#334b8f');grd.addColorStop(1,'#111936');ctx.fillStyle=grd;ctx.globalAlpha=.72;ctx.shadowBlur=22;ctx.shadowColor='#4f7dff';ctx.beginPath();ctx.arc(0,0,p.r,0,7);ctx.fill();if(p.ring){ctx.globalAlpha=.35;ctx.strokeStyle='#a8c5ff';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(0,0,p.r*1.45,p.r*.38,p.phase,0,7);ctx.stroke()}ctx.restore()});ctx.globalAlpha=1;shock.forEach(s=>{ctx.globalAlpha=Math.max(0,s.l/.5);ctx.strokeStyle='#75eaff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.stroke()});ctx.globalAlpha=1;ast.forEach(a=>{ctx.save();ctx.translate(a.x,a.y);ctx.rotate(a.r);ctx.beginPath();a.pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=a.special?'#24132f':'#41475a';ctx.fill();ctx.strokeStyle=a.neon?(a.special?'#ff55e8':'#57eaff'):'#8992aa';ctx.lineWidth=a.neon?2.5:2;if(a.neon){ctx.shadowBlur=18;ctx.shadowColor=ctx.strokeStyle}ctx.stroke();ctx.shadowBlur=0;ctx.restore()});remote.forEach(p=>p.lives>0&&rocket(p._x??p.x,p._y??p.y,p._a??p.angle,p.name,true,false,p.colour));if(me.active)rocket(me.x,me.y,me.angle,me.name,false,performance.now()/1000<me.inv);particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.l/.8);ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill()});ctx.globalAlpha=1;if(drag&&me.active){ctx.save();ctx.globalAlpha=.25;ctx.strokeStyle='#70eaff';ctx.beginPath();ctx.arc(targetX,targetY,18,0,7);ctx.stroke();ctx.restore()}ctx.restore();if(hitFlashTimer>0){ctx.fillStyle=`rgba(255,35,60,${Math.min(.24,hitFlashTimer*.9)})`;ctx.fillRect(0,0,W,H)}}
+function draw(t){ctx.save();if(screenShake>0){ctx.translate((Math.random()-.5)*screenShake,(Math.random()-.5)*screenShake)}background(t);const cam=camera();ctx.save();ctx.translate(-cam.x,-cam.y);planets.forEach(p=>{ctx.save();ctx.translate(p.x,p.y);let grd=ctx.createRadialGradient(-p.r*.3,-p.r*.35,p.r*.08,0,0,p.r);grd.addColorStop(0,'#7b9cff');grd.addColorStop(.55,'#334b8f');grd.addColorStop(1,'#111936');ctx.fillStyle=grd;ctx.globalAlpha=.72;ctx.shadowBlur=22;ctx.shadowColor='#4f7dff';ctx.beginPath();ctx.arc(0,0,p.r,0,7);ctx.fill();if(p.ring){ctx.globalAlpha=.35;ctx.strokeStyle='#a8c5ff';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(0,0,p.r*1.45,p.r*.38,p.phase,0,7);ctx.stroke()}
+if(p.ad){
+  ctx.save();
+  ctx.rotate(p.phase*.35);
+  ctx.globalAlpha=.68;
+  ctx.fillStyle='#071329';
+  ctx.strokeStyle='#55eaff';
+  ctx.lineWidth=1.5;
+  ctx.shadowBlur=10;
+  ctx.shadowColor='#55eaff';
+  const aw=p.r*1.65, ah=Math.max(18,p.r*.55);
+  ctx.beginPath();ctx.roundRect(-aw/2,-ah/2,aw,ah,6);ctx.fill();ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.globalAlpha=.9;
+  ctx.fillStyle='#9df6ff';
+  ctx.font=`900 ${Math.max(8,Math.floor(p.r*.18))}px system-ui`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('SPONSORED SPACE',0,-2);
+  ctx.globalAlpha=.55;
+  ctx.font=`600 ${Math.max(6,Math.floor(p.r*.11))}px system-ui`;
+  ctx.fillText('AD SPACE',0,Math.max(7,ah*.28));
+  ctx.restore();
+}
+ctx.restore()});ctx.globalAlpha=1;shock.forEach(s=>{ctx.globalAlpha=Math.max(0,s.l/.5);ctx.strokeStyle='#75eaff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.stroke()});ctx.globalAlpha=1;ast.forEach(a=>{ctx.save();ctx.translate(a.x,a.y);ctx.rotate(a.r);ctx.beginPath();a.pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=a.special?'#24132f':'#41475a';ctx.fill();ctx.strokeStyle=a.neon?(a.special?'#ff55e8':'#57eaff'):'#8992aa';ctx.lineWidth=a.neon?2.5:2;if(a.neon){ctx.shadowBlur=18;ctx.shadowColor=ctx.strokeStyle}ctx.stroke();ctx.shadowBlur=0;ctx.restore()});remote.forEach(p=>p.lives>0&&rocket(p._x??p.x,p._y??p.y,p._a??p.angle,p.name,true,false,p.colour));if(me.active)rocket(me.x,me.y,me.angle,me.name,false,performance.now()/1000<me.inv);particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.l/.8);ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill()});ctx.globalAlpha=1;if(drag&&me.active){ctx.save();ctx.globalAlpha=.25;ctx.strokeStyle='#70eaff';ctx.beginPath();ctx.arc(targetX,targetY,18,0,7);ctx.stroke();ctx.restore()}ctx.restore();if(hitFlashTimer>0){ctx.fillStyle=`rgba(255,35,60,${Math.min(.24,hitFlashTimer*.9)})`;ctx.fillRect(0,0,W,H)}}
 function loop(t){let dt=Math.min(.033,(t-last)/1000);last=t;update(dt);draw(t);requestAnimationFrame(loop)}requestAnimationFrame(loop);
 
 </script>
