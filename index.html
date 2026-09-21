@@ -4444,6 +4444,21 @@ const ROAM_RETURN_ANGLE=.22;
 const SURFACE_ITEM_LAT_OFFSET=.55;
 
 /*
+ * How far south of the roaming pet's own position the camera
+ * looks — the exact same offset PLANET_VIEW_LAT already keeps
+ * between the camera and the ship in the default (non-roaming)
+ * view, reused here for the identical reason: looking directly
+ * AT a point projects that point to the mathematical centre of
+ * the planet's drawn circle, which sits well below the visible
+ * screen given this game's horizon-style framing. This keeps
+ * whatever the camera is centred on sitting near the visible top
+ * edge instead, matching how everything else on the planet is
+ * already framed.
+ */
+const ROAM_CAMERA_TILT=
+    SURFACE_ITEM_LAT_OFFSET;
+
+/*
  * The ship's own latitude — deliberately the exact same distance
  * from the pole as everything else on the surface, not its own
  * special case. It used to sit much closer to the true pole than
@@ -19678,31 +19693,42 @@ function drawPlanetFocusScene(){
      * Roaming: the planet is a genuine sphere that turns beneath
      * the pet as it walks, in both axes.
      *
-     * viewLat/viewLon below is simply the pet's own position —
-     * everything drawn on the planet is projected through
-     * projectSphere() relative to it, which rotates the whole
-     * world so the pet's spot faces the camera. That's what makes
-     * the pet appear to run in place on a turning ball, with
-     * structures rising over the horizon ahead and dropping away
-     * behind, and tipping right over as it crosses a pole.
+     * viewLat/viewLon below drives the whole rotation — everything
+     * drawn on the planet is projected through projectSphere()
+     * relative to it, which turns the whole world so wherever the
+     * pet currently stands faces the camera. That's what makes the
+     * pet appear to run in place on a turning ball, with structures
+     * rising over the horizon ahead and dropping away behind, and
+     * tipping right over as it crosses a pole.
+     *
+     * It's NOT simply the pet's own lat/lon though — it's tilted
+     * south of it by ROAM_CAMERA_TILT, the exact same amount
+     * PLANET_VIEW_LAT is already tilted south of the ship's own
+     * SHIP_LAT below. Without this tilt, the camera looks directly
+     * AT the pet's exact point, which projects that point to the
+     * dead mathematical centre of the planet's drawn circle — and
+     * since this game's planet is drawn as a huge circle whose
+     * visible portion is only the small arc near its top edge (the
+     * "horizon" convention every other screenshot of this planet
+     * already shows), that centre point sits far below the actual
+     * visible screen. The pet was rendering at a real, valid,
+     * non-crashing position — it just happened to be off-screen
+     * every single time, which is why nothing ever appeared to be
+     * wrong except that nothing ever showed up. The same tilt that
+     * already keeps the ship near the visible top edge in the
+     * default view keeps the pet there too while roaming.
      *
      * cx/cy stay at the planet's normal drawn position while
-     * roaming — the pet is centred by the ROTATION itself (its
-     * own projection always lands dead centre), not by shifting
-     * the camera, so no offset is needed here at all.
+     * roaming — the pet is centred by the ROTATION itself, not by
+     * shifting the camera, so no cx/cy offset is needed here.
      *
      * NOT roaming, the camera sits at PLANET_VIEW_LAT — a tilted
-     * side-on view, NOT straight down at the pole. Viewing from
-     * the pole itself put the ship (which lives at the pole) dead
-     * centre of the planet's disc, looking buried inside it
-     * rather than standing on top, with the structures ringed
-     * BELOW it instead of across the top. The tilt restores the
-     * familiar framing: ship near the top of the planet,
-     * structures spread across the upper surface beneath it.
+     * side-on view, NOT straight down at the pole, for exactly the
+     * same reason described above.
      */
     const roamViewLat=
         roamingActive
-        ?roamingLat
+        ?roamingLat-ROAM_CAMERA_TILT
         :PLANET_VIEW_LAT;
 
     const roamViewLon=
@@ -19711,25 +19737,6 @@ function drawPlanetFocusScene(){
         :0;
 
     if(roamingActive){
-
-        /*
-         * Fixed-position diagnostic — a small green square pinned
-         * to the top-left corner of the SCREEN itself, not tied to
-         * cx/cy or anything else that could be wrong. This is the
-         * most basic possible check: is roamingActive genuinely
-         * true during an actual render? If this doesn't show up
-         * after swiping down, the problem is upstream of
-         * everything else here — the swipe gesture likely isn't
-         * calling startRoaming at all, rather than anything in
-         * this function's own drawing logic.
-         */
-        c.save();
-
-        c.fillStyle="#4ade80";
-
-        c.fillRect(12,12,26,26);
-
-        c.restore();
 
         updateRoamingMovement();
 
@@ -20098,28 +20105,6 @@ function drawPlanetFocusScene(){
     }
 
     c.restore();
-
-    /*
-     * Diagnostic checkpoint 2 — a blue square, top-left, just
-     * under the green one. If green shows but this doesn't, the
-     * problem is somewhere between here and there (the return-
-     * to-ship check, the atmosphere halo, the planet body, the
-     * surface/blotches). If both show, everything up to this
-     * point in the function ran cleanly and the problem is
-     * further down (structures, pets, ship, or the pet's own
-     * draw call at the very end).
-     */
-    if(roamingActive){
-
-        c.save();
-
-        c.fillStyle="#38bdf8";
-
-        c.fillRect(12,46,26,26);
-
-        c.restore();
-
-    }
 
     /*
      * Moved up from further below — needed here now so the
@@ -20691,22 +20676,6 @@ function drawPlanetFocusScene(){
         );
 
         /*
-         * Diagnostic checkpoint 3 — orange square. Structures
-         * loop finished without throwing if this shows.
-         */
-        if(roamingActive){
-
-            c.save();
-
-            c.fillStyle="#fb923c";
-
-            c.fillRect(12,80,26,26);
-
-            c.restore();
-
-        }
-
-        /*
          * Pets, drawn individually — each one wanders idly near
          * its own spot unless it has a task, in which case it
          * drifts toward wherever that task actually is on
@@ -20924,23 +20893,6 @@ function drawPlanetFocusScene(){
             );
 
         }
-
-        c.restore();
-
-    }
-
-    /*
-     * Diagnostic checkpoint 4 — purple square. Idle pets loop
-     * (and everything before it) finished without throwing if
-     * this shows.
-     */
-    if(roamingActive){
-
-        c.save();
-
-        c.fillStyle="#c084fc";
-
-        c.fillRect(12,114,26,26);
 
         c.restore();
 
@@ -21179,6 +21131,27 @@ function drawPlanetFocusScene(){
             ship &&
             ship.pendingPilot;
 
+        /*
+         * Where the pet's own position projects to on screen —
+         * valid regardless of whether the ship/pet lookup above
+         * actually succeeded, since it only depends on
+         * roamingLat/roamingLon (the pet's real position) and the
+         * current camera, neither of which needs a found ship or
+         * pet object. Shared by both branches below so the
+         * diagnostic markers land in the same place a
+         * successfully-drawn pet would.
+         */
+        const roamPetProj=
+            projectSphere(
+                roamingLat,
+                roamingLon,
+                roamViewLat,
+                roamViewLon,
+                cx,
+                cy,
+                radius
+            );
+
         if(pet){
 
             roamingLookupMissSince=0;
@@ -21187,6 +21160,7 @@ function drawPlanetFocusScene(){
 
             for(
                 let i=0;
+
                 i<pet.id.length;
                 i++
             ){
@@ -21220,26 +21194,27 @@ function drawPlanetFocusScene(){
                     width*.075
                 );
 
+            /*
+             * Projected exactly like every other item on the
+             * planet, using the pet's own actual lat/lon against
+             * the current (tilted) camera — NOT hardcoded to
+             * (cx,cy). That literal centre point is the planet's
+             * true mathematical centre, which sits well below the
+             * visible screen given this game's horizon-style
+             * framing; the pet needs to land where its projection
+             * ACTUALLY falls, the same near-the-top spot
+             * everything else appears, not at that off-screen
+             * point. (Computed once, shared with the else branch
+             * below, right after entering this whole block.)
+             */
+
             try{
 
-                /*
-                 * (cx,cy) here, not the literal screen centre —
-                 * that was a leftover from before the sphere
-                 * rewrite. The planet's own body is drawn around
-                 * (cx,cy), and projectSphere guarantees the pet's
-                 * OWN projected position lands exactly there too
-                 * (its lat/lon and the view lat/lon are the same
-                 * point). Drawing the pet at the literal screen
-                 * centre instead meant it and the planet visibly
-                 * disagreed about where "here" was — the planet
-                 * sits below true centre in the normal framing, so
-                 * the pet looked like it was floating above it.
-                 */
                 drawSpacePet(
                     c,
                     selectedStartPlanet,
-                    cx,
-                    cy,
+                    roamPetProj.x,
+                    roamPetProj.y,
                     roamPetSize,
                     pet.energy,
                     roamAnimSeed,
@@ -21256,32 +21231,6 @@ function drawPlanetFocusScene(){
                     "Roaming pet draw failed:",
                     roamPetDrawError
                 );
-
-                /*
-                 * A visible fallback rather than nothing at all —
-                 * if drawSpacePet itself is throwing for some
-                 * reason, this at least confirms roaming is still
-                 * genuinely active and exactly where the pet
-                 * should be, which is real information toward
-                 * finding what's actually wrong with the pet's own
-                 * draw call specifically.
-                 */
-                c.save();
-
-                c.fillStyle="#ff6b6b";
-
-                c.beginPath();
-
-                c.arc(
-                    cx,cy,
-                    roamPetSize*.4,
-                    0,
-                    Math.PI*2
-                );
-
-                c.fill();
-
-                c.restore();
 
             }
 
@@ -21301,34 +21250,7 @@ function drawPlanetFocusScene(){
              * ever actually drawn even once, which reads to the
              * player as "the pet doesn't show at all" even though
              * the underlying data was never actually wrong.
-             *
-             * A visible marker for the whole grace window, not
-             * just on failure — if THIS shows up, roaming is
-             * genuinely active and the lookup is genuinely coming
-             * up empty, which is real, useful information toward
-             * narrowing down what's actually wrong. If nothing at
-             * all shows up (not even this), the problem is further
-             * upstream than any of this code — roaming likely
-             * isn't becoming active in the first place.
              */
-            c.save();
-
-            c.fillStyle="#ffd43b";
-
-            c.beginPath();
-
-            c.moveTo(cx,cy-24);
-
-            c.lineTo(cx+21,cy+12);
-
-            c.lineTo(cx-21,cy+12);
-
-            c.closePath();
-
-            c.fill();
-
-            c.restore();
-
             if(!roamingLookupMissSince){
 
                 roamingLookupMissSince=
