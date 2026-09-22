@@ -19658,8 +19658,21 @@ function drawPlanetFocusScene(){
         width/2+
         planetParallaxX;
 
+    /*
+     * .72 originally — moved up substantially (structures and the
+     * ship were landing at over 100% of screen height, genuinely
+     * below the visible edge, which is exactly why they read as
+     * "hard to see and reach": the top of this arc starting at
+     * .72 down the screen sounds reasonable on its own, but
+     * structures and the ship sit roughly halfway between that
+     * top edge and the true centre below it (a consequence of the
+     * same camera tilt that keeps them off the disc's dead
+     * centre), which pushed them past the bottom of the screen
+     * entirely rather than just low on it.
+     */
     const homeCy=
-        height*.72+homeRadius;
+        height*.53+homeRadius;
+
 
     const departCy=
         height*.80;
@@ -24836,6 +24849,18 @@ function renderPlanetDetail(id){
 
     }else{
 
+        /*
+         * Whichever ship the Launch button under the star map
+         * would actually fly with right now — same resolution the
+         * launch preview and the home-screen ship itself both use,
+         * so the "Selected for Launch" badge below is never lying
+         * about what a tap on Launch would actually do.
+         */
+        const currentlySelectedShip=
+            id==="earth"
+            ?resolveEarthLaunchChoice()
+            :resolveLaunchShip(ships);
+
         ships.forEach(
             ship=>{
 
@@ -25059,6 +25084,45 @@ function renderPlanetDetail(id){
                             '</div>';
 
                     }
+
+                    /*
+                     * ---- SELECT FOR LAUNCH ----
+                     * Docked ships are otherwise chosen for launch
+                     * only from the ship carousel on the home
+                     * screen itself — this lets that same choice be
+                     * made from right here, next to the ship's own
+                     * details, without needing to back out and find
+                     * it again on the planet surface.
+                     */
+                    const isSelectedForLaunch=
+                        currentlySelectedShip &&
+                        currentlySelectedShip.id===
+                        ship.id;
+
+                    html+=
+                        '<button class="control-btn" '+
+                        'style="width:100%;margin-top:8px;'+
+                        (
+                            isSelectedForLaunch
+                            ?'background:rgba(80,200,120,.18);'+
+                             'border-color:rgba(80,200,120,.5);'+
+                             'color:#8ef0ae;'
+                            :''
+                        )+
+                        '" '+
+                        (
+                            isSelectedForLaunch
+                            ?''
+                            :'data-action="select-launch-ship" '+
+                             'data-ship="'+ship.id+'"'
+                        )+
+                        '>'+
+                        (
+                            isSelectedForLaunch
+                            ?'✓ Selected for Launch'
+                            :'Select for Launch'
+                        )+
+                        '</button>';
 
                     /*
                      * ---- PILOT BAY ----
@@ -27793,6 +27857,38 @@ document
             renderPlanetDetail(
                 planetDetailId
             );
+
+        }else if(
+            action==="select-launch-ship"
+        ){
+
+            /*
+             * Same variable the home-screen ship carousel already
+             * sets when swiping between docked ships — this just
+             * gives the ship card's own details view an equally
+             * direct way to make that choice, rather than only
+             * being settable from the planet surface itself.
+             */
+            selectedLaunchShipId=
+                shipId;
+
+            savePlanetProgress();
+
+            sound("click");
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+            /*
+             * So the home screen's own ship preview (and the
+             * ship drawn on the planet surface itself) picks up
+             * the new choice immediately, rather than only on
+             * whatever next causes it to redraw on its own — a
+             * no-op if the home screen isn't the one currently
+             * on screen.
+             */
+            renderLaunchPreview();
 
         }else if(
             action==="toggle-ship-cargo"
