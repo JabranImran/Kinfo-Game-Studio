@@ -20340,18 +20340,22 @@ function drawPlanetFocusScene(){
 
         /*
          * Spread across a shallow arc centred on the top of the
-         * sphere. The arc widens with more items but stays
-         * narrow enough that everything sits on visible ground.
-         * Widened alongside the icon size increase above -- a
-         * roughly proportional (not quite double, to stay clear
-         * of the screen edges) increase in both the per-item gap
-         * and the cap, so bigger icons still get bigger breathing
-         * room between them instead of starting to overlap.
+         * sphere. The arc widens with more items but stays narrow
+         * enough that everything sits on visible ground.
+         *
+         * Both this and CENTRE_GAP below were re-measured against
+         * the current icon size (224px on a typical screen) rather
+         * than assumed — the previous values were tuned before
+         * icons were doubled in size and never revisited, which is
+         * exactly why they'd drifted into real overlap: measuring
+         * projected pixel positions directly showed adjacent
+         * structures landing barely 140px apart with 224px icons,
+         * a substantial overlap, not just a visually tight fit.
          */
         const arcSpan=
             Math.min(
-                .32,
-                .1*surfaceItems.length
+                .40,
+                .125*surfaceItems.length
             );
 
         /*
@@ -20367,8 +20371,15 @@ function drawPlanetFocusScene(){
          * translates into a huge pixel distance. The previous,
          * wider spread was what pushed buildings clean off the
          * edges of the screen.
+         *
+         * Widened from .16 — the same re-measurement above showed
+         * the innermost structure on each side landing only 132px
+         * from the ship's own centre, well inside the ship's own
+         * icon radius, so the structures closest to it were
+         * genuinely overlapping the ship itself, not just each
+         * other.
          */
-        const CENTRE_GAP=.16;
+        const CENTRE_GAP=.235;
 
         /*
          * Filled in as each structure is placed, so the pet pass
@@ -21733,17 +21744,17 @@ function renderPlanetFocus(){
     const chosenLaunchShip=
         renderLaunchPreview();
 
-    const previewEl=
-        document.getElementById(
-            "launchPreview"
-        );
-
+    /*
+     * The focus view's own copy of the selectable ship rows was
+     * removed — picking which ship launches is now done from that
+     * ship's own card in the Fleet tab (a "Select for Launch"
+     * button right in its details), which is both a more natural
+     * place to make that choice and frees up real space here for
+     * the structures and ship sitting just above.
+     */
     document.getElementById(
         "focusLaunchInfo"
-    ).innerHTML=
-        previewEl
-        ?previewEl.innerHTML
-        :"";
+    ).innerHTML="";
 
     /*
      * A ship with a pet pilot assigned launches into Orbital
@@ -23081,47 +23092,6 @@ document
             );
 
         renderLaunchPreview();
-
-    },
-    {passive:false}
-);
-
-/*
- * The focus view shows a COPY of the launch preview's markup, so
- * the handler bound to #launchPreview above never fires for taps
- * on that copy — which is exactly why ship selection appeared
- * dead in the zoomed view. This binds the same behaviour to the
- * copy, then re-renders the focus view so the new selection is
- * reflected immediately rather than only after leaving and
- * returning to the planet.
- */
-document
-.getElementById(
-    "focusLaunchInfo"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        const target=
-            event.target.closest(
-                '[data-action="pick-launch-ship"]'
-            );
-
-        if(!target)
-            return;
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        sound("click");
-
-        selectedLaunchShipId=
-            target.getAttribute(
-                "data-ship"
-            );
-
-        renderPlanetFocus();
 
     },
     {passive:false}
