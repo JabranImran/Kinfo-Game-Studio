@@ -4,15 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-<title>HTML Game Studio V2.2</title>
+<title>HTML Game Studio V2.3</title>
 
 <style>
 * {
     box-sizing: border-box;
 }
 
-html,
-body {
+html, body {
     margin: 0;
     width: 100%;
     height: 100%;
@@ -26,10 +25,7 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-button,
-input,
-textarea,
-select {
+button, input, textarea, select {
     font: inherit;
 }
 
@@ -223,9 +219,7 @@ label {
     color: #9ba5c2;
 }
 
-input,
-select,
-textarea {
+input, select, textarea {
     width: 100%;
     border: 1px solid rgba(255,255,255,.08);
     border-radius: 12px;
@@ -234,8 +228,7 @@ textarea {
     outline: none;
 }
 
-input,
-select {
+input, select {
     padding: 11px 12px;
 }
 
@@ -249,12 +242,15 @@ textarea {
 }
 
 .blockList {
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 9px;
 }
 
 .blockRow {
+    width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -267,26 +263,39 @@ textarea {
 .blockInfo {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
 }
 
 .blockName {
+    width: 100%;
     font-size: 13px;
     font-weight: 700;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .blockDetails {
+    width: 100%;
     margin-top: 3px;
     color: #747f9e;
     font-size: 10px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .typeBadge {
+    flex-shrink: 0;
     padding: 4px 7px;
     border-radius: 7px;
     background: rgba(100,120,255,.12);
     color: #9aaaff;
     font-size: 9px;
     font-weight: 800;
+}
+
+.blockCheck {
+    flex-shrink: 0;
 }
 
 .commandBox {
@@ -385,12 +394,47 @@ textarea {
     font-weight: 800;
 }
 
-.empty {
-    padding: 35px 15px;
-    text-align: center;
-    color: #707a98;
-    border: 1px dashed rgba(255,255,255,.08);
-    border-radius: 17px;
+.textTools {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-top: 7px;
+}
+
+.toolBtn {
+    border: 0;
+    border-radius: 9px;
+    padding: 7px 10px;
+    background: #202944;
+    color: #dce2f5;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.toolBtn:active {
+    transform: scale(.97);
+}
+
+.toolStatus {
+    min-height: 14px;
+    margin-top: 5px;
+    color: #6fda9a;
+    font-size: 10px;
+    text-align: right;
+}
+
+.codeViewer {
+    width: 100%;
+    min-height: 400px;
+    background: #050811;
+    color: #d8def0;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    padding: 14px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    resize: vertical;
 }
 
 .modal {
@@ -470,18 +514,12 @@ textarea {
     float: right;
 }
 
-.codeViewer {
-    width: 100%;
-    min-height: 400px;
-    background: #050811;
-    color: #d8def0;
-    border: 1px solid rgba(255,255,255,.07);
-    border-radius: 14px;
-    padding: 14px;
-    font-family: ui-monospace, monospace;
-    font-size: 11px;
-    line-height: 1.55;
-    resize: vertical;
+.empty {
+    padding: 35px 15px;
+    text-align: center;
+    color: #707a98;
+    border: 1px dashed rgba(255,255,255,.08);
+    border-radius: 17px;
 }
 
 @media (max-width: 600px) {
@@ -506,6 +544,14 @@ textarea {
         width: 100%;
     }
 
+    .blockRow {
+        align-items: flex-start;
+    }
+
+    .blockRow .btn {
+        flex-shrink: 0;
+    }
+
     .commandOutput {
         height: 270px;
     }
@@ -525,7 +571,7 @@ textarea {
 
         <div class="brandText">
             <strong>HTML Game Studio</strong>
-            <span>V2.2 • COMMAND ENGINE</span>
+            <span>V2.3 • COPY / PASTE</span>
         </div>
 
     </div>
@@ -706,15 +752,27 @@ textarea {
                     spellcheck="false"
                     placeholder="Type a command...">
 
-                <button
-                    class="btn primary"
-                    onclick="runCommandFromInput()">
+                <button class="btn primary" onclick="runCommandFromInput()">
                     Run
                 </button>
 
             </div>
 
         </div>
+
+        <div class="textTools">
+
+            <button class="toolBtn" onclick="copyElement('commandOutput','commandStatus')">
+                📋 Copy
+            </button>
+
+            <button class="toolBtn" onclick="pasteElement('commandInput','commandStatus')">
+                📥 Paste
+            </button>
+
+        </div>
+
+        <div id="commandStatus" class="toolStatus"></div>
 
     </div>
 
@@ -826,6 +884,20 @@ textarea {
 
         <textarea id="blockEditorCode"></textarea>
 
+        <div class="textTools">
+
+            <button class="toolBtn" onclick="copyElement('blockEditorCode','blockCodeStatus')">
+                📋 Copy
+            </button>
+
+            <button class="toolBtn" onclick="pasteElement('blockEditorCode','blockCodeStatus')">
+                📥 Paste
+            </button>
+
+        </div>
+
+        <div id="blockCodeStatus" class="toolStatus"></div>
+
     </div>
 
 
@@ -862,7 +934,18 @@ textarea {
 
     </div>
 
+
     <textarea id="generatedCodeViewer" class="codeViewer" readonly></textarea>
+
+    <div class="textTools">
+
+        <button class="toolBtn" onclick="copyElement('generatedCodeViewer','generatedCodeStatus')">
+            📋 Copy
+        </button>
+
+    </div>
+
+    <div id="generatedCodeStatus" class="toolStatus"></div>
 
 </div>
 
@@ -871,10 +954,7 @@ textarea {
 
 <div id="errorPanel">
 
-<button
-    id="errorClose"
-    class="btn small"
-    onclick="hideError()">
+<button id="errorClose" class="btn small" onclick="hideError()">
     ×
 </button>
 
@@ -898,6 +978,180 @@ var studio = {
 var editingGameId = null;
 var editingBlockId = null;
 
+
+/* =========================
+   COPY / PASTE
+========================= */
+
+async function copyElement(elementId, statusId) {
+
+    var element =
+        document.getElementById(elementId);
+
+    if (!element) {
+        return;
+    }
+
+    var text =
+        element.value !== undefined
+            ? element.value
+            : element.innerText;
+
+
+    try {
+
+        await navigator.clipboard.writeText(
+            text || ""
+        );
+
+        showToolStatus(
+            statusId,
+            "✓ Copied"
+        );
+
+    } catch (error) {
+
+        /* iOS/browser fallback */
+
+        try {
+
+            var range =
+                document.createRange();
+
+            range.selectNodeContents(
+                element
+            );
+
+            var selection =
+                window.getSelection();
+
+            selection.removeAllRanges();
+
+            selection.addRange(range);
+
+            document.execCommand(
+                "copy"
+            );
+
+            selection.removeAllRanges();
+
+            showToolStatus(
+                statusId,
+                "✓ Copied"
+            );
+
+        } catch (fallbackError) {
+
+            showToolStatus(
+                statusId,
+                "Copy unavailable"
+            );
+
+        }
+
+    }
+}
+
+
+async function pasteElement(elementId, statusId) {
+
+    var element =
+        document.getElementById(elementId);
+
+    if (!element) {
+        return;
+    }
+
+
+    try {
+
+        var text =
+            await navigator.clipboard.readText();
+
+
+        if (
+            element.value !== undefined
+        ) {
+
+            element.value = text;
+
+        } else {
+
+            element.innerText = text;
+
+        }
+
+
+        showToolStatus(
+            statusId,
+            "✓ Pasted"
+        );
+
+
+    } catch (error) {
+
+        /*
+            Clipboard read access is restricted
+            by some browsers/iOS contexts.
+
+            Focusing the field lets the normal
+            iOS Paste menu be used.
+        */
+
+        if (
+            element.focus
+        ) {
+
+            element.focus();
+
+        }
+
+
+        showToolStatus(
+            statusId,
+            "Use Paste from the iPhone menu"
+        );
+
+    }
+}
+
+
+function showToolStatus(
+    elementId,
+    message
+) {
+
+    var element =
+        document.getElementById(elementId);
+
+
+    if (!element) {
+        return;
+    }
+
+
+    element.textContent =
+        message;
+
+
+    clearTimeout(
+        element._statusTimer
+    );
+
+
+    element._statusTimer =
+        setTimeout(function() {
+
+            element.textContent =
+                "";
+
+        }, 1800);
+}
+
+
+/* =========================
+   ERROR HANDLING
+========================= */
 
 function showError(message) {
 
@@ -962,6 +1216,10 @@ window.addEventListener(
 );
 
 
+/* =========================
+   STORAGE
+========================= */
+
 function makeId(prefix) {
 
     return (
@@ -999,7 +1257,9 @@ function saveStudio() {
 function loadStudio() {
 
     var saved =
-        localStorage.getItem(STORAGE_KEY);
+        localStorage.getItem(
+            STORAGE_KEY
+        );
 
 
     if (!saved) {
@@ -1039,24 +1299,37 @@ function loadStudio() {
         };
 
         showError(
-            "Saved Studio data was invalid and has been reset."
+            "Saved Studio data was invalid."
         );
 
     }
 }
 
 
+/* =========================
+   DEFAULT BLOCKS
+========================= */
+
 function installDefaultBlocks() {
 
     if (studio.blocks.length > 0) {
 
-        studio.blocks.forEach(function(block) {
+        studio.blocks.forEach(
+            function(block) {
 
-            if (!Array.isArray(block.dependencies)) {
-                block.dependencies = [];
+                if (
+                    !Array.isArray(
+                        block.dependencies
+                    )
+                ) {
+
+                    block.dependencies =
+                        [];
+
+                }
+
             }
-
-        });
+        );
 
         saveStudio();
 
@@ -1192,7 +1465,10 @@ function createRenderer() {
             id: makeId("block"),
             name: "Game Loop",
             type: "js",
-            dependencies: ["Three.js", "Renderer"],
+            dependencies: [
+                "Three.js",
+                "Renderer"
+            ],
             code:
 `function gameLoop() {
 
@@ -1221,19 +1497,31 @@ function createRenderer() {
 }
 
 
+/* =========================
+   NAVIGATION
+========================= */
+
 function showPage(page) {
 
     document
         .querySelectorAll(".page")
         .forEach(function(element) {
-            element.classList.remove("active");
+
+            element.classList.remove(
+                "active"
+            );
+
         });
 
 
     document
         .querySelectorAll(".tab")
         .forEach(function(element) {
-            element.classList.remove("active");
+
+            element.classList.remove(
+                "active"
+            );
+
         });
 
 
@@ -1250,12 +1538,16 @@ function showPage(page) {
 
 
     if (pageElement) {
-        pageElement.classList.add("active");
+        pageElement.classList.add(
+            "active"
+        );
     }
 
 
     if (tabElement) {
-        tabElement.classList.add("active");
+        tabElement.classList.add(
+            "active"
+        );
     }
 
 
@@ -1263,23 +1555,22 @@ function showPage(page) {
         renderGames();
     }
 
-
     if (page === "blocks") {
         renderBlocks();
     }
 
-
     if (page === "studio") {
         renderGenerator();
     }
-
 
     if (page === "command") {
 
         setTimeout(function() {
 
             document
-                .getElementById("commandInput")
+                .getElementById(
+                    "commandInput"
+                )
                 .focus();
 
         }, 50);
@@ -1288,10 +1579,16 @@ function showPage(page) {
 }
 
 
+/* =========================
+   GAMES
+========================= */
+
 function renderGames() {
 
     var grid =
-        document.getElementById("gameGrid");
+        document.getElementById(
+            "gameGrid"
+        );
 
 
     if (!grid) {
@@ -1313,21 +1610,22 @@ function renderGames() {
 
 
     grid.innerHTML =
-        studio.games.map(function(game) {
+        studio.games.map(
+            function(game) {
 
-            var saves =
-                Array.isArray(game.saves)
-                    ? game.saves
-                    : [];
-
-
-            var latest =
-                saves.length
-                    ? saves[saves.length - 1]
-                    : null;
+                var saves =
+                    Array.isArray(game.saves)
+                        ? game.saves
+                        : [];
 
 
-            return `
+                var latest =
+                    saves.length
+                        ? saves[saves.length - 1]
+                        : null;
+
+
+                return `
 <div class="gameCard">
 
     <div>
@@ -1371,7 +1669,8 @@ function renderGames() {
 
 </div>`;
 
-        }).join("");
+            }
+        ).join("");
 }
 
 
@@ -1397,11 +1696,15 @@ function newGame() {
     saveStudio();
 
 
-    document.getElementById("gameName").value =
+    document.getElementById(
+        "gameName"
+    ).value =
         game.name;
 
 
-    document.getElementById("saveName").value =
+    document.getElementById(
+        "saveName"
+    ).value =
         "Version 1";
 
 
@@ -1412,9 +1715,11 @@ function newGame() {
 function editGame(gameId) {
 
     var game =
-        studio.games.find(function(item) {
-            return item.id === gameId;
-        });
+        studio.games.find(
+            function(item) {
+                return item.id === gameId;
+            }
+        );
 
 
     if (!game) {
@@ -1426,7 +1731,9 @@ function editGame(gameId) {
         game.id;
 
 
-    document.getElementById("gameName").value =
+    document.getElementById(
+        "gameName"
+    ).value =
         game.name;
 
 
@@ -1436,7 +1743,9 @@ function editGame(gameId) {
             : [];
 
 
-    document.getElementById("saveName").value =
+    document.getElementById(
+        "saveName"
+    ).value =
         saves.length
             ? saves[saves.length - 1].name
             : "Version 1";
@@ -1445,6 +1754,10 @@ function editGame(gameId) {
     showPage("studio");
 }
 
+
+/* =========================
+   GENERATOR
+========================= */
 
 function renderGenerator() {
 
@@ -1463,9 +1776,11 @@ function renderGenerator() {
 
 
     var game =
-        studio.games.find(function(item) {
-            return item.id === editingGameId;
-        });
+        studio.games.find(
+            function(item) {
+                return item.id === editingGameId;
+            }
+        );
 
 
     if (
@@ -1494,21 +1809,26 @@ function renderGenerator() {
 
 
     container.innerHTML =
-        studio.blocks.map(function(block) {
+        studio.blocks.map(
+            function(block) {
 
-            var checked =
-                selected.includes(block.name)
-                    ? "checked"
-                    : "";
-
-
-            var dependencies =
-                Array.isArray(block.dependencies)
-                    ? block.dependencies
-                    : [];
+                var checked =
+                    selected.includes(
+                        block.name
+                    )
+                        ? "checked"
+                        : "";
 
 
-            return `
+                var dependencies =
+                    Array.isArray(
+                        block.dependencies
+                    )
+                        ? block.dependencies
+                        : [];
+
+
+                return `
 <div class="blockRow">
 
     <input
@@ -1544,44 +1864,61 @@ function renderGenerator() {
 
 </div>`;
 
-        }).join("");
+            }
+        ).join("");
 }
 
 
 function selectAllBlocks() {
 
     document
-        .querySelectorAll(".generatorCheck")
-        .forEach(function(checkbox) {
-            checkbox.checked = true;
-        });
+        .querySelectorAll(
+            ".generatorCheck"
+        )
+        .forEach(
+            function(checkbox) {
+                checkbox.checked = true;
+            }
+        );
 }
 
 
 function clearAllBlocks() {
 
     document
-        .querySelectorAll(".generatorCheck")
-        .forEach(function(checkbox) {
-            checkbox.checked = false;
-        });
+        .querySelectorAll(
+            ".generatorCheck"
+        )
+        .forEach(
+            function(checkbox) {
+                checkbox.checked = false;
+            }
+        );
 }
 
 
-function resolveDependencies(requestedNames) {
+/* =========================
+   DEPENDENCY RESOLUTION
+========================= */
+
+function resolveDependencies(
+    requestedNames
+) {
 
     var blockMap =
         new Map();
 
 
-    studio.blocks.forEach(function(block) {
+    studio.blocks.forEach(
+        function(block) {
 
-        blockMap.set(
-            block.name,
-            block
-        );
+            blockMap.set(
+                block.name,
+                block
+            );
 
-    });
+        }
+    );
 
 
     var ordered = [];
@@ -1593,7 +1930,10 @@ function resolveDependencies(requestedNames) {
     var errors = [];
 
 
-    function visit(name, chain) {
+    function visit(
+        name,
+        chain
+    ) {
 
         chain =
             chain || [];
@@ -1636,19 +1976,23 @@ function resolveDependencies(requestedNames) {
 
 
         var dependencies =
-            Array.isArray(block.dependencies)
+            Array.isArray(
+                block.dependencies
+            )
                 ? block.dependencies
                 : [];
 
 
-        dependencies.forEach(function(dependency) {
+        dependencies.forEach(
+            function(dependency) {
 
-            visit(
-                dependency,
-                chain.concat([name])
-            );
+                visit(
+                    dependency,
+                    chain.concat([name])
+                );
 
-        });
+            }
+        );
 
 
         visiting.delete(name);
@@ -1659,11 +2003,13 @@ function resolveDependencies(requestedNames) {
     }
 
 
-    requestedNames.forEach(function(name) {
+    requestedNames.forEach(
+        function(name) {
 
-        visit(name);
+            visit(name);
 
-    });
+        }
+    );
 
 
     var requestedSet =
@@ -1671,13 +2017,15 @@ function resolveDependencies(requestedNames) {
 
 
     var automatic =
-        ordered.filter(function(block) {
+        ordered.filter(
+            function(block) {
 
-            return !requestedSet.has(
-                block.name
-            );
+                return !requestedSet.has(
+                    block.name
+                );
 
-        });
+            }
+        );
 
 
     return {
@@ -1687,6 +2035,10 @@ function resolveDependencies(requestedNames) {
     };
 }
 
+
+/* =========================
+   BUILD
+========================= */
 
 function buildCurrentGame() {
 
@@ -1701,9 +2053,11 @@ function buildCurrentGame() {
 
 
     var game =
-        studio.games.find(function(item) {
-            return item.id === editingGameId;
-        });
+        studio.games.find(
+            function(item) {
+                return item.id === editingGameId;
+            }
+        );
 
 
     if (!game) {
@@ -1713,7 +2067,9 @@ function buildCurrentGame() {
 
     game.name =
         document
-            .getElementById("gameName")
+            .getElementById(
+                "gameName"
+            )
             .value
             .trim() ||
         "Untitled Game";
@@ -1721,7 +2077,9 @@ function buildCurrentGame() {
 
     var saveName =
         document
-            .getElementById("saveName")
+            .getElementById(
+                "saveName"
+            )
             .value
             .trim() ||
         "Version 1";
@@ -1732,11 +2090,11 @@ function buildCurrentGame() {
             document.querySelectorAll(
                 ".generatorCheck:checked"
             )
-        ).map(function(checkbox) {
-
-            return checkbox.value;
-
-        });
+        ).map(
+            function(checkbox) {
+                return checkbox.value;
+            }
+        );
 
 
     if (requested.length === 0) {
@@ -1767,7 +2125,9 @@ function buildCurrentGame() {
 
     if (result.errors.length) {
 
-        showBuildReport(result);
+        showBuildReport(
+            result
+        );
 
         return;
     }
@@ -1836,27 +2196,36 @@ function buildCurrentGame() {
 }
 
 
-function generateHTML(gameName, blocks) {
+function generateHTML(
+    gameName,
+    blocks
+) {
 
     var htmlBlocks =
-        blocks.filter(function(block) {
-            return block.type === "html";
-        });
+        blocks.filter(
+            function(block) {
+                return block.type === "html";
+            }
+        );
 
 
     var cssBlocks =
-        blocks.filter(function(block) {
-            return block.type === "css";
-        });
+        blocks.filter(
+            function(block) {
+                return block.type === "css";
+            }
+        );
 
 
     var jsBlocks =
-        blocks.filter(function(block) {
-            return block.type === "js";
-        });
+        blocks.filter(
+            function(block) {
+                return block.type === "js";
+            }
+        );
 
 
-    var html =
+    return
 `<!DOCTYPE html>
 <html lang="en">
 
@@ -1875,15 +2244,17 @@ function generateHTML(gameName, blocks) {
 
 <style>
 
-${cssBlocks.map(function(block) {
+${cssBlocks.map(
+    function(block) {
 
-    return (
+        return (
 `/* BLOCK: ${block.name} */
 
 ${block.code}`
-    );
+        );
 
-}).join("\n\n")}
+    }
+).join("\n\n")}
 
 </style>
 
@@ -1891,40 +2262,47 @@ ${block.code}`
 
 <body>
 
-${htmlBlocks.map(function(block) {
+${htmlBlocks.map(
+    function(block) {
 
-    return (
+        return (
 `<!-- BLOCK: ${block.name} -->
 
 ${block.code}`
-    );
+        );
 
-}).join("\n\n")}
+    }
+).join("\n\n")}
 
 <script>
 
-${jsBlocks.map(function(block) {
+${jsBlocks.map(
+    function(block) {
 
-    return (
+        return (
 `/* BLOCK: ${block.name} */
 
 ${block.code}`
-    );
+        );
 
-}).join("\n\n")}
+    }
+).join("\n\n")}
 
 <\/script>
 
 </body>
 
 </html>`;
-
-
-    return html;
 }
 
 
-function showBuildReport(result) {
+/* =========================
+   BUILD REPORT
+========================= */
+
+function showBuildReport(
+    result
+) {
 
     var report =
         document.getElementById(
@@ -1971,14 +2349,16 @@ function showBuildReport(result) {
         result.automatic.length
     ) {
 
-        result.automatic.forEach(function(block) {
+        result.automatic.forEach(
+            function(block) {
 
-            html +=
+                html +=
 `<div class="reportLine ok">
     + ${escapeHTML(block.name)}
 </div>`;
 
-        });
+            }
+        );
 
     } else {
 
@@ -1996,14 +2376,16 @@ function showBuildReport(result) {
 </div>`;
 
 
-    result.ordered.forEach(function(block, index) {
+    result.ordered.forEach(
+        function(block, index) {
 
-        html +=
+            html +=
 `<div class="reportLine">
     ${index + 1}. ${escapeHTML(block.name)}
 </div>`;
 
-    });
+        }
+    );
 
 
     if (
@@ -2017,14 +2399,16 @@ function showBuildReport(result) {
 </div>`;
 
 
-        result.errors.forEach(function(error) {
+        result.errors.forEach(
+            function(error) {
 
-            html +=
+                html +=
 `<div class="reportLine error">
     ✗ ${escapeHTML(error)}
 </div>`;
 
-        });
+            }
+        );
 
     }
 
@@ -2054,6 +2438,25 @@ function showBuildReport(result) {
     }
 
 
+    if (
+        result.html &&
+        result.save
+    ) {
+
+        html +=
+`<div style="margin-top:12px">
+
+<button
+    class="btn small"
+    onclick="openCodeViewerFromLatest()">
+    👁 View Generated HTML
+</button>
+
+</div>`;
+
+    }
+
+
     report.innerHTML =
         html;
 
@@ -2063,12 +2466,18 @@ function showBuildReport(result) {
 }
 
 
+/* =========================
+   PLAY
+========================= */
+
 function playGame(gameId) {
 
     var game =
-        studio.games.find(function(item) {
-            return item.id === gameId;
-        });
+        studio.games.find(
+            function(item) {
+                return item.id === gameId;
+            }
+        );
 
 
     if (
@@ -2094,12 +2503,16 @@ function playGame(gameId) {
     var blob =
         new Blob(
             [save.html],
-            { type: "text/html" }
+            {
+                type: "text/html"
+            }
         );
 
 
     var url =
-        URL.createObjectURL(blob);
+        URL.createObjectURL(
+            blob
+        );
 
 
     var newWindow =
@@ -2118,6 +2531,10 @@ function playGame(gameId) {
     }
 }
 
+
+/* =========================
+   BLOCKS
+========================= */
 
 function renderBlocks() {
 
@@ -2144,15 +2561,18 @@ function renderBlocks() {
 
 
     list.innerHTML =
-        studio.blocks.map(function(block) {
+        studio.blocks.map(
+            function(block) {
 
-            var dependencies =
-                Array.isArray(block.dependencies)
-                    ? block.dependencies
-                    : [];
+                var dependencies =
+                    Array.isArray(
+                        block.dependencies
+                    )
+                        ? block.dependencies
+                        : [];
 
 
-            return `
+                return `
 <div class="blockRow">
 
     <div class="blockInfo">
@@ -2194,11 +2614,14 @@ function renderBlocks() {
 
 </div>`;
 
-        }).join("");
+            }
+        ).join("");
 }
 
 
-function openBlockEditor(blockId) {
+function openBlockEditor(
+    blockId
+) {
 
     editingBlockId =
         blockId || null;
@@ -2207,9 +2630,11 @@ function openBlockEditor(blockId) {
     if (blockId) {
 
         var block =
-            studio.blocks.find(function(item) {
-                return item.id === blockId;
-            });
+            studio.blocks.find(
+                function(item) {
+                    return item.id === blockId;
+                }
+            );
 
 
         if (!block) {
@@ -2269,12 +2694,25 @@ function openBlockEditor(blockId) {
 
 
     document
-        .getElementById("blockModal")
-        .classList.add("visible");
+        .getElementById(
+            "blockCodeStatus"
+        )
+        .textContent = "";
+
+
+    document
+        .getElementById(
+            "blockModal"
+        )
+        .classList.add(
+            "visible"
+        );
 }
 
 
-function editBlock(blockId) {
+function editBlock(
+    blockId
+) {
 
     openBlockEditor(
         blockId
@@ -2285,10 +2723,15 @@ function editBlock(blockId) {
 function closeBlockEditor() {
 
     document
-        .getElementById("blockModal")
-        .classList.remove("visible");
+        .getElementById(
+            "blockModal"
+        )
+        .classList.remove(
+            "visible"
+        );
 
-    editingBlockId = null;
+    editingBlockId =
+        null;
 }
 
 
@@ -2340,21 +2783,26 @@ function saveBlock() {
     var dependencies =
         dependencyText
             .split(",")
-            .map(function(value) {
-                return value.trim();
-            })
+            .map(
+                function(value) {
+                    return value.trim();
+                }
+            )
             .filter(Boolean);
 
 
     var duplicate =
-        studio.blocks.find(function(block) {
+        studio.blocks.find(
+            function(block) {
 
-            return (
-                block.name === name &&
-                block.id !== editingBlockId
-            );
+                return (
+                    block.name === name &&
+                    block.id !==
+                        editingBlockId
+                );
 
-        });
+            }
+        );
 
 
     if (duplicate) {
@@ -2370,17 +2818,27 @@ function saveBlock() {
     if (editingBlockId) {
 
         var block =
-            studio.blocks.find(function(item) {
-                return item.id === editingBlockId;
-            });
+            studio.blocks.find(
+                function(item) {
+                    return item.id ===
+                        editingBlockId;
+                }
+            );
 
 
         if (block) {
 
-            block.name = name;
-            block.type = type;
-            block.dependencies = dependencies;
-            block.code = code;
+            block.name =
+                name;
+
+            block.type =
+                type;
+
+            block.dependencies =
+                dependencies;
+
+            block.code =
+                code;
 
         }
 
@@ -2394,7 +2852,8 @@ function saveBlock() {
 
             type: type,
 
-            dependencies: dependencies,
+            dependencies:
+                dependencies,
 
             code: code
 
@@ -2413,12 +2872,16 @@ function saveBlock() {
 }
 
 
-function deleteBlock(blockId) {
+function deleteBlock(
+    blockId
+) {
 
     var block =
-        studio.blocks.find(function(item) {
-            return item.id === blockId;
-        });
+        studio.blocks.find(
+            function(item) {
+                return item.id === blockId;
+            }
+        );
 
 
     if (!block) {
@@ -2427,18 +2890,20 @@ function deleteBlock(blockId) {
 
 
     var usedBy =
-        studio.blocks.filter(function(other) {
+        studio.blocks.filter(
+            function(other) {
 
-            return (
-                Array.isArray(
-                    other.dependencies
-                ) &&
-                other.dependencies.includes(
-                    block.name
-                )
-            );
+                return (
+                    Array.isArray(
+                        other.dependencies
+                    ) &&
+                    other.dependencies.includes(
+                        block.name
+                    )
+                );
 
-        });
+            }
+        );
 
 
     if (usedBy.length) {
@@ -2446,9 +2911,12 @@ function deleteBlock(blockId) {
         alert(
             "Cannot delete this block.\n\n" +
             "It is required by:\n" +
-            usedBy.map(function(item) {
-                return "• " + item.name;
-            }).join("\n")
+            usedBy.map(
+                function(item) {
+                    return "• " +
+                        item.name;
+                }
+            ).join("\n")
         );
 
         return;
@@ -2466,11 +2934,14 @@ function deleteBlock(blockId) {
 
 
     studio.blocks =
-        studio.blocks.filter(function(item) {
+        studio.blocks.filter(
+            function(item) {
 
-            return item.id !== blockId;
+                return item.id !==
+                    blockId;
 
-        });
+            }
+        );
 
 
     saveStudio();
@@ -2481,49 +2952,13 @@ function deleteBlock(blockId) {
 }
 
 
-function deleteGame(gameId) {
+/* =========================
+   CODE VIEWER
+========================= */
 
-    var game =
-        studio.games.find(function(item) {
-            return item.id === gameId;
-        });
-
-
-    if (!game) {
-        return;
-    }
-
-
-    if (!confirm(
-        'Delete "' +
-        game.name +
-        '" and all its saves?'
-    )) {
-
-        return;
-    }
-
-
-    studio.games =
-        studio.games.filter(function(item) {
-
-            return item.id !== gameId;
-
-        });
-
-
-    if (editingGameId === gameId) {
-        editingGameId = null;
-    }
-
-
-    saveStudio();
-
-    renderGames();
-}
-
-
-function openCodeViewer(html) {
+function openCodeViewer(
+    html
+) {
 
     document.getElementById(
         "generatedCodeViewer"
@@ -2532,35 +2967,67 @@ function openCodeViewer(html) {
 
 
     document
-        .getElementById("codeModal")
-        .classList.add("visible");
+        .getElementById(
+            "codeModal"
+        )
+        .classList.add(
+            "visible"
+        );
+
+
+    document.getElementById(
+        "generatedCodeStatus"
+    ).textContent = "";
+}
+
+
+function openCodeViewerFromLatest() {
+
+    var save =
+        latestSave();
+
+
+    if (!save) {
+        return;
+    }
+
+
+    openCodeViewer(
+        save.html
+    );
 }
 
 
 function closeCodeViewer() {
 
     document
-        .getElementById("codeModal")
-        .classList.remove("visible");
+        .getElementById(
+            "codeModal"
+        )
+        .classList.remove(
+            "visible"
+        );
 }
 
 
+/* =========================
+   LATEST SAVE
+========================= */
+
 function latestSave() {
 
-    if (
-        !editingGameId
-    ) {
+    if (!editingGameId) {
         return null;
     }
 
 
     var game =
-        studio.games.find(function(item) {
-
-            return item.id ===
-                editingGameId;
-
-        });
+        studio.games.find(
+            function(item) {
+                return item.id ===
+                    editingGameId;
+            }
+        );
 
 
     if (
@@ -2579,7 +3046,14 @@ function latestSave() {
 }
 
 
-function commandPrint(text, type) {
+/* =========================
+   COMMAND LINE
+========================= */
+
+function commandPrint(
+    text,
+    type
+) {
 
     var output =
         document.getElementById(
@@ -2588,7 +3062,9 @@ function commandPrint(text, type) {
 
 
     var line =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     line.className =
@@ -2600,7 +3076,10 @@ function commandPrint(text, type) {
         text;
 
 
-    output.appendChild(line);
+    output.appendChild(
+        line
+    );
+
 
     output.scrollTop =
         output.scrollHeight;
@@ -2615,7 +3094,9 @@ function commandClear() {
 }
 
 
-function commandExample(text) {
+function commandExample(
+    text
+) {
 
     var input =
         document.getElementById(
@@ -2657,11 +3138,15 @@ function runCommandFromInput() {
     input.value = "";
 
 
-    executeCommand(command);
+    executeCommand(
+        command
+    );
 }
 
 
-function executeCommand(command) {
+function executeCommand(
+    command
+) {
 
     var parts =
         command.match(
@@ -2670,33 +3155,35 @@ function executeCommand(command) {
 
 
     var args =
-        parts.map(function(value) {
+        parts.map(
+            function(value) {
 
-            if (
-                value.length >= 2 &&
-                (
+                if (
+                    value.length >= 2 &&
                     (
-                        value[0] === '"' &&
-                        value[value.length - 1] === '"'
-                    ) ||
-                    (
-                        value[0] === "'" &&
-                        value[value.length - 1] === "'"
+                        (
+                            value[0] === '"' &&
+                            value[value.length - 1] === '"'
+                        ) ||
+                        (
+                            value[0] === "'" &&
+                            value[value.length - 1] === "'"
+                        )
                     )
-                )
-            ) {
+                ) {
 
-                return value.slice(
-                    1,
-                    -1
-                );
+                    return value.slice(
+                        1,
+                        -1
+                    );
+
+                }
+
+
+                return value;
 
             }
-
-
-            return value;
-
-        });
+        );
 
 
     if (!args.length) {
@@ -2714,99 +3201,91 @@ function executeCommand(command) {
 
     try {
 
-        switch (commandName) {
+        switch (
+            commandName
+        ) {
 
             case "help":
                 commandHelp();
                 break;
 
-
             case "clear":
                 commandClear();
                 break;
-
 
             case "list":
                 commandList(rest);
                 break;
 
-
             case "show":
                 commandList(rest);
                 break;
-
 
             case "new":
                 commandNew(rest);
                 break;
 
-
             case "create":
                 commandCreate(rest);
                 break;
-
 
             case "use":
                 commandUse(rest);
                 break;
 
-
             case "remove":
                 commandRemove(rest);
                 break;
-
 
             case "build":
                 commandBuild();
                 break;
 
-
             case "view":
                 commandView(rest);
                 break;
-
 
             case "edit":
                 commandEdit(rest);
                 break;
 
-
             case "delete":
                 commandDelete(rest);
                 break;
-
 
             case "open":
                 commandOpen(rest);
                 break;
 
-
             case "games":
                 showPage("games");
+
                 commandPrint(
                     "Opened Games.",
                     "success"
                 );
-                break;
 
+                break;
 
             case "blocks":
                 showPage("blocks");
+
                 commandPrint(
                     "Opened Blocks.",
                     "success"
                 );
-                break;
 
+                break;
 
             case "generator":
                 showPage("studio");
+
                 commandPrint(
                     "Opened Generator.",
                     "success"
                 );
-                break;
 
+                break;
 
             default:
 
@@ -2821,7 +3300,10 @@ function executeCommand(command) {
 
         commandPrint(
             "ERROR: " +
-            (error.message || error),
+            (
+                error.message ||
+                error
+            ),
             "error"
         );
 
@@ -2867,10 +3349,15 @@ open generator`,
 }
 
 
-function commandList(args) {
+function commandList(
+    args
+) {
 
     var target =
-        (args[0] || "").toLowerCase();
+        (
+            args[0] ||
+            ""
+        ).toLowerCase();
 
 
     if (target === "blocks") {
@@ -2886,28 +3373,31 @@ function commandList(args) {
         }
 
 
-        studio.blocks.forEach(function(block) {
+        studio.blocks.forEach(
+            function(block) {
 
-            var deps =
-                block.dependencies || [];
+                var deps =
+                    block.dependencies ||
+                    [];
 
 
-            commandPrint(
-                "• " +
-                block.name +
-                " [" +
-                block.type +
-                "]" +
-                (
-                    deps.length
-                        ? " → " +
-                          deps.join(", ")
-                        : ""
-                ),
-                "info"
-            );
+                commandPrint(
+                    "• " +
+                    block.name +
+                    " [" +
+                    block.type +
+                    "]" +
+                    (
+                        deps.length
+                            ? " → " +
+                              deps.join(", ")
+                            : ""
+                    ),
+                    "info"
+                );
 
-        });
+            }
+        );
 
 
         return;
@@ -2927,22 +3417,24 @@ function commandList(args) {
         }
 
 
-        studio.games.forEach(function(game) {
+        studio.games.forEach(
+            function(game) {
 
-            commandPrint(
-                "• " +
-                game.name +
-                " — " +
-                (
-                    game.saves
-                        ? game.saves.length
-                        : 0
-                ) +
-                " save(s)",
-                "info"
-            );
+                commandPrint(
+                    "• " +
+                    game.name +
+                    " — " +
+                    (
+                        game.saves
+                            ? game.saves.length
+                            : 0
+                    ) +
+                    " save(s)",
+                    "info"
+                );
 
-        });
+            }
+        );
 
 
         return;
@@ -2951,40 +3443,38 @@ function commandList(args) {
 
     if (target === "saves") {
 
-        if (!studio.games.length) {
-
-            commandPrint(
-                "No games or saves.",
-                "info"
-            );
-
-            return;
-        }
-
-
-        studio.games.forEach(function(game) {
-
-            commandPrint(
-                "GAME: " +
-                game.name,
-                "info"
-            );
-
-
-            (game.saves || []).forEach(function(save) {
+        studio.games.forEach(
+            function(game) {
 
                 commandPrint(
-                    "  • " +
-                    save.name +
-                    " [" +
-                    (save.resolvedBlocks || []).length +
-                    " blocks]",
+                    "GAME: " +
+                    game.name,
                     "info"
                 );
 
-            });
 
-        });
+                (
+                    game.saves || []
+                ).forEach(
+                    function(save) {
+
+                        commandPrint(
+                            "  • " +
+                            save.name +
+                            " [" +
+                            (
+                                save.resolvedBlocks ||
+                                []
+                            ).length +
+                            " blocks]",
+                            "info"
+                        );
+
+                    }
+                );
+
+            }
+        );
 
 
         return;
@@ -2998,11 +3488,14 @@ function commandList(args) {
 }
 
 
-function commandNew(args) {
+function commandNew(
+    args
+) {
 
     if (
         args[0] &&
-        args[0].toLowerCase() === "game"
+        args[0].toLowerCase() ===
+            "game"
     ) {
 
         var name =
@@ -3021,7 +3514,9 @@ function commandNew(args) {
         };
 
 
-        studio.games.push(game);
+        studio.games.push(
+            game
+        );
 
         editingGameId =
             game.id;
@@ -3030,6 +3525,7 @@ function commandNew(args) {
         saveStudio();
 
         renderGames();
+
 
         document.getElementById(
             "gameName"
@@ -3043,7 +3539,9 @@ function commandNew(args) {
             "Version 1";
 
 
-        showPage("studio");
+        showPage(
+            "studio"
+        );
 
 
         commandPrint(
@@ -3065,11 +3563,14 @@ function commandNew(args) {
 }
 
 
-function commandCreate(args) {
+function commandCreate(
+    args
+) {
 
     if (
         !args[0] ||
-        args[0].toLowerCase() !== "block"
+        args[0].toLowerCase() !==
+            "block"
     ) {
 
         commandPrint(
@@ -3095,7 +3596,7 @@ function commandCreate(args) {
     if (!name) {
 
         commandPrint(
-            'A block name is required.',
+            "A block name is required.",
             "error"
         );
 
@@ -3104,7 +3605,11 @@ function commandCreate(args) {
 
 
     if (
-        !["js", "css", "html"].includes(type)
+        ![
+            "js",
+            "css",
+            "html"
+        ].includes(type)
     ) {
 
         commandPrint(
@@ -3117,11 +3622,11 @@ function commandCreate(args) {
 
 
     var existing =
-        studio.blocks.find(function(block) {
-
-            return block.name === name;
-
-        });
+        studio.blocks.find(
+            function(block) {
+                return block.name === name;
+            }
+        );
 
 
     if (existing) {
@@ -3176,7 +3681,9 @@ function commandCreate(args) {
 }
 
 
-function commandUse(args) {
+function commandUse(
+    args
+) {
 
     if (!args.length) {
 
@@ -3201,12 +3708,12 @@ function commandUse(args) {
 
 
     var game =
-        studio.games.find(function(item) {
-
-            return item.id ===
-                editingGameId;
-
-        });
+        studio.games.find(
+            function(item) {
+                return item.id ===
+                    editingGameId;
+            }
+        );
 
 
     if (!game) {
@@ -3223,34 +3730,36 @@ function commandUse(args) {
     var names = [];
 
 
-    args.forEach(function(name) {
+    args.forEach(
+        function(name) {
 
-        var block =
-            studio.blocks.find(function(item) {
+            var block =
+                studio.blocks.find(
+                    function(item) {
+                        return item.name === name;
+                    }
+                );
 
-                return item.name === name;
 
-            });
+            if (!block) {
+
+                commandPrint(
+                    'Block "' +
+                    name +
+                    '" does not exist.',
+                    "error"
+                );
+
+                return;
+            }
 
 
-        if (!block) {
+            if (!names.includes(name)) {
+                names.push(name);
+            }
 
-            commandPrint(
-                'Block "' +
-                name +
-                '" does not exist.',
-                "error"
-            );
-
-            return;
         }
-
-
-        if (!names.includes(name)) {
-            names.push(name);
-        }
-
-    });
+    );
 
 
     var existingSave =
@@ -3289,20 +3798,24 @@ function commandUse(args) {
     renderGenerator();
 
 
-    names.forEach(function(name) {
+    names.forEach(
+        function(name) {
 
-        commandPrint(
-            'Using "' +
-            name +
-            '".',
-            "success"
-        );
+            commandPrint(
+                'Using "' +
+                name +
+                '".',
+                "success"
+            );
 
-    });
+        }
+    );
 }
 
 
-function commandRemove(args) {
+function commandRemove(
+    args
+) {
 
     if (!args.length) {
 
@@ -3346,11 +3859,16 @@ function commandRemove(args) {
 
 
     save.blocks =
-        (save.blocks || []).filter(function(blockName) {
+        (
+            save.blocks || []
+        ).filter(
+            function(blockName) {
 
-            return blockName !== name;
+                return blockName !==
+                    name;
 
-        });
+            }
+        );
 
 
     save.resolvedBlocks = [];
@@ -3385,30 +3903,21 @@ function commandBuild() {
     }
 
 
-    renderGenerator();
+    var save =
+        latestSave();
 
 
-    var checks =
-        Array.from(
-            document.querySelectorAll(
-                ".generatorCheck:checked"
-            )
-        );
+    if (
+        save &&
+        save.blocks &&
+        save.blocks.length
+    ) {
+
+        renderGenerator();
 
 
-    if (!checks.length) {
-
-        var save =
-            latestSave();
-
-
-        if (
-            save &&
-            save.blocks &&
-            save.blocks.length
-        ) {
-
-            save.blocks.forEach(function(name) {
+        save.blocks.forEach(
+            function(name) {
 
                 var checkbox =
                     document.querySelector(
@@ -3419,12 +3928,12 @@ function commandBuild() {
 
 
                 if (checkbox) {
-                    checkbox.checked = true;
+                    checkbox.checked =
+                        true;
                 }
 
-            });
-
-        }
+            }
+        );
 
     }
 
@@ -3464,10 +3973,15 @@ function commandBuild() {
 }
 
 
-function commandView(args) {
+function commandView(
+    args
+) {
 
     var target =
-        (args[0] || "code").toLowerCase();
+        (
+            args[0] ||
+            "code"
+        ).toLowerCase();
 
 
     if (target !== "code") {
@@ -3511,10 +4025,15 @@ function commandView(args) {
 }
 
 
-function commandEdit(args) {
+function commandEdit(
+    args
+) {
 
     var target =
-        (args[0] || "").toLowerCase();
+        (
+            args[0] ||
+            ""
+        ).toLowerCase();
 
 
     var name =
@@ -3524,11 +4043,11 @@ function commandEdit(args) {
     if (target === "block") {
 
         var block =
-            studio.blocks.find(function(item) {
-
-                return item.name === name;
-
-            });
+            studio.blocks.find(
+                function(item) {
+                    return item.name === name;
+                }
+            );
 
 
         if (!block) {
@@ -3564,11 +4083,11 @@ function commandEdit(args) {
     if (target === "game") {
 
         var game =
-            studio.games.find(function(item) {
-
-                return item.name === name;
-
-            });
+            studio.games.find(
+                function(item) {
+                    return item.name === name;
+                }
+            );
 
 
         if (!game) {
@@ -3608,10 +4127,15 @@ function commandEdit(args) {
 }
 
 
-function commandDelete(args) {
+function commandDelete(
+    args
+) {
 
     var target =
-        (args[0] || "").toLowerCase();
+        (
+            args[0] ||
+            ""
+        ).toLowerCase();
 
 
     var name =
@@ -3621,11 +4145,11 @@ function commandDelete(args) {
     if (target === "block") {
 
         var block =
-            studio.blocks.find(function(item) {
-
-                return item.name === name;
-
-            });
+            studio.blocks.find(
+                function(item) {
+                    return item.name === name;
+                }
+            );
 
 
         if (!block) {
@@ -3661,11 +4185,11 @@ function commandDelete(args) {
     if (target === "game") {
 
         var game =
-            studio.games.find(function(item) {
-
-                return item.name === name;
-
-            });
+            studio.games.find(
+                function(item) {
+                    return item.name === name;
+                }
+            );
 
 
         if (!game) {
@@ -3705,10 +4229,15 @@ function commandDelete(args) {
 }
 
 
-function commandOpen(args) {
+function commandOpen(
+    args
+) {
 
     var target =
-        (args[0] || "").toLowerCase();
+        (
+            args[0] ||
+            ""
+        ).toLowerCase();
 
 
     if (
@@ -3741,30 +4270,20 @@ function commandOpen(args) {
 }
 
 
-function escapeHTML(value) {
+/* =========================
+   DELETE GAME
+========================= */
 
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-
-function escapeAttr(value) {
-    return escapeHTML(value);
-}
-
-
-function deleteGame(gameId) {
+function deleteGame(
+    gameId
+) {
 
     var game =
-        studio.games.find(function(item) {
-
-            return item.id === gameId;
-
-        });
+        studio.games.find(
+            function(item) {
+                return item.id === gameId;
+            }
+        );
 
 
     if (!game) {
@@ -3783,15 +4302,23 @@ function deleteGame(gameId) {
 
 
     studio.games =
-        studio.games.filter(function(item) {
+        studio.games.filter(
+            function(item) {
 
-            return item.id !== gameId;
+                return item.id !==
+                    gameId;
 
-        });
+            }
+        );
 
 
-    if (editingGameId === gameId) {
-        editingGameId = null;
+    if (
+        editingGameId === gameId
+    ) {
+
+        editingGameId =
+            null;
+
     }
 
 
@@ -3799,6 +4326,75 @@ function deleteGame(gameId) {
 
     renderGames();
 }
+
+
+/* =========================
+   UTILITIES
+========================= */
+
+function escapeHTML(
+    value
+) {
+
+    return String(value)
+        .replaceAll(
+            "&",
+            "&amp;"
+        )
+        .replaceAll(
+            "<",
+            "&lt;"
+        )
+        .replaceAll(
+            ">",
+            "&gt;"
+        )
+        .replaceAll(
+            '"',
+            "&quot;"
+        )
+        .replaceAll(
+            "'",
+            "&#039;"
+        );
+}
+
+
+function escapeAttr(
+    value
+) {
+
+    return escapeHTML(
+        value
+    );
+}
+
+
+/* =========================
+   START
+========================= */
+
+document
+    .getElementById(
+        "commandInput"
+    )
+    .addEventListener(
+        "keydown",
+        function(event) {
+
+            if (
+                event.key ===
+                "Enter"
+            ) {
+
+                event.preventDefault();
+
+                runCommandFromInput();
+
+            }
+
+        }
+    );
 
 
 function startStudio() {
@@ -3817,7 +4413,7 @@ function startStudio() {
 
 
         commandPrint(
-            "HTML Game Studio V2.2 ready.",
+            "HTML Game Studio V2.3 ready.",
             "success"
         );
 
@@ -3838,24 +4434,6 @@ function startStudio() {
 
     }
 }
-
-
-document
-    .getElementById("commandInput")
-    .addEventListener(
-        "keydown",
-        function(event) {
-
-            if (event.key === "Enter") {
-
-                event.preventDefault();
-
-                runCommandFromInput();
-
-            }
-
-        }
-    );
 
 
 startStudio();
