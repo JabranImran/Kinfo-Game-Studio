@@ -4444,6 +4444,32 @@ const ROAM_RETURN_ANGLE=.22;
 const SURFACE_ITEM_LAT_OFFSET=.55;
 
 /*
+ * Structures are spread across two of these rather than pinned to
+ * SURFACE_ITEM_LAT_OFFSET's single line — .45 (upper, nearer the
+ * ship) and .68 (lower, toward the bottom of the safe area above
+ * the Launch button). Chosen by measuring actual projected pixel
+ * positions rather than guessing: the gap between them clears the
+ * structure icon's own size even for two items sharing the same
+ * longitude, and .68 alone stays clear of the Launch button and
+ * mission log below it. SURFACE_ITEM_LAT_OFFSET itself is left
+ * alone — it's still what the ship, idle pets' default line, and
+ * the roaming camera's tilt are calibrated against.
+ */
+const SURFACE_ROW_LAT_OFFSETS=
+    [.45,.68];
+
+/*
+ * How idle pets wander between buildings rather than jittering
+ * near one fixed spot — a repeating cycle, each pet on its own
+ * phase. WALK_FRACTION is how much of each cycle is spent
+ * actually walking versus paused at the arrival building before
+ * the next cycle picks a new destination.
+ */
+const WANDER_CYCLE_SECONDS=14;
+
+const WANDER_WALK_FRACTION=.55;
+
+/*
  * How far south of the roaming pet's own position the camera
  * looks — the exact same offset PLANET_VIEW_LAT already keeps
  * between the camera and the ship in the default (non-roaming)
@@ -20345,17 +20371,21 @@ function drawPlanetFocusScene(){
          *
          * Both this and CENTRE_GAP below were re-measured against
          * the current icon size (224px on a typical screen) rather
-         * than assumed — the previous values were tuned before
-         * icons were doubled in size and never revisited, which is
-         * exactly why they'd drifted into real overlap: measuring
-         * projected pixel positions directly showed adjacent
-         * structures landing barely 140px apart with 224px icons,
-         * a substantial overlap, not just a visually tight fit.
+         * than assumed. Widened again here alongside the move to
+         * two rows — a full genuine grid, not just a taller single
+         * strip, needs real breathing room in both directions to
+         * avoid overlap, without shrinking the icons themselves.
+         * Fully avoiding all overlap at very high structure counts
+         * (8+) and staying completely clear of the screen edges
+         * are genuinely in tension on a phone-width screen with
+         * icons this size — this favours staying on-screen, since
+         * a structure partly off both edges is worse than two
+         * icons sitting a little closer than ideal.
          */
         const arcSpan=
             Math.min(
-                .40,
-                .125*surfaceItems.length
+                .55,
+                .16*surfaceItems.length
             );
 
         /*
@@ -20386,17 +20416,55 @@ function drawPlanetFocusScene(){
          * below can send a working or training pet toward the
          * actual on-screen spot of whatever it's doing — the
          * "walk toward what they're interacting with" behaviour.
+         * Stores both lat and lon now, not just longitude — with
+         * two rows, a pet needs to know WHICH row its target
+         * structure is actually in, not just walk to the right
+         * longitude and stand at whatever the single old fixed
+         * latitude used to be.
+         *
+         * structurePositionList is the same positions again, as a
+         * plain array rather than keyed by structure id — for
+         * idle pets wandering between whatever's actually built
+         * rather than working at one specific one, which needs to
+         * pick an arbitrary building rather than look one up by
+         * name.
          */
-        const structureAngles={};
+        const structurePositions={};
+
+        const structurePositionList=[];
 
         surfaceItems.forEach(
             (item,index)=>{
 
+                /*
+                 * Two rows instead of one — .45 (upper, closer to
+                 * the ship) and .68 (lower, toward the bottom of
+                 * the safe zone) rather than every item crammed
+                 * onto SURFACE_ITEM_LAT_OFFSET's single line. The
+                 * gap between them (measured in actual projected
+                 * pixels, not just eyeballed) comfortably clears
+                 * the icon size even for two items sharing the
+                 * same longitude — this is genuinely a big enough
+                 * planet to use both rows, not shrink to fit one.
+                 * Items alternate row first, then side/rank within
+                 * that row, which is what staggers them into a
+                 * proper grid rather than two separate strips.
+                 */
+                const row=
+                    index%2;
+
+                const withinRowIndex=
+                    Math.floor(index/2);
+
                 const side=
-                    index%2===0 ? -1 : 1;
+                    withinRowIndex%2===0
+                    ?-1
+                    :1;
 
                 const rank=
-                    Math.floor(index/2);
+                    Math.floor(
+                        withinRowIndex/2
+                    );
 
                 const t=
                     side*
@@ -20409,13 +20477,13 @@ function drawPlanetFocusScene(){
                  * Each surface item's fixed home on the sphere.
                  * The spread value t (which used to be an offset
                  * around a flat arc) becomes longitude, and
-                 * everything sits on the equator band nearest the
-                 * pole where the ship is — so the familiar
-                 * left-to-right layout is unchanged when not
-                 * roaming, but it's now a real position on a
+                 * everything sits on one of two latitude bands
+                 * near the pole where the ship is — so the
+                 * familiar left-to-right layout is unchanged when
+                 * not roaming, but it's now a real position on a
                  * sphere that can rotate anywhere.
                  *
-                 * structureAngles stores THIS base longitude, not
+                 * structurePositions stores THIS base lat/lon, not
                  * a rotated one, so anything reading it back (idle
                  * pets walking toward what they're doing) applies
                  * rotation itself rather than getting it baked in
@@ -20426,15 +20494,29 @@ function drawPlanetFocusScene(){
 
                 const itemLat=
                     Math.PI/2-
-                    SURFACE_ITEM_LAT_OFFSET;
+                    (
+                        row===0
+                        ?SURFACE_ROW_LAT_OFFSETS[0]
+                        :SURFACE_ROW_LAT_OFFSETS[1]
+                    );
 
                 if(
                     item.kind==="structure"
                 ){
 
-                    structureAngles[
+                    const structurePos=
+                        {
+                            lat:itemLat,
+                            lon:itemLon
+                        };
+
+                    structurePositions[
                         item.structureId
-                    ]=itemLon;
+                    ]=structurePos;
+
+                    structurePositionList.push(
+                        structurePos
+                    );
 
                 }
 
@@ -20823,10 +20905,118 @@ function drawPlanetFocusScene(){
                             time*.8+seed
                         )*.05;
 
+                    /*
+                     * Idle pets (no active work or training) walk
+                     * between whatever's actually built, rather
+                     * than jittering in place near one fixed spot
+                     * — genuinely roaming the settlement instead
+                     * of just standing near it. A repeating cycle
+                     * of walk-then-pause-then-pick-a-new-building,
+                     * each pet on its own offset phase (via seed)
+                     * so they don't all move in lockstep.
+                     *
+                     * The destination of one cycle becomes the
+                     * start of the next (pickWanderIndex(n+1) here
+                     * is exactly pickWanderIndex(n) one cycle
+                     * later), so the walk is continuous across
+                     * cycle boundaries rather than popping to a
+                     * new position each time a new cycle begins.
+                     */
+                    let wanderPosition=
+                        null;
+
+                    if(
+                        structurePositionList.length>1
+                    ){
+
+                        const wanderClock=
+                            time+seed*3.7;
+
+                        const cycleIndex=
+                            Math.floor(
+                                wanderClock/
+                                WANDER_CYCLE_SECONDS
+                            );
+
+                        const cycleT=
+                            (
+                                wanderClock%
+                                WANDER_CYCLE_SECONDS
+                            )/
+                            WANDER_CYCLE_SECONDS;
+
+                        const pickWanderIndex=
+                            cycleNum=>{
+
+                                const h=
+                                    Math.sin(
+                                        cycleNum*12.9898+
+                                        seed*0.6180339887
+                                    )*43758.5453;
+
+                                return Math.floor(
+                                    (
+                                        h-Math.floor(h)
+                                    )*
+                                    structurePositionList.length
+                                );
+
+                            };
+
+                        const fromPos=
+                            structurePositionList[
+                                pickWanderIndex(
+                                    cycleIndex
+                                )
+                            ];
+
+                        const toPos=
+                            structurePositionList[
+                                pickWanderIndex(
+                                    cycleIndex+1
+                                )
+                            ];
+
+                        const walkProgress=
+                            Math.min(
+                                1,
+                                cycleT/
+                                WANDER_WALK_FRACTION
+                            );
+
+                        /*
+                         * Ease in/out rather than a constant walk
+                         * speed — a natural-feeling accelerate
+                         * then decelerate into arriving, rather
+                         * than an abrupt start/stop.
+                         */
+                        const eased=
+                            walkProgress<.5
+                            ?2*walkProgress*
+                             walkProgress
+                            :1-
+                             Math.pow(
+                                -2*walkProgress+2,
+                                2
+                             )/2;
+
+                        wanderPosition={
+                            lat:
+                                fromPos.lat+
+                                (toPos.lat-fromPos.lat)*
+                                eased,
+                            lon:
+                                fromPos.lon+
+                                (toPos.lon-fromPos.lon)*
+                                eased
+                        };
+
+                    }
+
                     const role=
                         pet.role || "builder";
 
-                    let targetAngle=
+                    let targetPosition=
                         null;
 
                     if(
@@ -20841,13 +21031,13 @@ function drawPlanetFocusScene(){
                             :activeBuild.structureId;
 
                         if(
-                            structureAngles[
+                            structurePositions[
                                 targetId
                             ]!==undefined
                         ){
 
-                            targetAngle=
-                                structureAngles[
+                            targetPosition=
+                                structurePositions[
                                     targetId
                                 ];
 
@@ -20855,29 +21045,45 @@ function drawPlanetFocusScene(){
 
                     }else if(
                         role==="pilot" &&
-                        structureAngles[
+                        structurePositions[
                             "pilot-training"
                         ]!==undefined
                     ){
 
-                        targetAngle=
-                            structureAngles[
+                        targetPosition=
+                            structurePositions[
                                 "pilot-training"
                             ];
 
                     }
 
+                    /*
+                     * Working/training targets take priority over
+                     * wandering between buildings — a pet that's
+                     * actually assigned somewhere walks there and
+                     * stays, rather than drifting off mid-task.
+                     */
+                    const basePosition=
+                        targetPosition ||
+                        wanderPosition;
+
                     const petLon=
-                        targetAngle!==null
-                        ?targetAngle+wander*.4
+                        basePosition
+                        ?basePosition.lon+
+                         wander*.4
                         :idleAngle+wander;
 
                     /*
                      * Latitude wander — pets drift a little north
-                     * and south of the main surface band as they
-                     * mill about (a different phase per pet, so
-                     * they don't all move in sync), rather than
-                     * being pinned to one exact line of latitude.
+                     * and south of wherever they're centred (the
+                     * wander walk's current position, the actual
+                     * latitude of whatever structure they're
+                     * working at, or the old fallback band if
+                     * there's nothing built yet to wander between)
+                     * as they mill about (a different phase per
+                     * pet, so they don't all move in sync), rather
+                     * than being pinned to one exact line of
+                     * latitude.
                      */
                     const latWander=
                         Math.sin(
@@ -20887,8 +21093,12 @@ function drawPlanetFocusScene(){
                         )*.12;
 
                     const petLat=
-                        Math.PI/2-
-                        SURFACE_ITEM_LAT_OFFSET+
+                        (
+                            basePosition
+                            ?basePosition.lat
+                            :Math.PI/2-
+                             SURFACE_ITEM_LAT_OFFSET
+                        )+
                         latWander;
 
                     /*
