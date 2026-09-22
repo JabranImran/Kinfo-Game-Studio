@@ -4494,12 +4494,25 @@ const ROAM_START_LAT_OFFSET=.42;
  * pole would project it to the dead centre of the planet's disc,
  * looking buried inside the planet rather than perched on top of
  * it, with the structures ringed below rather than spread across
- * the top. Pulling the camera down to this latitude instead puts
- * the pole up near the planet's visible top edge, which is the
- * framing the home screen has always had.
+ * the top. Pulling the camera down instead puts the pole up near
+ * the planet's visible top edge.
+ *
+ * Expressed as SHIP_LAT minus a tilt amount, rather than as its
+ * own independent angle, specifically so the two stay tied
+ * together — a plain independent constant here previously
+ * happened to numerically line up with SURFACE_ITEM_LAT_OFFSET by
+ * coincidence (1.1 is exactly double .55), which silently broke
+ * the moment SURFACE_ITEM_LAT_OFFSET needed to change without
+ * this one changing to match. HOME_VIEW_TILT is deliberately
+ * larger than SURFACE_ITEM_LAT_OFFSET itself — structures and the
+ * ship need to sit further up the visible screen than a 1:1 tilt
+ * would put them, clear of the bottom UI cluster (the Launch
+ * button and mission log) which otherwise covered them.
  */
+const HOME_VIEW_TILT=.885;
+
 const PLANET_VIEW_LAT=
-    Math.PI/2-1.1;
+    SHIP_LAT-HOME_VIEW_TILT;
 
 /*
  * Earth's continents as fixed positions on the sphere — the
@@ -25027,6 +25040,47 @@ function renderPlanetDetail(id){
                         '<div class="ship-interior">';
 
                     /*
+                     * ---- SELECT FOR LAUNCH ----
+                     * First thing shown on expanding a ship — the
+                     * single most likely reason to open this card
+                     * at all. Docked ships are otherwise chosen for
+                     * launch only from the ship carousel on the
+                     * home screen itself; this lets that same
+                     * choice be made from right here too, without
+                     * needing to back out and find it again on the
+                     * planet surface.
+                     */
+                    const isSelectedForLaunch=
+                        currentlySelectedShip &&
+                        currentlySelectedShip.id===
+                        ship.id;
+
+                    html+=
+                        '<button class="control-btn" '+
+                        'style="width:100%;margin-bottom:10px;'+
+                        (
+                            isSelectedForLaunch
+                            ?'background:rgba(80,200,120,.18);'+
+                             'border-color:rgba(80,200,120,.5);'+
+                             'color:#8ef0ae;'
+                            :''
+                        )+
+                        '" '+
+                        (
+                            isSelectedForLaunch
+                            ?''
+                            :'data-action="select-launch-ship" '+
+                             'data-ship="'+ship.id+'"'
+                        )+
+                        '>'+
+                        (
+                            isSelectedForLaunch
+                            ?'✓ Selected for Launch'
+                            :'Select for Launch'
+                        )+
+                        '</button>';
+
+                    /*
                      * ---- SHIP PREVIEW / STYLE ----
                      * Tapping the ship itself is how you
                      * customize its look — no separate text
@@ -25084,45 +25138,6 @@ function renderPlanetDetail(id){
                             '</div>';
 
                     }
-
-                    /*
-                     * ---- SELECT FOR LAUNCH ----
-                     * Docked ships are otherwise chosen for launch
-                     * only from the ship carousel on the home
-                     * screen itself — this lets that same choice be
-                     * made from right here, next to the ship's own
-                     * details, without needing to back out and find
-                     * it again on the planet surface.
-                     */
-                    const isSelectedForLaunch=
-                        currentlySelectedShip &&
-                        currentlySelectedShip.id===
-                        ship.id;
-
-                    html+=
-                        '<button class="control-btn" '+
-                        'style="width:100%;margin-top:8px;'+
-                        (
-                            isSelectedForLaunch
-                            ?'background:rgba(80,200,120,.18);'+
-                             'border-color:rgba(80,200,120,.5);'+
-                             'color:#8ef0ae;'
-                            :''
-                        )+
-                        '" '+
-                        (
-                            isSelectedForLaunch
-                            ?''
-                            :'data-action="select-launch-ship" '+
-                             'data-ship="'+ship.id+'"'
-                        )+
-                        '>'+
-                        (
-                            isSelectedForLaunch
-                            ?'✓ Selected for Launch'
-                            :'Select for Launch'
-                        )+
-                        '</button>';
 
                     /*
                      * ---- PILOT BAY ----
