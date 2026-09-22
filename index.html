@@ -19693,6 +19693,21 @@ function drawPlanetFocusScene(){
      * Roaming: the planet is a genuine sphere that turns beneath
      * the pet as it walks, in both axes.
      *
+     * Movement is resolved FIRST, before viewLat/viewLon below are
+     * computed from it — otherwise every roaming-aware draw this
+     * frame (the camera shift right after, structures, pets, the
+     * ship, the pet itself) would be working from last frame's
+     * position while the pet's actual state had already moved on,
+     * a one-frame mismatch between where things are drawn and
+     * where the player's input has already taken them.
+     */
+    if(roamingActive){
+
+        updateRoamingMovement();
+
+    }
+
+    /*
      * viewLat/viewLon below drives the whole rotation — everything
      * drawn on the planet is projected through projectSphere()
      * relative to it, which turns the whole world so wherever the
@@ -19711,16 +19726,7 @@ function drawPlanetFocusScene(){
      * visible portion is only the small arc near its top edge (the
      * "horizon" convention every other screenshot of this planet
      * already shows), that centre point sits far below the actual
-     * visible screen. The pet was rendering at a real, valid,
-     * non-crashing position — it just happened to be off-screen
-     * every single time, which is why nothing ever appeared to be
-     * wrong except that nothing ever showed up. The same tilt that
-     * already keeps the ship near the visible top edge in the
-     * default view keeps the pet there too while roaming.
-     *
-     * cx/cy stay at the planet's normal drawn position while
-     * roaming — the pet is centred by the ROTATION itself, not by
-     * shifting the camera, so no cx/cy offset is needed here.
+     * visible screen.
      *
      * NOT roaming, the camera sits at PLANET_VIEW_LAT — a tilted
      * side-on view, NOT straight down at the pole, for exactly the
@@ -19736,9 +19742,56 @@ function drawPlanetFocusScene(){
         ?roamingLon
         :0;
 
+    /*
+     * The tilt above keeps the pet in the same near-the-top BAND
+     * everything else on the planet lives in, rather than off-
+     * screen at the disc's true centre — but that band is still
+     * wherever the planet's own normal, non-roaming position
+     * happens to put it, which is low on screen (this game's
+     * standard "planet sits near the bottom, horizon-style"
+     * framing). That's fine for structures and the ship, which
+     * are meant to be seen against that same backdrop — but the
+     * PLAYER's own avatar while actively roaming needs to be
+     * genuinely centred on screen, not just somewhere visible
+     * near the bottom.
+     *
+     * So cx/cy themselves shift here, roaming only: project the
+     * pet's own position through the (already tilted) camera
+     * using the planet's true, unshifted centre first, then move
+     * cx/cy by exactly the offset needed to bring that projected
+     * point to true screen centre. Since every position later in
+     * this function is computed as cx + (something) or cy +
+     * (something), shifting cx/cy by a fixed amount shifts
+     * everything drawn on the planet — the body itself, the
+     * surface pattern, every structure, every pet, the ship — by
+     * that exact same amount, which is what actually moves the
+     * whole planet up into view around the pet rather than just
+     * the pet's own sprite.
+     */
     if(roamingActive){
 
-        updateRoamingMovement();
+        const petNaturalProj=
+            projectSphere(
+                roamingLat,
+                roamingLon,
+                roamViewLat,
+                roamViewLon,
+                cx,
+                cy,
+                radius
+            );
+
+        cx+=
+            width/2-
+            petNaturalProj.x;
+
+        cy+=
+            height/2-
+            petNaturalProj.y;
+
+    }
+
+    if(roamingActive){
 
         /*
          * Distance back to the ship, measured as a true angle
