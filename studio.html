@@ -93,7 +93,7 @@ button {
     color: #8f98b6;
 }
 /* =========================================================
-   NAVIGATION
+   TABS
 ========================================================= */
 .tabs {
     height: 58px;
@@ -332,6 +332,7 @@ textarea:focus {
 .blockCheck {
     width: 20px;
     height: 20px;
+    flex-shrink: 0;
 }
 .blockInfo {
     flex: 1;
@@ -354,23 +355,6 @@ textarea:focus {
     color: #9aaaff;
     font-size: 9px;
     font-weight: 800;
-}
-/* =========================================================
-   DEPENDENCY DISPLAY
-========================================================= */
-.dependencies {
-    margin-top: 7px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
-.dep {
-    padding: 3px 6px;
-    border-radius: 6px;
-    background:
-        rgba(255,255,255,.05);
-    color: #929bb5;
-    font-size: 9px;
 }
 /* =========================================================
    BUILD REPORT
@@ -419,7 +403,48 @@ textarea:focus {
     font-weight: 800;
 }
 /* =========================================================
-   EMPTY STATE
+   ERROR PANEL
+========================================================= */
+#errorPanel {
+    display: none;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 9999;
+    padding: 14px;
+    border-radius: 15px;
+    background:
+        #35151c;
+    border:
+        1px solid
+        rgba(255,100,120,.4);
+    box-shadow:
+        0 15px 50px
+        rgba(0,0,0,.5);
+}
+#errorPanel.visible {
+    display: block;
+}
+.errorTitle {
+    color: #ff8998;
+    font-weight: 800;
+    margin-bottom: 6px;
+}
+#errorMessage {
+    color: #ffc4cc;
+    font-family:
+        ui-monospace,
+        monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+#errorClose {
+    float: right;
+}
+/* =========================================================
+   EMPTY
 ========================================================= */
 .empty {
     padding: 35px 15px;
@@ -512,8 +537,12 @@ textarea:focus {
                 🧩
             </div>
             <div class="brandText">
-                <strong>HTML Game Studio</strong>
-                <span>V2 • DEPENDENCY ENGINE</span>
+                <strong>
+                    HTML Game Studio
+                </strong>
+                <span>
+                    V2 • DEPENDENCY ENGINE
+                </span>
             </div>
         </div>
         <button
@@ -545,9 +574,7 @@ textarea:focus {
     </nav>
     <!-- CONTENT -->
     <main class="content">
-        <!-- =================================================
-             GAMES
-        ================================================== -->
+        <!-- GAMES -->
         <section
             id="gamesPage"
             class="page active">
@@ -564,9 +591,7 @@ textarea:focus {
                 class="gameGrid">
             </div>
         </section>
-        <!-- =================================================
-             BLOCKS
-        ================================================== -->
+        <!-- BLOCKS -->
         <section
             id="blocksPage"
             class="page">
@@ -575,15 +600,14 @@ textarea:focus {
                     Universal Code Blocks
                 </div>
                 <div class="cardSub">
-                    These blocks are available to every game.
+                    Blocks available to every game.
                 </div>
             </div>
             <div
                 id="blockList"
                 class="blockList">
             </div>
-            <div
-                style="margin-top:15px">
+            <div style="margin-top:15px">
                 <button
                     class="btn primary"
                     onclick="openBlockEditor()">
@@ -591,9 +615,7 @@ textarea:focus {
                 </button>
             </div>
         </section>
-        <!-- =================================================
-             STUDIO / GENERATOR
-        ================================================== -->
+        <!-- STUDIO -->
         <section
             id="studioPage"
             class="page">
@@ -654,7 +676,6 @@ textarea:focus {
                         🔨 Build Game
                     </button>
                 </div>
-                <!-- BUILD REPORT -->
                 <div
                     id="buildReport"
                     class="report">
@@ -663,9 +684,7 @@ textarea:focus {
         </section>
     </main>
 </div>
-<!-- =====================================================
-     BLOCK EDITOR MODAL
-====================================================== -->
+<!-- BLOCK EDITOR -->
 <div
     id="blockModal"
     class="modal">
@@ -747,7 +766,78 @@ textarea:focus {
         </div>
     </div>
 </div>
+<!-- ERROR PANEL -->
+<div id="errorPanel">
+    <button
+        id="errorClose"
+        class="btn small"
+        onclick="hideError()">
+        ×
+    </button>
+    <div class="errorTitle">
+        ⚠ Studio JavaScript Error
+    </div>
+    <div id="errorMessage">
+    </div>
+</div>
 <script>
+/* =========================================================
+   ERROR HANDLING
+========================================================= */
+function showError(
+    message
+) {
+    const panel =
+        document.getElementById(
+            "errorPanel"
+        );
+    const messageBox =
+        document.getElementById(
+            "errorMessage"
+        );
+    if (!panel || !messageBox) {
+        alert(
+            "Studio error:\n\n" +
+            message
+        );
+        return;
+    }
+    messageBox.textContent =
+        message;
+    panel.classList.add(
+        "visible"
+    );
+}
+function hideError() {
+    const panel =
+        document.getElementById(
+            "errorPanel"
+        );
+    if (panel) {
+        panel.classList.remove(
+            "visible"
+        );
+    }
+}
+window.addEventListener(
+    "error",
+    function(event) {
+        showError(
+            event.message ||
+            "Unknown JavaScript error."
+        );
+    }
+);
+window.addEventListener(
+    "unhandledrejection",
+    function(event) {
+        showError(
+            String(
+                event.reason
+            )
+        );
+    }
+);
 /* =========================================================
    STORAGE
 ========================================================= */
@@ -769,24 +859,53 @@ function loadStudio() {
         localStorage.getItem(
             STORAGE_KEY
         );
-    if (saved) {
-        try {
-            studio =
-                JSON.parse(saved);
-        } catch {
+    if (!saved)
+        return;
+    try {
+        const parsed =
+            JSON.parse(
+                saved
+            );
+        if (
+            parsed &&
+            typeof parsed ===
+            "object"
+        ) {
             studio = {
-                blocks: [],
-                games: [],
-                settings: {}
+                blocks:
+                    Array.isArray(
+                        parsed.blocks
+                    )
+                        ? parsed.blocks
+                        : [],
+                games:
+                    Array.isArray(
+                        parsed.games
+                    )
+                        ? parsed.games
+                        : [],
+                settings:
+                    parsed.settings ||
+                    {}
             };
         }
+    } catch (error) {
+        console.error(
+            "Could not load Studio data:",
+            error
+        );
+        studio = {
+            blocks: [],
+            games: [],
+            settings: {}
+        };
     }
 }
 /* =========================================================
    IDs
 ========================================================= */
 function makeId(
-    prefix = "id"
+    prefix
 ) {
     return (
         prefix +
@@ -795,31 +914,62 @@ function makeId(
         "_" +
         Math.random()
             .toString(36)
-            .slice(2, 7)
+            .slice(2, 8)
     );
 }
 /* =========================================================
    DEFAULT BLOCKS
 ========================================================= */
 function installDefaultBlocks() {
-    if (studio.blocks.length)
+    if (
+        Array.isArray(
+            studio.blocks
+        ) &&
+        studio.blocks.length > 0
+    ) {
+        /*
+         * Upgrade old blocks which might not
+         * have dependency arrays.
+         */
+        studio.blocks.forEach(
+            block => {
+                if (
+                    !Array.isArray(
+                        block.dependencies
+                    )
+                ) {
+                    block.dependencies =
+                        [];
+                }
+            }
+        );
+        saveStudio();
         return;
+    }
     studio.blocks = [
         {
-            id: makeId("block"),
-            name: "Core HTML",
-            type: "html",
-            dependencies: [],
+            id:
+                makeId("block"),
+            name:
+                "Core HTML",
+            type:
+                "html",
+            dependencies:
+                [],
             code:
 `<div id="game">
     <!-- Game content -->
 </div>`
         },
         {
-            id: makeId("block"),
-            name: "Game CSS",
-            type: "css",
-            dependencies: [],
+            id:
+                makeId("block"),
+            name:
+                "Game CSS",
+            type:
+                "css",
+            dependencies:
+                [],
             code:
 `html,
 body {
@@ -834,10 +984,14 @@ body {
 }`
         },
         {
-            id: makeId("block"),
-            name: "Three.js",
-            type: "js",
-            dependencies: [],
+            id:
+                makeId("block"),
+            name:
+                "Three.js",
+            type:
+                "js",
+            dependencies:
+                [],
             code:
 `window.__THREE_READY__ = false;
 const threeScript =
@@ -853,29 +1007,48 @@ threeScript.onload = function() {
         window.onThreeReady();
     }
 };
+threeScript.onerror = function() {
+    console.error(
+        "Three.js failed to load."
+    );
+};
 document.head.appendChild(
     threeScript
 );`
         },
         {
-            id: makeId("block"),
-            name: "Renderer",
-            type: "js",
-            dependencies: [
-                "Three.js"
-            ],
+            id:
+                makeId("block"),
+            name:
+                "Renderer",
+            type:
+                "js",
+            dependencies:
+                [
+                    "Three.js"
+                ],
             code:
 `let scene;
 let camera;
 let renderer;
 function createRenderer() {
+    if (
+        typeof THREE ===
+        "undefined"
+    ) {
+        console.error(
+            "THREE is not ready."
+        );
+        return;
+    }
     scene =
         new THREE.Scene();
     camera =
         new THREE.PerspectiveCamera(
             65,
-            innerWidth / innerHeight,
-            .1,
+            innerWidth /
+            innerHeight,
+            0.1,
             1000
         );
     renderer =
@@ -897,7 +1070,7 @@ function createRenderer() {
     );
     window.addEventListener(
         "resize",
-        () => {
+        function() {
             camera.aspect =
                 innerWidth /
                 innerHeight;
@@ -911,15 +1084,20 @@ function createRenderer() {
 }`
         },
         {
-            id: makeId("block"),
-            name: "Game Loop",
-            type: "js",
-            dependencies: [
-                "Three.js",
-                "Renderer"
-            ],
+            id:
+                makeId("block"),
+            name:
+                "Game Loop",
+            type:
+                "js",
+            dependencies:
+                [
+                    "Three.js",
+                    "Renderer"
+                ],
             code:
-`let gameRunning = false;
+`let gameRunning =
+    false;
 function gameLoop() {
     requestAnimationFrame(
         gameLoop
@@ -940,7 +1118,8 @@ function gameLoop() {
             camera
         );
     }
-}`
+}
+`
         }
     ];
     saveStudio();
@@ -952,39 +1131,63 @@ function showPage(
     page
 ) {
     document
-        .querySelectorAll(".page")
+        .querySelectorAll(
+            ".page"
+        )
         .forEach(
-            p => p.classList.remove(
-                "active"
-            )
+            function(element) {
+                element.classList.remove(
+                    "active"
+                );
+            }
         );
     document
-        .querySelectorAll(".tab")
+        .querySelectorAll(
+            ".tab"
+        )
         .forEach(
-            t => t.classList.remove(
-                "active"
-            )
+            function(element) {
+                element.classList.remove(
+                    "active"
+                );
+            }
         );
-    document
-        .getElementById(
+    const pageElement =
+        document.getElementById(
             page + "Page"
-        )
-        .classList.add(
-            "active"
         );
-    document
-        .getElementById(
+    const tabElement =
+        document.getElementById(
             page + "Tab"
-        )
-        .classList.add(
+        );
+    if (pageElement) {
+        pageElement.classList.add(
             "active"
         );
-    if (page === "games")
+    }
+    if (tabElement) {
+        tabElement.classList.add(
+            "active"
+        );
+    }
+    if (
+        page ===
+        "games"
+    ) {
         renderGames();
-    if (page === "blocks")
+    }
+    if (
+        page ===
+        "blocks"
+    ) {
         renderBlocks();
-    if (page === "studio")
+    }
+    if (
+        page ===
+        "studio"
+    ) {
         renderGenerator();
+    }
 }
 /* =========================================================
    GAMES
@@ -994,10 +1197,16 @@ function renderGames() {
         document.getElementById(
             "gameGrid"
         );
-    if (!studio.games.length) {
+    if (!grid)
+        return;
+    if (
+        !studio.games.length
+    ) {
         grid.innerHTML =
-`<div class="empty"
-      style="grid-column:1/-1">
+`
+<div
+    class="empty"
+    style="grid-column:1/-1">
     No games yet.
     <br><br>
     Create your first game with
@@ -1006,16 +1215,22 @@ function renderGames() {
         return;
     }
     grid.innerHTML =
-        studio.games.map(
-            game => {
-                const latest =
-                    game.saves &&
-                    game.saves.length
-                        ? game.saves[
-                            game.saves.length - 1
-                          ]
-                        : null;
-                return `
+        studio.games
+            .map(
+                function(game) {
+                    const saves =
+                        Array.isArray(
+                            game.saves
+                        )
+                            ? game.saves
+                            : [];
+                    const latest =
+                        saves.length
+                            ? saves[
+                                saves.length - 1
+                              ]
+                            : null;
+                    return `
 <div class="gameCard">
     <div>
         <div class="gameIcon">
@@ -1025,9 +1240,7 @@ function renderGames() {
             ${escapeHTML(game.name)}
         </div>
         <div class="gameMeta">
-            ${
-                game.saves.length
-            }
+            ${saves.length}
             save(s)
             ${
                 latest
@@ -1057,38 +1270,54 @@ function renderGames() {
         </button>
     </div>
 </div>`;
-            }
-        )
-        .join("");
+                }
+            )
+            .join("");
 }
 /* =========================================================
    NEW GAME
 ========================================================= */
+let editingGameId =
+    null;
 function newGame() {
     const game = {
-        id: makeId("game"),
-        name: "New Game",
-        saves: []
+        id:
+            makeId("game"),
+        name:
+            "New Game",
+        saves:
+            []
     };
     studio.games.push(
         game
     );
     saveStudio();
-    editGame(
-        game.id
+    editingGameId =
+        game.id;
+    document.getElementById(
+        "gameName"
+    ).value =
+        game.name;
+    document.getElementById(
+        "saveName"
+    ).value =
+        "Version 1";
+    showPage(
+        "studio"
     );
 }
 /* =========================================================
    EDIT GAME
 ========================================================= */
-let editingGameId =
-    null;
 function editGame(
     gameId
 ) {
     const game =
         studio.games.find(
-            g => g.id === gameId
+            function(item) {
+                return item.id ===
+                    gameId;
+            }
         );
     if (!game)
         return;
@@ -1098,12 +1327,16 @@ function editGame(
         "gameName"
     ).value =
         game.name;
-    if (
-        game.saves.length
-    ) {
+    const saves =
+        Array.isArray(
+            game.saves
+        )
+            ? game.saves
+            : [];
+    if (saves.length) {
         const latest =
-            game.saves[
-                game.saves.length - 1
+            saves[
+                saves.length - 1
             ];
         document.getElementById(
             "saveName"
@@ -1127,20 +1360,22 @@ function renderGenerator() {
         document.getElementById(
             "generatorBlocks"
         );
-    if (!studio.blocks.length) {
-        container.innerHTML =
-            `<div class="empty">
-                No universal blocks.
-            </div>`;
+    if (!container)
         return;
-    }
-    let selected = [];
+    let selected =
+        [];
     const game =
         studio.games.find(
-            g => g.id === editingGameId
+            function(item) {
+                return item.id ===
+                    editingGameId;
+            }
         );
     if (
         game &&
+        Array.isArray(
+            game.saves
+        ) &&
         game.saves.length
     ) {
         selected =
@@ -1148,16 +1383,31 @@ function renderGenerator() {
                 game.saves.length - 1
             ].blocks || [];
     }
+    if (!studio.blocks.length) {
+        container.innerHTML =
+`
+<div class="empty">
+    No universal blocks.
+</div>`;
+        return;
+    }
     container.innerHTML =
-        studio.blocks.map(
-            block => {
-                const checked =
-                    selected.includes(
-                        block.name
-                    )
-                    ? "checked"
-                    : "";
-                return `
+        studio.blocks
+            .map(
+                function(block) {
+                    const checked =
+                        selected.includes(
+                            block.name
+                        )
+                            ? "checked"
+                            : "";
+                    const dependencies =
+                        Array.isArray(
+                            block.dependencies
+                        )
+                            ? block.dependencies
+                            : [];
+                    return `
 <div class="blockRow">
     <input
         class="blockCheck generatorCheck"
@@ -1170,25 +1420,29 @@ function renderGenerator() {
         </div>
         <div class="blockDetails">
             ${
-                escapeHTML(
-                    block.dependencies.length
-                        ? "Requires: " +
-                          block.dependencies.join(", ")
-                        : "No dependencies"
-                )
+                dependencies.length
+                    ? "Requires: " +
+                      escapeHTML(
+                          dependencies.join(
+                              ", "
+                          )
+                      )
+                    : "No dependencies"
             }
         </div>
     </div>
     <div class="typeBadge">
-        ${block.type.toUpperCase()}
+        ${escapeHTML(
+            block.type.toUpperCase()
+        )}
     </div>
 </div>`;
-            }
-        )
-        .join("");
+                }
+            )
+            .join("");
 }
 /* =========================================================
-   SELECT ALL
+   SELECT / CLEAR
 ========================================================= */
 function selectAllBlocks() {
     document
@@ -1196,8 +1450,9 @@ function selectAllBlocks() {
             ".generatorCheck"
         )
         .forEach(
-            checkbox => {
-                checkbox.checked = true;
+            function(checkbox) {
+                checkbox.checked =
+                    true;
             }
         );
 }
@@ -1207,13 +1462,14 @@ function clearAllBlocks() {
             ".generatorCheck"
         )
         .forEach(
-            checkbox => {
-                checkbox.checked = false;
+            function(checkbox) {
+                checkbox.checked =
+                    false;
             }
         );
 }
 /* =========================================================
-   DEPENDENCY RESOLUTION
+   DEPENDENCY RESOLVER
 ========================================================= */
 function resolveDependencies(
     requestedNames
@@ -1221,28 +1477,34 @@ function resolveDependencies(
     const blockMap =
         new Map();
     studio.blocks.forEach(
-        block => {
+        function(block) {
             blockMap.set(
                 block.name,
                 block
             );
         }
     );
-    const ordered = [];
+    const ordered =
+        [];
     const visited =
         new Set();
     const visiting =
         new Set();
-    const errors = [];
-    const warnings = [];
+    const errors =
+        [];
+    const warnings =
+        [];
     function visit(
         name,
-        chain = []
+        chain
     ) {
+        chain =
+            chain || [];
         if (
             visited.has(name)
-        )
+        ) {
             return;
+        }
         if (
             visiting.has(name)
         ) {
@@ -1251,12 +1513,16 @@ function resolveDependencies(
                 [
                     ...chain,
                     name
-                ].join(" → ")
+                ].join(
+                    " → "
+                )
             );
             return;
         }
         const block =
-            blockMap.get(name);
+            blockMap.get(
+                name
+            );
         if (!block) {
             errors.push(
                 "Missing dependency: " +
@@ -1274,7 +1540,7 @@ function resolveDependencies(
                 ? block.dependencies
                 : [];
         dependencies.forEach(
-            dependency => {
+            function(dependency) {
                 visit(
                     dependency,
                     [
@@ -1295,7 +1561,7 @@ function resolveDependencies(
         );
     }
     requestedNames.forEach(
-        name => {
+        function(name) {
             visit(
                 name
             );
@@ -1306,18 +1572,22 @@ function resolveDependencies(
             requestedNames
         );
     const automatic =
-        ordered
-            .filter(
-                block =>
-                    !requestedSet.has(
-                        block.name
-                    )
-            );
+        ordered.filter(
+            function(block) {
+                return !requestedSet.has(
+                    block.name
+                );
+            }
+        );
     return {
-        ordered,
-        automatic,
-        errors,
-        warnings
+        ordered:
+            ordered,
+        automatic:
+            automatic,
+        errors:
+            errors,
+        warnings:
+            warnings
     };
 }
 /* =========================================================
@@ -1332,7 +1602,10 @@ function buildCurrentGame() {
     }
     const game =
         studio.games.find(
-            g => g.id === editingGameId
+            function(item) {
+                return item.id ===
+                    editingGameId;
+            }
         );
     if (!game)
         return;
@@ -1349,23 +1622,28 @@ function buildCurrentGame() {
         ||
         "Version 1";
     const requested =
-        [
-            ...document.querySelectorAll(
+        Array.from(
+            document.querySelectorAll(
                 ".generatorCheck:checked"
             )
-        ]
+        )
         .map(
-            checkbox =>
-                checkbox.value
+            function(checkbox) {
+                return checkbox.value;
+            }
         );
     if (!requested.length) {
         showBuildReport({
-            success: false,
-            errors: [
-                "No blocks selected."
-            ],
-            ordered: [],
-            automatic: []
+            success:
+                false,
+            errors:
+                [
+                    "No blocks selected."
+                ],
+            ordered:
+                [],
+            automatic:
+                []
         });
         return;
     }
@@ -1386,31 +1664,47 @@ function buildCurrentGame() {
             game.name,
             result.ordered
         );
+    if (
+        !Array.isArray(
+            game.saves
+        )
+    ) {
+        game.saves =
+            [];
+    }
     const save = {
-        id: makeId("save"),
-        name: saveName,
-        blocks: requested,
+        id:
+            makeId("save"),
+        name:
+            saveName,
+        blocks:
+            requested,
         resolvedBlocks:
             result.ordered.map(
-                block =>
-                    block.name
+                function(block) {
+                    return block.name;
+                }
             ),
-        html: html,
+        html:
+            html,
         created:
-            new Date().toISOString()
+            new Date()
+                .toISOString()
     };
-    if (!game.saves)
-        game.saves = [];
     game.saves.push(
         save
     );
     saveStudio();
     showBuildReport({
         ...result,
-        success: true,
-        html: html,
-        game: game,
-        save: save
+        success:
+            true,
+        html:
+            html,
+        game:
+            game,
+        save:
+            save
     });
     renderGames();
 }
@@ -1423,19 +1717,36 @@ function generateHTML(
 ) {
     const htmlBlocks =
         blocks.filter(
-            block =>
-                block.type === "html"
+            function(block) {
+                return block.type ===
+                    "html";
+            }
         );
     const cssBlocks =
         blocks.filter(
-            block =>
-                block.type === "css"
+            function(block) {
+                return block.type ===
+                    "css";
+            }
         );
     const jsBlocks =
         blocks.filter(
-            block =>
-                block.type === "js"
+            function(block) {
+                return block.type ===
+                    "js";
+            }
         );
+    /*
+     * IMPORTANT:
+     *
+     * We deliberately use <\/script>
+     * below.
+     *
+     * Writing </script> literally inside
+     * this Studio's own JavaScript would
+     * cause the browser's HTML parser to
+     * terminate this script early.
+     */
     const html =
 `<!DOCTYPE html>
 <html lang="en">
@@ -1451,33 +1762,48 @@ function generateHTML(
 <style>
 ${cssBlocks
     .map(
-        block =>
-            `/* ===== ${block.name} ===== */
+        function(block) {
+            return (
+`/* ===== ${block.name} ===== */
 ${block.code}`
+            );
+        }
     )
-    .join("\n\n")}
+    .join(
+        "\n\n"
+    )}
 </style>
 </head>
 <body>
 ${htmlBlocks
     .map(
-        block =>
-            `<!-- ===== ${block.name} ===== -->
+        function(block) {
+            return (
+`<!-- ===== ${block.name} ===== -->
 ${block.code}`
+            );
+        }
     )
-    .join("\n\n")}
+    .join(
+        "\n\n"
+    )}
 <script>
 /* =========================================================
    GENERATED JAVASCRIPT
 ========================================================= */
 ${jsBlocks
     .map(
-        block =>
-            `/* ===== ${block.name} ===== */
+        function(block) {
+            return (
+`/* ===== ${block.name} ===== */
 ${block.code}`
+            );
+        }
     )
-    .join("\n\n")}
-</script>
+    .join(
+        "\n\n"
+    )}
+<\/script>
 </body>
 </html>`;
     return html;
@@ -1492,7 +1818,10 @@ function showBuildReport(
         document.getElementById(
             "buildReport"
         );
-    let html = "";
+    if (!report)
+        return;
+    let html =
+        "";
     html += `
 <div class="reportTitle">
     BUILD REPORT
@@ -1514,29 +1843,25 @@ function showBuildReport(
 <div class="reportSection">
     Requested Blocks
 </div>`;
-    if (
-        result.ordered.length
-    ) {
-        const requestedNames =
-            [
-                ...document
-                    .querySelectorAll(
-                        ".generatorCheck:checked"
-                    )
-            ]
-            .map(
-                checkbox =>
-                    checkbox.value
-            );
-        requestedNames.forEach(
-            name => {
-                html += `
+    const requestedNames =
+        Array.from(
+            document.querySelectorAll(
+                ".generatorCheck:checked"
+            )
+        )
+        .map(
+            function(checkbox) {
+                return checkbox.value;
+            }
+        );
+    requestedNames.forEach(
+        function(name) {
+            html += `
 <div class="reportLine ok">
     ✓ ${escapeHTML(name)}
 </div>`;
-            }
-        );
-    }
+        }
+    );
     if (
         result.automatic &&
         result.automatic.length
@@ -1546,10 +1871,12 @@ function showBuildReport(
     Automatically Added Dependencies
 </div>`;
         result.automatic.forEach(
-            block => {
+            function(block) {
                 html += `
 <div class="reportLine ok">
-    + ${escapeHTML(block.name)}
+    + ${escapeHTML(
+        block.name
+    )}
 </div>`;
             }
         );
@@ -1559,11 +1886,13 @@ function showBuildReport(
     Final Build Order
 </div>`;
     result.ordered.forEach(
-        (block, index) => {
+        function(block, index) {
             html += `
 <div class="reportLine">
     ${index + 1}.
-    ${escapeHTML(block.name)}
+    ${escapeHTML(
+        block.name
+    )}
 </div>`;
         }
     );
@@ -1576,7 +1905,7 @@ function showBuildReport(
     Errors
 </div>`;
         result.errors.forEach(
-            error => {
+            function(error) {
                 html += `
 <div class="reportLine error">
     ✗ ${escapeHTML(error)}
@@ -1593,7 +1922,7 @@ function showBuildReport(
     Warnings
 </div>`;
         result.warnings.forEach(
-            warning => {
+            function(warning) {
                 html += `
 <div class="reportLine warn">
     ⚠ ${escapeHTML(warning)}
@@ -1611,15 +1940,18 @@ function showBuildReport(
 <div class="reportLine ok">
     ✓ ${result.html.length.toLocaleString()}
       characters generated
-</div>
-<div class="reportLine ok">
-    ✓ ${result.save
-        ? "Save created: " +
-          escapeHTML(
-              result.save.name
-          )
-        : ""}
 </div>`;
+        if (
+            result.save
+        ) {
+            html += `
+<div class="reportLine ok">
+    ✓ Save created:
+    ${escapeHTML(
+        result.save.name
+    )}
+</div>`;
+        }
     }
     report.innerHTML =
         html;
@@ -1635,10 +1967,16 @@ function playGame(
 ) {
     const game =
         studio.games.find(
-            g => g.id === gameId
+            function(item) {
+                return item.id ===
+                    gameId;
+            }
         );
     if (
         !game ||
+        !Array.isArray(
+            game.saves
+        ) ||
         !game.saves.length
     ) {
         alert(
@@ -1652,7 +1990,9 @@ function playGame(
         ];
     const blob =
         new Blob(
-            [save.html],
+            [
+                save.html
+            ],
             {
                 type:
                     "text/html"
@@ -1668,42 +2008,60 @@ function playGame(
     );
 }
 /* =========================================================
-   BLOCKS PAGE
+   BLOCK PAGE
 ========================================================= */
 function renderBlocks() {
     const list =
         document.getElementById(
             "blockList"
         );
-    if (!studio.blocks.length) {
+    if (!list)
+        return;
+    if (
+        !studio.blocks.length
+    ) {
         list.innerHTML =
-            `<div class="empty">
-                No universal blocks.
-            </div>`;
+`
+<div class="empty">
+    No universal blocks.
+</div>`;
         return;
     }
     list.innerHTML =
-        studio.blocks.map(
-            block => {
-                return `
+        studio.blocks
+            .map(
+                function(block) {
+                    const dependencies =
+                        Array.isArray(
+                            block.dependencies
+                        )
+                            ? block.dependencies
+                            : [];
+                    return `
 <div class="blockRow">
     <div class="blockInfo">
         <div class="blockName">
-            ${escapeHTML(block.name)}
+            ${escapeHTML(
+                block.name
+            )}
         </div>
         <div class="blockDetails">
             ${
-                block.dependencies.length
+                dependencies.length
                     ? "Requires: " +
                       escapeHTML(
-                          block.dependencies.join(", ")
+                          dependencies.join(
+                              ", "
+                          )
                       )
                     : "No dependencies"
             }
         </div>
     </div>
     <div class="typeBadge">
-        ${block.type.toUpperCase()}
+        ${escapeHTML(
+            block.type.toUpperCase()
+        )}
     </div>
     <button
         class="btn small"
@@ -1716,9 +2074,9 @@ function renderBlocks() {
         Delete
     </button>
 </div>`;
-            }
-        )
-        .join("");
+                }
+            )
+            .join("");
 }
 /* =========================================================
    BLOCK EDITOR
@@ -1726,14 +2084,17 @@ function renderBlocks() {
 let editingBlockId =
     null;
 function openBlockEditor(
-    blockId = null
+    blockId
 ) {
     editingBlockId =
-        blockId;
+        blockId || null;
     if (blockId) {
         const block =
             studio.blocks.find(
-                b => b.id === blockId
+                function(item) {
+                    return item.id ===
+                        blockId;
+                }
             );
         if (!block)
             return;
@@ -1748,9 +2109,13 @@ function openBlockEditor(
         document.getElementById(
             "blockEditorDependencies"
         ).value =
-            block.dependencies.join(
-                ", "
-            );
+            Array.isArray(
+                block.dependencies
+            )
+                ? block.dependencies.join(
+                    ", "
+                )
+                : "";
         document.getElementById(
             "blockEditorCode"
         ).value =
@@ -1822,15 +2187,23 @@ function saveBlock() {
         dependencyText
             .split(",")
             .map(
-                value =>
-                    value.trim()
+                function(value) {
+                    return value.trim();
+                }
             )
-            .filter(Boolean);
+            .filter(
+                Boolean
+            );
     const duplicate =
         studio.blocks.find(
-            block =>
-                block.name === name &&
-                block.id !== editingBlockId
+            function(block) {
+                return (
+                    block.name ===
+                    name &&
+                    block.id !==
+                    editingBlockId
+                );
+            }
         );
     if (duplicate) {
         alert(
@@ -1841,9 +2214,10 @@ function saveBlock() {
     if (editingBlockId) {
         const block =
             studio.blocks.find(
-                b =>
-                    b.id ===
-                    editingBlockId
+                function(item) {
+                    return item.id ===
+                        editingBlockId;
+                }
             );
         if (block) {
             block.name =
@@ -1859,10 +2233,14 @@ function saveBlock() {
         studio.blocks.push({
             id:
                 makeId("block"),
-            name,
-            type,
-            dependencies,
-            code
+            name:
+                name,
+            type:
+                type,
+            dependencies:
+                dependencies,
+            code:
+                code
         });
     }
     saveStudio();
@@ -1878,17 +2256,25 @@ function deleteBlock(
 ) {
     const block =
         studio.blocks.find(
-            b =>
-                b.id === blockId
+            function(item) {
+                return item.id ===
+                    blockId;
+            }
         );
     if (!block)
         return;
     const usedBy =
         studio.blocks.filter(
-            other =>
-                other.dependencies.includes(
-                    block.name
-                )
+            function(other) {
+                return (
+                    Array.isArray(
+                        other.dependencies
+                    ) &&
+                    other.dependencies.includes(
+                        block.name
+                    )
+                );
+            }
         );
     if (usedBy.length) {
         alert(
@@ -1896,11 +2282,16 @@ function deleteBlock(
             "It is required by:\n" +
             usedBy
                 .map(
-                    b =>
-                        "• " +
-                        b.name
+                    function(item) {
+                        return (
+                            "• " +
+                            item.name
+                        );
+                    }
                 )
-                .join("\n")
+                .join(
+                    "\n"
+                )
         );
         return;
     }
@@ -1908,12 +2299,15 @@ function deleteBlock(
         !confirm(
             `Delete "${block.name}"?`
         )
-    )
+    ) {
         return;
+    }
     studio.blocks =
         studio.blocks.filter(
-            b =>
-                b.id !== blockId
+            function(item) {
+                return item.id !==
+                    blockId;
+            }
         );
     saveStudio();
     renderBlocks();
@@ -1927,8 +2321,10 @@ function deleteGame(
 ) {
     const game =
         studio.games.find(
-            g =>
-                g.id === gameId
+            function(item) {
+                return item.id ===
+                    gameId;
+            }
         );
     if (!game)
         return;
@@ -1936,15 +2332,19 @@ function deleteGame(
         !confirm(
             `Delete "${game.name}" and all its saves?`
         )
-    )
+    ) {
         return;
+    }
     studio.games =
         studio.games.filter(
-            g =>
-                g.id !== gameId
+            function(item) {
+                return item.id !==
+                    gameId;
+            }
         );
     if (
-        editingGameId === gameId
+        editingGameId ===
+        gameId
     ) {
         editingGameId =
             null;
@@ -1953,32 +2353,34 @@ function deleteGame(
     renderGames();
 }
 /* =========================================================
-   UTILITIES
+   ESCAPE HELPERS
 ========================================================= */
 function escapeHTML(
     value
 ) {
-    return String(value)
-        .replaceAll(
-            "&",
-            "&amp;"
-        )
-        .replaceAll(
-            "<",
-            "&lt;"
-        )
-        .replaceAll(
-            ">",
-            "&gt;"
-        )
-        .replaceAll(
-            '"',
-            "&quot;"
-        )
-        .replaceAll(
-            "'",
-            "&#039;"
-        );
+    return String(
+        value
+    )
+    .replaceAll(
+        "&",
+        "&amp;"
+    )
+    .replaceAll(
+        "<",
+        "&lt;"
+    )
+    .replaceAll(
+        ">",
+        "&gt;"
+    )
+    .replaceAll(
+        '"',
+        "&quot;"
+    )
+    .replaceAll(
+        "'",
+        "&#039;"
+    );
 }
 function escapeAttr(
     value
@@ -1990,10 +2392,27 @@ function escapeAttr(
 /* =========================================================
    STARTUP
 ========================================================= */
-loadStudio();
-installDefaultBlocks();
-renderGames();
-renderBlocks();
+(function startStudio() {
+    try {
+        loadStudio();
+        installDefaultBlocks();
+        renderGames();
+        renderBlocks();
+        renderGenerator();
+        console.log(
+            "HTML Game Studio V2 started successfully."
+        );
+    } catch (error) {
+        console.error(
+            error
+        );
+        showError(
+            error.stack ||
+            error.message ||
+            String(error)
+        );
+    }
+})();
 </script>
 </body>
 </html>
