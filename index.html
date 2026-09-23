@@ -4425,6 +4425,23 @@ let roamingLookupMissSince=0;
 const ROAM_LOOKUP_GRACE_SECONDS=.4;
 
 /*
+ * The pet's own emerge/return animation — separate from
+ * roamingActive itself, which flips instantly (movement and the
+ * rest of the roaming logic need to work right away). This only
+ * drives how the pet's own sprite scales and fades in or out over
+ * ROAM_PET_TRANSITION_MS: growing from nothing as it steps out of
+ * the ship when roaming starts, shrinking back into it as roaming
+ * ends. null means no transition is currently playing (full
+ * scale, full opacity, the steady state before and after either
+ * animation).
+ */
+let roamPetTransitionKind=null;
+
+let roamPetTransitionStart=0;
+
+const ROAM_PET_TRANSITION_MS=420;
+
+/*
  * How close the pet needs to get to the ship before roaming ends
  * and it's considered "back aboard, ready to launch" — measured
  * as a true angle across the sphere's surface (radians), not a
@@ -19271,6 +19288,16 @@ function startRoaming(ship){
 
     roamingLookupMissSince=0;
 
+    /*
+     * Kicks off the pet's own emerge animation — growing from
+     * nothing as it steps out of the ship. See ROAM_PET_TRANSITION_MS
+     * above for what actually reads this.
+     */
+    roamPetTransitionKind="enter";
+
+    roamPetTransitionStart=
+        performance.now();
+
 
     toggleRoamingUI(true);
 
@@ -19298,6 +19325,15 @@ function endRoaming(){
 
     roamingLookupMissSince=0;
 
+    /*
+     * Cleared, not left mid-exit — by the time this actually runs
+     * (see startExitingRoaming below, which is what schedules this
+     * call), the return-into-ship animation has already finished
+     * playing, so there's no transition left in progress to
+     * preserve.
+     */
+    roamPetTransitionKind=null;
+
     toggleRoamingUI(false);
 
 
@@ -19305,6 +19341,34 @@ function endRoaming(){
     sound("click");
 
     renderPlanetFocus();
+
+}
+
+/*
+ * Starts the pet's return-into-the-ship animation and schedules
+ * the actual end of roaming once it's finished playing, rather
+ * than ending roaming immediately and only animating the pet
+ * disappearing from wherever it happened to already be. Safe to
+ * call repeatedly — arriving back at the ship is checked every
+ * frame, so this guards against restarting the same exit
+ * animation, and re-triggering it, on every one of those frames.
+ */
+function startExitingRoaming(){
+
+    if(
+        roamPetTransitionKind==="exit"
+    )
+        return;
+
+    roamPetTransitionKind="exit";
+
+    roamPetTransitionStart=
+        performance.now();
+
+    setTimeout(
+        endRoaming,
+        ROAM_PET_TRANSITION_MS
+    );
 
 }
 
@@ -19881,21 +19945,18 @@ function drawPlanetFocusScene(){
         ){
 
             /*
-             * Deferred to the next frame rather than called here
-             * directly — this check runs mid-draw, and ending
-             * roaming immediately would flip roamingActive
-             * partway through the very frame that's using it (the
-             * camera shift above already happened, but the idle-
-             * pets loop later in this same function would then
-             * see roaming as already over and draw this pet at
-             * its normal idle position instead of where it
-             * actually is) — a one-frame position pop. Finishing
-             * this frame consistently as "still roaming", then
-             * ending cleanly before the next one, avoids that.
+             * Starts the return-into-the-ship animation and
+             * schedules the actual endRoaming() call for once it's
+             * finished — not called directly here for the same
+             * reason described below (this runs mid-draw, and
+             * flipping roamingActive false partway through the
+             * frame using it would pop the pet to its idle
+             * position for the rest of this same frame). Safe to
+             * reach every frame the player stays within range —
+             * startExitingRoaming guards against restarting an
+             * already-playing exit itself.
              */
-            requestAnimationFrame(
-                endRoaming
-            );
+            startExitingRoaming();
 
         }
 
@@ -21495,6 +21556,53 @@ function drawPlanetFocusScene(){
                 );
 
             /*
+             * Emerge/return animation — grows and fades in from
+             * nothing as roaming starts, shrinks and fades back
+             * out as it ends, both centred on the pet's own
+             * position rather than drifting anywhere. Neither
+             * transition currently playing (the steady state
+             * throughout the rest of a roaming session) is scale
+             * 1, alpha 1 — a complete no-op.
+             */
+            let roamPetScale=1;
+
+            let roamPetAlpha=1;
+
+            if(
+                roamPetTransitionKind==="enter" ||
+                roamPetTransitionKind==="exit"
+            ){
+
+                const rawProgress=
+                    Math.min(
+                        1,
+                        (
+                            performance.now()-
+                            roamPetTransitionStart
+                        )/
+                        ROAM_PET_TRANSITION_MS
+                    );
+
+                const progress=
+                    roamPetTransitionKind==="enter"
+                    ?rawProgress
+                    :1-rawProgress;
+
+                /*
+                 * Cubic ease-out — starts quickly, settles in
+                 * gently, rather than a constant linear grow/fade
+                 * that would read as mechanical.
+                 */
+                roamPetScale=
+                    1-
+                    Math.pow(1-progress,3);
+
+                roamPetAlpha=
+                    progress;
+
+            }
+
+            /*
              * Projected exactly like every other item on the
              * planet, using the pet's own actual lat/lon against
              * the current (tilted) camera — NOT hardcoded to
@@ -21510,6 +21618,30 @@ function drawPlanetFocusScene(){
 
             try{
 
+                c.save();
+
+                c.globalAlpha=
+                    roamPetAlpha;
+
+                if(roamPetScale!==1){
+
+                    c.translate(
+                        roamPetProj.x,
+                        roamPetProj.y
+                    );
+
+                    c.scale(
+                        roamPetScale,
+                        roamPetScale
+                    );
+
+                    c.translate(
+                        -roamPetProj.x,
+                        -roamPetProj.y
+                    );
+
+                }
+
                 drawSpacePet(
                     c,
                     selectedStartPlanet,
@@ -21524,13 +21656,25 @@ function drawPlanetFocusScene(){
                     roamingFacingScale
                 );
 
-
             }catch(roamPetDrawError){
 
                 console.error(
                     "Roaming pet draw failed:",
                     roamPetDrawError
                 );
+
+            }finally{
+
+                /*
+                 * In finally, not just after the try block — if
+                 * drawSpacePet throws, execution jumps straight to
+                 * the catch above and would otherwise skip this
+                 * entirely, leaving the alpha/scale transform from
+                 * this save() still active on the canvas for
+                 * everything drawn afterward for the rest of the
+                 * frame.
+                 */
+                c.restore();
 
             }
 
