@@ -3816,6 +3816,7 @@ const PLANETS = [
         name:"Earth",
         tier:0,
         requirement:0,
+        unlockRank:0,
         icon:"🌍",
         x:50,
         y:82,
@@ -3827,17 +3828,31 @@ const PLANETS = [
         name:"Mars",
         tier:1,
         requirement:7000,
+        unlockRank:0,
         icon:"🔴",
         x:20,
         y:63,
         asteroid:"mars"
     },
 
+    /*
+     * unlockRank on everything below — Mars and Titan are the two
+     * default-unlocked worlds beyond Earth (unlockRank:0), every
+     * other planet needs the rank shown reached first, checked
+     * alongside the existing score-based requirement rather than
+     * instead of it (see isPlanetRouteUnlocked). Interleaved one
+     * planet, one pet slot, one planet... up the rank ladder
+     * (see the pet slot unlock list near computePetCost) so a
+     * rank-up alternates between opening a new world and growing
+     * the roster at home, rather than both landing on the same
+     * moment and the other going quiet for a long stretch.
+     */
     {
         id:"europa",
         name:"Europa",
         tier:1,
         requirement:7000,
+        unlockRank:2,
         icon:"🌕",
         x:50,
         y:57,
@@ -3849,6 +3864,7 @@ const PLANETS = [
         name:"Titan",
         tier:1,
         requirement:7000,
+        unlockRank:0,
         icon:"🟠",
         x:80,
         y:63,
@@ -3860,6 +3876,7 @@ const PLANETS = [
         name:"Neptune",
         tier:2,
         requirement:21000,
+        unlockRank:4,
         icon:"🔵",
         x:18,
         y:38,
@@ -3871,6 +3888,7 @@ const PLANETS = [
         name:"Kepler",
         tier:2,
         requirement:21000,
+        unlockRank:6,
         icon:"🪐",
         x:50,
         y:32,
@@ -3882,6 +3900,7 @@ const PLANETS = [
         name:"Aurora",
         tier:2,
         requirement:21000,
+        unlockRank:8,
         icon:"🟣",
         x:82,
         y:38,
@@ -3893,6 +3912,7 @@ const PLANETS = [
         name:"Helios",
         tier:3,
         requirement:46000,
+        unlockRank:10,
         icon:"☀️",
         x:30,
         y:16,
@@ -3904,6 +3924,7 @@ const PLANETS = [
         name:"Nova",
         tier:3,
         requirement:46000,
+        unlockRank:12,
         icon:"💠",
         x:70,
         y:16,
@@ -3915,6 +3936,7 @@ const PLANETS = [
         name:"Zenith",
         tier:4,
         requirement:94000,
+        unlockRank:14,
         icon:"⭐",
         x:50,
         y:5,
@@ -3922,6 +3944,38 @@ const PLANETS = [
     }
 
 ];
+
+/*
+ * A planet is genuinely available — selectable on the star map,
+ * flyable to, its route drawn in — purely by rank. This is
+ * deliberately NOT the same question as "can THIS run's current
+ * score actually reach it" (the existing planet.requirement
+ * checks scattered through the live flight/interplanetary code,
+ * left untouched) — that's a per-run gameplay mechanic, this is
+ * "has this world been found at all yet". Mars and Titan both
+ * have unlockRank 0, so they're always true here regardless of
+ * score, which is what actually makes them read as default-
+ * unlocked on the map rather than only appearing once a run
+ * happens to reach 7,000.
+ */
+function isPlanetUnlocked(planetId){
+
+    const planet=
+        getPlanet(planetId);
+
+    if(!planet)
+        return false;
+
+    const rankInfo=
+        getRankInfo();
+
+    return(
+        rankInfo.tierIndex+1>=
+        (planet.unlockRank || 0)
+    );
+
+}
+
 
 /*
  * Planet icons render the actual planet -- reusing
@@ -4033,6 +4087,15 @@ const ROUTES = [
     ["nova","zenith"]
 
 ];
+
+/*
+ * How long a newly-unlocked route takes to draw itself in on the
+ * star map, the first time it's ever shown — see planetSave.
+ * revealedRoutes in drawStarMapScene for where this is actually
+ * used and timestamped per route.
+ */
+const ROUTE_REVEAL_MS=1400;
+
 
 
 /* =========================================================
@@ -4870,10 +4933,25 @@ let beamEffects=[];
 const FIELD_MIN_TIME=12;
 
 /*
- * Doubled per feedback — reaching each planet should take
- * meaningfully longer now that scoring paces faster.
+ * Rebalanced to 50,000 — a full round trip (reach a planet, then
+ * depart it toward the next) now costs a flat 100,000 score
+ * total, split evenly across both legs rather than the old
+ * uneven split.
  */
-const PLANET_APPROACH_POINTS=7000;
+const PLANET_APPROACH_POINTS=50000;
+
+/*
+ * The other half of that round trip — how much MORE score (past
+ * wherever the score stood when the current planet's field
+ * started) it takes to leave that field toward interplanetary
+ * space. Deliberately the SAME flat amount as
+ * PLANET_APPROACH_POINTS rather than the old per-tier escalating
+ * absolute requirement — every hop now costs the same regardless
+ * of how far out it is, which is what actually makes "reaching a
+ * planet and leaving it costs 100,000 total" a consistent rule
+ * rather than true only for the first hop.
+ */
+const PLANET_DEPART_POINTS=50000;
 
 /*
  * A queued transition out of the current field (either "arrive
@@ -7062,20 +7140,24 @@ const STRUCTURES={
         description:
             "Builds new ships. Earth's factory comes for free — "+
             "anywhere else, it has to be built first, using "+
-            "materials brought in from a few different planets "+
-            "plus a pet stationed there to actually do the work.",
+            "materials brought in from Mars and Titan plus a pet "+
+            "stationed there to actually do the work.",
         /*
          * Requirements to BUILD the factory itself on a
-         * non-Earth planet. Deliberately spans multiple
-         * planets' materials, per the original request —
-         * building a factory somewhere should mean you've
-         * already been travelling and trading, not just
-         * grinding one planet's own resource.
+         * non-Earth planet. Now specifically Mars + Titan's own
+         * materials only, rather than spanning three planets
+         * including ones the player might not have reached yet —
+         * Mars and Titan are the two default-unlocked worlds
+         * beyond Earth, so building the first non-Earth factory is
+         * meant to be achievable using only what's already
+         * available, not gated on a planet that isn't unlocked
+         * yet. 4 of each rather than 3 of three, so the total
+         * material cost stays in a similar ballpark to the old
+         * three-planet recipe despite dropping a planet's worth.
          */
         buildMaterials:[
-            {materialId:"volatile-alloy",amount:3},
-            {materialId:"cryo-shard",amount:3},
-            {materialId:"magnetic-resin",amount:3}
+            {materialId:"volatile-alloy",amount:4},
+            {materialId:"shadow-vapor",amount:4}
         ],
         requiresPet:true,
         buildDurationSeconds:60
@@ -7316,6 +7398,68 @@ function computePetCost(planetId){
 
 }
 
+/*
+ * The first 3 pets on any one planet need only coins. The 4th
+ * onward each need a rank reached too — index 0 here is the 4th
+ * pet's own requirement, index 1 the 5th's, and so on. Interleaved
+ * with the planet unlock ranks above (one planet, one pet slot,
+ * one planet...) so a rank-up alternates between opening a new
+ * world and growing the roster at home.
+ */
+const PET_SLOT_UNLOCK_RANKS=
+    [3,5,7,9,11,13,15];
+
+/*
+ * null means this slot is free (still within the first 3, no
+ * rank needed at all) — existingCount is however many pets this
+ * planet already has, so existingCount itself IS the index of
+ * the pet about to be bought (0-indexed: buying the 4th pet means
+ * existingCount is already 3).
+ */
+function getPetSlotUnlockRank(existingCount){
+
+    if(existingCount<3)
+        return null;
+
+    return(
+        PET_SLOT_UNLOCK_RANKS[
+            existingCount-3
+        ] ||
+        /*
+         * Past the named list (a 11th+ pet, not currently
+         * reachable at only 20 ranks total, but a safe fallback
+         * regardless) — one rank further than the last named
+         * slot for each additional one past it.
+         */
+        PET_SLOT_UNLOCK_RANKS[
+            PET_SLOT_UNLOCK_RANKS.length-1
+        ]+
+        (
+            existingCount-3-
+            (PET_SLOT_UNLOCK_RANKS.length-1)
+        )*2
+    );
+
+}
+
+function isNextPetSlotUnlocked(planetId){
+
+    const existing=
+        getPetCount(planetId);
+
+    const neededRank=
+        getPetSlotUnlockRank(existing);
+
+    if(neededRank===null)
+        return true;
+
+    return(
+        getRankInfo().tierIndex+1>=
+        neededRank
+    );
+
+}
+
 const PET_FOOD_COST=1;
 const PET_ENERGY_PER_FOOD=40;
 
@@ -7434,6 +7578,13 @@ function resolvePetEnergy(planetId){
 }
 
 function buyPet(planetId){
+
+    if(
+        !isNextPetSlotUnlocked(
+            planetId
+        )
+    )
+        return;
 
     const cost=
         computePetCost(planetId);
@@ -11080,9 +11231,23 @@ const RANK_SKILL_BASE_SCALE=250;
  * now (see SKILL_TITLES below), not overall rank, since overall
  * rank mixes in engagement the skill model knows nothing about.
  *
- * Thresholds spaced much further apart than the first pass —
- * reaching the top in two sessions meant the curve was far too
- * generous relative to how fast points actually come in now.
+ * Doubled from 10 to 20 ranks, with thresholds recalculated from
+ * scratch rather than just interpolated — Rank 2's 1,400 is a
+ * genuine derived number, not a guess: it's twice the rank points
+ * a new player earns from actually gathering enough Mars and
+ * Titan material to build a non-Earth Ship Factory (at those
+ * planets' baseline special-spawn and material-drop rates, ~400
+ * asteroids' worth of score converted through the existing
+ * "Mission complete" rank-point rate) plus trying each other
+ * economy feature once (a shop purchase, selling a material,
+ * buying and training a pet). So a player who genuinely explores
+ * every system reaches Rank 2 roughly twice as fast as one who
+ * only ever chases score — engagement is rewarded, but a
+ * score-only path to the same rank always stays open. Every rank
+ * after that follows the same curve shape (thresholds growing as
+ * rank^1.75), extended out rather than re-derived per rank, so
+ * the progression stays smooth rather than hand-picked per step.
+ *
  * Each ring colour shifts warmer/brighter climbing the scale,
  * matching the state-colour language used elsewhere (cool blue
  * "in progress" tones giving way to hotter, more "arrived"
@@ -11090,16 +11255,26 @@ const RANK_SKILL_BASE_SCALE=250;
  * along someone is, before even reading the number.
  */
 const RANK_TIERS=[
-    {name:"Rank 1",threshold:0,color:"#7fe0ff"},
-    {name:"Rank 2",threshold:600,color:"#7fc4ff"},
-    {name:"Rank 3",threshold:1500,color:"#8fb0ff"},
-    {name:"Rank 4",threshold:3000,color:"#a8a0ff"},
-    {name:"Rank 5",threshold:5500,color:"#c98cff"},
-    {name:"Rank 6",threshold:9000,color:"#ff8ce0"},
-    {name:"Rank 7",threshold:14000,color:"#ff8ca8"},
-    {name:"Rank 8",threshold:21000,color:"#ff9d6e"},
-    {name:"Rank 9",threshold:30000,color:"#ffc06e"},
-    {name:"Rank 10",threshold:42000,color:"#ffe06e"}
+    {name:"Rank 1",threshold:0,color:"#77d8f8"},
+    {name:"Rank 2",threshold:1400,color:"#78c0f8"},
+    {name:"Rank 3",threshold:4700,color:"#79a9f8"},
+    {name:"Rank 4",threshold:9600,color:"#7a92f8"},
+    {name:"Rank 5",threshold:16000,color:"#7b7cf8"},
+    {name:"Rank 6",threshold:23500,color:"#937cf8"},
+    {name:"Rank 7",threshold:32000,color:"#ab7df8"},
+    {name:"Rank 8",threshold:42000,color:"#c27ef8"},
+    {name:"Rank 9",threshold:53500,color:"#d97ff8"},
+    {name:"Rank 10",threshold:65500,color:"#f081f8"},
+    {name:"Rank 11",threshold:78500,color:"#f882ea"},
+    {name:"Rank 12",threshold:93000,color:"#f883d4"},
+    {name:"Rank 13",threshold:108500,color:"#f984bf"},
+    {name:"Rank 14",threshold:124500,color:"#f985aa"},
+    {name:"Rank 15",threshold:142000,color:"#f98695"},
+    {name:"Rank 16",threshold:160000,color:"#f98d87"},
+    {name:"Rank 17",threshold:179000,color:"#f9a388"},
+    {name:"Rank 18",threshold:199500,color:"#f9b889"},
+    {name:"Rank 19",threshold:220000,color:"#f9ce8a"},
+    {name:"Rank 20",threshold:242000,color:"#f9e38b"}
 ];
 
 /*
@@ -11199,13 +11374,24 @@ function getTotalRankPoints(){
  * Resolves total points into a tier, how far into it the player
  * is, and how many points stand between here and the next one
  * (null at the final tier).
+ *
+ * The raw total genuinely can fall — the skill component above
+ * is live and drops right along with a rough patch, and
+ * rankPoints itself can go negative too (a poor run can cost more
+ * than it earns at higher ranks, same as skill dropping can).
+ * What's floored is only the RANK ITSELF: once a tier has ever
+ * been reached, tierIndex never reports a lower one again — a
+ * dip shows as sitting at zero progress within the rank already
+ * earned, not as sliding back down to an earlier one. planetSave.
+ * peakTierIndex is the persisted high-water mark this floor is
+ * built on.
  */
 function getRankInfo(){
 
     const total=
         getTotalRankPoints();
 
-    let tierIndex=0;
+    let rawTierIndex=0;
 
     for(
         let i=0;
@@ -11215,11 +11401,38 @@ function getRankInfo(){
 
         if(total>=RANK_TIERS[i].threshold){
 
-            tierIndex=i;
+            rawTierIndex=i;
 
         }
 
     }
+
+    if(
+        typeof planetSave.peakTierIndex!==
+        "number"
+    ){
+
+        planetSave.peakTierIndex=0;
+
+    }
+
+    if(
+        rawTierIndex>
+        planetSave.peakTierIndex
+    ){
+
+        planetSave.peakTierIndex=
+            rawTierIndex;
+
+        savePlanetProgress();
+
+    }
+
+    const tierIndex=
+        Math.max(
+            rawTierIndex,
+            planetSave.peakTierIndex
+        );
 
     const tier=
         RANK_TIERS[tierIndex];
@@ -11228,10 +11441,23 @@ function getRankInfo(){
         RANK_TIERS[tierIndex+1] ||
         null;
 
+    /*
+     * Math.max(total,tier.threshold) here rather than total
+     * alone — when the floor above is actively holding tierIndex
+     * up past what the raw total would earn on its own, total
+     * itself sits below this tier's own threshold, which would
+     * otherwise make progress compute negative. Clamping the
+     * INPUT to the tier's own floor first is what makes a dip
+     * genuinely read as "zero progress in the rank you have",
+     * not a negative number formatted as zero.
+     */
     const progress=
         nextTier
         ?clamp(
-            (total-tier.threshold)/
+            (
+                Math.max(total,tier.threshold)-
+                tier.threshold
+            )/
             (nextTier.threshold-tier.threshold),
             0,1
         )
@@ -11248,7 +11474,8 @@ function getRankInfo(){
             ?Math.max(
                 0,
                 Math.round(
-                    nextTier.threshold-total
+                    nextTier.threshold-
+                    Math.max(total,tier.threshold)
                 )
             )
             :0
@@ -17812,7 +18039,8 @@ function getStarMapSelectable(){
                     current.id,
                     p.id
                 ) &&
-                score>=p.requirement
+                score>=p.requirement &&
+                isPlanetUnlocked(p.id)
         ).map(
             p => p.id
         );
@@ -17824,13 +18052,15 @@ function getStarMapSelectable(){
             p.id==="earth" ||
             (
                 getShipCount(p.id)>0 &&
-                highScore>=p.requirement
+                highScore>=p.requirement &&
+                isPlanetUnlocked(p.id)
             ) ||
             (
                 planetSave.visitedPlanets &&
                 planetSave.visitedPlanets[
                     p.id
-                ]
+                ] &&
+                isPlanetUnlocked(p.id)
             )
     ).map(
         p => p.id
@@ -17959,6 +18189,18 @@ function drawStarMapScene(){
                 if(!other)
                     return;
 
+                /*
+                 * Only counts toward the junction's position if
+                 * the route itself is actually visible — an
+                 * undiscovered route shouldn't skew where the
+                 * fork sits for the ones that are.
+                 */
+                if(
+                    !isPlanetUnlocked(p.id) ||
+                    !isPlanetUnlocked(otherId)
+                )
+                    return;
+
                 const op=
                     planetPos(other);
 
@@ -18007,6 +18249,96 @@ function drawStarMapScene(){
             1-easeZoom(zoomProgress)*3
         );
 
+    /*
+     * A point a given fraction of the way along a multi-segment
+     * path (planet -> junction -> junction -> planet), used to
+     * animate a route drawing itself in rather than just fading
+     * into view. Walks segment by segment, spending the fraction
+     * proportionally to each segment's own share of the total
+     * length, so the travelling point moves at a constant speed
+     * along the whole bent path rather than jumping unevenly at
+     * the junctions.
+     */
+    function pointAlongPath(points,fraction){
+
+        if(fraction<=0)
+            return points[0];
+
+        if(fraction>=1)
+            return points[
+                points.length-1
+            ];
+
+        const segLengths=[];
+
+        let totalLength=0;
+
+        for(
+            let i=0;
+            i<points.length-1;
+            i++
+        ){
+
+            const segLength=
+                Math.hypot(
+                    points[i+1].x-points[i].x,
+                    points[i+1].y-points[i].y
+                );
+
+            segLengths.push(segLength);
+
+            totalLength+=segLength;
+
+        }
+
+        let target=
+            fraction*totalLength;
+
+        for(
+            let i=0;
+            i<segLengths.length;
+            i++
+        ){
+
+            if(target<=segLengths[i]){
+
+                const segT=
+                    segLengths[i]>0
+                    ?target/segLengths[i]
+                    :0;
+
+                return{
+                    x:
+                        points[i].x+
+                        (points[i+1].x-points[i].x)*
+                        segT,
+                    y:
+                        points[i].y+
+                        (points[i+1].y-points[i].y)*
+                        segT
+                };
+
+            }
+
+            target-=segLengths[i];
+
+        }
+
+        return points[
+            points.length-1
+        ];
+
+    }
+
+    if(!planetSave.revealedRoutes){
+
+        planetSave.revealedRoutes={};
+
+    }
+
+    const routeNowMs=
+        performance.now();
+
     ROUTES.forEach(
         route=>{
 
@@ -18019,23 +18351,106 @@ function drawStarMapScene(){
             if(!a || !b)
                 return;
 
+            /*
+             * Hidden entirely rather than drawn locked/greyed —
+             * a route not being there at all reads as "no path
+             * has been found yet", not "a path exists but you
+             * can't use it", matching how the planets themselves
+             * only appear once reachable.
+             */
+            if(
+                !isPlanetUnlocked(a.id) ||
+                !isPlanetUnlocked(b.id)
+            )
+                return;
+
+            const routeKey=
+                route[0]+"-"+route[1];
+
+            /*
+             * First frame this route is ever drawn unlocked —
+             * stamped once, kept forever after, so the reveal
+             * animation below plays exactly once per route per
+             * save rather than replaying every time the map
+             * happens to be reopened.
+             */
+            if(
+                !planetSave.revealedRoutes[
+                    routeKey
+                ]
+            ){
+
+                planetSave.revealedRoutes[
+                    routeKey
+                ]=routeNowMs;
+
+                savePlanetProgress();
+
+            }
+
+            const revealElapsed=
+                routeNowMs-
+                planetSave.revealedRoutes[
+                    routeKey
+                ];
+
+            const revealProgress=
+                clamp(
+                    revealElapsed/
+                    ROUTE_REVEAL_MS,
+                    0,1
+                );
+
             const pa=planetPos(a);
 
             const pb=planetPos(b);
+
+            const junctionA=
+                junctionPos(a);
+
+            const junctionB=
+                junctionPos(b);
+
+            const pathPoints=[
+                pa,junctionA,junctionB,pb
+            ];
+
+            const drawnEnd=
+                pointAlongPath(
+                    pathPoints,
+                    revealProgress
+                );
 
             c.save();
 
             /*
              * Route lines fade in only once the planets are
              * visible and out before they go, so they never
-             * hang in empty space during a zoom.
+             * hang in empty space during a zoom. The reveal
+             * itself also ramps its own alpha up over its first
+             * moment, so a newly-discovered route doesn't just
+             * snap to full brightness the instant it starts
+             * drawing in.
              */
             c.globalAlpha=
-                .18*routeAlpha;
+                .18*routeAlpha*
+                Math.min(1,revealElapsed/220+.3);
 
             c.strokeStyle="#5aa8ff";
 
             c.lineWidth=1;
+
+            /*
+             * Dashed rather than solid, with the dash pattern
+             * itself slowly creeping along the line — a route
+             * reads as a travelled path rather than a static
+             * connector, matching how it only appeared once
+             * actually "found".
+             */
+            c.setLineDash([7,6]);
+
+            c.lineDashOffset=
+                -routeNowMs*.012;
 
             c.beginPath();
 
@@ -18046,26 +18461,124 @@ function drawStarMapScene(){
              * node rather than radiating straight out, so
              * several routes from one world read as a fork —
              * a Y — instead of a starburst of separate lines.
+             *
+             * Each segment is drawn in full only once the reveal
+             * has genuinely passed it (by actual length along the
+             * bent path, not assuming the three segments are equal
+             * length, which they generally aren't) — the segment
+             * the reveal is currently inside stops exactly at
+             * drawnEnd instead, and anything beyond that isn't
+             * drawn at all yet.
              */
-            const junctionA=
-                junctionPos(a);
+            const segLengths=[];
 
-            const junctionB=
-                junctionPos(b);
+            let totalPathLength=0;
 
-            c.lineTo(
-                junctionA.x,
-                junctionA.y
-            );
+            for(
+                let i=0;
+                i<pathPoints.length-1;
+                i++
+            ){
 
-            c.lineTo(
-                junctionB.x,
-                junctionB.y
-            );
+                const segLength=
+                    Math.hypot(
+                        pathPoints[i+1].x-
+                        pathPoints[i].x,
+                        pathPoints[i+1].y-
+                        pathPoints[i].y
+                    );
 
-            c.lineTo(pb.x,pb.y);
+                segLengths.push(segLength);
+
+                totalPathLength+=segLength;
+
+            }
+
+            let cumFraction=0;
+
+            for(
+                let i=0;
+                i<segLengths.length;
+                i++
+            ){
+
+                const segFraction=
+                    totalPathLength>0
+                    ?segLengths[i]/
+                     totalPathLength
+                    :0;
+
+                const segEndFraction=
+                    cumFraction+segFraction;
+
+                if(
+                    revealProgress>=
+                    segEndFraction
+                ){
+
+                    c.lineTo(
+                        pathPoints[i+1].x,
+                        pathPoints[i+1].y
+                    );
+
+                }else if(
+                    revealProgress>
+                    cumFraction
+                ){
+
+                    c.lineTo(
+                        drawnEnd.x,
+                        drawnEnd.y
+                    );
+
+                    break;
+
+                }else{
+
+                    break;
+
+                }
+
+                cumFraction=
+                    segEndFraction;
+
+            }
 
             c.stroke();
+
+            /*
+             * A small bright travelling glow right at the leading
+             * edge while the reveal is still playing — reads as
+             * the route actively being charted, not just an
+             * opacity fade.
+             */
+            if(revealProgress<1){
+
+                c.setLineDash([]);
+
+                c.globalAlpha=
+                    routeAlpha*.9*
+                    (1-revealProgress*.3);
+
+                c.fillStyle="#9fd4ff";
+
+                c.shadowBlur=8;
+
+                c.shadowColor="#5aa8ff";
+
+                c.beginPath();
+
+                c.arc(
+                    drawnEnd.x,
+                    drawnEnd.y,
+                    2.5,
+                    0,
+                    Math.PI*2
+                );
+
+                c.fill();
+
+            }
 
             c.restore();
 
@@ -18258,6 +18771,30 @@ function drawStarMapScene(){
                     px,
                     py+pr*2.5
                 );
+
+                /*
+                 * A second, smaller line naming exactly which
+                 * rank clears it — only when rank is genuinely
+                 * the reason it's not selectable yet (not e.g.
+                 * simply having no ship docked there), so this
+                 * doesn't show up on a planet the player could
+                 * otherwise fly to right now.
+                 */
+                if(!isPlanetUnlocked(p.id)){
+
+                    c.fillStyle="#5a729a";
+
+                    c.font=
+                        "700 8px system-ui";
+
+                    c.fillText(
+                        "🔒 Rank "+
+                        p.unlockRank,
+                        px,
+                        py+pr*2.5+11
+                    );
+
+                }
 
                 c.restore();
 
@@ -26283,6 +26820,14 @@ function renderPlanetDetail(id){
         getTotalAvailableCoins(id)>=
         petCost;
 
+    const nextPetSlotRank=
+        getPetSlotUnlockRank(
+            pets.length
+        );
+
+    const nextPetSlotUnlocked=
+        isNextPetSlotUnlocked(id);
+
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">🐾 Pets</div>';
@@ -26651,14 +27196,30 @@ function renderPlanetDetail(id){
     }
 
     html+=
-        '<button class="big-button secondary-button" '+
-        'style="margin-top:10px;" data-action="buy-pet" '+
-        (
-            canAffordPet
-            ?''
-            :'disabled'
+        nextPetSlotUnlocked
+        ?(
+            '<button class="big-button secondary-button" '+
+            'style="margin-top:10px;" data-action="buy-pet" '+
+            (
+                canAffordPet
+                ?''
+                :'disabled'
+            )+
+            '>Buy Pet ('+petCost+' '+COIN_ICON_HTML+')</button>'
+        )
+        :(
+            /*
+             * Kept simple, per request — just the locked state
+             * and which rank clears it, no extra explanation of
+             * why. disabled rather than left clickable and
+             * silently doing nothing, and no cost shown since
+             * there's nothing to spend yet regardless of coins.
+             */
+            '<button class="big-button secondary-button" '+
+            'style="margin-top:10px;" disabled>'+
+            '🔒 Reach Rank '+nextPetSlotRank+
+            '</button>'
         )+
-        '>Buy Pet ('+petCost+' '+COIN_ICON_HTML+')</button>'+
         '</div>';
 
     /*
@@ -41512,42 +42073,31 @@ function update(dt){
             !planetPhasePending
         ){
 
-            const current=
-                getPlanet(
-                    currentPlanetId
+            /*
+             * A flat PLANET_DEPART_POINTS past wherever score
+             * stood at landing — same relative-threshold shape as
+             * the approach check above, and deliberately no
+             * longer keyed to the next tier's absolute
+             * requirement. That old system meant departing Earth
+             * (needing to reach 7,000) and departing a tier-3
+             * planet (needing to reach 94,000 outright) cost wildly
+             * different amounts of NEW score even though both are
+             * "one hop" — this makes every hop cost the same.
+             */
+            const departTarget=
+                fieldStartScore+
+                PLANET_DEPART_POINTS;
+
+            if(
+                score>=
+                departTarget &&
+                worldTimer>=
+                FIELD_MIN_TIME
+            ){
+
+                requestFieldExit(
+                    enterInterplanetary
                 );
-
-            if(current){
-
-                const nextPlanets=
-                    PLANETS.filter(
-                        p =>
-                            p.tier===
-                            current.tier+1
-                    );
-
-                const nextRequirement=
-                    nextPlanets.length
-                    ?Math.min(
-                        ...nextPlanets.map(
-                            p =>
-                                p.requirement
-                        )
-                    )
-                    :Infinity;
-
-                if(
-                    score>=
-                    nextRequirement &&
-                    worldTimer>=
-                    FIELD_MIN_TIME
-                ){
-
-                    requestFieldExit(
-                        enterInterplanetary
-                    );
-
-                }
 
             }
 
