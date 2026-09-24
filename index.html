@@ -4899,7 +4899,19 @@ let wave=1;
 let destroyed=0;
 
 let spawnTimer=0;
+
+/*
+ * Throttles recordRhythmFieldSnapshot to roughly every
+ * RHYTHM_FIELD_SNAPSHOT_INTERVAL seconds rather than every frame
+ * — declared up here alongside spawnTimer since it's driven from
+ * the exact same per-frame update block.
+ */
+let rhythmFieldSnapshotTimer=0;
+
+const RHYTHM_FIELD_SNAPSHOT_INTERVAL=.4;
+
 let difficultyTimer=0;
+
 
 let worldTimer=0;
 let transitionTimer=0;
@@ -32671,12 +32683,81 @@ function drawEarthContinents3D(
 }
 
 
+/*
+ * Which edge (0=top,1=right,2=bottom,3=left) each of the last
+ * few spawns came from — used to bias new spawns away from
+ * whichever side has been used the most recently, rather than
+ * every spawn rolling a fully independent 1-in-4. Pure
+ * independent randomness is exactly what lets several spawns in
+ * a row happen to pick the same edge purely by chance, which is
+ * what actually reads as an unfair wall bearing down from one
+ * direction — this doesn't forbid repeats (a spawn CAN still
+ * come from the same edge as the last one), it just makes that
+ * progressively less likely the more it's already happened.
+ */
+let recentSpawnSides=[];
+
+const RECENT_SPAWN_SIDES_MAX=6;
+
 function edgeSpawn(){
 
-    const side=
-        Math.floor(
-            Math.random()*4
+    const sideCounts=
+        [0,0,0,0];
+
+    for(
+        const s of recentSpawnSides
+    ){
+
+        sideCounts[s]++;
+
+    }
+
+    const weights=
+        sideCounts.map(
+            count => 1/(1+count)
         );
+
+    const totalWeight=
+        weights.reduce(
+            (a,b) => a+b,
+            0
+        );
+
+    let roll=
+        Math.random()*totalWeight;
+
+    let side=0;
+
+    for(
+        let i=0;
+        i<weights.length;
+        i++
+    ){
+
+        if(roll<weights[i]){
+
+            side=i;
+
+            break;
+
+        }
+
+        roll-=weights[i];
+
+        side=i;
+
+    }
+
+    recentSpawnSides.push(side);
+
+    if(
+        recentSpawnSides.length>
+        RECENT_SPAWN_SIDES_MAX
+    ){
+
+        recentSpawnSides.shift();
+
+    }
 
     if(side===0){
 
@@ -36283,13 +36364,35 @@ let rhythmState={
      * tap missing are different events for how the beat actually
      * felt to the player.
      */
-    destructionHistory:[]
+    destructionHistory:[],
+
+    /*
+     * Periodic snapshots of the field's own spatial layout —
+     * where asteroids actually ARE right now, not just how many.
+     * A count alone can't tell a genuinely even spread apart from
+     * everything bunched in one corner, and those read completely
+     * differently to a player even at identical density.
+     */
+    fieldSnapshots:[],
+
+    /*
+     * Set on the current live snapshot each time one's taken (see
+     * recordRhythmFieldSnapshot) — kept here, not just inside the
+     * snapshot itself, so a destruction event landing between two
+     * snapshots can still be measured against "the field as it
+     * was most recently known" without hunting through the array.
+     */
+    latestFieldCentroidX:null,
+
+    latestFieldCentroidY:null
 
 };
 
 const RHYTHM_TAP_HISTORY_MAX=40;
 
 const RHYTHM_DESTRUCTION_HISTORY_MAX=40;
+
+const RHYTHM_FIELD_SNAPSHOT_MAX=30;
 
 /*
  * How quickly the tempo estimate adapts to a new interval versus
@@ -36392,7 +36495,26 @@ function recordRhythmDestruction(x,y,time){
     const history=
         rhythmState.destructionHistory;
 
-    history.push({x,y,time});
+    /*
+     * Distance from the field's own centroid at the most recent
+     * snapshot — this is what actually lets a later analysis ask
+     * "does this player tend to clear from the middle out, or
+     * pick off stragglers at the edges", not just "where on
+     * screen did a kill happen" in isolation.
+     */
+    const distFromCentroid=
+        rhythmState.latestFieldCentroidX===
+        null
+        ?null
+        :Math.hypot(
+            x-rhythmState.latestFieldCentroidX,
+            y-rhythmState.latestFieldCentroidY
+        );
+
+    history.push({
+        x,y,time,
+        distFromCentroid
+    });
 
     if(
         history.length>
@@ -36400,6 +36522,130 @@ function recordRhythmDestruction(x,y,time){
     ){
 
         history.shift();
+
+    }
+
+}
+
+/*
+ * Samples the CURRENT asteroid field's own spatial layout —
+ * called periodically (not every frame; see where this is
+ * invoked in the main update loop) rather than continuously,
+ * since a field's overall shape doesn't meaningfully change
+ * frame to frame and this is cheap but not free to compute.
+ *
+ * Tracks a centroid + spread (basic 2D shape of where things
+ * currently are) plus a rough count of asteroids nearest each
+ * screen edge, which is what actually reveals lopsided spawning
+ * — e.g. several rocks all having come from the same side in
+ * quick succession — that a plain centroid/spread pair alone
+ * wouldn't distinguish from an evenly-surrounded field of the
+ * same size and spread.
+ */
+function recordRhythmFieldSnapshot(time){
+
+    if(!asteroids.length){
+
+        rhythmState.latestFieldCentroidX=
+            null;
+
+        rhythmState.latestFieldCentroidY=
+            null;
+
+        return;
+
+    }
+
+    let sumX=0;
+
+    let sumY=0;
+
+    for(const a of asteroids){
+
+        sumX+=a.x;
+
+        sumY+=a.y;
+
+    }
+
+    const centroidX=
+        sumX/asteroids.length;
+
+    const centroidY=
+        sumY/asteroids.length;
+
+    let spreadSumSq=0;
+
+    const edgeCounts=
+        {n:0,e:0,s:0,w:0};
+
+    for(const a of asteroids){
+
+        spreadSumSq+=
+            Math.hypot(
+                a.x-centroidX,
+                a.y-centroidY
+            )**2;
+
+        /*
+         * Whichever of the four edges each asteroid is currently
+         * closest to, by simple distance to that edge's own
+         * line — a rough but cheap stand-in for "which direction
+         * did this one effectively come from".
+         */
+        const distN=a.y;
+
+        const distS=H-a.y;
+
+        const distW=a.x;
+
+        const distE=W-a.x;
+
+        const minDist=
+            Math.min(
+                distN,distS,distW,distE
+            );
+
+        if(minDist===distN)
+            edgeCounts.n++;
+        else if(minDist===distS)
+            edgeCounts.s++;
+        else if(minDist===distW)
+            edgeCounts.w++;
+        else
+            edgeCounts.e++;
+
+    }
+
+    const spread=
+        Math.sqrt(
+            spreadSumSq/asteroids.length
+        );
+
+    rhythmState.latestFieldCentroidX=
+        centroidX;
+
+    rhythmState.latestFieldCentroidY=
+        centroidY;
+
+    const snapshots=
+        rhythmState.fieldSnapshots;
+
+    snapshots.push({
+        time,
+        count:asteroids.length,
+        centroidX,
+        centroidY,
+        spread,
+        edgeCounts
+    });
+
+    if(
+        snapshots.length>
+        RHYTHM_FIELD_SNAPSHOT_MAX
+    ){
+
+        snapshots.shift();
 
     }
 
@@ -36485,6 +36731,199 @@ function computeSpawnInterval(){
         ),
         .3,
         2.2
+    );
+
+}
+
+
+/* =========================================================
+   RHYTHM-AWARE SPAWN PHRASING
+   Where the flat, single-number spawn interval above actually
+   becomes a rhythm: instead of every spawn using the same gap
+   (independent random spawns can and do cluster together purely
+   by chance, which is exactly what reads as an unfair, arbitrary
+   wall of asteroids), spawns now move through a repeating
+   "phrase" — a short sequence of beats that genuinely builds,
+   peaks, and releases, the way a musical phrase does, rather
+   than sitting at one flat density throughout.
+========================================================= */
+
+let rhythmPhrase=null;
+
+/*
+ * Whatever getNextRhythmBeatIntensity most recently returned —
+ * stashed globally so the bonus-spawn roll in the main update
+ * loop can read the current beat without needing its own
+ * separate call (which would advance the phrase an extra step
+ * per spawn rather than reading the one just used).
+ */
+let lastRhythmBeatIntensity=1;
+
+const RHYTHM_PHRASE_MIN_BEATS=5;
+
+const RHYTHM_PHRASE_MAX_BEATS=8;
+
+/*
+ * A fresh phrase — beatCount beats, each an intensity multiplier
+ * (higher = shorter gap = busier). Shaped around a single peak
+ * placed somewhere in the phrase (with some randomness in exactly
+ * where, so phrases don't all feel identical), intensity tapering
+ * off toward both ends of it — a genuine build and release rather
+ * than a flat run of the same number repeated.
+ */
+function generateRhythmPhrase(){
+
+    const beatCount=
+        RHYTHM_PHRASE_MIN_BEATS+
+        Math.floor(
+            Math.random()*
+            (
+                RHYTHM_PHRASE_MAX_BEATS-
+                RHYTHM_PHRASE_MIN_BEATS+1
+            )
+        );
+
+    const peakPosition=
+        clamp(
+            Math.round(
+                beatCount*.5+
+                (Math.random()-.5)*
+                beatCount*.4
+            ),
+            0,
+            beatCount-1
+        );
+
+    const beats=[];
+
+    for(
+        let i=0;
+        i<beatCount;
+        i++
+    ){
+
+        const maxDist=
+            Math.max(
+                1,
+                peakPosition,
+                beatCount-1-peakPosition
+            );
+
+        const distFromPeak=
+            Math.abs(i-peakPosition)/
+            maxDist;
+
+        /*
+         * 1.375 here, not the more obvious-looking 1.25 — chosen
+         * by actually measuring the average intensity this
+         * produces across many generated phrases (peak-centred
+         * shapes taper on both sides, which pulls the mean below
+         * whatever the peak value alone suggests) and tuning it
+         * so that average lands right at 1.0. That matters
+         * because 1.0 is a no-op against computeSpawnInterval's
+         * own existing pace/difficulty tuning — phrasing is meant
+         * to redistribute WHEN spawns happen into a genuine
+         * build/release shape, not quietly shift the overall
+         * amount of spawning up or down from what that separate,
+         * already-tuned system decided.
+         */
+        const intensity=
+            1.375-
+            distFromPeak*.75+
+            (Math.random()-.5)*.15;
+
+        beats.push(
+            clamp(intensity,.45,1.5)
+        );
+
+    }
+
+    return{beats,index:0};
+
+}
+
+/*
+ * The intensity for whichever beat is currently up, advancing to
+ * the next one each call and generating a fresh phrase whenever
+ * the current one runs out — called exactly once per spawn (see
+ * the spawnTimer reset in the main update loop), so "one call =
+ * one beat" stays true throughout.
+ */
+function getNextRhythmBeatIntensity(){
+
+    if(
+        !rhythmPhrase ||
+        rhythmPhrase.index>=
+        rhythmPhrase.beats.length
+    ){
+
+        rhythmPhrase=
+            generateRhythmPhrase();
+
+    }
+
+    const intensity=
+        rhythmPhrase.beats[
+            rhythmPhrase.index
+        ];
+
+    rhythmPhrase.index++;
+
+    lastRhythmBeatIntensity=
+        intensity;
+
+    return intensity;
+
+}
+
+/*
+ * The actual interval used to reset spawnTimer — computeSpawnInterval's
+ * own difficulty/pace-driven number, blended a little toward the
+ * player's own detected tap tempo (only when it's actually steady;
+ * an erratic, mashing tempo isn't a trustworthy target to chase
+ * toward), then modulated by the current phrase beat. Player tempo
+ * is deliberately capped at partial influence (never more than
+ * RHYTHM_TEMPO_BLEND_MAX) — this is meant to let spawns loosely
+ * fall into step with the player, not hand them full control over
+ * their own difficulty by tapping in a particular pattern.
+ */
+const RHYTHM_TEMPO_BLEND_MAX=.4;
+
+function computeRhythmAwareSpawnInterval(){
+
+    let base=
+        computeSpawnInterval();
+
+    if(
+        rhythmState.tempoSeconds!==
+        null
+    ){
+
+        const steadiness=
+            clamp(
+                1-
+                rhythmState.tempoVarianceFrac,
+                0,1
+            );
+
+        const blendWeight=
+            steadiness*
+            RHYTHM_TEMPO_BLEND_MAX;
+
+        base=
+            base*(1-blendWeight)+
+            rhythmState.tempoSeconds*
+            blendWeight;
+
+    }
+
+    const beatIntensity=
+        getNextRhythmBeatIntensity();
+
+    return clamp(
+        base/beatIntensity,
+        .18,
+        3
     );
 
 }
@@ -41918,6 +42357,28 @@ function update(dt){
         }
 
 
+        /*
+         * Field spatial snapshot — throttled to every ~0.4s
+         * rather than every frame, since the field's overall
+         * shape doesn't meaningfully change faster than that and
+         * this is cheap but not free (a full pass over every
+         * current asteroid).
+         */
+        rhythmFieldSnapshotTimer-=dt;
+
+        if(
+            rhythmFieldSnapshotTimer<=0
+        ){
+
+            rhythmFieldSnapshotTimer=
+                RHYTHM_FIELD_SNAPSHOT_INTERVAL;
+
+            recordRhythmFieldSnapshot(
+                performance.now()
+            );
+
+        }
+
         spawnTimer-=dt;
 
 
@@ -41959,9 +42420,22 @@ function update(dt){
                  * DIFFICULTY below) then nudges this
                  * pace up or down based on how the
                  * player is actually doing right now.
+                 *
+                 * Rhythm-aware now rather than a flat
+                 * number every time — see
+                 * computeRhythmAwareSpawnInterval's own
+                 * comment for why. lastRhythmBeatIntensity
+                 * is stashed from the same call so the
+                 * bonus-spawn roll just below can lean on
+                 * the SAME beat rather than rolling
+                 * completely independently of it — a
+                 * second asteroid arriving is meant to
+                 * read as part of this beat's own peak,
+                 * not an unrelated coincidence stacking on
+                 * top of it.
                  */
                 spawnTimer=
-                    computeSpawnInterval();
+                    computeRhythmAwareSpawnInterval();
 
                 spawnAsteroid();
 
@@ -41972,7 +42446,12 @@ function update(dt){
                         .18,
                         wave*.01
                     )*
-                    aiModel.difficulty
+                    aiModel.difficulty*
+                    clamp(
+                        lastRhythmBeatIntensity,
+                        .4,
+                        1.6
+                    )
                 ){
 
                     spawnAsteroid();
