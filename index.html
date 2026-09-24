@@ -2777,6 +2777,16 @@ and (max-height:500px){
     color:#8de7ff;
 }
 
+.rhythm-waveform-canvas{
+    display:block;
+    width:100%;
+    height:120px;
+    border-radius:11px;
+    background:rgba(10,20,35,.55);
+    border:1px solid rgba(100,190,255,.2);
+    margin-bottom:12px;
+}
+
 .metric-row{
     display:flex;
     align-items:center;
@@ -29622,6 +29632,81 @@ function sound(type){
 
 }
 
+/*
+ * A soft, short audio pulse on the current spawn-rhythm beat —
+ * meant to sit under the mix as a barely-conscious anchor rather
+ * than a prominent effect, the same way a subtle metronome click
+ * works in actual rhythm games: not something a player necessarily
+ * notices directly, but something their own timing can settle
+ * into syncing against anyway. Pitch rises a little with the
+ * beat's own intensity (see computeRhythmAwareSpawnInterval),
+ * which gives a real, if subtle, audible sense of a phrase
+ * building toward its peak rather than the pulse sounding
+ * identical throughout.
+ */
+function playRhythmPulse(intensity){
+
+    if(!audioContext)
+        return;
+
+    if(!rhythmAudioEnabled)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const osc=
+        audioContext.createOscillator();
+
+    const gain=
+        audioContext.createGain();
+
+    osc.connect(gain);
+
+    gain.connect(
+        audioContext.destination
+    );
+
+    osc.type="sine";
+
+    const pitch=
+        620+
+        clamp(intensity,.4,1.5)*
+        90;
+
+    osc.frequency.setValueAtTime(
+        pitch,
+        now
+    );
+
+    osc.frequency.exponentialRampToValueAtTime(
+        pitch*.82,
+        now+.05
+    );
+
+    /*
+     * Much quieter than the normal sound() effects (.07 gain) —
+     * this plays on every single spawn beat, potentially several
+     * times a second at a busy phrase peak, so it needs to stay
+     * genuinely in the background rather than compete with the
+     * actual gameplay sounds layered on top of it.
+     */
+    gain.gain.setValueAtTime(
+        .018,
+        now
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+        .001,
+        now+.05
+    );
+
+    osc.start(now);
+
+    osc.stop(now+.07);
+
+}
+
 
 /* =========================================================
    STARS
@@ -36384,7 +36469,41 @@ let rhythmState={
      */
     latestFieldCentroidX:null,
 
-    latestFieldCentroidY:null
+    latestFieldCentroidY:null,
+
+    /*
+     * Where the tempo estimate expects the NEXT tap to land —
+     * recomputed every time a tap actually arrives (see
+     * recordRhythmTap), so it's always "next tap after the one
+     * that just happened", never stale from several taps ago.
+     * null whenever there's no tempo estimate yet to predict from.
+     */
+    predictedNextTapTime:null,
+
+    /*
+     * How far off recent predictions have actually been, as a
+     * fraction of the tempo they were predicting against —
+     * smoothed the same way tempoVarianceFrac is. This is
+     * DELIBERATELY a separate number from tempoVarianceFrac: that
+     * one measures how much the player's own interval jumps
+     * around; this one measures how well a simple "last interval
+     * repeats" model actually predicts them, which isn't
+     * necessarily the same thing — a player could have a wildly
+     * varying but genuinely periodic rhythm (fast-fast-slow-fast-
+     * fast-slow...) that a naive predictor would still do badly
+     * against despite a perfectly real, learnable pattern.
+     */
+    predictionErrorFrac:0,
+
+    /*
+     * The CONTROLLED side's own timeline — every actual spawn
+     * beat, with the intensity it was given. This is what the
+     * waveform's "controlled" line is drawn from; without
+     * recording it as it happens, there'd be no way to show what
+     * the spawn rhythm has actually been doing over time, only
+     * what it's doing on this exact frame.
+     */
+    spawnHistory:[]
 
 };
 
@@ -36393,6 +36512,9 @@ const RHYTHM_TAP_HISTORY_MAX=40;
 const RHYTHM_DESTRUCTION_HISTORY_MAX=40;
 
 const RHYTHM_FIELD_SNAPSHOT_MAX=30;
+
+const RHYTHM_SPAWN_HISTORY_MAX=40;
+
 
 /*
  * How quickly the tempo estimate adapts to a new interval versus
@@ -36415,6 +36537,46 @@ function recordRhythmTap(x,y,time){
 
     const history=
         rhythmState.tapHistory;
+
+    /*
+     * Score whatever the PREVIOUS tap predicted against where
+     * this one actually landed, before touching the prediction
+     * for next time — this has to happen before tempoSeconds
+     * gets updated below, since the prediction being scored was
+     * made using the OLD tempo estimate, not the one this tap is
+     * about to produce.
+     */
+    if(
+        rhythmState.predictedNextTapTime!==
+        null
+    ){
+
+        const predictionErrorSeconds=
+            Math.abs(
+                time-
+                rhythmState.predictedNextTapTime
+            )/1000;
+
+        const errorFrac=
+            clamp(
+                predictionErrorSeconds/
+                Math.max(
+                    .05,
+                    rhythmState.tempoSeconds ||
+                    .5
+                ),
+                0,
+                3
+            );
+
+        rhythmState.predictionErrorFrac+=
+            (
+                errorFrac-
+                rhythmState.predictionErrorFrac
+            )*
+            RHYTHM_TEMPO_SMOOTHING;
+
+    }
 
     if(history.length){
 
@@ -36468,6 +36630,20 @@ function recordRhythmTap(x,y,time){
         }
 
     }
+
+    /*
+     * Next prediction, made fresh off whatever tempoSeconds is
+     * now (post-update, above) — the simplest possible model,
+     * "the next gap will look like the current smoothed tempo",
+     * which is exactly what predictionErrorFrac above is tracking
+     * the real accuracy of rather than just assuming.
+     */
+    rhythmState.predictedNextTapTime=
+        rhythmState.tempoSeconds===
+        null
+        ?null
+        :time+
+         rhythmState.tempoSeconds*1000;
 
     history.push({x,y,time});
 
@@ -36759,6 +36935,14 @@ let rhythmPhrase=null;
  */
 let lastRhythmBeatIntensity=1;
 
+/*
+ * Master on/off for the rhythm pulse specifically, separate from
+ * the game's general sound() calls — lets the pulse be muted on
+ * its own later (e.g. a settings toggle) without touching normal
+ * sound effects.
+ */
+let rhythmAudioEnabled=true;
+
 const RHYTHM_PHRASE_MIN_BEATS=5;
 
 const RHYTHM_PHRASE_MAX_BEATS=8;
@@ -36919,6 +37103,22 @@ function computeRhythmAwareSpawnInterval(){
 
     const beatIntensity=
         getNextRhythmBeatIntensity();
+
+    playRhythmPulse(beatIntensity);
+
+    rhythmState.spawnHistory.push({
+        time:performance.now(),
+        intensity:beatIntensity
+    });
+
+    if(
+        rhythmState.spawnHistory.length>
+        RHYTHM_SPAWN_HISTORY_MAX
+    ){
+
+        rhythmState.spawnHistory.shift();
+
+    }
 
     return clamp(
         base/beatIntensity,
@@ -48387,13 +48587,367 @@ function renderAIMetrics(){
 
     }
 
+    /* -------- Rhythm -------- */
+
+    html+=
+        '<div class="metric-group-title">'+
+        'Rhythm</div>'+
+        '<div class="metric-callout">'+
+        'Every tap and every spawn beat, tracked and turned into '+
+        'a genuine build/release phrase rather than a flat rate — '+
+        'see the last exchange in chat for the full picture. Below: '+
+        'your own actual tap rhythm (white), the spawn rhythm it\'s '+
+        'currently being nudged toward (amber), and where the next '+
+        'tap is predicted to land (the dashed line).'+
+        '</div>';
+
+    html+=
+        '<canvas id="rhythmWaveformCanvas" '+
+        'class="rhythm-waveform-canvas" '+
+        'width="600" height="120">'+
+        '</canvas>';
+
+    const tempoText=
+        rhythmState.tempoSeconds===
+        null
+        ?"not enough taps yet"
+        :(
+            60/
+            Math.max(.05,rhythmState.tempoSeconds)
+        ).toFixed(0)+
+         " taps/min ("+
+         rhythmState.tempoSeconds.toFixed(2)+
+         "s apart)";
+
+    html+=
+        '<div class="metric-note">'+
+        'Your tempo: <b>'+tempoText+'</b> · steadiness '+
+        (
+            (
+                1-
+                clamp(
+                    rhythmState.tempoVarianceFrac,
+                    0,1
+                )
+            )*100
+        ).toFixed(0)+
+        '% · next-tap prediction accuracy '+
+        (
+            (
+                1-
+                clamp(
+                    rhythmState.predictionErrorFrac,
+                    0,1
+                )
+            )*100
+        ).toFixed(0)+
+        '%'+
+        '</div>';
+
     html+=
         '</div>';
 
     container.innerHTML=
         html;
 
+    drawRhythmWaveform();
+
 }
+
+/*
+ * The rhythm waveform in the AI Metrics tab — three overlapping
+ * pulse envelopes (actual taps, controlled spawn beats, and the
+ * single predicted-next-tap marker) across a shared timeline
+ * running from a few seconds in the past up to a little into the
+ * predicted future. Each event is rendered as a smooth decaying
+ * pulse rather than a bare tick, so the traces genuinely read as
+ * waveforms rather than a scatter of dashes.
+ */
+function drawRhythmWaveform(){
+
+    const canvas=
+        document.getElementById(
+            "rhythmWaveformCanvas"
+        );
+
+    if(!canvas)
+        return;
+
+    /*
+     * Sized against its actual CSS display size rather than the
+     * fixed 600×120 HTML attributes it starts with — those are
+     * just a fallback for the very first layout pass, since the
+     * canvas is styled width:100% and will genuinely differ from
+     * 600px on most real screens. Matches the same
+     * clientWidth/clientHeight + capped-devicePixelRatio pattern
+     * used by the other canvases in this file, so text and lines
+     * stay crisp on high-DPI screens instead of upscaling a
+     * lower-resolution buffer.
+     */
+    const width=
+        canvas.clientWidth;
+
+    const height=
+        canvas.clientHeight;
+
+    if(
+        !width ||
+        !height
+    )
+        return;
+
+    const dpr=
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    if(
+        canvas.width!==
+        Math.floor(width*dpr)
+    ){
+
+        canvas.width=
+            Math.floor(width*dpr);
+
+    }
+
+    if(
+        canvas.height!==
+        Math.floor(height*dpr)
+    ){
+
+        canvas.height=
+            Math.floor(height*dpr);
+
+    }
+
+    const c=
+        canvas.getContext("2d");
+
+    c.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+
+    c.clearRect(
+        0,0,width,height
+    );
+
+    const now=
+        performance.now();
+
+    /*
+     * Window shown: RHYTHM_WAVEFORM_PAST_MS in the past through
+     * RHYTHM_WAVEFORM_FUTURE_MS ahead (for the prediction marker
+     * to have room to actually appear ahead of "now" rather than
+     * being pinned to the right edge).
+     */
+    const spanMs=
+        RHYTHM_WAVEFORM_PAST_MS+
+        RHYTHM_WAVEFORM_FUTURE_MS;
+
+    function timeToX(t){
+
+        return(
+            (
+                t-
+                (now-RHYTHM_WAVEFORM_PAST_MS)
+            )/
+            spanMs
+        )*width;
+
+    }
+
+    /*
+     * A smooth decaying pulse centred on each event in the given
+     * history, sampled across the full canvas width and drawn as
+     * one continuous line — this is what turns a list of discrete
+     * timestamps into something that actually looks like a
+     * waveform rather than a row of ticks.
+     */
+    function drawPulseTrace(
+        history,
+        color,
+        baselineY,
+        peakHeight,
+        pulseWidthMs,
+        getWeight
+    ){
+
+        c.beginPath();
+
+        const sampleCount=
+            140;
+
+        for(
+            let i=0;
+            i<=sampleCount;
+            i++
+        ){
+
+            const x=
+                (i/sampleCount)*width;
+
+            const t=
+                (now-RHYTHM_WAVEFORM_PAST_MS)+
+                (x/width)*spanMs;
+
+            let level=0;
+
+            for(
+                const event of history
+            ){
+
+                const dt=
+                    Math.abs(
+                        t-event.time
+                    );
+
+                if(dt>pulseWidthMs)
+                    continue;
+
+                const decay=
+                    1-dt/pulseWidthMs;
+
+                const weight=
+                    getWeight
+                    ?getWeight(event)
+                    :1;
+
+                const contribution=
+                    decay*decay*weight;
+
+                if(contribution>level){
+
+                    level=contribution;
+
+                }
+
+            }
+
+            const y=
+                baselineY-
+                level*peakHeight;
+
+            if(i===0){
+
+                c.moveTo(x,y);
+
+            }else{
+
+                c.lineTo(x,y);
+
+            }
+
+        }
+
+        c.strokeStyle=color;
+
+        c.lineWidth=1.5;
+
+        c.stroke();
+
+    }
+
+    /*
+     * Controlled spawn rhythm first, underneath — amber, each
+     * pulse's height scaled by that beat's own intensity, so a
+     * phrase's build and release is visibly taller/shorter across
+     * the trace, not just present/absent.
+     */
+    drawPulseTrace(
+        rhythmState.spawnHistory,
+        "rgba(255,180,90,.85)",
+        height*.78,
+        height*.5,
+        260,
+        event => clamp(event.intensity,.3,1.5)/1.5
+    );
+
+    /*
+     * Player's own actual taps — white, on top.
+     */
+    drawPulseTrace(
+        rhythmState.tapHistory,
+        "rgba(255,255,255,.9)",
+        height*.34,
+        height*.5,
+        220,
+        null
+    );
+
+    /*
+     * The single predicted-next-tap marker, if it falls within
+     * the visible window — a dashed vertical line rather than a
+     * pulse, since this is a single point estimate, not a
+     * timeline of events like the two traces above it.
+     */
+    if(
+        rhythmState.predictedNextTapTime!==
+        null
+    ){
+
+        const predictedX=
+            timeToX(
+                rhythmState.predictedNextTapTime
+            );
+
+        if(
+            predictedX>=0 &&
+            predictedX<=width
+        ){
+
+            c.save();
+
+            c.setLineDash([4,4]);
+
+            c.strokeStyle=
+                "rgba(160,255,180,.8)";
+
+            c.lineWidth=1.5;
+
+            c.beginPath();
+
+            c.moveTo(predictedX,4);
+
+            c.lineTo(
+                predictedX,
+                height-4
+            );
+
+            c.stroke();
+
+            c.restore();
+
+        }
+
+    }
+
+    /*
+     * "Now" line — everything left of it is history, everything
+     * right is prediction/upcoming window.
+     */
+    const nowX=
+        timeToX(now);
+
+    c.strokeStyle=
+        "rgba(120,150,190,.5)";
+
+    c.lineWidth=1;
+
+    c.beginPath();
+
+    c.moveTo(nowX,0);
+
+    c.lineTo(nowX,height);
+
+    c.stroke();
+
+}
+
+const RHYTHM_WAVEFORM_PAST_MS=5000;
+
+const RHYTHM_WAVEFORM_FUTURE_MS=1500;
 
 
 document
