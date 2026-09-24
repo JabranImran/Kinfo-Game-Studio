@@ -29658,7 +29658,50 @@ function createStars(){
 }
 
 
+/*
+ * How fast the background starfield drifts, smoothed rather than
+ * snapping straight to its target each frame — a global feel cue
+ * for the game's own current intensity, independent of any one
+ * star's own fixed per-star speed (which stays as the existing
+ * parallax-depth variation between stars).
+ */
+let starPaceMultiplier=1;
+
 function updateStars(dt){
+
+    /*
+     * Busier spawn rate reads as a faster-feeling starfield —
+     * computeSpawnInterval is already the single source of truth
+     * for "how dense is the field right now" (lower = busier), so
+     * this just re-reads the same number the actual spawner uses
+     * rather than tracking a second, separate pace signal that
+     * could drift out of sync with it. Only during active field
+     * play though — approaching a planet or interplanetary space
+     * (worldState no longer "field") eases the target back toward
+     * a calm baseline instead, which is what actually makes the
+     * starfield itself read as "the pace is winding down" during
+     * those transitions rather than staying keyed to whatever
+     * spawn rate was last active.
+     */
+    const starPaceTarget=
+        worldState==="field"
+        ?clamp(
+            1+
+            (
+                2.2-
+                computeSpawnInterval()
+            )/2.2*1.5,
+            .6,
+            2.5
+        )
+        :.55;
+
+    starPaceMultiplier+=
+        (
+            starPaceTarget-
+            starPaceMultiplier
+        )*
+        Math.min(1,dt*1.4);
 
     /*
      * In orbital space the ship is genuinely moving through the
@@ -29733,7 +29776,8 @@ function updateStars(dt){
             s.y+=
                 s.speed*
                 dt*
-                60;
+                60*
+                starPaceMultiplier;
 
             if(
                 s.y>
@@ -33097,6 +33141,12 @@ function detonateAsteroid(
         1
     );
 
+    recordRhythmDestruction(
+        asteroid.x,
+        asteroid.y,
+        performance.now()
+    );
+
     /*
      * Feeds the orbital "clearing pressure" tracker — a rolling
      * count of recent kills that pushes spawn density up when
@@ -36177,6 +36227,183 @@ let aiTimer=0;
  */
 let aiLastWindow=null;
 
+
+/* =========================================================
+   RHYTHM TRACKING
+   Foundation layer for the rhythm-aware pacing system — this
+   file just captures what actually happened (tap timing,
+   position, and destruction events) and derives a live "current
+   tempo" reading from it. Spawn-rhythm CONTROL, prediction, the
+   audio pulse, and the metrics waveform are all separate,
+   later-stage systems that read from this rather than living
+   here — keeping capture and control apart means the control
+   side can be revised freely without ever touching how raw
+   rhythm data is gathered.
+========================================================= */
+
+let rhythmState={
+
+    /*
+     * Recent taps as {time,x,y} — time in the same
+     * performance.now()-style milliseconds used everywhere else
+     * timing-sensitive in this file. Capped, not because old taps
+     * stop mattering instantly, but because a tempo estimate
+     * should track the player's CURRENT rhythm, not their whole
+     * session average — a player who was frantic a minute ago and
+     * has since settled down should read as settled, not as some
+     * blend of both.
+     */
+    tapHistory:[],
+
+    /*
+     * Smoothed inter-tap interval, seconds — the core "current
+     * tempo" reading everything downstream (spawn control,
+     * prediction, the waveform) is meant to read from. null until
+     * there have been at least two taps to derive an interval
+     * from at all.
+     */
+    tempoSeconds:null,
+
+    /*
+     * How consistent that tempo actually is — the smoothed
+     * absolute difference between each new interval and the
+     * tempo estimate at the time, as a fraction of the tempo
+     * itself. Low = steady, metronomic tapping; high = erratic,
+     * bursty tapping. This is what should eventually let the
+     * spawn controller tell "a confidently fast player" apart
+     * from "a player who's just mashing," which a tempo number
+     * alone can't distinguish.
+     */
+    tempoVarianceFrac:0,
+
+    /*
+     * Destruction events (a tap that actually connected), kept
+     * separately from raw taps — this is the "explosion" side of
+     * rhythm the pacing system needs, since a tap landing and a
+     * tap missing are different events for how the beat actually
+     * felt to the player.
+     */
+    destructionHistory:[]
+
+};
+
+const RHYTHM_TAP_HISTORY_MAX=40;
+
+const RHYTHM_DESTRUCTION_HISTORY_MAX=40;
+
+/*
+ * How quickly the tempo estimate adapts to a new interval versus
+ * trusting its existing read — lower means steadier but slower to
+ * notice a genuine tempo change; kept fairly responsive since a
+ * pacing system built on this needs to notice a real shift within
+ * a handful of taps, not dozens.
+ */
+const RHYTHM_TEMPO_SMOOTHING=.3;
+
+/*
+ * Called once per genuine tap (armed-ability taps included, not
+ * just ones that hit something — see recordRhythmDestruction for
+ * the separate "did it connect" event). Updates the smoothed
+ * tempo and its variance from the interval since the previous
+ * tap; the very first tap in a fresh history has no prior
+ * interval to compare against, so it only seeds the history.
+ */
+function recordRhythmTap(x,y,time){
+
+    const history=
+        rhythmState.tapHistory;
+
+    if(history.length){
+
+        const previous=
+            history[
+                history.length-1
+            ];
+
+        const interval=
+            (time-previous.time)/1000;
+
+        if(
+            interval>0 &&
+            interval<8
+        ){
+
+            if(
+                rhythmState.tempoSeconds===
+                null
+            ){
+
+                rhythmState.tempoSeconds=
+                    interval;
+
+            }else{
+
+                const priorTempo=
+                    rhythmState.tempoSeconds;
+
+                rhythmState.tempoSeconds+=
+                    (
+                        interval-priorTempo
+                    )*
+                    RHYTHM_TEMPO_SMOOTHING;
+
+                const deviationFrac=
+                    Math.abs(
+                        interval-priorTempo
+                    )/
+                    Math.max(.05,priorTempo);
+
+                rhythmState.tempoVarianceFrac+=
+                    (
+                        deviationFrac-
+                        rhythmState.tempoVarianceFrac
+                    )*
+                    RHYTHM_TEMPO_SMOOTHING;
+
+            }
+
+        }
+
+    }
+
+    history.push({x,y,time});
+
+    if(
+        history.length>
+        RHYTHM_TAP_HISTORY_MAX
+    ){
+
+        history.shift();
+
+    }
+
+}
+
+/*
+ * The "explosion" side — called wherever an asteroid is actually
+ * destroyed, kept as its own timeline rather than folded into
+ * tapHistory since a spawn/beam/orb kill isn't the same event as
+ * a raw tap (one tap can trigger a chain of several destructions
+ * an instant apart, which is itself a distinct rhythmic pattern
+ * — a "roll" rather than a single hit).
+ */
+function recordRhythmDestruction(x,y,time){
+
+    const history=
+        rhythmState.destructionHistory;
+
+    history.push({x,y,time});
+
+    if(
+        history.length>
+        RHYTHM_DESTRUCTION_HISTORY_MAX
+    ){
+
+        history.shift();
+
+    }
+
+}
 
 function screenScaleFeature(){
 
@@ -44354,6 +44581,12 @@ function handlePointer(event){
         pointerPosition(
             event
         );
+
+    recordRhythmTap(
+        p.x,
+        p.y,
+        performance.now()
+    );
 
     if(
         beamArmed
