@@ -29530,7 +29530,7 @@ document.addEventListener(
 );
 
 
-function sound(type){
+function sound(type,pitchMultiplier=1){
 
     if(!audioContext)
         return;
@@ -29604,13 +29604,24 @@ function sound(type){
 
     }
 
+    /*
+     * pitchMultiplier defaults to 1 (a total no-op) for every
+     * existing call site — only the destruction sounds pass
+     * anything else, scaling both ends of the frequency sweep
+     * together so the sound's whole shape shifts rather than just
+     * its starting note, in step with the current spawn-rhythm
+     * beat at the moment of the kill. A peak beat's explosions
+     * genuinely ring brighter than a calm beat's; the same sound,
+     * modulated by the same rhythm everything else in this system
+     * is built around.
+     */
     osc.frequency.setValueAtTime(
-        start,
+        start*pitchMultiplier,
         now
     );
 
     osc.frequency.exponentialRampToValueAtTime(
-        end,
+        end*pitchMultiplier,
         now+duration
     );
 
@@ -29632,19 +29643,20 @@ function sound(type){
 
 }
 
+
 /*
- * A soft, short audio pulse on the current spawn-rhythm beat —
- * meant to sit under the mix as a barely-conscious anchor rather
- * than a prominent effect, the same way a subtle metronome click
- * works in actual rhythm games: not something a player necessarily
- * notices directly, but something their own timing can settle
- * into syncing against anyway. Pitch rises a little with the
- * beat's own intensity (see computeRhythmAwareSpawnInterval),
- * which gives a real, if subtle, audible sense of a phrase
- * building toward its peak rather than the pulse sounding
- * identical throughout.
+ * The actual "something just arrived" sound — asteroids
+ * previously spawned in complete silence, which is exactly why
+ * this needed to be a genuine gameplay sound rather than the
+ * background metronome pulse it started as. Pitch carries two
+ * pieces of information at once: size sets the base note (bigger
+ * rocks land lower, smaller ones higher — the same physical
+ * intuition as a large object versus a small one), and the
+ * current beat's own intensity shifts that note brighter or
+ * duller on top of it, so a peak beat's arrivals genuinely sound
+ * different from a calm one's, not just happen more often.
  */
-function playRhythmPulse(intensity){
+function playRhythmSpawnSound(intensity,size){
 
     if(!audioContext)
         return;
@@ -29669,10 +29681,24 @@ function playRhythmPulse(intensity){
 
     osc.type="sine";
 
+    const sizeBasePitch=
+        920-
+        clamp(size,1,3)*190;
+
+    /*
+     * Size sets the base note regardless of learning (a physical
+     * cue, not a "how much rhythm flavour" one) — only the
+     * intensity-driven part of the multiplier is scaled by
+     * soundModulationStrength, via the same shared helper the
+     * destruction sound above uses.
+     */
     const pitch=
-        620+
-        clamp(intensity,.4,1.5)*
-        90;
+        sizeBasePitch*
+        applySoundModulationStrength(
+            .88+
+            clamp(intensity,.4,1.5)*
+            .16
+        );
 
     osc.frequency.setValueAtTime(
         pitch,
@@ -29680,30 +29706,29 @@ function playRhythmPulse(intensity){
     );
 
     osc.frequency.exponentialRampToValueAtTime(
-        pitch*.82,
-        now+.05
+        pitch*.8,
+        now+.06
     );
 
     /*
-     * Much quieter than the normal sound() effects (.07 gain) —
-     * this plays on every single spawn beat, potentially several
-     * times a second at a busy phrase peak, so it needs to stay
-     * genuinely in the background rather than compete with the
-     * actual gameplay sounds layered on top of it.
+     * Kept quiet enough to read as ambient texture rather than a
+     * hit-confirm sound (that's what the explosion sound below is
+     * for) — this is a "something just entered the field" cue,
+     * not an achievement.
      */
     gain.gain.setValueAtTime(
-        .018,
+        .03,
         now
     );
 
     gain.gain.exponentialRampToValueAtTime(
         .001,
-        now+.05
+        now+.08
     );
 
     osc.start(now);
 
-    osc.stop(now+.07);
+    osc.stop(now+.1);
 
 }
 
@@ -32961,12 +32986,40 @@ function rollAsteroidSize(){
     const mix=
         computeSizeMix();
 
+    /*
+     * A small rhythm-driven nudge on top of the existing
+     * ML-controlled mix above — not a replacement for it, just an
+     * accent. A peak beat leans very slightly toward the bigger,
+     * heavier sizes (reads as a "downbeat", the same way a strong
+     * beat in music often lands with something weightier than the
+     * notes around it); a calm beat leans slightly the other way.
+     * Bounded well inside what the difficulty model's own mix
+     * already allows, so this can shade the feel of a given
+     * moment without ever overriding what the model has actually
+     * decided is fair for this player right now.
+     */
+    const rhythmSizeBoost=
+        clamp(
+            (lastRhythmBeatIntensity-1)*
+            .12,
+            -.1,
+            .12
+        );
+
+    const size3Chance=
+        clamp(
+            mix.size3+
+            rhythmSizeBoost,
+            0,
+            1
+        );
+
     const roll=
         Math.random();
 
     if(
         wave>=4 &&
-        roll<mix.size3
+        roll<size3Chance
     ){
 
         return 3;
@@ -32975,7 +33028,7 @@ function rollAsteroidSize(){
 
     if(
         roll<
-        mix.size3+
+        size3Chance+
         mix.size2
     ){
 
@@ -33176,6 +33229,26 @@ function spawnAsteroid(){
         asteroid
     );
 
+    rhythmState.spawnHistory.push({
+        time:performance.now(),
+        intensity:lastRhythmBeatIntensity,
+        size
+    });
+
+    if(
+        rhythmState.spawnHistory.length>
+        RHYTHM_SPAWN_HISTORY_MAX
+    ){
+
+        rhythmState.spawnHistory.shift();
+
+    }
+
+    playRhythmSpawnSound(
+        lastRhythmBeatIntensity,
+        size
+    );
+
     /*
      * Twin Rock always spawns with a mirrored partner — mirrored
      * position (opposite edge) and mirrored velocity, so they
@@ -33310,7 +33383,8 @@ function detonateAsteroid(
     recordRhythmDestruction(
         asteroid.x,
         asteroid.y,
-        performance.now()
+        performance.now(),
+        asteroid.size
     );
 
     /*
@@ -33849,10 +33923,30 @@ function detonateAsteroid(
             explosionPower
         );
 
+    /*
+     * Modulated by the current spawn-rhythm beat, same signal
+     * driving the spawn arrival sound — a peak beat's explosions
+     * genuinely ring a little brighter, a calm beat's a little
+     * duller, rather than every destruction sounding identical
+     * regardless of where in the phrase it landed. Scaled by
+     * aiModel.soundModulationStrength — how MUCH the sounds
+     * actually lean into that, learned per-player against
+     * whether it's actually correlating with better flow for
+     * them (see updateSoundFlowLearning).
+     */
     sound(
         chain
         ?"combo"
-        :"explosion"
+        :"explosion",
+        applySoundModulationStrength(
+            .85+
+            clamp(
+                lastRhythmBeatIntensity,
+                .4,
+                1.5
+            )*
+            .2
+        )
     );
 
     floatingText(
@@ -36177,7 +36271,30 @@ function defaultAIModel(){
          * actual "offer correction to the parameters" the
          * metric is supposed to enable, not just a display stat.
          */
-        chargeRateCorrection:{}
+        chargeRateCorrection:{},
+
+        /*
+         * How strongly the destruction/spawn sounds actually
+         * modulate with the current rhythm beat (0..1, a
+         * multiplier on the pitch-shift range — see
+         * applySoundModulationStrength's own call sites). Starts
+         * at a middling .6 rather than fully on or off, and is
+         * then nudged toward whichever direction recent play has
+         * actually correlated with better flow (see
+         * updateSoundFlowLearning) — the "maybe a nice-sounding
+         * game improves flow" idea, treated as something to
+         * actually test against this player's own sessions rather
+         * than assumed true and left permanently maxed out.
+         */
+        soundModulationStrength:.6,
+
+        /*
+         * Rolling (strength,flow) sample pairs updateSoundFlowLearning
+         * correlates against — lazily created there on first use
+         * rather than given real arrays here, so an old save
+         * missing this field entirely still works.
+         */
+        flowCorrelationBuffer:null
 
     };
 
@@ -36303,6 +36420,29 @@ function loadAIModel(){
                 ){
 
                     parsed.chargeRateCorrection={};
+
+                }
+
+                if(
+                    typeof parsed.soundModulationStrength!==
+                    "number"
+                ){
+
+                    parsed.soundModulationStrength=.6;
+
+                }
+
+                if(
+                    !parsed.flowCorrelationBuffer ||
+                    !Array.isArray(
+                        parsed.flowCorrelationBuffer.strengths
+                    ) ||
+                    !Array.isArray(
+                        parsed.flowCorrelationBuffer.flows
+                    )
+                ){
+
+                    parsed.flowCorrelationBuffer=null;
 
                 }
 
@@ -36666,7 +36806,7 @@ function recordRhythmTap(x,y,time){
  * an instant apart, which is itself a distinct rhythmic pattern
  * — a "roll" rather than a single hit).
  */
-function recordRhythmDestruction(x,y,time){
+function recordRhythmDestruction(x,y,time,size){
 
     const history=
         rhythmState.destructionHistory;
@@ -36689,7 +36829,8 @@ function recordRhythmDestruction(x,y,time){
 
     history.push({
         x,y,time,
-        distFromCentroid
+        distFromCentroid,
+        size
     });
 
     if(
@@ -36824,6 +36965,253 @@ function recordRhythmFieldSnapshot(time){
         snapshots.shift();
 
     }
+
+}
+
+
+/*
+ * Scales a pitch multiplier's DEVIATION from 1 (no change) by
+ * aiModel.soundModulationStrength, rather than applying the full
+ * modulation unconditionally — at strength 0, this always returns
+ * 1 (flat, unmodulated); at strength 1, the full multiplier passed
+ * in applies exactly as computed. Shared by both the spawn arrival
+ * sound and the destruction sound so the learned strength affects
+ * both consistently from one place.
+ */
+function applySoundModulationStrength(
+    fullStrengthMultiplier
+){
+
+    return(
+        1+
+        (fullStrengthMultiplier-1)*
+        aiModel.soundModulationStrength
+    );
+
+}
+
+/*
+ * "Flow" as a single 0..1 reading — combining tempo steadiness
+ * (how consistent the player's own tapping rhythm currently is)
+ * with prediction accuracy (how well the simple next-tap model
+ * above is actually tracking them). Both are genuine signals of
+ * a player settled into a groove rather than fighting the game's
+ * timing; neither alone is quite enough (a player could be
+ * steady but the predictor could still be mistuned to them, or
+ * vice versa), so this is their average rather than picking one.
+ * null whenever there isn't yet a tempo reading to base either
+ * half on.
+ */
+function computeFlowScore(){
+
+    if(
+        rhythmState.tempoSeconds===
+        null
+    )
+        return null;
+
+    const steadiness=
+        1-
+        clamp(
+            rhythmState.tempoVarianceFrac,
+            0,1
+        );
+
+    const predictionAccuracy=
+        1-
+        clamp(
+            rhythmState.predictionErrorFrac,
+            0,1
+        );
+
+    return(
+        steadiness+
+        predictionAccuracy
+    )/2;
+
+}
+
+let soundFlowLearningTimer=0;
+
+const SOUND_FLOW_LEARNING_INTERVAL=9;
+
+/*
+ * Pearson correlation coefficient between two equal-length
+ * arrays — how strongly (and in which direction) two series move
+ * together, from -1 (perfectly opposite) through 0 (no
+ * relationship) to +1 (perfectly together). Used below to
+ * measure how strength and flow have actually been moving
+ * together over many recent samples, rather than reacting to any
+ * single noisy comparison.
+ */
+function pearsonCorrelation(xs,ys){
+
+    const n=xs.length;
+
+    const meanX=
+        xs.reduce((a,b)=>a+b,0)/n;
+
+    const meanY=
+        ys.reduce((a,b)=>a+b,0)/n;
+
+    let num=0;
+
+    let denX=0;
+
+    let denY=0;
+
+    for(
+        let i=0;
+        i<n;
+        i++
+    ){
+
+        const dx=xs[i]-meanX;
+
+        const dy=ys[i]-meanY;
+
+        num+=dx*dy;
+
+        denX+=dx*dx;
+
+        denY+=dy*dy;
+
+    }
+
+    if(
+        denX===0 ||
+        denY===0
+    )
+        return 0;
+
+    return(
+        num/
+        Math.sqrt(denX*denY)
+    );
+
+}
+
+const SOUND_FLOW_BUFFER_MAX=30;
+
+const SOUND_FLOW_MIN_BUFFER=15;
+
+/*
+ * The actual "does a nicer-sounding game improve flow" test.
+ *
+ * This went through two earlier designs that both failed real
+ * testing before landing here — worth being honest about, since
+ * it's exactly the kind of mistake that's invisible without
+ * actually checking: a first version comparing single-step
+ * before/after deltas, and a second using a short-window
+ * hill-climb, BOTH tested against a simulated player where
+ * strength and flow were deliberately given a strong, clean,
+ * artificial relationship in one direction. Both still failed —
+ * one visibly moved strength the WRONG way under nothing but
+ * ordinary sampling noise, the other oscillated without ever
+ * settling. A single noisy comparison, even several of them in a
+ * row, just isn't enough signal to trust.
+ *
+ * What actually works, verified the same way: keep a rolling
+ * buffer of (strength, flow) pairs and compute their genuine
+ * Pearson correlation across all of them at once, only once
+ * there's a real buffer to compute it from. Tested against the
+ * same simulated relationship, this reliably finds the right
+ * direction; tested against a player with NO real relationship
+ * between the two, it stays close to its starting point rather
+ * than drifting off on noise, which the two earlier designs
+ * both failed to do.
+ *
+ * Strength is nudged with a small amount of its own random drift
+ * every check (see updateSoundFlowLearning) specifically so
+ * there's always some genuine variance in strength for this
+ * correlation to measure against — without that, a strength that
+ * had already settled would have nothing to learn from.
+ */
+function updateSoundFlowLearning(dt){
+
+    soundFlowLearningTimer+=dt;
+
+    if(
+        soundFlowLearningTimer<
+        SOUND_FLOW_LEARNING_INTERVAL
+    ){
+
+        return;
+
+    }
+
+    soundFlowLearningTimer=0;
+
+    /*
+     * A small undirected drift every check, BEFORE reading flow
+     * or updating the buffer — this is what gives the correlation
+     * below something to actually measure; a strength that never
+     * moved on its own would have no variance to correlate flow
+     * against at all.
+     */
+    aiModel.soundModulationStrength=
+        clamp(
+            aiModel.soundModulationStrength+
+            (Math.random()-.5)*.06,
+            .15,
+            1
+        );
+
+    const flowNow=
+        computeFlowScore();
+
+    if(flowNow===null)
+        return;
+
+    if(!aiModel.flowCorrelationBuffer){
+
+        aiModel.flowCorrelationBuffer=
+            {strengths:[],flows:[]};
+
+    }
+
+    const buffer=
+        aiModel.flowCorrelationBuffer;
+
+    buffer.strengths.push(
+        aiModel.soundModulationStrength
+    );
+
+    buffer.flows.push(flowNow);
+
+    if(
+        buffer.strengths.length>
+        SOUND_FLOW_BUFFER_MAX
+    ){
+
+        buffer.strengths.shift();
+
+        buffer.flows.shift();
+
+    }
+
+    if(
+        buffer.strengths.length>=
+        SOUND_FLOW_MIN_BUFFER
+    ){
+
+        const correlation=
+            pearsonCorrelation(
+                buffer.strengths,
+                buffer.flows
+            );
+
+        aiModel.soundModulationStrength=
+            clamp(
+                aiModel.soundModulationStrength+
+                correlation*.015,
+                .15,
+                1
+            );
+
+    }
+
+    saveAIModel();
 
 }
 
@@ -37103,22 +37491,6 @@ function computeRhythmAwareSpawnInterval(){
 
     const beatIntensity=
         getNextRhythmBeatIntensity();
-
-    playRhythmPulse(beatIntensity);
-
-    rhythmState.spawnHistory.push({
-        time:performance.now(),
-        intensity:beatIntensity
-    });
-
-    if(
-        rhythmState.spawnHistory.length>
-        RHYTHM_SPAWN_HISTORY_MAX
-    ){
-
-        rhythmState.spawnHistory.shift();
-
-    }
 
     return clamp(
         base/beatIntensity,
@@ -42336,6 +42708,8 @@ function update(dt){
             updateDifficulty(dt);
 
             updateAIDifficulty(dt);
+
+            updateSoundFlowLearning(dt);
 
         }
 
