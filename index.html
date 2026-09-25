@@ -29400,6 +29400,161 @@ document
 
 let audioContext=null;
 
+/*
+ * A short buffer of white noise, generated once and reused for
+ * every percussive sound rather than regenerated per hit — pure
+ * oscillator tones (what every sound in this file used
+ * previously) simply can't produce the gritty, "something
+ * physical just broke" texture a real impact needs; that texture
+ * comes specifically from noise, filtered and shaped per sound,
+ * layered under a tonal component rather than replacing it.
+ * Created lazily on first use since it needs a live
+ * audioContext to build the buffer against.
+ */
+let noiseBuffer=null;
+
+function getNoiseBuffer(){
+
+    if(
+        noiseBuffer ||
+        !audioContext
+    )
+        return noiseBuffer;
+
+    const length=
+        audioContext.sampleRate*.5;
+
+    noiseBuffer=
+        audioContext.createBuffer(
+            1,
+            length,
+            audioContext.sampleRate
+        );
+
+    const data=
+        noiseBuffer.getChannelData(0);
+
+    for(
+        let i=0;
+        i<length;
+        i++
+    ){
+
+        data[i]=
+            Math.random()*2-1;
+
+    }
+
+    return noiseBuffer;
+
+}
+
+/*
+ * The shared "where is this relative to the player" read every
+ * spatial sound is built from — pan (stereo left/right, from X
+ * position), a distance-based volume falloff, and a Doppler pitch
+ * shift from how fast the asteroid is currently closing on or
+ * receding from that point. There's no literal ship on screen
+ * during field play (this is a tap-defense game, not a piloted
+ * one), but every asteroid is already aimed roughly at (W/2,H/2)
+ * — see the Asteroid constructor's own targetX/targetY — so that
+ * point IS the game's real implicit "core" a player is defending,
+ * and the natural reference for all of this.
+ */
+function computeSpatialAudioParams(
+    x,y,vx,vy
+){
+
+    const refX=W/2;
+
+    const refY=H/2;
+
+    const dx=x-refX;
+
+    const dy=y-refY;
+
+    const dist=
+        Math.hypot(dx,dy)||1;
+
+    const maxDist=
+        Math.hypot(W,H)*.5;
+
+    /*
+     * Pan clamped well short of full hard-left/right — even an
+     * asteroid right at the screen edge should still read as
+     * "in front of, slightly to the side of" the player, not
+     * behind one ear entirely.
+     */
+    const pan=
+        clamp(
+            dx/(W*.5),
+            -.85,
+            .85
+        );
+
+    /*
+     * Closer asteroids read louder — a real proximity cue, not
+     * just a stereo position. Floored well above 0 so a distant
+     * spawn is still clearly audible (this is a warning cue, it
+     * shouldn't be missable just for being far away), only
+     * meaningfully quieter than something already close.
+     */
+    const distanceGain=
+        clamp(
+            1-
+            (dist/maxDist)*.55,
+            .45,
+            1
+        );
+
+    let dopplerMultiplier=1;
+
+    if(
+        vx!==undefined &&
+        vy!==undefined
+    ){
+
+        const toRefX=
+            refX-x;
+
+        const toRefY=
+            refY-y;
+
+        const toRefDist=
+            Math.hypot(
+                toRefX,toRefY
+            )||1;
+
+        /*
+         * Velocity component along the line toward the
+         * reference point — positive means genuinely closing in,
+         * negative means moving away, regardless of the
+         * asteroid's full speed or heading.
+         */
+        const radialVelocity=
+            (
+                vx*toRefX+
+                vy*toRefY
+            )/toRefDist;
+
+        dopplerMultiplier=
+            1+
+            clamp(
+                radialVelocity/260,
+                -.3,
+                .3
+            );
+
+    }
+
+    return{
+        pan,
+        distanceGain,
+        dopplerMultiplier
+    };
+
+}
+
 
 function initAudio(){
 
@@ -29656,7 +29811,31 @@ function sound(type,pitchMultiplier=1){
  * duller on top of it, so a peak beat's arrivals genuinely sound
  * different from a calm one's, not just happen more often.
  */
-function playRhythmSpawnSound(intensity,size){
+/*
+ * The "something just arrived" sound — a genuine harmonic swell
+ * now rather than a single oscillator note, meant to actually
+ * read as a bowed string's character: a slow attack (a bow
+ * taking a moment to catch and speak, not an instant pluck), a
+ * fundamental plus two quieter harmonics above it (a single sine
+ * wave has none of a real instrument's overtone content, which is
+ * most of what makes an instrument sound like an instrument
+ * rather than a pure tone), and a light vibrato — a slow, small
+ * wobble in pitch, the same physical gesture a violinist's hand
+ * makes on the string.
+ *
+ * size sets the base note (bigger rocks land lower), the current
+ * beat's intensity brightens or dulls it on top of that (scaled
+ * by the learned soundModulationStrength, same as before), and
+ * position/velocity now drive real spatial placement: stereo pan
+ * from where it is, volume from how close it is, and a Doppler
+ * shift from whether it's actually closing in or drifting away —
+ * an asteroid arriving from the left and swinging past sounds
+ * different from one bearing straight down the middle, not just
+ * differently timed.
+ */
+function playAsteroidSpawnSound(
+    x,y,vx,vy,intensity,size
+){
 
     if(!audioContext)
         return;
@@ -29667,68 +29846,562 @@ function playRhythmSpawnSound(intensity,size){
     const now=
         audioContext.currentTime;
 
-    const osc=
-        audioContext.createOscillator();
-
-    const gain=
-        audioContext.createGain();
-
-    osc.connect(gain);
-
-    gain.connect(
-        audioContext.destination
-    );
-
-    osc.type="sine";
+    const spatial=
+        computeSpatialAudioParams(
+            x,y,vx,vy
+        );
 
     const sizeBasePitch=
-        920-
-        clamp(size,1,3)*190;
+        620-
+        clamp(size,1,3)*130;
 
     /*
      * Size sets the base note regardless of learning (a physical
      * cue, not a "how much rhythm flavour" one) — only the
-     * intensity-driven part of the multiplier is scaled by
-     * soundModulationStrength, via the same shared helper the
-     * destruction sound above uses.
+     * intensity-driven part of the multiplier, and the Doppler
+     * shift, are scaled by soundModulationStrength.
      */
     const pitch=
         sizeBasePitch*
         applySoundModulationStrength(
-            .88+
+            .9+
             clamp(intensity,.4,1.5)*
-            .16
+            .14
+        )*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
         );
 
-    osc.frequency.setValueAtTime(
-        pitch,
-        now
-    );
+    const pan=
+        audioContext.createStereoPanner?
+        audioContext.createStereoPanner():
+        null;
 
-    osc.frequency.exponentialRampToValueAtTime(
-        pitch*.8,
-        now+.06
-    );
+    const master=
+        audioContext.createGain();
+
+    if(pan){
+
+        pan.pan.setValueAtTime(
+            spatial.pan,
+            now
+        );
+
+        master.connect(pan);
+
+        pan.connect(
+            audioContext.destination
+        );
+
+    }else{
+
+        master.connect(
+            audioContext.destination
+        );
+
+    }
+
+    const attackTime=.11;
+
+    const totalDuration=.34;
 
     /*
      * Kept quiet enough to read as ambient texture rather than a
-     * hit-confirm sound (that's what the explosion sound below is
-     * for) — this is a "something just entered the field" cue,
-     * not an achievement.
+     * hit-confirm sound (that's what destruction is for) — this
+     * is a "something just entered the field" cue, not an
+     * achievement. Scaled by distance — closer arrivals genuinely
+     * read louder, a real proximity cue.
      */
-    gain.gain.setValueAtTime(
-        .03,
+    const peakGain=
+        .034*
+        spatial.distanceGain;
+
+    master.gain.setValueAtTime(
+        .0001,
         now
     );
 
-    gain.gain.exponentialRampToValueAtTime(
-        .001,
-        now+.08
+    master.gain.exponentialRampToValueAtTime(
+        peakGain,
+        now+attackTime
     );
 
-    osc.start(now);
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+totalDuration
+    );
 
-    osc.stop(now+.1);
+    /*
+     * A slow, small vibrato on the fundamental only — an LFO
+     * oscillator feeding a gain node wired directly into the
+     * fundamental oscillator's own frequency AudioParam below
+     * (the standard Web Audio technique for frequency
+     * modulation), created here, before the harmonics loop, so
+     * that connection can actually be made where the fundamental
+     * oscillator itself is in scope, rather than reaching for a
+     * separate reference afterward. Subtle — a few Hz of wobble,
+     * a few cycles a second — rather than a wide, obvious warble.
+     */
+    const vibratoLFO=
+        audioContext.createOscillator();
+
+    const vibratoGain=
+        audioContext.createGain();
+
+    vibratoLFO.frequency.value=5.5;
+
+    vibratoGain.gain.value=
+        pitch*.012;
+
+    vibratoLFO.connect(vibratoGain);
+
+    /*
+     * Fundamental + two harmonics at decreasing amplitude — real
+     * overtone content, which is most of what separates an
+     * "instrument" timbre from a plain oscillator tone.
+     */
+    const harmonics=
+        [
+            {mult:1,gain:1,type:"triangle"},
+            {mult:2,gain:.4,type:"sine"},
+            {mult:3,gain:.18,type:"sine"}
+        ];
+
+    harmonics.forEach(
+        h=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            const hGain=
+                audioContext.createGain();
+
+            osc.type=h.type;
+
+            osc.frequency.setValueAtTime(
+                pitch*h.mult,
+                now
+            );
+
+            osc.frequency.linearRampToValueAtTime(
+                pitch*h.mult*.94,
+                now+totalDuration
+            );
+
+            /*
+             * Vibrato only reaches the fundamental — connecting
+             * it to the harmonics too would drift them out of
+             * true harmonic ratio with each other as the
+             * fundamental wobbles, which would read as detuning
+             * rather than vibrato.
+             */
+            if(h.mult===1){
+
+                vibratoGain.connect(
+                    osc.frequency
+                );
+
+            }
+
+            hGain.gain.value=
+                h.gain;
+
+            osc.connect(hGain);
+
+            hGain.connect(master);
+
+            osc.start(now);
+
+            osc.stop(
+                now+totalDuration+.02
+            );
+
+        }
+    );
+
+    vibratoLFO.start(now);
+
+    vibratoLFO.stop(
+        now+totalDuration+.02
+    );
+
+}
+
+/*
+ * The actual hit sound — a low tonal "thump" (the physical mass
+ * of the rock) layered with filtered noise (the actual gritty,
+ * "something just broke" texture, which no combination of pure
+ * oscillator tones can produce — that texture specifically comes
+ * from noise). Both fire together with a near-instant attack and
+ * a quick decay, the percussive envelope shape that separates a
+ * drum hit from the slow-swelling spawn sound above. Bigger
+ * rocks get a deeper thump and a lower, rumblier noise band;
+ * smaller ones a higher crack. Same spatial treatment as spawn —
+ * pan, distance, and Doppler from wherever this actually happened
+ * and however fast it was moving.
+ */
+function playAsteroidDestructionSound(
+    x,y,vx,vy,intensity,size,isChain
+){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const spatial=
+        computeSpatialAudioParams(
+            x,y,vx,vy
+        );
+
+    const pan=
+        audioContext.createStereoPanner?
+        audioContext.createStereoPanner():
+        null;
+
+    const master=
+        audioContext.createGain();
+
+    if(pan){
+
+        pan.pan.setValueAtTime(
+            spatial.pan,
+            now
+        );
+
+        master.connect(pan);
+
+        pan.connect(
+            audioContext.destination
+        );
+
+    }else{
+
+        master.connect(
+            audioContext.destination
+        );
+
+    }
+
+    /*
+     * .085 rather than a rounder number — tuned specifically so
+     * the tonal thump layer alone (peakGain × its own .75 mix
+     * ratio below) lands close to the .07 flat gain every other
+     * sound in this file already uses, keeping this in the same
+     * overall loudness family rather than standing out as
+     * conspicuously louder now that the noise layer's earlier
+     * gain-staging bug (see noiseGain's own comment) no longer
+     * silently crushes it down to near-nothing.
+     */
+    const peakGain=
+        .085*
+        spatial.distanceGain;
+
+    master.gain.setValueAtTime(
+        peakGain,
+        now
+    );
+
+    const duration=
+        isChain?.16:.24;
+
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    /*
+     * The tonal "thump" — size sets the base pitch (bigger =
+     * lower), the beat intensity and Doppler shift ride on top of
+     * that, both scaled by the learned soundModulationStrength.
+     * A chain-reaction hit uses a brighter triangle rather than
+     * the primary hit's sine — the "combo" sound's original
+     * character, kept rather than lost in this redesign.
+     */
+    const thumpOsc=
+        audioContext.createOscillator();
+
+    thumpOsc.type=
+        isChain?"triangle":"sine";
+
+    const thumpBase=
+        isChain?
+        520:
+        170-clamp(size,1,3)*40;
+
+    const thumpPitch=
+        thumpBase*
+        applySoundModulationStrength(
+            .88+
+            clamp(intensity,.4,1.5)*
+            .2
+        )*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    thumpOsc.frequency.setValueAtTime(
+        thumpPitch,
+        now
+    );
+
+    thumpOsc.frequency.exponentialRampToValueAtTime(
+        thumpPitch*
+        (isChain?2.1:.4),
+        now+duration
+    );
+
+    const thumpGain=
+        audioContext.createGain();
+
+    thumpGain.gain.value=
+        isChain?.5:.75;
+
+    thumpOsc.connect(thumpGain);
+
+    thumpGain.connect(master);
+
+    thumpOsc.start(now);
+
+    thumpOsc.stop(now+duration+.02);
+
+    /*
+     * The noise layer — the actual "rocky" texture. A bandpass
+     * filter picks out a size-dependent band of the shared white
+     * noise buffer: a wide, low band for a big rock (reads as a
+     * dull, rumbling crunch) narrowing and rising for smaller
+     * ones (reads as a sharper crack). This is genuinely a
+     * separate, independent grain layer, not just a filtered copy
+     * of the tonal thump above — real impact sounds are made of
+     * both a resonant body and an inharmonic noise burst
+     * together, not one or the other.
+     */
+    const buffer=
+        getNoiseBuffer();
+
+    if(buffer){
+
+        const noiseSource=
+            audioContext.createBufferSource();
+
+        noiseSource.buffer=buffer;
+
+        const filter=
+            audioContext.createBiquadFilter();
+
+        filter.type="bandpass";
+
+        const filterBase=
+            2600-
+            clamp(size,1,3)*700;
+
+        filter.frequency.setValueAtTime(
+            filterBase,
+            now
+        );
+
+        filter.Q.value=
+            isChain?2.2:1.1;
+
+        const noiseGain=
+            audioContext.createGain();
+
+        /*
+         * A pure mix ratio, same scale as thumpGain above — NOT
+         * multiplied by peakGain here, since noiseGain connects
+         * into master below, which already carries peakGain in
+         * its own envelope. Multiplying it in twice (once here,
+         * once via that connection) would have quietly crushed
+         * this whole layer by roughly peakGain's own factor again
+         * — genuinely inaudible for anything past a close-range
+         * hit, which defeats the entire point of a texture layer
+         * meant to be heard alongside the thump, not buried
+         * under it.
+         */
+        noiseGain.gain.setValueAtTime(
+            (isChain?.35:.55)*2.2,
+            now
+        );
+
+        noiseGain.gain.exponentialRampToValueAtTime(
+            .0001,
+            now+duration*.7
+        );
+
+        noiseSource.connect(filter);
+
+        filter.connect(noiseGain);
+
+        noiseGain.connect(master);
+
+        noiseSource.start(now);
+
+        noiseSource.stop(
+            now+duration+.02
+        );
+
+    }
+
+}
+
+/*
+ * The "hit landed but didn't finish it" sound — Durable/Elite
+ * asteroids absorbing a hit rather than dying. Related to the
+ * destruction sound (same tonal-plus-noise idea, same spatial
+ * treatment) but deliberately doesn't deliver the full
+ * satisfaction of an actual kill: a shorter, higher, more metallic
+ * "clang" rather than a rock genuinely breaking apart — a real
+ * ricochet off something that held, not an impact that won.
+ */
+function playAsteroidDeflectionSound(
+    x,y,vx,vy,intensity,size
+){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const spatial=
+        computeSpatialAudioParams(
+            x,y,vx,vy
+        );
+
+    const pan=
+        audioContext.createStereoPanner?
+        audioContext.createStereoPanner():
+        null;
+
+    const master=
+        audioContext.createGain();
+
+    if(pan){
+
+        pan.pan.setValueAtTime(
+            spatial.pan,
+            now
+        );
+
+        master.connect(pan);
+
+        pan.connect(
+            audioContext.destination
+        );
+
+    }else{
+
+        master.connect(
+            audioContext.destination
+        );
+
+    }
+
+    const peakGain=
+        .06*
+        spatial.distanceGain;
+
+    const duration=.14;
+
+    master.gain.setValueAtTime(
+        peakGain,
+        now
+    );
+
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    const clangOsc=
+        audioContext.createOscillator();
+
+    clangOsc.type="square";
+
+    const clangBase=
+        520-
+        clamp(size,1,3)*70;
+
+    const clangPitch=
+        clangBase*
+        applySoundModulationStrength(
+            .9+
+            clamp(intensity,.4,1.5)*
+            .18
+        )*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    clangOsc.frequency.setValueAtTime(
+        clangPitch,
+        now
+    );
+
+    clangOsc.frequency.exponentialRampToValueAtTime(
+        clangPitch*1.4,
+        now+duration
+    );
+
+    const clangGain=
+        audioContext.createGain();
+
+    clangGain.gain.value=.6;
+
+    clangOsc.connect(clangGain);
+
+    clangGain.connect(master);
+
+    clangOsc.start(now);
+
+    clangOsc.stop(now+duration+.02);
+
+    const buffer=
+        getNoiseBuffer();
+
+    if(buffer){
+
+        const noiseSource=
+            audioContext.createBufferSource();
+
+        noiseSource.buffer=buffer;
+
+        const filter=
+            audioContext.createBiquadFilter();
+
+        filter.type="highpass";
+
+        filter.frequency.value=
+            1800-
+            clamp(size,1,3)*300;
+
+        const noiseGain=
+            audioContext.createGain();
+
+        noiseGain.gain.setValueAtTime(
+            .5,
+            now
+        );
+
+        noiseGain.gain.exponentialRampToValueAtTime(
+            .0001,
+            now+duration*.5
+        );
+
+        noiseSource.connect(filter);
+
+        filter.connect(noiseGain);
+
+        noiseGain.connect(master);
+
+        noiseSource.start(now);
+
+        noiseSource.stop(
+            now+duration+.02
+        );
+
+    }
 
 }
 
@@ -33244,7 +33917,11 @@ function spawnAsteroid(){
 
     }
 
-    playRhythmSpawnSound(
+    playAsteroidSpawnSound(
+        asteroid.x,
+        asteroid.y,
+        asteroid.vx,
+        asteroid.vy,
         lastRhythmBeatIntensity,
         size
     );
@@ -33369,7 +34046,14 @@ function detonateAsteroid(
 
         asteroid.cracked=true;
 
-        sound("damage");
+        playAsteroidDeflectionSound(
+            asteroid.x,
+            asteroid.y,
+            asteroid.vx,
+            asteroid.vy,
+            lastRhythmBeatIntensity,
+            asteroid.size
+        );
 
         return;
 
@@ -33912,6 +34596,41 @@ function detonateAsteroid(
                 child
             );
 
+            /*
+             * Children from a split previously bypassed all of
+             * this entirely — created via this direct push rather
+             * than through spawnAsteroid(), they got no rhythm
+             * tracking and no spawn sound at all, silently
+             * arriving with no arrival cue while every other
+             * asteroid on screen had one. Same treatment as a
+             * normal spawn now, size included (each child is one
+             * size smaller than its parent, already reflected in
+             * the constructor call above).
+             */
+            rhythmState.spawnHistory.push({
+                time:performance.now(),
+                intensity:lastRhythmBeatIntensity,
+                size:child.size
+            });
+
+            if(
+                rhythmState.spawnHistory.length>
+                RHYTHM_SPAWN_HISTORY_MAX
+            ){
+
+                rhythmState.spawnHistory.shift();
+
+            }
+
+            playAsteroidSpawnSound(
+                child.x,
+                child.y,
+                child.vx,
+                child.vy,
+                lastRhythmBeatIntensity,
+                child.size
+            );
+
         }
 
     }
@@ -33924,29 +34643,21 @@ function detonateAsteroid(
         );
 
     /*
-     * Modulated by the current spawn-rhythm beat, same signal
-     * driving the spawn arrival sound — a peak beat's explosions
-     * genuinely ring a little brighter, a calm beat's a little
-     * duller, rather than every destruction sounding identical
-     * regardless of where in the phrase it landed. Scaled by
-     * aiModel.soundModulationStrength — how MUCH the sounds
-     * actually lean into that, learned per-player against
-     * whether it's actually correlating with better flow for
-     * them (see updateSoundFlowLearning).
+     * Tonal thump + rocky noise texture, spatially placed and
+     * Doppler-shifted from wherever this actually happened and
+     * however fast the asteroid was moving — see
+     * playAsteroidDestructionSound's own comment for the full
+     * design. Replaces the old flat sound("explosion"/"combo")
+     * call entirely.
      */
-    sound(
+    playAsteroidDestructionSound(
+        asteroid.x,
+        asteroid.y,
+        asteroid.vx,
+        asteroid.vy,
+        lastRhythmBeatIntensity,
+        asteroid.size,
         chain
-        ?"combo"
-        :"explosion",
-        applySoundModulationStrength(
-            .85+
-            clamp(
-                lastRhythmBeatIntensity,
-                .4,
-                1.5
-            )*
-            .2
-        )
     );
 
     floatingText(
