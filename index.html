@@ -29851,9 +29851,21 @@ function playAsteroidSpawnSound(
             x,y,vx,vy
         );
 
+    const clampedSize=
+        clamp(size,1,3);
+
+    /*
+     * Lowered substantially from the first pass (was 620-130×size,
+     * closer to a violin's own range and part of why it read as
+     * squeaky) — this sits in a soft, low register instead, along
+     * with the timbre changes below (sine instead of triangle,
+     * much quieter overtones, a lowpass smoothing the whole
+     * signal) meant to land closer to a soft, breathy "voorraaah"
+     * swell than a bright bowed note.
+     */
     const sizeBasePitch=
-        620-
-        clamp(size,1,3)*130;
+        340-
+        clampedSize*70;
 
     /*
      * Size sets the base note regardless of learning (a physical
@@ -29877,8 +29889,29 @@ function playAsteroidSpawnSound(
         audioContext.createStereoPanner():
         null;
 
+    const lowpass=
+        audioContext.createBiquadFilter();
+
+    lowpass.type="lowpass";
+
+    /*
+     * Rounds off whatever brightness is left in the harmonics
+     * below — bigger rocks get an even duller cutoff on top of
+     * their already-lower pitch, smaller ones stay a little more
+     * present, another dimension (alongside pitch and duration)
+     * that actually separates them by ear rather than relying on
+     * pitch alone to carry all of it.
+     */
+    lowpass.frequency.value=
+        1100-
+        clampedSize*220;
+
+    lowpass.Q.value=.3;
+
     const master=
         audioContext.createGain();
+
+    master.connect(lowpass);
 
     if(pan){
 
@@ -29887,7 +29920,7 @@ function playAsteroidSpawnSound(
             now
         );
 
-        master.connect(pan);
+        lowpass.connect(pan);
 
         pan.connect(
             audioContext.destination
@@ -29895,15 +29928,27 @@ function playAsteroidSpawnSound(
 
     }else{
 
-        master.connect(
+        lowpass.connect(
             audioContext.destination
         );
 
     }
 
-    const attackTime=.11;
+    /*
+     * Both scale with size now, not just pitch — a bigger rock's
+     * arrival genuinely takes longer to swell in and lingers
+     * longer, a smaller one is quicker both to rise and fade. Real
+     * differentiation across more than one dimension is what
+     * actually makes sizes distinguishable by ear; pitch alone
+     * wasn't enough.
+     */
+    const attackTime=
+        .13+
+        clampedSize*.035;
 
-    const totalDuration=.34;
+    const totalDuration=
+        .3+
+        clampedSize*.1;
 
     /*
      * Kept quiet enough to read as ambient texture rather than a
@@ -29913,7 +29958,7 @@ function playAsteroidSpawnSound(
      * read louder, a real proximity cue.
      */
     const peakGain=
-        .034*
+        .036*
         spatial.distanceGain;
 
     master.gain.setValueAtTime(
@@ -29948,7 +29993,7 @@ function playAsteroidSpawnSound(
     const vibratoGain=
         audioContext.createGain();
 
-    vibratoLFO.frequency.value=5.5;
+    vibratoLFO.frequency.value=4.8;
 
     vibratoGain.gain.value=
         pitch*.012;
@@ -29956,15 +30001,18 @@ function playAsteroidSpawnSound(
     vibratoLFO.connect(vibratoGain);
 
     /*
-     * Fundamental + two harmonics at decreasing amplitude — real
-     * overtone content, which is most of what separates an
-     * "instrument" timbre from a plain oscillator tone.
+     * Fundamental (now sine rather than triangle — triangle's
+     * extra odd-harmonic content was a real part of why this read
+     * as reedy/squeaky rather than soft) plus two much quieter
+     * harmonics than the first pass had (.4/.18 down to .18/.06)
+     * — real overtone content still separates this from a plain
+     * tone, but far less brightness riding on top of it now.
      */
     const harmonics=
         [
-            {mult:1,gain:1,type:"triangle"},
-            {mult:2,gain:.4,type:"sine"},
-            {mult:3,gain:.18,type:"sine"}
+            {mult:1,gain:1,type:"sine"},
+            {mult:2,gain:.18,type:"sine"},
+            {mult:3,gain:.06,type:"sine"}
         ];
 
     harmonics.forEach(
@@ -30055,6 +30103,9 @@ function playAsteroidDestructionSound(
             x,y,vx,vy
         );
 
+    const clampedSize=
+        clamp(size,1,3);
+
     const pan=
         audioContext.createStereoPanner?
         audioContext.createStereoPanner():
@@ -30089,35 +30140,64 @@ function playAsteroidDestructionSound(
      * the tonal thump layer alone (peakGain × its own .75 mix
      * ratio below) lands close to the .07 flat gain every other
      * sound in this file already uses, keeping this in the same
-     * overall loudness family rather than standing out as
-     * conspicuously louder now that the noise layer's earlier
-     * gain-staging bug (see noiseGain's own comment) no longer
-     * silently crushes it down to near-nothing.
+     * overall loudness family.
      */
     const peakGain=
         .085*
         spatial.distanceGain;
+
+    /*
+     * Scales with size now, not just a flat .24/.16 — a bigger
+     * rock's hit genuinely takes longer to fully die out, giving
+     * real, audible length difference between sizes on top of the
+     * pitch and filter differences below, rather than leaving
+     * pitch to carry the entire distinction alone.
+     */
+    const duration=
+        isChain?
+        .16:
+        .2+clampedSize*.075;
+
+    /*
+     * Computed here, ahead of master's own envelope below, rather
+     * than inline where the noise layer is actually built further
+     * down — master is the SHARED output stage both the thump and
+     * noise layers connect through, so its own decay has to span
+     * whichever of the two genuinely finishes last. Setting
+     * master's envelope to just `duration` while the noise layer
+     * tried to decay further out on its own would have silently
+     * cut the noise off early anyway once master itself reached
+     * near-zero, since everything passing through it is scaled by
+     * its envelope multiplicatively — extending the noise layer's
+     * own decay alone wouldn't actually have been audible.
+     */
+    const noiseDecayTime=
+        isChain?
+        duration*.7:
+        duration*1.15;
 
     master.gain.setValueAtTime(
         peakGain,
         now
     );
 
-    const duration=
-        isChain?.16:.24;
-
     master.gain.exponentialRampToValueAtTime(
         .0001,
-        now+duration
+        now+
+        Math.max(duration,noiseDecayTime)
     );
 
     /*
-     * The tonal "thump" — size sets the base pitch (bigger =
-     * lower), the beat intensity and Doppler shift ride on top of
-     * that, both scaled by the learned soundModulationStrength.
-     * A chain-reaction hit uses a brighter triangle rather than
-     * the primary hit's sine — the "combo" sound's original
-     * character, kept rather than lost in this redesign.
+     * The tonal "thump" — lowered substantially from the first
+     * pass (was 170-40×size dropping to 40% of that) and now
+     * drops further, to 28% by the end, aiming for a genuine deep
+     * "boook" rather than a brighter drum crack: size sets the
+     * base pitch (bigger = lower), the beat intensity and Doppler
+     * shift ride on top of that, both scaled by the learned
+     * soundModulationStrength. A chain-reaction hit uses a
+     * brighter triangle rather than the primary hit's sine — the
+     * "combo" sound's original character, kept rather than lost
+     * in this redesign.
      */
     const thumpOsc=
         audioContext.createOscillator();
@@ -30128,7 +30208,7 @@ function playAsteroidDestructionSound(
     const thumpBase=
         isChain?
         520:
-        170-clamp(size,1,3)*40;
+        150-clampedSize*32;
 
     const thumpPitch=
         thumpBase*
@@ -30148,7 +30228,7 @@ function playAsteroidDestructionSound(
 
     thumpOsc.frequency.exponentialRampToValueAtTime(
         thumpPitch*
-        (isChain?2.1:.4),
+        (isChain?2.1:.28),
         now+duration
     );
 
@@ -30167,15 +30247,19 @@ function playAsteroidDestructionSound(
     thumpOsc.stop(now+duration+.02);
 
     /*
-     * The noise layer — the actual "rocky" texture. A bandpass
-     * filter picks out a size-dependent band of the shared white
-     * noise buffer: a wide, low band for a big rock (reads as a
-     * dull, rumbling crunch) narrowing and rising for smaller
-     * ones (reads as a sharper crack). This is genuinely a
-     * separate, independent grain layer, not just a filtered copy
-     * of the tonal thump above — real impact sounds are made of
-     * both a resonant body and an inharmonic noise burst
-     * together, not one or the other.
+     * The noise layer — the actual "rocky", breathy "hhh" tail
+     * that follows the thump's own "boook". Switched from a
+     * bandpass to a lowpass, and pulled down substantially in
+     * cutoff (was 2600-700×size, centred quite bright and reading
+     * more as a sharp crack than a breath) — a lowpass instead
+     * lets everything below its cutoff through, which is what
+     * actually gives a dull, breathy "hhh" character rather than
+     * an isolated resonant "crack" band. Bigger rocks get a much
+     * lower cutoff (duller, more of a muffled exhale); smaller
+     * ones stay brighter and crisper. Decays a little past the
+     * thump's own duration (1.15× rather than .7×) so the breath
+     * genuinely trails out after the boom instead of cutting off
+     * together with it.
      */
     const buffer=
         getNoiseBuffer();
@@ -30190,11 +30274,12 @@ function playAsteroidDestructionSound(
         const filter=
             audioContext.createBiquadFilter();
 
-        filter.type="bandpass";
+        filter.type="lowpass";
 
         const filterBase=
-            2600-
-            clamp(size,1,3)*700;
+            isChain?
+            2200:
+            1500-clampedSize*380;
 
         filter.frequency.setValueAtTime(
             filterBase,
@@ -30202,7 +30287,7 @@ function playAsteroidDestructionSound(
         );
 
         filter.Q.value=
-            isChain?2.2:1.1;
+            isChain?1.4:.5;
 
         const noiseGain=
             audioContext.createGain();
@@ -30220,13 +30305,13 @@ function playAsteroidDestructionSound(
          * under it.
          */
         noiseGain.gain.setValueAtTime(
-            (isChain?.35:.55)*2.2,
+            (isChain?.35:.5)*2.2,
             now
         );
 
         noiseGain.gain.exponentialRampToValueAtTime(
             .0001,
-            now+duration*.7
+            now+noiseDecayTime
         );
 
         noiseSource.connect(filter);
@@ -30238,7 +30323,7 @@ function playAsteroidDestructionSound(
         noiseSource.start(now);
 
         noiseSource.stop(
-            now+duration+.02
+            now+noiseDecayTime+.02
         );
 
     }
