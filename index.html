@@ -29625,6 +29625,429 @@ function requestMotionAccess(){
 
 }
 
+/*
+ * Echo Rock — unlocked at ECHO_ROCK_UNLOCK_SCORE, spawning not on
+ * the normal timer at all but whenever the device's own
+ * microphone picks up a beat in whatever's playing nearby. There
+ * is no way for a webpage to listen to audio another app on the
+ * same device is playing directly — that's a deliberate browser
+ * privacy boundary, not a gap in this implementation — so this
+ * necessarily works by ear the same way a person would: picking
+ * up ambient sound through the mic and finding the beat in it.
+ * That means it only picks up music actually audible in the room
+ * (phone speaker, not headphones), it'll pick up the game's own
+ * sound effects too, and it's a genuinely noisier signal than
+ * anything else this rhythm system reads — which is exactly why
+ * this is entirely separate from spawnAsteroid's normal timer
+ * rather than folded into it: a false trigger here means one
+ * extra rock, not a corrupted read on the player's own tempo.
+ *
+ * Never requested up front — mic access is a meaningfully more
+ * sensitive ask than the motion permission above, so it's
+ * requested lazily, only the first time score actually crosses
+ * the threshold during play (see the hook in detonateAsteroid),
+ * and it fails silently and permanently if denied: no retry
+ * prompts, no nagging, the feature simply stays off for that
+ * session.
+ */
+const ECHO_ROCK_UNLOCK_SCORE=200000;
+
+let micPermissionRequested=false;
+
+let micAnalyser=null;
+
+let micDataArray=null;
+
+function requestMicAccess(){
+
+    if(micPermissionRequested)
+        return;
+
+    micPermissionRequested=true;
+
+    if(
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia ||
+        !audioContext
+    ){
+
+        return;
+
+    }
+
+    navigator.mediaDevices.getUserMedia(
+        {audio:true}
+    ).then(
+        stream=>{
+
+            const source=
+                audioContext.createMediaStreamSource(
+                    stream
+                );
+
+            micAnalyser=
+                audioContext.createAnalyser();
+
+            /*
+             * Small FFT — this only needs a coarse read on
+             * low-frequency energy for beat detection, not a
+             * detailed spectrum, and a smaller size means faster,
+             * cheaper analysis every frame.
+             */
+            micAnalyser.fftSize=256;
+
+            source.connect(micAnalyser);
+
+            micDataArray=
+                new Uint8Array(
+                    micAnalyser.frequencyBinCount
+                );
+
+        }
+    ).catch(
+        ()=>{}
+    );
+
+}
+
+let micEnergyEWMA=null;
+
+/*
+ * A short warm-up window rather than initializing the rolling
+ * average directly from the first sample — a single sample could
+ * easily land during a loud moment (a phone's mic starting up in
+ * the middle of a kick drum hit is entirely plausible), which
+ * would leave the whole baseline sitting too high for a while
+ * afterward and genuinely miss real beats until it settled back
+ * down. Averaging a short window first is far more robust to
+ * that, at the cost of a brief period with no detection at all
+ * while it fills.
+ */
+const MIC_WARMUP_SAMPLE_COUNT=15;
+
+let micWarmupBuffer=[];
+
+let lastEchoSpawnAt=-Infinity;
+
+const ECHO_SPAWN_COOLDOWN=.3;
+
+/*
+ * A simple, classic onset detector: track a slow-moving average
+ * of low-frequency energy (where a kick drum or bass line
+ * actually lives — the part of a mix that carries a beat most
+ * reliably), and treat a sudden spike well above that average as
+ * a beat. Deliberately simple rather than a full tempo-tracking
+ * algorithm — a mic signal picked up through a phone's own
+ * speaker-to-mic path, likely with the game's own sound effects
+ * mixed in too, isn't a clean enough source to reward a more
+ * elaborate model; a threshold-crossing spike detector is honest
+ * about how noisy this input actually is.
+ */
+function updateEchoRockSpawning(dt){
+
+    if(score<ECHO_ROCK_UNLOCK_SCORE)
+        return;
+
+    if(
+        !micAnalyser ||
+        !micDataArray
+    ){
+
+        return;
+
+    }
+
+    micAnalyser.getByteFrequencyData(
+        micDataArray
+    );
+
+    const lowBinCount=
+        Math.floor(
+            micDataArray.length*.5
+        );
+
+    let sum=0;
+
+    for(
+        let i=0;
+        i<lowBinCount;
+        i++
+    ){
+
+        sum+=micDataArray[i];
+
+    }
+
+    const energy=
+        sum/lowBinCount/255;
+
+    if(
+        micWarmupBuffer.length<
+        MIC_WARMUP_SAMPLE_COUNT
+    ){
+
+        micWarmupBuffer.push(energy);
+
+        if(
+            micWarmupBuffer.length===
+            MIC_WARMUP_SAMPLE_COUNT
+        ){
+
+            micEnergyEWMA=
+                micWarmupBuffer.reduce(
+                    (a,b)=>a+b,0
+                )/
+                micWarmupBuffer.length;
+
+        }
+
+        return;
+
+    }
+
+    const nowSeconds=
+        performance.now()/1000;
+
+    const isBeat=
+        energy>
+        micEnergyEWMA*1.35 &&
+        energy>.12 &&
+        (
+            nowSeconds-
+            lastEchoSpawnAt
+        )>ECHO_SPAWN_COOLDOWN;
+
+    micEnergyEWMA+=
+        (energy-micEnergyEWMA)*
+        .08;
+
+    if(isBeat){
+
+        lastEchoSpawnAt=
+            nowSeconds;
+
+        spawnEchoRock();
+
+    }
+
+}
+
+function spawnEchoRock(){
+
+    const pos=
+        edgeSpawn();
+
+    const size=
+        rollAsteroidSize();
+
+    const asteroid=
+        new Asteroid(
+            pos.x,
+            pos.y,
+            size,
+            getAsteroidType(),
+            "echo"
+        );
+
+    asteroids.push(
+        asteroid
+    );
+
+    finishAsteroidSpawn(asteroid);
+
+}
+
+/*
+ * How confident tempo tracking needs to be (predictionErrorFrac
+ * below this) before player_leads mode will actually let the
+ * backing bend toward the player's own tempo — deliberately a
+ * real bar rather than "any reading at all", since the whole
+ * point of this mode is testing whether that tracking is
+ * genuinely good, not applying it the moment any tempo estimate
+ * exists at all, however shaky.
+ */
+const MUSIC_PLAYER_LEAD_CONFIDENCE=.35;
+
+/*
+ * The backing track's own clock — separate from spawnTimer (the
+ * asteroid field's own pacing) even though they're related in
+ * spawn_mimics/combine mode; this owns the music's beat, bar, and
+ * chord progression, and gets read FROM by
+ * computeRhythmAwareSpawnInterval when a mode calls for spawn to
+ * follow it, rather than the other way around.
+ */
+function updateProceduralMusic(dt){
+
+    if(
+        !musicState.active ||
+        !rhythmAudioEnabled
+    ){
+
+        return;
+
+    }
+
+    musicState.modeTimer+=dt;
+
+    if(
+        musicState.modeTimer>=
+        MUSIC_MODE_DURATION
+    ){
+
+        musicState.modeTimer=0;
+
+        musicState.modeIndex=
+            (
+                musicState.modeIndex+1
+            )%MUSIC_MODES.length;
+
+    }
+
+    const mode=
+        MUSIC_MODES[
+            musicState.modeIndex
+        ];
+
+    /*
+     * player_leads is the only mode where the backing's tempo
+     * moves toward the player at all, and even then only when
+     * tracking is confident — otherwise (or in either of the
+     * other two modes) it settles back toward its own fixed base
+     * tempo instead. Blended gradually (a slow EWMA, not a snap)
+     * so a genuine lock-in reads as the backing settling into the
+     * player's pace rather than lurching to match it.
+     */
+    let targetInterval=
+        MUSIC_BASE_BEAT_INTERVAL;
+
+    if(
+        mode==="player_leads" &&
+        rhythmState.tempoSeconds!==
+        null &&
+        rhythmState.predictionErrorFrac<
+        MUSIC_PLAYER_LEAD_CONFIDENCE
+    ){
+
+        targetInterval=
+            rhythmState.tempoSeconds;
+
+    }
+
+    musicState.beatInterval+=
+        (
+            targetInterval-
+            musicState.beatInterval
+        )*.04;
+
+    musicState.beatTimer+=dt;
+
+    if(
+        musicState.beatTimer>=
+        musicState.beatInterval
+    ){
+
+        musicState.beatTimer-=
+            musicState.beatInterval;
+
+        /*
+         * A new chord (and the bar's own bass note) lands on beat
+         * 0 of every 4-beat bar; a lighter second bass note on
+         * beat 2 gives a simple "strong-.-weak-." pulse rather
+         * than one note per bar with silence between.
+         */
+        if(musicState.barBeat===0){
+
+            musicState.barIndex=
+                (
+                    musicState.barIndex+1
+                )%
+                MUSIC_CHORD_PROGRESSION.length;
+
+            const chordDegrees=
+                MUSIC_CHORD_PROGRESSION[
+                    musicState.barIndex
+                ];
+
+            playMusicPadChord(
+                chordDegrees.map(
+                    d=>MUSIC_SCALE_MID[d]
+                ),
+                musicState.beatInterval*4
+            );
+
+            playMusicBassNote(
+                MUSIC_SCALE_BASS[
+                    chordDegrees[0]
+                ]
+            );
+
+        }else if(
+            musicState.barBeat===2
+        ){
+
+            const chordDegrees=
+                MUSIC_CHORD_PROGRESSION[
+                    musicState.barIndex
+                ];
+
+            playMusicBassNote(
+                MUSIC_SCALE_BASS[
+                    chordDegrees[
+                        chordDegrees.length-1
+                    ]
+                ]
+            );
+
+        }
+
+        musicState.barBeat=
+            (
+                musicState.barBeat+1
+            )%4;
+
+    }
+
+}
+
+/*
+ * spawn_mimics and combine both have spawn following the backing
+ * (the reverse of the usual player->spawn relationship); called
+ * from computeRhythmAwareSpawnInterval, which blends its own base
+ * interval toward whatever this returns, exactly the way it
+ * already blends toward the player's own tempo. player_leads
+ * returns null — spawn just uses its normal logic there, since in
+ * that mode it's the BACKING bending toward the player, not
+ * spawn's job to also chase the backing's tempo on top of that.
+ */
+function getMusicSpawnBlendTarget(){
+
+    if(
+        !musicState.active ||
+        !rhythmAudioEnabled
+    ){
+
+        return null;
+
+    }
+
+    const mode=
+        MUSIC_MODES[
+            musicState.modeIndex
+        ];
+
+    if(
+        mode==="spawn_mimics" ||
+        mode==="combine"
+    ){
+
+        return musicState.beatInterval;
+
+    }
+
+    return null;
+
+}
+
 window.addEventListener(
     "deviceorientation",
     event=>{
@@ -29977,42 +30400,36 @@ function playAsteroidSpawnSound(
     );
 
     /*
-     * A slow, small vibrato on the fundamental only — an LFO
-     * oscillator feeding a gain node wired directly into the
-     * fundamental oscillator's own frequency AudioParam below
-     * (the standard Web Audio technique for frequency
-     * modulation), created here, before the harmonics loop, so
-     * that connection can actually be made where the fundamental
-     * oscillator itself is in scope, rather than reaching for a
-     * separate reference afterward. Subtle — a few Hz of wobble,
-     * a few cycles a second — rather than a wide, obvious warble.
+     * "vooorrraaaaahhhhhhh" — genuinely low to high, not a bowed
+     * swell with vibrato (which read as a wobble, part of what
+     * made the earlier version unsettling rather than soft). Each
+     * oscillator starts well below its own target pitch and rises
+     * up into it across the attack — pitch and volume climbing
+     * together is exactly that "voo-rrr-aaa" rising quality — then
+     * holds roughly steady while the volume envelope above fades
+     * it out, the "hhhhh" tail. No vibrato at all now; a struck
+     * piano note doesn't wobble in pitch, it just rings and settles,
+     * which is closer to what was actually asked for than a
+     * continuously-modulated bowed tone.
      */
-    const vibratoLFO=
-        audioContext.createOscillator();
-
-    const vibratoGain=
-        audioContext.createGain();
-
-    vibratoLFO.frequency.value=4.8;
-
-    vibratoGain.gain.value=
-        pitch*.012;
-
-    vibratoLFO.connect(vibratoGain);
+    const riseTime=
+        attackTime*.85;
 
     /*
-     * Fundamental (now sine rather than triangle — triangle's
-     * extra odd-harmonic content was a real part of why this read
-     * as reedy/squeaky rather than soft) plus two much quieter
-     * harmonics than the first pass had (.4/.18 down to .18/.06)
-     * — real overtone content still separates this from a plain
-     * tone, but far less brightness riding on top of it now.
+     * Fundamental plus two harmonics, each with its OWN gain
+     * envelope now rather than one flat ratio held for the whole
+     * note — the higher harmonics fire bright at the strike and
+     * die away quickly while the fundamental keeps ringing
+     * underneath, which is the actual mechanism behind a piano's
+     * character: a bright transient that mellows into a purer,
+     * warmer sustained tone, rather than a constant timbre held
+     * unchanged for the note's whole length.
      */
     const harmonics=
         [
-            {mult:1,gain:1,type:"sine"},
-            {mult:2,gain:.18,type:"sine"},
-            {mult:3,gain:.06,type:"sine"}
+            {mult:1,gain:1,type:"sine",decayFrac:1},
+            {mult:2,gain:.32,type:"sine",decayFrac:.4},
+            {mult:3,gain:.14,type:"sine",decayFrac:.22}
         ];
 
     harmonics.forEach(
@@ -30027,32 +30444,57 @@ function playAsteroidSpawnSound(
             osc.type=h.type;
 
             osc.frequency.setValueAtTime(
-                pitch*h.mult,
+                pitch*h.mult*.5,
                 now
             );
 
-            osc.frequency.linearRampToValueAtTime(
-                pitch*h.mult*.94,
-                now+totalDuration
+            osc.frequency.exponentialRampToValueAtTime(
+                pitch*h.mult,
+                now+riseTime
             );
 
             /*
-             * Vibrato only reaches the fundamental — connecting
-             * it to the harmonics too would drift them out of
-             * true harmonic ratio with each other as the
-             * fundamental wobbles, which would read as detuning
-             * rather than vibrato.
+             * Each harmonic's own gain fades out well before
+             * totalDuration for anything but the fundamental
+             * (decayFrac scales how much of the remaining note,
+             * AFTER the shared rise, it actually keeps ringing
+             * for) — layered on top of master's own overall
+             * envelope above, so the fundamental still follows the
+             * full swell-and-fade shape while the upper harmonics
+             * contribute only to the brighter early portion of it.
+             * Anchored to riseTime rather than a flat fraction of
+             * totalDuration from zero — a fraction taken from zero
+             * could land BEFORE riseTime for a small decayFrac
+             * (the 3rd harmonic's .22 did exactly that at every
+             * size, scheduling a ramp target earlier than the hold
+             * point immediately before it, which is invalid
+             * AudioParam ordering), so this instead decays across
+             * a fraction of whatever time is actually left after
+             * the rise, which is always forward-moving by
+             * construction.
              */
-            if(h.mult===1){
+            hGain.gain.setValueAtTime(
+                h.gain,
+                now
+            );
 
-                vibratoGain.connect(
-                    osc.frequency
+            if(h.decayFrac<1){
+
+                hGain.gain.setValueAtTime(
+                    h.gain,
+                    now+
+                    riseTime
+                );
+
+                hGain.gain.exponentialRampToValueAtTime(
+                    .001,
+                    now+
+                    riseTime+
+                    (totalDuration-riseTime)*
+                    h.decayFrac
                 );
 
             }
-
-            hGain.gain.value=
-                h.gain;
 
             osc.connect(hGain);
 
@@ -30065,12 +30507,6 @@ function playAsteroidSpawnSound(
             );
 
         }
-    );
-
-    vibratoLFO.start(now);
-
-    vibratoLFO.stop(
-        now+totalDuration+.02
     );
 
 }
@@ -30487,6 +30923,222 @@ function playAsteroidDeflectionSound(
         );
 
     }
+
+}
+
+/*
+ * The generative backing track's three voices. All centered (no
+ * stereo pan — this is ambient backing, not a positioned
+ * gameplay cue) and quieter overall than any of the asteroid
+ * sounds above, since this needs to sit underneath everything
+ * else rather than compete with it.
+ */
+function playMusicBassNote(freq){
+
+    if(
+        !audioContext ||
+        !rhythmAudioEnabled
+    )
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const osc=
+        audioContext.createOscillator();
+
+    osc.type="sine";
+
+    osc.frequency.value=freq;
+
+    const gain=
+        audioContext.createGain();
+
+    const duration=.4;
+
+    gain.gain.setValueAtTime(
+        .05,
+        now
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    osc.connect(gain);
+
+    gain.connect(
+        audioContext.destination
+    );
+
+    osc.start(now);
+
+    osc.stop(now+duration+.02);
+
+}
+
+function playMusicPadChord(freqs,holdSeconds){
+
+    if(
+        !audioContext ||
+        !rhythmAudioEnabled
+    )
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const attackTime=.22;
+
+    const releaseStart=
+        Math.max(
+            attackTime+.05,
+            holdSeconds*.8
+        );
+
+    freqs.forEach(
+        freq=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type="triangle";
+
+            osc.frequency.value=freq;
+
+            const lowpass=
+                audioContext.createBiquadFilter();
+
+            lowpass.type="lowpass";
+
+            lowpass.frequency.value=900;
+
+            lowpass.Q.value=.3;
+
+            const gain=
+                audioContext.createGain();
+
+            gain.gain.setValueAtTime(
+                .0001,
+                now
+            );
+
+            gain.gain.exponentialRampToValueAtTime(
+                .022,
+                now+attackTime
+            );
+
+            gain.gain.setValueAtTime(
+                .022,
+                now+releaseStart
+            );
+
+            gain.gain.exponentialRampToValueAtTime(
+                .0001,
+                now+holdSeconds
+            );
+
+            osc.connect(lowpass);
+
+            lowpass.connect(gain);
+
+            gain.connect(
+                audioContext.destination
+            );
+
+            osc.start(now);
+
+            osc.stop(now+holdSeconds+.02);
+
+        }
+    );
+
+}
+
+/*
+ * The player-triggered voice, in "combine" and "player_leads"
+ * modes only — a fast-attack, quickly-decaying note in the same
+ * piano-like spirit as the redesigned spawn sound's own harmonic
+ * decay: bright at the strike, settling fast, rather than a
+ * sustained tone that would pile up under rapid tapping.
+ */
+function playMusicPluck(freq){
+
+    if(
+        !audioContext ||
+        !rhythmAudioEnabled
+    )
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const osc=
+        audioContext.createOscillator();
+
+    osc.type="sine";
+
+    osc.frequency.value=freq;
+
+    const overtone=
+        audioContext.createOscillator();
+
+    overtone.type="sine";
+
+    overtone.frequency.value=freq*2;
+
+    const overtoneGain=
+        audioContext.createGain();
+
+    overtoneGain.gain.value=.25;
+
+    const duration=.32;
+
+    const gain=
+        audioContext.createGain();
+
+    gain.gain.setValueAtTime(
+        .045,
+        now
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    overtoneGain.gain.setValueAtTime(
+        .045*.25,
+        now
+    );
+
+    overtoneGain.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration*.35
+    );
+
+    osc.connect(gain);
+
+    overtone.connect(overtoneGain);
+
+    gain.connect(
+        audioContext.destination
+    );
+
+    overtoneGain.connect(
+        audioContext.destination
+    );
+
+    osc.start(now);
+
+    osc.stop(now+duration+.02);
+
+    overtone.start(now);
+
+    overtone.stop(
+        now+duration*.35+.02
+    );
 
 }
 
@@ -31153,7 +31805,8 @@ class Asteroid{
             drift:"#ff3860",
             cloak:"#8a7fff",
             twin:"#ff9de6",
-            rift:"#6ee7c8"
+            rift:"#6ee7c8",
+            echo:"#ffb347"
         };
 
         this.color=
@@ -31612,6 +32265,66 @@ class Asteroid{
                     0,
                     1
                 );
+
+            }else if(
+                this.special===
+                "echo"
+            ){
+
+                ctx.fillStyle=
+                    "#ffb347";
+
+                ctx.font=
+                    "bold "+
+                    (this.radius*.7)+
+                    "px system-ui";
+
+                ctx.textAlign=
+                    "center";
+
+                ctx.textBaseline=
+                    "middle";
+
+                ctx.fillText(
+                    "🎙️",
+                    0,
+                    1
+                );
+
+                /*
+                 * A pulsing ring, timed to the same slow
+                 * micEnergyEWMA reading that drives its own
+                 * spawning — a visible reminder that this
+                 * particular rock exists because of sound in the
+                 * room, not the game's own timer, echoing outward
+                 * the way an actual sound ripple would.
+                 */
+                const pulsePhase=
+                    (
+                        performance.now()/
+                        1000
+                    )%1;
+
+                ctx.strokeStyle=
+                    "rgba(255,179,71,"+
+                    (1-pulsePhase)*.6+
+                    ")";
+
+                ctx.lineWidth=2;
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    0,
+                    0,
+                    this.radius+
+                    6+
+                    pulsePhase*10,
+                    0,
+                    Math.PI*2
+                );
+
+                ctx.stroke();
 
             }else if(
                 this.special===
@@ -33963,6 +34676,43 @@ function rollSpecialKind(){
 }
 
 
+/*
+ * Shared by every place an asteroid actually enters play —
+ * spawnAsteroid's normal path, a Shatter Ice split's children,
+ * and now Echo Rock's mic-triggered spawns — so rhythm tracking
+ * and the arrival sound happen exactly once, consistently,
+ * regardless of which of those triggered it. Previously
+ * duplicated between the first two; extracted here rather than
+ * copied a third time.
+ */
+function finishAsteroidSpawn(asteroid){
+
+    rhythmState.spawnHistory.push({
+        time:performance.now(),
+        intensity:lastRhythmBeatIntensity,
+        size:asteroid.size
+    });
+
+    if(
+        rhythmState.spawnHistory.length>
+        RHYTHM_SPAWN_HISTORY_MAX
+    ){
+
+        rhythmState.spawnHistory.shift();
+
+    }
+
+    playAsteroidSpawnSound(
+        asteroid.x,
+        asteroid.y,
+        asteroid.vx,
+        asteroid.vy,
+        lastRhythmBeatIntensity,
+        asteroid.size
+    );
+
+}
+
 function spawnAsteroid(){
 
     const pos=
@@ -33987,29 +34737,7 @@ function spawnAsteroid(){
         asteroid
     );
 
-    rhythmState.spawnHistory.push({
-        time:performance.now(),
-        intensity:lastRhythmBeatIntensity,
-        size
-    });
-
-    if(
-        rhythmState.spawnHistory.length>
-        RHYTHM_SPAWN_HISTORY_MAX
-    ){
-
-        rhythmState.spawnHistory.shift();
-
-    }
-
-    playAsteroidSpawnSound(
-        asteroid.x,
-        asteroid.y,
-        asteroid.vx,
-        asteroid.vy,
-        lastRhythmBeatIntensity,
-        size
-    );
+    finishAsteroidSpawn(asteroid);
 
     /*
      * Twin Rock always spawns with a mirrored partner — mirrored
@@ -34363,6 +35091,21 @@ function detonateAsteroid(
     score+=
         earned;
 
+    /*
+     * Requested lazily, the first time score actually crosses the
+     * Echo Rock threshold during play, rather than eagerly at game
+     * start — mic access is a meaningfully more sensitive ask than
+     * anything else this game requests, so it only happens once
+     * it's actually about to matter. requestMicAccess itself
+     * guards against repeat requests, so this can just be called
+     * plainly on every kill once the threshold is reached.
+     */
+    if(score>=ECHO_ROCK_UNLOCK_SCORE){
+
+        requestMicAccess();
+
+    }
+
     if(!isEMP){
 
         /*
@@ -34687,34 +35430,13 @@ function detonateAsteroid(
              * than through spawnAsteroid(), they got no rhythm
              * tracking and no spawn sound at all, silently
              * arriving with no arrival cue while every other
-             * asteroid on screen had one. Same treatment as a
-             * normal spawn now, size included (each child is one
-             * size smaller than its parent, already reflected in
-             * the constructor call above).
+             * asteroid on screen had one. Same shared treatment
+             * every other spawn path gets now (see
+             * finishAsteroidSpawn), size included — each child is
+             * one size smaller than its parent, already reflected
+             * in the constructor call above.
              */
-            rhythmState.spawnHistory.push({
-                time:performance.now(),
-                intensity:lastRhythmBeatIntensity,
-                size:child.size
-            });
-
-            if(
-                rhythmState.spawnHistory.length>
-                RHYTHM_SPAWN_HISTORY_MAX
-            ){
-
-                rhythmState.spawnHistory.shift();
-
-            }
-
-            playAsteroidSpawnSound(
-                child.x,
-                child.y,
-                child.vx,
-                child.vy,
-                lastRhythmBeatIntensity,
-                child.size
-            );
+            finishAsteroidSpawn(child);
 
         }
 
@@ -38127,6 +38849,90 @@ let lastRhythmBeatIntensity=1;
  */
 let rhythmAudioEnabled=true;
 
+/*
+ * A generative backing "soundtrack" — a bass note plus a soft pad
+ * chord on a steady pulse, cycling through three modes over time
+ * rather than staying in one shape:
+ *
+ *   spawn_mimics — the music leads at its own tempo; spawn control
+ *   blends toward THAT pulse (the reverse of the normal case,
+ *   where spawn tracks the player) — the game visibly following
+ *   the music rather than the other way round.
+ *
+ *   combine — same backing, but now the player's own taps add a
+ *   melodic pluck note into the mix, chosen from the same scale as
+ *   everything else so it always harmonizes — spawn, the backing,
+ *   and the player all sounding together as one thing rather than
+ *   three separate layers.
+ *
+ *   player_leads — the actual test: when tempo tracking is
+ *   confident (predictionErrorFrac genuinely low), the backing's
+ *   OWN tempo bends toward the player's tempoSeconds instead of
+ *   staying fixed. If prediction is good, the player's natural
+ *   tapping pace and the music converge and their taps start
+ *   landing on the beat; if prediction is bad, this mode is
+ *   exactly where that would show up as drift rather than lock.
+ *
+ * Root A3=220Hz, minor pentatonic (semitones 0,3,5,7,10) — chosen
+ * specifically because a pentatonic scale has no genuinely
+ * dissonant combination of its own notes, which matters a lot
+ * here: bass, pad, and player-triggered plucks are all drawn from
+ * the same five degrees, layered somewhat unpredictably (tap
+ * timing isn't under this system's control), so the notes
+ * colliding needed to be safe by construction rather than
+ * something to carefully avoid in real time.
+ */
+const MUSIC_SCALE_BASS=
+    [110,130.81,146.83,164.81,196];
+
+const MUSIC_SCALE_MID=
+    [220,261.63,293.66,329.63,392];
+
+const MUSIC_SCALE_HIGH=
+    [440,523.25,587.33,659.25,783.99];
+
+/*
+ * Four bars, each a pair of scale degrees stacked as the pad chord
+ * — indices into MUSIC_SCALE_MID. Not traditional triads (a
+ * pentatonic scale doesn't really have those in the usual sense),
+ * just pairings chosen to sound settled (bar 1, bar 4 use the root)
+ * versus more open (bars 2-3) — a loose verse shape rather than a
+ * strict harmonic progression.
+ */
+const MUSIC_CHORD_PROGRESSION=
+    [
+        [0,3],
+        [1,4],
+        [2,3],
+        [0,3]
+    ];
+
+const MUSIC_MODES=
+    ["spawn_mimics","combine","player_leads"];
+
+const MUSIC_MODE_DURATION=22;
+
+const MUSIC_BASE_BEAT_INTERVAL=.56;
+
+let musicState={
+
+    active:true,
+
+    modeIndex:0,
+
+    modeTimer:0,
+
+    beatTimer:0,
+
+    beatInterval:
+        MUSIC_BASE_BEAT_INTERVAL,
+
+    barBeat:0,
+
+    barIndex:0
+
+};
+
 const RHYTHM_PHRASE_MIN_BEATS=5;
 
 const RHYTHM_PHRASE_MAX_BEATS=8;
@@ -38282,6 +39088,27 @@ function computeRhythmAwareSpawnInterval(){
             base*(1-blendWeight)+
             rhythmState.tempoSeconds*
             blendWeight;
+
+    }
+
+    /*
+     * spawn_mimics/combine mode: spawn genuinely follows the
+     * backing track's own pulse, blended in fairly strongly (.5)
+     * since the whole point of those modes is the game visibly
+     * tracking the music rather than the music being incidental
+     * background — null in player_leads, where it's the backing
+     * bending toward the player instead, and spawn keeps its
+     * normal logic rather than also chasing the backing on top of
+     * that.
+     */
+    const musicBlendTarget=
+        getMusicSpawnBlendTarget();
+
+    if(musicBlendTarget!==null){
+
+        base=
+            base*.5+
+            musicBlendTarget*.5;
 
     }
 
@@ -43507,6 +44334,10 @@ function update(dt){
 
             updateSoundFlowLearning(dt);
 
+            updateEchoRockSpawning(dt);
+
+            updateProceduralMusic(dt);
+
         }
 
 
@@ -46436,6 +47267,45 @@ function handlePointer(event){
         p.y,
         performance.now()
     );
+
+    /*
+     * The player's own voice in the backing track — only in
+     * combine/player_leads (spawn_mimics is meant to be the
+     * backing playing alone, the player not yet part of it). Tap
+     * X position picks which of the five pentatonic degrees
+     * sounds, so where on screen someone taps has some genuine
+     * melodic consequence rather than always playing the same
+     * note; the scale itself guarantees whatever comes out never
+     * clashes with the bass or pad running underneath.
+     */
+    if(
+        musicState.active &&
+        rhythmAudioEnabled &&
+        (
+            MUSIC_MODES[
+                musicState.modeIndex
+            ]==="combine" ||
+            MUSIC_MODES[
+                musicState.modeIndex
+            ]==="player_leads"
+        )
+    ){
+
+        const degree=
+            clamp(
+                Math.floor(
+                    p.x/W*
+                    MUSIC_SCALE_HIGH.length
+                ),
+                0,
+                MUSIC_SCALE_HIGH.length-1
+            );
+
+        playMusicPluck(
+            MUSIC_SCALE_HIGH[degree]
+        );
+
+    }
 
     if(
         beamArmed
