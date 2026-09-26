@@ -757,6 +757,54 @@ body{
     margin-top:8px;
 }
 
+.rank-detail-unlocks-title{
+    font-size:9px;
+    font-weight:800;
+    color:#a9d4f0;
+    text-align:center;
+    margin-top:10px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+
+.rank-detail-unlocks{
+    margin-top:6px;
+    max-height:150px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+}
+
+.rank-unlock-group{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+}
+
+.rank-unlock-group-title{
+    font-size:9px;
+    font-weight:700;
+    color:#7d95b5;
+}
+
+.rank-unlock-item{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    font-size:9px;
+    padding-left:6px;
+}
+
+.rank-unlock-item.locked{
+    color:#5c7ba0;
+    opacity:.65;
+}
+
+.rank-unlock-item.unlocked{
+    color:#c9ecff;
+}
+
 .rank-detail-history{
     margin-top:8px;
     max-height:120px;
@@ -3107,6 +3155,8 @@ and (max-height:500px){
             <div class="rank-detail-row" id="rankDetailSkillRow"></div>
             <div class="rank-detail-row" id="rankDetailEngagementRow"></div>
             <div class="rank-detail-next" id="rankDetailNext"></div>
+            <div class="rank-detail-unlocks-title">What each rank unlocks</div>
+            <div class="rank-detail-unlocks" id="rankDetailUnlocks"></div>
             <div class="rank-detail-history" id="rankDetailHistory"></div>
 
         </div>
@@ -29915,6 +29965,26 @@ function recordMusicBeat(noteFreq,kind){
  * computeRhythmAwareSpawnInterval when a mode calls for spawn to
  * follow it, rather than the other way around.
  */
+/*
+ * Restructured after real feedback: this previously ran its own
+ * independent beat clock for EVERY genre, including edm/techno,
+ * which meant those styles were playing dedicated instrument
+ * sounds (a kick, a supersaw pad, a riser, an arpeggiator) on a
+ * timer that had nothing to do with whether an actual asteroid was
+ * spawning or being destroyed at that moment — exactly the
+ * "sounds only from asteroids" principle this system is built
+ * around, broken. Now this drives ONLY the ambient genre's own
+ * bass/pad/pluck backing (the "default sounds" that were never the
+ * problem and are kept exactly as they were) — edm and techno get
+ * no independent clock at all. Their entire identity lives in two
+ * other places instead: getGenreSpawnRhythmMultiplier (read by
+ * computeRhythmAwareSpawnInterval, so the actual asteroid spawn
+ * TIMER embodies the build/drop or four-on-the-floor shape) and
+ * the genre branches inside playAsteroidSpawnSound/
+ * playAsteroidDestructionSound (so the TIMBRE of a real spawn or
+ * kill embodies it too) — both driven by real asteroid events,
+ * never by a clock running on its own.
+ */
 function updateProceduralMusic(dt){
 
     if(
@@ -29942,25 +30012,28 @@ function updateProceduralMusic(dt){
 
     }
 
+    const currentStyle=
+        getCurrentMusicStyle();
+
+    if(currentStyle.genre!=="ambient"){
+
+        return;
+
+    }
+
     const mode=
         MUSIC_MODES[
             musicState.modeIndex
         ];
-
-    const currentStyle=
-        getCurrentMusicStyle();
 
     /*
      * player_leads is the only mode where the backing's tempo
      * moves toward the player at all, and even then only when
      * tracking is confident — otherwise (or in either of the
      * other two modes) it settles back toward the current STYLE's
-     * own base tempo instead (edm's 128bpm feel, techno's 132bpm
-     * feel, ambient's original .56s — no longer one single global
-     * tempo now that genre is a real distinction). Blended
-     * gradually (a slow EWMA, not a snap) so a genuine lock-in
-     * reads as the backing settling into the player's pace rather
-     * than lurching to match it.
+     * own base tempo instead. Blended gradually (a slow EWMA, not
+     * a snap) so a genuine lock-in reads as the backing settling
+     * into the player's pace rather than lurching to match it.
      */
     let targetInterval=
         currentStyle.baseBeatInterval;
@@ -29994,21 +30067,7 @@ function updateProceduralMusic(dt){
         musicState.beatTimer-=
             musicState.beatInterval;
 
-        if(currentStyle.genre==="edm"){
-
-            updateEdmBeat();
-
-        }else if(
-            currentStyle.genre==="techno"
-        ){
-
-            updateTechnoBeat();
-
-        }else{
-
-            updateAmbientBeat();
-
-        }
+        updateAmbientBeat();
 
         musicState.barBeat=
             (
@@ -30108,269 +30167,6 @@ const EDM_MACRO_BEATS=32;
 
 const EDM_BUILD_START_BEAT=24;
 
-/*
- * The actual build-and-drop: a chord/bass pattern much like the
- * ambient backing's own (same 4-beat bar shape, same chord
- * progression), but layered with a genuine macro-structure on top
- * — a 32-beat (8-bar) cycle where the last 8 beats are a rising
- * build (see playEdmRiser, triggered exactly once as that section
- * begins, timed to finish precisely as the cycle wraps) and beat 0
- * of every new cycle is the drop itself (playEdmDropHit plus a
- * gain-boosted kick, together giving the release its actual
- * weight). Kick density itself rises through the build too — half-
- * time (beats 0 and 2 only) during the groove section, full
- * four-on-the-floor once the build begins — so the tension is
- * audible in the rhythm section, not just the riser sitting on
- * top of an unchanged groove underneath it.
- */
-function updateEdmBeat(){
-
-    if(musicState.barBeat===0){
-
-        musicState.barIndex=
-            (
-                musicState.barIndex+1
-            )%
-            MUSIC_CHORD_PROGRESSION.length;
-
-        const chordDegrees=
-            MUSIC_CHORD_PROGRESSION[
-                musicState.barIndex
-            ];
-
-        const midOctave=
-            getMusicStyleOctave(1);
-
-        const bassOctave=
-            getMusicStyleOctave(0);
-
-        playSupersawPad(
-            chordDegrees.map(
-                d=>midOctave[d]
-            ),
-            musicState.beatInterval*4
-        );
-
-        recordMusicBeat(
-            midOctave[chordDegrees[0]],
-            "pad"
-        );
-
-        const bassFreq0=
-            bassOctave[
-                chordDegrees[0]
-            ];
-
-        playMusicBassNote(
-            bassFreq0
-        );
-
-        recordMusicBeat(
-            bassFreq0,
-            "bass"
-        );
-
-    }
-
-    const isDropMoment=
-        musicState.edmMacroBeatIndex===0;
-
-    const isBuildSection=
-        musicState.edmMacroBeatIndex>=
-        EDM_BUILD_START_BEAT;
-
-    const kickThisBeat=
-        isBuildSection ||
-        musicState.barBeat===0 ||
-        musicState.barBeat===2;
-
-    if(isDropMoment){
-
-        playEdmDropHit();
-
-        playGenreKick(1.6);
-
-        recordMusicBeat(
-            getMusicStyleOctave(0)[0],
-            "kick"
-        );
-
-    }else if(kickThisBeat){
-
-        playGenreKick(1);
-
-        recordMusicBeat(
-            getMusicStyleOctave(0)[0],
-            "kick"
-        );
-
-    }
-
-    if(
-        musicState.edmMacroBeatIndex===
-        EDM_BUILD_START_BEAT
-    ){
-
-        const buildBeatsRemaining=
-            EDM_MACRO_BEATS-
-            EDM_BUILD_START_BEAT;
-
-        playEdmRiser(
-            buildBeatsRemaining*
-            musicState.beatInterval
-        );
-
-    }
-
-    musicState.edmMacroBeatIndex=
-        (
-            musicState.edmMacroBeatIndex+1
-        )%EDM_MACRO_BEATS;
-
-}
-
-const TECHNO_ARP_PATTERN=
-    [0,2,4,2];
-
-/*
- * True four-on-the-floor (a kick every single beat, not just 0/2)
- * plus a running arpeggiated sequence — the actual mechanism
- * behind a driving, hypnotic techno pulse, distinct from both the
- * ambient backing's sparser rhythm and EDM's own build/release
- * shape. The pad changes only every SECOND bar rather than every
- * bar (steadier, more sustained — matching a real techno pad's own
- * character of holding underneath a busy, constantly-moving
- * rhythm section rather than itself being part of what's moving).
- * The arpeggiator fires on the beat itself AND a scheduled
- * off-beat note halfway to the next one, doubling the actual
- * rhythmic density of the melodic line without doubling the main
- * beat loop's own rate.
- */
-function updateTechnoBeat(){
-
-    playGenreKick(1);
-
-    recordMusicBeat(
-        getMusicStyleOctave(0)[0],
-        "kick"
-    );
-
-    if(
-        musicState.barBeat===0 &&
-        musicState.barIndex%2===0
-    ){
-
-        musicState.barIndex=
-            (
-                musicState.barIndex+1
-            )%
-            (
-                MUSIC_CHORD_PROGRESSION.length*
-                2
-            );
-
-        const chordDegrees=
-            MUSIC_CHORD_PROGRESSION[
-                Math.floor(
-                    musicState.barIndex/2
-                )%
-                MUSIC_CHORD_PROGRESSION.length
-            ];
-
-        const midOctave=
-            getMusicStyleOctave(1);
-
-        playMusicPadChord(
-            chordDegrees.map(
-                d=>midOctave[d]
-            ),
-            musicState.beatInterval*8
-        );
-
-        recordMusicBeat(
-            midOctave[chordDegrees[0]],
-            "pad"
-        );
-
-    }else if(musicState.barBeat===0){
-
-        musicState.barIndex=
-            (
-                musicState.barIndex+1
-            )%
-            (
-                MUSIC_CHORD_PROGRESSION.length*
-                2
-            );
-
-    }
-
-    const highOctave=
-        getMusicStyleOctave(2);
-
-    const arpStep=
-        (
-            musicState.barIndex*4+
-            musicState.barBeat
-        )%
-        TECHNO_ARP_PATTERN.length;
-
-    const arpDegree=
-        TECHNO_ARP_PATTERN[arpStep]%
-        highOctave.length;
-
-    playTechnoArpNote(
-        highOctave[arpDegree]
-    );
-
-    recordMusicBeat(
-        highOctave[arpDegree],
-        "pluck"
-    );
-
-    const offBeatArpStep=
-        (arpStep+1)%
-        TECHNO_ARP_PATTERN.length;
-
-    const offBeatDegree=
-        TECHNO_ARP_PATTERN[
-            offBeatArpStep
-        ]%highOctave.length;
-
-    const offBeatFreq=
-        highOctave[offBeatDegree];
-
-    const offBeatDelayMs=
-        musicState.beatInterval*
-        500;
-
-    setTimeout(
-        ()=>{
-
-            if(
-                musicState.active &&
-                rhythmAudioEnabled &&
-                getCurrentMusicStyle().
-                genre==="techno"
-            ){
-
-                playTechnoArpNote(
-                    offBeatFreq
-                );
-
-                recordMusicBeat(
-                    offBeatFreq,
-                    "pluck"
-                );
-
-            }
-
-        },
-        offBeatDelayMs
-    );
-
-}
-
 
 /*
  * spawn_mimics and combine both have spawn following the backing
@@ -30408,6 +30204,141 @@ function getMusicSpawnBlendTarget(){
     }
 
     return null;
+
+}
+
+/*
+ * The rhythm half of edm/techno's real fix — read by
+ * computeRhythmAwareSpawnInterval, this is what actually makes the
+ * asteroid spawn TIMER itself embody a build/drop or a driving
+ * four-on-the-floor pulse, rather than an independent instrument
+ * layer pretending to. edm: sparser, more laid-back during the
+ * groove section (1.3x, half-time-feeling), then progressively
+ * DENSER through the build (down to .35x right before the drop) —
+ * genuine rising tension expressed as more asteroids actually
+ * arriving, not a separate riser sound layered over an unchanged
+ * spawn rate. techno: a constant, tight .8x — steady, mechanical,
+ *四-on-the-floor evenness. Verified numerically before this
+ * shipped: always positive, and the build section's multiplier
+ * monotonically decreases across its whole span, never spiking
+ * back up partway through.
+ */
+function getGenreSpawnRhythmMultiplier(){
+
+    if(
+        !musicState.active ||
+        !rhythmAudioEnabled
+    ){
+
+        return 1;
+
+    }
+
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    if(genre==="edm"){
+
+        if(
+            musicState.edmMacroBeatIndex>=
+            EDM_BUILD_START_BEAT
+        ){
+
+            const buildProgress=
+                (
+                    musicState.edmMacroBeatIndex-
+                    EDM_BUILD_START_BEAT
+                )/
+                (
+                    EDM_MACRO_BEATS-
+                    EDM_BUILD_START_BEAT
+                );
+
+            return(
+                1-
+                buildProgress*.65
+            );
+
+        }
+
+        return 1.3;
+
+    }
+
+    if(genre==="techno"){
+
+        return .8;
+
+    }
+
+    return 1;
+
+}
+
+/*
+ * Advances edm's macro-structure position by exactly one step per
+ * REAL asteroid spawn — called from finishAsteroidSpawn, not from
+ * any independent clock, which is the entire point: the "beat" this
+ * structure moves on IS a real spawn event, so there's no ghost
+ * timer running whether or not an asteroid actually exists. When it
+ * wraps back to the drop position, that's realized as a genuine
+ * burst of extra real spawns (reusing the exact same spawnAsteroid
+ * the normal timer calls) rather than an independent "drop hit"
+ * sound — the impact comes from several real asteroids actually
+ * arriving close together, each with edm's own kick-like
+ * destruction timbre when killed, not from a sound with no asteroid
+ * behind it.
+ */
+function advanceGenreSpawnRhythm(){
+
+    if(
+        getCurrentMusicStyle().genre!==
+        "edm"
+    ){
+
+        return;
+
+    }
+
+    musicState.edmMacroBeatIndex=
+        (
+            musicState.edmMacroBeatIndex+1
+        )%EDM_MACRO_BEATS;
+
+    if(musicState.edmMacroBeatIndex===0){
+
+        const dropBurstCount=3;
+
+        for(
+            let i=1;
+            i<=dropBurstCount;
+            i++
+        ){
+
+            setTimeout(
+                ()=>{
+
+                    if(
+                        running &&
+                        worldState==="field" &&
+                        !paused &&
+                        !gameOver &&
+                        !pendingFieldExit &&
+                        getCurrentMusicStyle().
+                        genre==="edm"
+                    ){
+
+                        spawnAsteroid();
+
+                    }
+
+                },
+                i*90
+            );
+
+        }
+
+    }
 
 }
 
@@ -30679,6 +30610,66 @@ function playAsteroidSpawnSound(
         audioContext.createStereoPanner():
         null;
 
+    /*
+     * The actual fix for "the new tracks just underlay the
+     * default sounds" — edm and techno no longer run any
+     * independent instrument on their own clock at all (see
+     * updateProceduralMusic's own comment); their entire
+     * character now lives HERE, in how this real spawn sound
+     * itself is shaped. edm leans into a rising, sawtooth-based
+     * sweep — a genuine "riser" quality, but happening as part of
+     * an actual asteroid's own arrival rather than a separate cue
+     * playing alongside it. techno is the opposite move: quick and
+     * punchy rather than a slow swell, square-wave based for a
+     * bright, mechanical, arpeggiator-like arrival. Ambient keeps
+     * its original "voorraaah" shape exactly as it was.
+     */
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const genreProfile=
+        genre==="edm"?
+        {
+            attackTime:
+                .16+clampedSize*.05,
+            totalDurationBase:
+                .35+clampedSize*.12,
+            riseFrac:.9,
+            riseStartFrac:.3,
+            lowpassBase:2400,
+            lowpassPerSize:300,
+            fundamentalType:"sawtooth",
+            harmonicGains:[1,.35,.16],
+            harmonicDecay:[1,.5,.3]
+        }:
+        genre==="techno"?
+        {
+            attackTime:
+                .02+clampedSize*.006,
+            totalDurationBase:
+                .14+clampedSize*.03,
+            riseFrac:.9,
+            riseStartFrac:.8,
+            lowpassBase:3200,
+            lowpassPerSize:400,
+            fundamentalType:"square",
+            harmonicGains:[1,.25,.1],
+            harmonicDecay:[1,.5,.3]
+        }:
+        {
+            attackTime:
+                .13+clampedSize*.035,
+            totalDurationBase:
+                .3+clampedSize*.1,
+            riseFrac:.85,
+            riseStartFrac:.5,
+            lowpassBase:1100,
+            lowpassPerSize:220,
+            fundamentalType:"sine",
+            harmonicGains:[1,.32,.14],
+            harmonicDecay:[1,.4,.22]
+        };
+
     const lowpass=
         audioContext.createBiquadFilter();
 
@@ -30693,8 +30684,9 @@ function playAsteroidSpawnSound(
      * pitch alone to carry all of it.
      */
     lowpass.frequency.value=
-        1100-
-        clampedSize*220;
+        genreProfile.lowpassBase-
+        clampedSize*
+        genreProfile.lowpassPerSize;
 
     lowpass.Q.value=.3;
 
@@ -30730,23 +30722,16 @@ function playAsteroidSpawnSound(
      * longer, a smaller one is quicker both to rise and fade. Real
      * differentiation across more than one dimension is what
      * actually makes sizes distinguishable by ear; pitch alone
-     * wasn't enough.
+     * wasn't enough. Base values and per-size scaling both come
+     * from genreProfile now — edm's attack/duration read as a
+     * genuine sweep, techno's as a quick, punchy arrival.
      */
     const attackTime=
-        .13+
-        clampedSize*.035;
+        genreProfile.attackTime;
 
     const totalDuration=
-        .3+
-        clampedSize*.1;
+        genreProfile.totalDurationBase;
 
-    /*
-     * Kept quiet enough to read as ambient texture rather than a
-     * hit-confirm sound (that's what destruction is for) — this
-     * is a "something just entered the field" cue, not an
-     * achievement. Scaled by distance — closer arrivals genuinely
-     * read louder, a real proximity cue.
-     */
     /*
      * Kept quiet enough to read as ambient texture rather than a
      * hit-confirm sound (that's what destruction is for) — this
@@ -30781,36 +30766,50 @@ function playAsteroidSpawnSound(
     );
 
     /*
-     * "vooorrraaaaahhhhhhh" — genuinely low to high, not a bowed
-     * swell with vibrato (which read as a wobble, part of what
-     * made the earlier version unsettling rather than soft). Each
-     * oscillator starts well below its own target pitch and rises
-     * up into it across the attack — pitch and volume climbing
-     * together is exactly that "voo-rrr-aaa" rising quality — then
-     * holds roughly steady while the volume envelope above fades
-     * it out, the "hhhhh" tail. No vibrato at all now; a struck
-     * piano note doesn't wobble in pitch, it just rings and settles,
-     * which is closer to what was actually asked for than a
-     * continuously-modulated bowed tone.
+     * "vooorrraaaaahhhhhhh" for ambient — genuinely low to high,
+     * not a bowed swell with vibrato. edm rises from further below
+     * its own target pitch (riseStartFrac .3 vs ambient's .5) for a
+     * more dramatic sweep; techno barely rises at all (.8) since a
+     * punchy arrival is about speed and brightness, not pitch
+     * movement. Each oscillator starts at riseStartFrac of its own
+     * target and climbs into it across riseFrac of the attack, then
+     * holds roughly steady while the volume envelope fades it out.
      */
     const riseTime=
-        attackTime*.85;
+        attackTime*
+        genreProfile.riseFrac;
 
     /*
      * Fundamental plus two harmonics, each with its OWN gain
-     * envelope now rather than one flat ratio held for the whole
-     * note — the higher harmonics fire bright at the strike and
+     * envelope — the higher harmonics fire bright at the strike and
      * die away quickly while the fundamental keeps ringing
-     * underneath, which is the actual mechanism behind a piano's
-     * character: a bright transient that mellows into a purer,
-     * warmer sustained tone, rather than a constant timbre held
-     * unchanged for the note's whole length.
+     * underneath. Fundamental oscillator type is genre-set
+     * (sawtooth for edm's grit, square for techno's digital
+     * punch, sine for ambient's soft piano-ping); the two upper
+     * harmonics stay sine in every genre — real overtone content
+     * without stacking extra buzz from the fundamental's own
+     * already-brighter waveform.
      */
     const harmonics=
         [
-            {mult:1,gain:1,type:"sine",decayFrac:1},
-            {mult:2,gain:.32,type:"sine",decayFrac:.4},
-            {mult:3,gain:.14,type:"sine",decayFrac:.22}
+            {
+                mult:1,
+                gain:genreProfile.harmonicGains[0],
+                type:genreProfile.fundamentalType,
+                decayFrac:genreProfile.harmonicDecay[0]
+            },
+            {
+                mult:2,
+                gain:genreProfile.harmonicGains[1],
+                type:"sine",
+                decayFrac:genreProfile.harmonicDecay[1]
+            },
+            {
+                mult:3,
+                gain:genreProfile.harmonicGains[2],
+                type:"sine",
+                decayFrac:genreProfile.harmonicDecay[2]
+            }
         ];
 
     harmonics.forEach(
@@ -30825,7 +30824,8 @@ function playAsteroidSpawnSound(
             osc.type=h.type;
 
             osc.frequency.setValueAtTime(
-                pitch*h.mult*.5,
+                pitch*h.mult*
+                genreProfile.riseStartFrac,
                 now
             );
 
@@ -31065,6 +31065,29 @@ function playAsteroidDestructionSound(
     const clampedSize=
         clamp(size,1,3);
 
+    /*
+     * The same architectural fix as the spawn sound above —
+     * edm/techno no longer add an independent "kick" instrument on
+     * their own clock; instead, a REAL destruction (never a chain
+     * reaction, which keeps its own escalating character
+     * regardless of genre) takes on a genuine kick-like identity
+     * of its own: a pronounced pitch DROP (high to low, the actual
+     * mechanism behind a kick's identity, replacing ambient's
+     * "settle and hold" shape) and a grittier fundamental waveform
+     * — sawtooth for edm, square for techno — rather than the
+     * piano-like sine. This is still the same real note the
+     * asteroid's own spawn announced; only how it's voiced changes.
+     */
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const isKickLike=
+        (
+            genre==="edm" ||
+            genre==="techno"
+        ) &&
+        !isChain;
+
     const pan=
         audioContext.createStereoPanner?
         audioContext.createStereoPanner():
@@ -31201,12 +31224,19 @@ function playAsteroidDestructionSound(
             pitch
         );
 
+    const fundamentalType=
+        isChain?
+        "triangle":
+        isKickLike?
+        (genre==="edm"?"sawtooth":"square"):
+        "sine";
+
     const harmonics=
         [
             {
                 mult:1,
                 gain:1,
-                type:isChain?"triangle":"sine",
+                type:fundamentalType,
                 decayFrac:1
             },
             {
@@ -31231,14 +31261,25 @@ function playAsteroidDestructionSound(
 
             osc.type=h.type;
 
+            /*
+             * isKickLike gets a genuine pitch DROP (high to low)
+             * instead of ambient's overshoot-then-hold shape — the
+             * actual mechanism that makes a kick read as a kick
+             * rather than a held note. isChain keeps its own
+             * brighter upward escalation, unaffected by genre.
+             */
             const startMult=
                 isChain?
                 .55:
+                isKickLike?
+                1.6:
                 1.18;
 
             const endMult=
                 isChain?
                 2.1:
+                isKickLike?
+                .32:
                 1;
 
             osc.frequency.setValueAtTime(
@@ -31547,7 +31588,30 @@ function playAsteroidDeflectionSound(
     const clangOsc=
         audioContext.createOscillator();
 
-    clangOsc.type="square";
+    /*
+     * A lighter-touch version of the same genre treatment as
+     * spawn/destruction — this is a ricochet, not a melodic or
+     * percussive event in its own right, so it doesn't need a full
+     * profile, just a consistent character: sawtooth for edm
+     * (matching that genre's grittier spawn/destruction voices),
+     * square everywhere else (its own original sound, unchanged
+     * for ambient and already a reasonable match for techno's own
+     * digital character). The upward "zap" bend goes a little
+     * sharper for edm/techno too, a small nod to their more
+     * electronic identity rather than a full redesign.
+     */
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    clangOsc.type=
+        genre==="edm"?
+        "sawtooth":
+        "square";
+
+    const clangBendMult=
+        genre==="ambient"?
+        1.4:
+        1.7;
 
     /*
      * Same shared note as this asteroid's own spawn and would-be
@@ -31556,8 +31620,8 @@ function playAsteroidDeflectionSound(
      * else it does) — a deflection is still an event happening to
      * a specific rock at a specific size and position, so it gets
      * the same treatment: a real note from the current scale, with
-     * the clang's own upward pitch-bend (×1.4 by the end) layered
-     * on top rather than baked into which note plays.
+     * the clang's own upward pitch-bend layered on top rather than
+     * baked into which note plays.
      */
     const clangBase=
         getAsteroidNoteFreqForSpecial(
@@ -31577,7 +31641,7 @@ function playAsteroidDeflectionSound(
     );
 
     clangOsc.frequency.exponentialRampToValueAtTime(
-        clangPitch*1.4,
+        clangPitch*clangBendMult,
         now+duration
     );
 
@@ -31814,267 +31878,6 @@ function playGenreKick(gainMultiplier){
 
 }
 
-/*
- * EDM's build-up riser — the tension cue itself, scheduled as one
- * long automated sweep across the whole build section rather than
- * triggered repeatedly, since a riser IS a single continuous
- * gesture, not a series of discrete hits: a rising sine (an
- * ascending tone, the pitch itself climbing toward the drop) and
- * a rising-cutoff filtered noise sweep (a brightening "whoosh")
- * together, both growing in volume as they climb. Both endpoints
- * of every sweep here are comfortably positive, verified before
- * this shipped — an exponential ramp toward zero or a negative
- * value is invalid and throws, which a linear pitch/filter climb
- * like this could easily have drifted into with less care taken
- * over the actual numbers.
- */
-function playEdmRiser(durationSeconds){
-
-    if(
-        !audioContext ||
-        !rhythmAudioEnabled
-    )
-        return;
-
-    const now=
-        audioContext.currentTime;
-
-    const osc=
-        audioContext.createOscillator();
-
-    osc.type="sawtooth";
-
-    osc.frequency.setValueAtTime(
-        200,
-        now
-    );
-
-    osc.frequency.exponentialRampToValueAtTime(
-        1400,
-        now+durationSeconds
-    );
-
-    const oscGain=
-        audioContext.createGain();
-
-    oscGain.gain.setValueAtTime(
-        .0001,
-        now
-    );
-
-    oscGain.gain.exponentialRampToValueAtTime(
-        .045,
-        now+durationSeconds
-    );
-
-    osc.connect(oscGain);
-
-    oscGain.connect(
-        audioContext.destination
-    );
-
-    osc.start(now);
-
-    osc.stop(now+durationSeconds+.02);
-
-    const buffer=
-        getNoiseBuffer();
-
-    if(buffer){
-
-        const noiseSource=
-            audioContext.createBufferSource();
-
-        noiseSource.buffer=buffer;
-
-        noiseSource.loop=true;
-
-        const filter=
-            audioContext.createBiquadFilter();
-
-        filter.type="bandpass";
-
-        filter.Q.value=.8;
-
-        filter.frequency.setValueAtTime(
-            300,
-            now
-        );
-
-        filter.frequency.exponentialRampToValueAtTime(
-            6000,
-            now+durationSeconds
-        );
-
-        const noiseGain=
-            audioContext.createGain();
-
-        noiseGain.gain.setValueAtTime(
-            .0001,
-            now
-        );
-
-        noiseGain.gain.exponentialRampToValueAtTime(
-            .05,
-            now+durationSeconds
-        );
-
-        noiseSource.connect(filter);
-
-        filter.connect(noiseGain);
-
-        noiseGain.connect(
-            audioContext.destination
-        );
-
-        noiseSource.start(now);
-
-        noiseSource.stop(
-            now+durationSeconds+.02
-        );
-
-    }
-
-}
-
-/*
- * The drop itself — a deep, held sub-bass hit (55Hz, longer decay
- * than the regular kick's own 220ms) that lands at the exact
- * moment the riser above finishes, giving the release its actual
- * weight. Played alongside a gain-boosted playGenreKick (see its
- * own call site in updateProceduralMusic) rather than replacing
- * it — the kick supplies the percussive snap, this supplies the
- * low-end body underneath it; a real drop needs both.
- */
-function playEdmDropHit(){
-
-    if(
-        !audioContext ||
-        !rhythmAudioEnabled
-    )
-        return;
-
-    const now=
-        audioContext.currentTime;
-
-    const osc=
-        audioContext.createOscillator();
-
-    osc.type="sine";
-
-    const duration=.55;
-
-    osc.frequency.setValueAtTime(
-        70,
-        now
-    );
-
-    osc.frequency.exponentialRampToValueAtTime(
-        55,
-        now+duration
-    );
-
-    const gain=
-        audioContext.createGain();
-
-    gain.gain.setValueAtTime(
-        .1,
-        now
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        .0001,
-        now+duration
-    );
-
-    osc.connect(gain);
-
-    gain.connect(
-        audioContext.destination
-    );
-
-    osc.start(now);
-
-    osc.stop(now+duration+.02);
-
-}
-
-/*
- * Techno's own repeating-sequence voice — square wave rather than
- * playMusicPluck's soft sine, and a much quicker, punchier envelope
- * (12ms attack, 14ms hold, fast decay) than that voice's own gentle
- * 320ms note. This is meant to be triggered rapidly in a running
- * pattern (see updateProceduralMusic's techno branch), so it needs
- * a genuinely percussive, bright character of its own rather than
- * borrowing the softer ambient pluck — an arpeggiator reads as
- * "euphoric" through speed and brightness, not through a note that
- * lingers.
- */
-function playTechnoArpNote(freq){
-
-    if(
-        !audioContext ||
-        !rhythmAudioEnabled
-    )
-        return;
-
-    const now=
-        audioContext.currentTime;
-
-    const osc=
-        audioContext.createOscillator();
-
-    osc.type="square";
-
-    osc.frequency.value=freq;
-
-    const lowpass=
-        audioContext.createBiquadFilter();
-
-    lowpass.type="lowpass";
-
-    lowpass.frequency.value=3200;
-
-    lowpass.Q.value=.6;
-
-    const duration=.16;
-
-    const gain=
-        audioContext.createGain();
-
-    gain.gain.setValueAtTime(
-        .001,
-        now
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        .032,
-        now+.012
-    );
-
-    gain.gain.setValueAtTime(
-        .032,
-        now+.026
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        .0001,
-        now+duration
-    );
-
-    osc.connect(lowpass);
-
-    lowpass.connect(gain);
-
-    gain.connect(
-        audioContext.destination
-    );
-
-    osc.start(now);
-
-    osc.stop(now+duration+.02);
-
-}
 
 function playMusicPadChord(freqs,holdSeconds){
 
@@ -32148,113 +31951,6 @@ function playMusicPadChord(freqs,holdSeconds){
             osc.start(now);
 
             osc.stop(now+holdSeconds+.02);
-
-        }
-    );
-
-}
-
-/*
- * EDM's own pad voice — three detuned sawtooth oscillators per
- * note (±9 cents, a modest classic spread, not the extreme wide
- * detune a dedicated synth patch might use) rather than
- * playMusicPadChord's single triangle, which is what actually
- * produces the thick, wide "supersaw" character EDM pads are
- * built from — a single oscillator, however filtered, can't
- * produce that specific chorused quality; it comes from several
- * near-identical pitches beating slightly against each other.
- * Brighter lowpass than the ambient pad too (2200Hz vs 900Hz) —
- * EDM's pad is meant to cut through a busy mix, not sit softly
- * underneath one.
- */
-function playSupersawPad(freqs,holdSeconds){
-
-    if(
-        !audioContext ||
-        !rhythmAudioEnabled
-    )
-        return;
-
-    const now=
-        audioContext.currentTime;
-
-    const attackTime=.05;
-
-    const releaseStart=
-        Math.max(
-            attackTime+.05,
-            holdSeconds*.75
-        );
-
-    const detunesCents=
-        [-9,0,9];
-
-    freqs.forEach(
-        freq=>{
-
-            const lowpass=
-                audioContext.createBiquadFilter();
-
-            lowpass.type="lowpass";
-
-            lowpass.frequency.value=2200;
-
-            lowpass.Q.value=.4;
-
-            const gain=
-                audioContext.createGain();
-
-            gain.gain.setValueAtTime(
-                .0001,
-                now
-            );
-
-            gain.gain.exponentialRampToValueAtTime(
-                .016,
-                now+attackTime
-            );
-
-            gain.gain.setValueAtTime(
-                .016,
-                now+releaseStart
-            );
-
-            gain.gain.exponentialRampToValueAtTime(
-                .0001,
-                now+holdSeconds
-            );
-
-            gain.connect(lowpass);
-
-            lowpass.connect(
-                audioContext.destination
-            );
-
-            detunesCents.forEach(
-                cents=>{
-
-                    const osc=
-                        audioContext.createOscillator();
-
-                    osc.type="sawtooth";
-
-                    osc.frequency.value=
-                        freq*
-                        Math.pow(
-                            2,
-                            cents/1200
-                        );
-
-                    osc.connect(gain);
-
-                    osc.start(now);
-
-                    osc.stop(
-                        now+holdSeconds+.02
-                    );
-
-                }
-            );
 
         }
     );
@@ -35935,6 +35631,14 @@ function finishAsteroidSpawn(asteroid){
         asteroid.size,
         asteroid.special
     );
+
+    /*
+     * Advances edm's macro-structure by exactly one step, right
+     * here — this IS the real spawn event that structure's "beat"
+     * is actually defined by, not an independent clock (see
+     * advanceGenreSpawnRhythm's own comment for the full reasoning).
+     */
+    advanceGenreSpawnRhythm();
 
 }
 
@@ -41869,6 +41573,16 @@ function computeRhythmAwareSpawnInterval(){
         }
 
     }
+
+    /*
+     * edm/techno's own rhythm shape — see
+     * getGenreSpawnRhythmMultiplier's own comment. A no-op (returns
+     * 1) for ambient, so this line changes nothing about the
+     * existing backing-blended behaviour above for that genre.
+     */
+    base=
+        base*
+        getGenreSpawnRhythmMultiplier();
 
     const beatIntensity=
         getNextRhythmBeatIntensity();
@@ -55928,6 +55642,100 @@ function renderRankCircle(flashAmount){
 
 }
 
+/*
+ * Every rank-gated thing in the game, grouped by which rank number
+ * actually unlocks it — planets (PLANETS' own unlockRank, same
+ * field isPlanetUnlocked already reads), pet slots
+ * (PET_SLOT_UNLOCK_RANKS, the 4th slot onward), and now music
+ * styles (MUSIC_STYLES' own unlockRank, read by
+ * isMusicStyleUnlocked the exact same way). One shared list rather
+ * than three separate ones, since a player asking "what does rank
+ * 6 unlock" wants everything at once, not three places to check.
+ */
+function buildRankUnlocksList(){
+
+    const groups={};
+
+    function addItem(
+        rankNumber,groupKey,groupLabel,icon,label
+    ){
+
+        if(!rankNumber)
+            return;
+
+        if(!groups[rankNumber]){
+
+            groups[rankNumber]={};
+
+        }
+
+        if(!groups[rankNumber][groupKey]){
+
+            groups[rankNumber][groupKey]=
+                {label:groupLabel,items:[]};
+
+        }
+
+        groups[rankNumber][groupKey].
+            items.push({icon,label});
+
+    }
+
+    PLANETS.forEach(
+        p=>{
+
+            addItem(
+                p.unlockRank,
+                "planets",
+                "Planets",
+                p.icon,
+                p.name
+            );
+
+        }
+    );
+
+    MUSIC_STYLES.forEach(
+        s=>{
+
+            addItem(
+                s.unlockRank,
+                "music",
+                "Music styles",
+                "🎵",
+                s.name+" ("+
+                s.genre+")"
+            );
+
+        }
+    );
+
+    PET_SLOT_UNLOCK_RANKS.forEach(
+        (rankNumber,i)=>{
+
+            addItem(
+                rankNumber,
+                "pets",
+                "Pet slots",
+                "🐾",
+                "Pet slot "+(i+4)
+            );
+
+        }
+    );
+
+    return Object.keys(groups)
+        .map(Number)
+        .sort((a,b)=>a-b)
+        .map(
+            rankNumber=>({
+                rankNumber,
+                groups:groups[rankNumber]
+            })
+        );
+
+}
+
 function renderRankDetail(){
 
     const info=
@@ -55970,6 +55778,69 @@ function renderRankDetail(){
          " points to "+
          info.nextTier.name
         :"Highest rank reached!";
+
+    const currentRankNumber=
+        info.tierIndex+1;
+
+    const unlocksEl=
+        document.getElementById(
+            "rankDetailUnlocks"
+        );
+
+    unlocksEl.innerHTML=
+        buildRankUnlocksList().map(
+            entry=>{
+
+                const isUnlocked=
+                    entry.rankNumber<=
+                    currentRankNumber;
+
+                const groupsHtml=
+                    Object.values(
+                        entry.groups
+                    ).map(
+                        group=>
+                            '<div class="rank-unlock-group">'+
+                            '<div class="rank-unlock-group-title">'+
+                            group.label+
+                            '</div>'+
+                            group.items.map(
+                                item=>
+                                    '<div class="rank-unlock-item '+
+                                    (
+                                        isUnlocked
+                                        ?"unlocked"
+                                        :"locked"
+                                    )+
+                                    '"><span>'+
+                                    item.icon+
+                                    '</span><span>'+
+                                    item.label+
+                                    '</span></div>'
+                            ).join('')+
+                            '</div>'
+                    ).join('');
+
+                return(
+                    '<div class="rank-unlock-group-title" '+
+                    'style="margin-top:4px;color:'+
+                    (
+                        isUnlocked
+                        ?"#8dffb0"
+                        :"#a9d4f0"
+                    )+
+                    ';">Rank '+
+                    entry.rankNumber+
+                    (
+                        isUnlocked
+                        ?" ✓":""
+                    )+
+                    '</div>'+
+                    groupsHtml
+                );
+
+            }
+        ).join('');
 
     const historyEl=
         document.getElementById(
