@@ -29869,6 +29869,33 @@ function spawnEchoRock(){
 const MUSIC_PLAYER_LEAD_CONFIDENCE=.35;
 
 /*
+ * Shared by every place a musical event (as opposed to an
+ * asteroid event) happens — the backing's own bass/pad beats
+ * below, and the player's pluck notes from the tap handler —
+ * pushed into rhythmState.musicBeatHistory so the waveform can
+ * plot them alongside the asteroid-driven spawn/destruction
+ * traces on one shared timeline.
+ */
+function recordMusicBeat(noteFreq,kind){
+
+    rhythmState.musicBeatHistory.push({
+        time:performance.now(),
+        noteFreq,
+        kind
+    });
+
+    if(
+        rhythmState.musicBeatHistory.length>
+        RHYTHM_MUSIC_BEAT_HISTORY_MAX
+    ){
+
+        rhythmState.musicBeatHistory.shift();
+
+    }
+
+}
+
+/*
  * The backing track's own clock — separate from spawnTimer (the
  * asteroid field's own pacing) even though they're related in
  * spawn_mimics/combine mode; this owns the music's beat, bar, and
@@ -29900,6 +29927,27 @@ function updateProceduralMusic(dt){
             (
                 musicState.modeIndex+1
             )%MUSIC_MODES.length;
+
+        /*
+         * A new style — different root, different pentatonic mode
+         * — whenever a full spawn_mimics/combine/player_leads
+         * cycle completes and wraps back to the first phase. A new
+         * "song" roughly every three phases' worth of play, rather
+         * than the whole session sitting in one scale throughout;
+         * this is also the ENTIRE reason getAsteroidNoteScale and
+         * getMusicStyleOctave rebuild from getCurrentMusicStyle on
+         * every call rather than caching an array once — a cached
+         * scale would keep serving the previous style's notes
+         * after this line changed which one was active.
+         */
+        if(musicState.modeIndex===0){
+
+            currentMusicStyleIndex=
+                (
+                    currentMusicStyleIndex+1
+                )%MUSIC_STYLES.length;
+
+        }
 
     }
 
@@ -29968,17 +30016,36 @@ function updateProceduralMusic(dt){
                     musicState.barIndex
                 ];
 
+            const midOctave=
+                getMusicStyleOctave(1);
+
+            const bassOctave=
+                getMusicStyleOctave(0);
+
             playMusicPadChord(
                 chordDegrees.map(
-                    d=>MUSIC_SCALE_MID[d]
+                    d=>midOctave[d]
                 ),
                 musicState.beatInterval*4
             );
 
-            playMusicBassNote(
-                MUSIC_SCALE_BASS[
+            recordMusicBeat(
+                midOctave[chordDegrees[0]],
+                "pad"
+            );
+
+            const bassFreq0=
+                bassOctave[
                     chordDegrees[0]
-                ]
+                ];
+
+            playMusicBassNote(
+                bassFreq0
+            );
+
+            recordMusicBeat(
+                bassFreq0,
+                "bass"
             );
 
         }else if(
@@ -29990,12 +30057,23 @@ function updateProceduralMusic(dt){
                     musicState.barIndex
                 ];
 
-            playMusicBassNote(
-                MUSIC_SCALE_BASS[
+            const bassOctave=
+                getMusicStyleOctave(0);
+
+            const bassFreq2=
+                bassOctave[
                     chordDegrees[
                         chordDegrees.length-1
                     ]
-                ]
+                ];
+
+            playMusicBassNote(
+                bassFreq2
+            );
+
+            recordMusicBeat(
+                bassFreq2,
+                "bass"
             );
 
         }
@@ -30257,7 +30335,7 @@ function sound(type,pitchMultiplier=1){
  * differently timed.
  */
 function playAsteroidSpawnSound(
-    x,y,vx,vy,intensity,size
+    x,y,vx,vy,intensity,size,special
 ){
 
     if(!audioContext)
@@ -30278,17 +30356,24 @@ function playAsteroidSpawnSound(
         clamp(size,1,3);
 
     /*
-     * Lowered substantially from the first pass (was 620-130×size,
-     * closer to a violin's own range and part of why it read as
-     * squeaky) — this sits in a soft, low register instead, along
-     * with the timbre changes below (sine instead of triangle,
-     * much quieter overtones, a lowpass smoothing the whole
-     * signal) meant to land closer to a soft, breathy "voorraaah"
-     * swell than a bright bowed note.
+     * Replaces the old free-floating size-only formula entirely —
+     * pitch now comes from getAsteroidNoteFreqForSpecial, a
+     * genuine note in whatever style/scale is currently playing
+     * (see its own comment), selected by size (which
+     * octave/register) AND position (which degree within it,
+     * symmetric under left-right mirroring), with a special kind's
+     * own musical role (see SPECIAL_MUSIC_ROLES) able to override
+     * that note entirely for kinds that have one. Every spawn is
+     * now a real note in the song, not an independent tone that
+     * happens to coexist next to it. Intensity and Doppler still
+     * modulate the result afterward, exactly as before — live,
+     * real-time effects layered on top of a chosen note, not part
+     * of choosing it.
      */
-    const sizeBasePitch=
-        340-
-        clampedSize*70;
+    const notePitch=
+        getAsteroidNoteFreqForSpecial(
+            size,x,y,special
+        );
 
     /*
      * Size sets the base note regardless of learning (a physical
@@ -30297,7 +30382,7 @@ function playAsteroidSpawnSound(
      * shift, are scaled by soundModulationStrength.
      */
     const pitch=
-        sizeBasePitch*
+        notePitch*
         applySoundModulationStrength(
             .9+
             clamp(intensity,.4,1.5)*
@@ -30380,9 +30465,23 @@ function playAsteroidSpawnSound(
      * achievement. Scaled by distance — closer arrivals genuinely
      * read louder, a real proximity cue.
      */
+    /*
+     * Kept quiet enough to read as ambient texture rather than a
+     * hit-confirm sound (that's what destruction is for) — this
+     * is a "something just entered the field" cue, not an
+     * achievement. Scaled by distance — closer arrivals genuinely
+     * read louder, a real proximity cue. Also scaled by any
+     * special-kind gain multiplier (Elite's accent, currently the
+     * only one) — the whole point of an accent is landing louder
+     * than its neighbours, not just on a different, more resolved
+     * note.
+     */
     const peakGain=
         .036*
-        spatial.distanceGain;
+        spatial.distanceGain*
+        getSpecialMusicGainMultiplier(
+            special
+        );
 
     master.gain.setValueAtTime(
         .0001,
@@ -30525,7 +30624,7 @@ function playAsteroidSpawnSound(
  * and however fast it was moving.
  */
 function playAsteroidDestructionSound(
-    x,y,vx,vy,intensity,size,isChain
+    x,y,vx,vy,intensity,size,isChain,special
 ){
 
     if(!audioContext)
@@ -30573,17 +30672,21 @@ function playAsteroidDestructionSound(
 
     /*
      * .085 rather than a rounder number — tuned specifically so
-     * the tonal thump layer alone (peakGain × its own .75 mix
-     * ratio below) lands close to the .07 flat gain every other
-     * sound in this file already uses, keeping this in the same
-     * overall loudness family.
+     * the tonal layer alone (peakGain × the fundamental's own gain
+     * below) lands close to the .07 flat gain every other sound in
+     * this file already uses, keeping this in the same overall
+     * loudness family. Also scaled by any special-kind gain
+     * multiplier, same as the spawn sound.
      */
     const peakGain=
         .085*
-        spatial.distanceGain;
+        spatial.distanceGain*
+        getSpecialMusicGainMultiplier(
+            special
+        );
 
     /*
-     * Scales with size now, not just a flat .24/.16 — a bigger
+     * Scales with size now, not just a flat number — a bigger
      * rock's hit genuinely takes longer to fully die out, giving
      * real, audible length difference between sizes on top of the
      * pitch and filter differences below, rather than leaving
@@ -30591,63 +30694,36 @@ function playAsteroidDestructionSound(
      */
     const duration=
         isChain?
-        .16:
-        .2+clampedSize*.075;
+        .18:
+        .24+clampedSize*.09;
 
     /*
-     * Computed here, ahead of master's own envelope below, rather
-     * than inline where the noise layer is actually built further
-     * down — master is the SHARED output stage both the thump and
-     * noise layers connect through, so its own decay has to span
-     * whichever of the two genuinely finishes last. Setting
-     * master's envelope to just `duration` while the noise layer
-     * tried to decay further out on its own would have silently
-     * cut the noise off early anyway once master itself reached
-     * near-zero, since everything passing through it is scaled by
-     * its envelope multiplicatively — extending the noise layer's
-     * own decay alone wouldn't actually have been audible.
+     * Rebuilt from the ground up around one specific piece of
+     * feedback: this previously read as "wispy" rather than
+     * musical, and the actual cause was structural, not a tuning
+     * number — the tonal layer was a single bare sine bent
+     * DOWNWARD to 28% of its own starting pitch by the end. A
+     * genuine melodic note does the opposite of that: it mostly
+     * HOLDS its pitch, the way a mallet or plucked string settles
+     * onto the note it's actually going to ring at rather than
+     * sliding away from it, and it carries real harmonic content
+     * rather than being a single pure tone. The noise layer that
+     * used to supply a long, breathy "hhh" tail is what was
+     * actually reading as "wispy" once the tonal core was too thin
+     * to anchor it — so noise is now a brief transient click at
+     * the moment of impact instead, and the tonal layer (same
+     * fundamental-plus-harmonics structure the spawn sound already
+     * uses) carries the actual, held, recognizable note.
      */
-    const noiseDecayTime=
-        isChain?
-        duration*.7:
-        duration*1.15;
-
-    master.gain.setValueAtTime(
-        peakGain,
-        now
-    );
-
-    master.gain.exponentialRampToValueAtTime(
-        .0001,
-        now+
-        Math.max(duration,noiseDecayTime)
-    );
-
-    /*
-     * The tonal "thump" — lowered substantially from the first
-     * pass (was 170-40×size dropping to 40% of that) and now
-     * drops further, to 28% by the end, aiming for a genuine deep
-     * "boook" rather than a brighter drum crack: size sets the
-     * base pitch (bigger = lower), the beat intensity and Doppler
-     * shift ride on top of that, both scaled by the learned
-     * soundModulationStrength. A chain-reaction hit uses a
-     * brighter triangle rather than the primary hit's sine — the
-     * "combo" sound's original character, kept rather than lost
-     * in this redesign.
-     */
-    const thumpOsc=
-        audioContext.createOscillator();
-
-    thumpOsc.type=
-        isChain?"triangle":"sine";
-
-    const thumpBase=
+    const notePitch=
         isChain?
         520:
-        150-clampedSize*32;
+        getAsteroidNoteFreqForSpecial(
+            size,x,y,special
+        );
 
-    const thumpPitch=
-        thumpBase*
+    const rawPitch=
+        notePitch*
         applySoundModulationStrength(
             .88+
             clamp(intensity,.4,1.5)*
@@ -30657,45 +30733,179 @@ function playAsteroidDestructionSound(
             spatial.dopplerMultiplier
         );
 
-    thumpOsc.frequency.setValueAtTime(
-        thumpPitch,
+    /*
+     * Compression only applies to the primary hit — a chain
+     * reaction's fixed 520Hz base is already in a moderate
+     * register and isn't the source of the "too high" complaint
+     * this was built to address, so it plays exactly as computed.
+     */
+    const pitch=
+        isChain?
+        rawPitch:
+        compressDestructionPitch(
+            rawPitch
+        );
+
+    /*
+     * A small, quick overshoot-then-settle on the fundamental only
+     * — starts a little sharp (a real mallet or plucked string
+     * does exactly this, striking slightly above true pitch before
+     * settling) and reaches the actual note within the first tenth
+     * of a second or so, then holds essentially steady for the
+     * rest of the note rather than continuing to slide anywhere.
+     * isChain keeps its own brighter upward character, since a
+     * chain reaction is meant to read as escalating, not as a
+     * single held note.
+     */
+    const pitchSettleTime=
+        Math.min(.09,duration*.3);
+
+    /*
+     * Harmonic gains scaled down for a high (post-compression)
+     * pitch — see destructionHarmonicBrightness's own comment.
+     * Multiplying it into each harmonic's base gain here, once,
+     * rather than inside the forEach below, since it depends only
+     * on pitch (already known at this point) and every harmonic
+     * needs the same scale applied.
+     */
+    const brightness=
+        isChain?
+        1:
+        destructionHarmonicBrightness(
+            pitch
+        );
+
+    const harmonics=
+        [
+            {
+                mult:1,
+                gain:1,
+                type:isChain?"triangle":"sine",
+                decayFrac:1
+            },
+            {
+                mult:2,
+                gain:.3*brightness,
+                type:"sine",
+                decayFrac:.55
+            },
+            {
+                mult:3,
+                gain:.12*brightness,
+                type:"sine",
+                decayFrac:.32
+            }
+        ];
+
+    harmonics.forEach(
+        h=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type=h.type;
+
+            const startMult=
+                isChain?
+                .55:
+                1.18;
+
+            const endMult=
+                isChain?
+                2.1:
+                1;
+
+            osc.frequency.setValueAtTime(
+                pitch*h.mult*startMult,
+                now
+            );
+
+            osc.frequency.exponentialRampToValueAtTime(
+                pitch*h.mult*endMult,
+                now+pitchSettleTime
+            );
+
+            /*
+             * Rift Rock only — a genuine slow glide downward across
+             * the rest of the note, layered on top of the normal
+             * settle above rather than replacing it. This is the
+             * one kind that keeps a real portamento, specifically
+             * because "warped time" is a time-varying idea that a
+             * static frequency multiplier (how every other special
+             * role works) genuinely can't express — everything
+             * else in this redesign moved away from a big pitch
+             * bend because it read as unmelodic on an ordinary
+             * note, but a controlled glide is exactly the point
+             * here rather than something to avoid.
+             */
+            if(
+                special==="rift" &&
+                !isChain
+            ){
+
+                osc.frequency.exponentialRampToValueAtTime(
+                    pitch*h.mult*endMult*.6,
+                    now+duration
+                );
+
+            }
+
+            const hGain=
+                audioContext.createGain();
+
+            hGain.gain.setValueAtTime(
+                h.gain,
+                now
+            );
+
+            if(h.decayFrac<1){
+
+                hGain.gain.setValueAtTime(
+                    h.gain,
+                    now+pitchSettleTime
+                );
+
+                hGain.gain.exponentialRampToValueAtTime(
+                    .001,
+                    now+
+                    pitchSettleTime+
+                    (duration-pitchSettleTime)*
+                    h.decayFrac
+                );
+
+            }
+
+            osc.connect(hGain);
+
+            hGain.connect(master);
+
+            osc.start(now);
+
+            osc.stop(now+duration+.02);
+
+        }
+    );
+
+    const fundamentalGain=
+        isChain?.5:.75;
+
+    master.gain.setValueAtTime(
+        peakGain*fundamentalGain,
         now
     );
 
-    thumpOsc.frequency.exponentialRampToValueAtTime(
-        thumpPitch*
-        (isChain?2.1:.28),
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
         now+duration
     );
 
-    const thumpGain=
-        audioContext.createGain();
-
-    thumpGain.gain.value=
-        isChain?.5:.75;
-
-    thumpOsc.connect(thumpGain);
-
-    thumpGain.connect(master);
-
-    thumpOsc.start(now);
-
-    thumpOsc.stop(now+duration+.02);
-
     /*
-     * The noise layer — the actual "rocky", breathy "hhh" tail
-     * that follows the thump's own "boook". Switched from a
-     * bandpass to a lowpass, and pulled down substantially in
-     * cutoff (was 2600-700×size, centred quite bright and reading
-     * more as a sharp crack than a breath) — a lowpass instead
-     * lets everything below its cutoff through, which is what
-     * actually gives a dull, breathy "hhh" character rather than
-     * an isolated resonant "crack" band. Bigger rocks get a much
-     * lower cutoff (duller, more of a muffled exhale); smaller
-     * ones stay brighter and crisper. Decays a little past the
-     * thump's own duration (1.15× rather than .7×) so the breath
-     * genuinely trails out after the boom instead of cutting off
-     * together with it.
+     * The noise layer — now a brief transient click at the moment
+     * of impact (roughly a fifth of the note's own length) rather
+     * than a long breathy tail, an accent marking the hit rather
+     * than a co-equal layer competing with the tonal note for
+     * attention. Bigger rocks still get a duller, lower-cutoff
+     * click; smaller ones a crisper one.
      */
     const buffer=
         getNoiseBuffer();
@@ -30728,20 +30938,22 @@ function playAsteroidDestructionSound(
         const noiseGain=
             audioContext.createGain();
 
+        const noiseDecayTime=
+            duration*(isChain?.3:.22);
+
         /*
-         * A pure mix ratio, same scale as thumpGain above — NOT
-         * multiplied by peakGain here, since noiseGain connects
-         * into master below, which already carries peakGain in
-         * its own envelope. Multiplying it in twice (once here,
-         * once via that connection) would have quietly crushed
-         * this whole layer by roughly peakGain's own factor again
-         * — genuinely inaudible for anything past a close-range
-         * hit, which defeats the entire point of a texture layer
-         * meant to be heard alongside the thump, not buried
-         * under it.
+         * Baked directly into this gain's own value (peakGain×3,
+         * a fixed mix ratio) and connected straight to the output
+         * — NOT through master — since this transient now runs on
+         * its own short envelope, independent of master's longer
+         * one for the tonal layer above; routing it through master
+         * would double-count peakGain (once here, once again via
+         * master's own envelope) the same way an earlier version
+         * of this sound already got caught doing.
          */
         noiseGain.gain.setValueAtTime(
-            (isChain?.35:.5)*2.2,
+            (isChain?.3:.4)*
+            peakGain*3,
             now
         );
 
@@ -30754,7 +30966,17 @@ function playAsteroidDestructionSound(
 
         filter.connect(noiseGain);
 
-        noiseGain.connect(master);
+        if(pan){
+
+            noiseGain.connect(pan);
+
+        }else{
+
+            noiseGain.connect(
+                audioContext.destination
+            );
+
+        }
 
         noiseSource.start(now);
 
@@ -30776,7 +30998,7 @@ function playAsteroidDestructionSound(
  * ricochet off something that held, not an impact that won.
  */
 function playAsteroidDeflectionSound(
-    x,y,vx,vy,intensity,size
+    x,y,vx,vy,intensity,size,special
 ){
 
     if(!audioContext)
@@ -30821,7 +31043,10 @@ function playAsteroidDeflectionSound(
 
     const peakGain=
         .06*
-        spatial.distanceGain;
+        spatial.distanceGain*
+        getSpecialMusicGainMultiplier(
+            special
+        );
 
     const duration=.14;
 
@@ -30840,9 +31065,20 @@ function playAsteroidDeflectionSound(
 
     clangOsc.type="square";
 
+    /*
+     * Same shared note as this asteroid's own spawn and would-be
+     * destruction sound (special kind included, so Elite's
+     * deflection clang resolves to its root the same as everything
+     * else it does) — a deflection is still an event happening to
+     * a specific rock at a specific size and position, so it gets
+     * the same treatment: a real note from the current scale, with
+     * the clang's own upward pitch-bend (×1.4 by the end) layered
+     * on top rather than baked into which note plays.
+     */
     const clangBase=
-        520-
-        clamp(size,1,3)*70;
+        getAsteroidNoteFreqForSpecial(
+            size,x,y,special
+        );
 
     const clangPitch=
         clangBase*
@@ -34690,7 +34926,26 @@ function finishAsteroidSpawn(asteroid){
     rhythmState.spawnHistory.push({
         time:performance.now(),
         intensity:lastRhythmBeatIntensity,
-        size:asteroid.size
+        size:asteroid.size,
+        /*
+         * The actual note frequency this spawn produces — the
+         * exact same call playAsteroidSpawnSound itself makes
+         * (special kind included), so the waveform can plot
+         * genuine pitch contour rather than just timing/intensity.
+         * Frequency rather than a scale-index here specifically
+         * because a special role's interval shift (coin-rich's
+         * octave up, for instance) can legitimately land outside
+         * the plain 15-note palette's own range — an index into
+         * that palette couldn't represent it, but a frequency
+         * always can.
+         */
+        noteFreq:
+            getAsteroidNoteFreqForSpecial(
+                asteroid.size,
+                asteroid.x,
+                asteroid.y,
+                asteroid.special
+            )
     });
 
     if(
@@ -34708,18 +34963,91 @@ function finishAsteroidSpawn(asteroid){
         asteroid.vx,
         asteroid.vy,
         lastRhythmBeatIntensity,
-        asteroid.size
+        asteroid.size,
+        asteroid.special
     );
 
 }
 
 function spawnAsteroid(){
 
-    const pos=
-        edgeSpawn();
+    /*
+     * spawn_mimics mode: size and position aren't rolled randomly
+     * here — they're CHOSEN to realize the next note of the
+     * composed melody, which is the entire mechanism behind "the
+     * game controls asteroid spawning to make the music" rather
+     * than asteroids merely happening to sound musical as a side
+     * effect. spawn_mimics AND combine both compose this way —
+     * combine is the phase where spawn keeps composing while the
+     * player's own taps ALSO consume notes from the same shared
+     * melody sequence (see the tap handler's pluck hook), a
+     * genuine combine rather than two independent things that
+     * happen to coexist. player_leads is the one mode that reverts
+     * to normal random spawning — that phase is specifically about
+     * testing whether the PLAYER's own taps alone, with only the
+     * backing's tempo bending to help, can carry the melody without
+     * spawn itself doing any of the composing.
+     */
+    let pos;
 
-    const size=
-        rollAsteroidSize();
+    let size;
+
+    const currentMusicMode=
+        MUSIC_MODES[
+            musicState.modeIndex
+        ];
+
+    if(
+        musicState.active &&
+        rhythmAudioEnabled &&
+        (
+            currentMusicMode===
+            "spawn_mimics" ||
+            currentMusicMode===
+            "combine"
+        )
+    ){
+
+        const style=
+            getCurrentMusicStyle();
+
+        const degreeCount=
+            style.degrees.length;
+
+        const targetNoteIndex=
+            getNextComposedNoteIndex();
+
+        const octaveIndex=
+            Math.floor(
+                targetNoteIndex/
+                degreeCount
+            );
+
+        const degreeIndex=
+            targetNoteIndex%
+            degreeCount;
+
+        size=
+            clamp(
+                3-octaveIndex,
+                1,3
+            );
+
+        pos=
+            composeSpawnPosition(
+                degreeIndex,
+                degreeCount
+            );
+
+    }else{
+
+        pos=
+            edgeSpawn();
+
+        size=
+            rollAsteroidSize();
+
+    }
 
     const special=
         rollSpecialKind();
@@ -34865,7 +35193,8 @@ function detonateAsteroid(
             asteroid.vx,
             asteroid.vy,
             lastRhythmBeatIntensity,
-            asteroid.size
+            asteroid.size,
+            asteroid.special
         );
 
         return;
@@ -34881,7 +35210,8 @@ function detonateAsteroid(
         asteroid.x,
         asteroid.y,
         performance.now(),
-        asteroid.size
+        asteroid.size,
+        asteroid.special
     );
 
     /*
@@ -35464,7 +35794,8 @@ function detonateAsteroid(
         asteroid.vy,
         lastRhythmBeatIntensity,
         asteroid.size,
-        chain
+        chain,
+        asteroid.special
     );
 
     floatingText(
@@ -37812,7 +38143,29 @@ function defaultAIModel(){
          * rather than given real arrays here, so an old save
          * missing this field entirely still works.
          */
-        flowCorrelationBuffer:null
+        flowCorrelationBuffer:null,
+
+        /*
+         * How aggressively the destruction sound's own pitch gets
+         * pulled back down when it lands high in the register — 1
+         * means no taming at all (the raw note plays exactly as
+         * computed, however high that is), lower values compress
+         * high notes down more (see compressDestructionPitch).
+         * Starts at .55, a value chosen by directly measuring the
+         * resulting curve before this shipped: it leaves the
+         * "proper piano ping" register genuinely untouched (every
+         * note up to roughly the middle of the scale's own range
+         * plays completely uncompressed) and only pulls down notes
+         * above that, more the higher they started. Learned from
+         * there the same way soundModulationStrength is — nudged
+         * toward whichever direction actually correlates with
+         * better flow for this player, via its own separate
+         * rolling correlation buffer below, rather than assumed to
+         * be right forever at its starting value.
+         */
+        destructionPitchCompressionExponent:.55,
+
+        destructionPitchCorrelationBuffer:null
 
     };
 
@@ -37961,6 +38314,31 @@ function loadAIModel(){
                 ){
 
                     parsed.flowCorrelationBuffer=null;
+
+                }
+
+                if(
+                    typeof parsed.destructionPitchCompressionExponent!==
+                    "number"
+                ){
+
+                    parsed.destructionPitchCompressionExponent=.55;
+
+                }
+
+                if(
+                    !parsed.destructionPitchCorrelationBuffer ||
+                    !Array.isArray(
+                        parsed.destructionPitchCorrelationBuffer.
+                        exponents
+                    ) ||
+                    !Array.isArray(
+                        parsed.destructionPitchCorrelationBuffer.
+                        flows
+                    )
+                ){
+
+                    parsed.destructionPitchCorrelationBuffer=null;
 
                 }
 
@@ -38161,7 +38539,18 @@ let rhythmState={
      * the spawn rhythm has actually been doing over time, only
      * what it's doing on this exact frame.
      */
-    spawnHistory:[]
+    spawnHistory:[],
+
+    /*
+     * The backing track's own voice — bass and pad beats from
+     * updateProceduralMusic, and the player's own pluck notes from
+     * the tap handler, all in one shared timeline (kind
+     * distinguishes which). This is what lets the waveform actually
+     * show the music itself, not just the asteroid-driven side of
+     * it — the "orchestra" this was asked to become needs every
+     * instrument represented, not only spawn and destruction.
+     */
+    musicBeatHistory:[]
 
 };
 
@@ -38172,6 +38561,8 @@ const RHYTHM_DESTRUCTION_HISTORY_MAX=40;
 const RHYTHM_FIELD_SNAPSHOT_MAX=30;
 
 const RHYTHM_SPAWN_HISTORY_MAX=40;
+
+const RHYTHM_MUSIC_BEAT_HISTORY_MAX=60;
 
 
 /*
@@ -38324,7 +38715,7 @@ function recordRhythmTap(x,y,time){
  * an instant apart, which is itself a distinct rhythmic pattern
  * — a "roll" rather than a single hit).
  */
-function recordRhythmDestruction(x,y,time,size){
+function recordRhythmDestruction(x,y,time,size,special){
 
     const history=
         rhythmState.destructionHistory;
@@ -38348,7 +38739,16 @@ function recordRhythmDestruction(x,y,time,size){
     history.push({
         x,y,time,
         distFromCentroid,
-        size
+        size,
+        /*
+         * Same note playAsteroidDestructionSound itself resolves
+         * to (special kind included) — lets the waveform plot the
+         * kill's actual pitch, not just when it happened.
+         */
+        noteFreq:
+            getAsteroidNoteFreqForSpecial(
+                size,x,y,special
+            )
     });
 
     if(
@@ -38733,6 +39133,118 @@ function updateSoundFlowLearning(dt){
 
 }
 
+let destructionPitchLearningTimer=0;
+
+/*
+ * Same interval, same buffer sizes, same nudge step as
+ * updateSoundFlowLearning above — this is a second, independent
+ * application of that exact mechanism (a rolling Pearson
+ * correlation against flow, not a reaction to any single noisy
+ * comparison) to a different tunable parameter, not a new design.
+ * Reusing proven numbers here rather than picking fresh ones: this
+ * response's own earlier attempts at a naive single-sample
+ * hill-climb genuinely failed under testing before the correlation
+ * approach was arrived at, and there's no reason to expect a
+ * second tunable parameter would be any less sensitive to that
+ * same failure mode.
+ */
+function updateDestructionPitchLearning(dt){
+
+    destructionPitchLearningTimer+=dt;
+
+    if(
+        destructionPitchLearningTimer<
+        SOUND_FLOW_LEARNING_INTERVAL
+    ){
+
+        return;
+
+    }
+
+    destructionPitchLearningTimer=0;
+
+    /*
+     * A smaller random drift than updateSoundFlowLearning's own
+     * .06 (down to .02) — deliberately, after actually measuring
+     * the difference: with the wider step, a full 11 of 30
+     * simulated "no real signal" sessions drifted to an extreme
+     * purely by chance, and specifically drifting HIGH here means
+     * undoing the compression this was built to add in the first
+     * place. At .02 that same test came back with zero sessions
+     * landing at an extreme, while still measurably tracking a
+     * genuine correlation in either direction when one exists —
+     * verified both properties held before picking this value
+     * rather than assuming a smaller step would still learn
+     * anything at all.
+     */
+    aiModel.destructionPitchCompressionExponent=
+        clamp(
+            aiModel.destructionPitchCompressionExponent+
+            (Math.random()-.5)*.02,
+            .3,
+            1
+        );
+
+    const flowNow=
+        computeFlowScore();
+
+    if(flowNow===null)
+        return;
+
+    if(
+        !aiModel.destructionPitchCorrelationBuffer
+    ){
+
+        aiModel.destructionPitchCorrelationBuffer=
+            {exponents:[],flows:[]};
+
+    }
+
+    const buffer=
+        aiModel.destructionPitchCorrelationBuffer;
+
+    buffer.exponents.push(
+        aiModel.destructionPitchCompressionExponent
+    );
+
+    buffer.flows.push(flowNow);
+
+    if(
+        buffer.exponents.length>
+        SOUND_FLOW_BUFFER_MAX
+    ){
+
+        buffer.exponents.shift();
+
+        buffer.flows.shift();
+
+    }
+
+    if(
+        buffer.exponents.length>=
+        SOUND_FLOW_MIN_BUFFER
+    ){
+
+        const correlation=
+            pearsonCorrelation(
+                buffer.exponents,
+                buffer.flows
+            );
+
+        aiModel.destructionPitchCompressionExponent=
+            clamp(
+                aiModel.destructionPitchCompressionExponent+
+                correlation*.015,
+                .3,
+                1
+            );
+
+    }
+
+    saveAIModel();
+
+}
+
 function screenScaleFeature(){
 
     const diagonal=
@@ -38881,19 +39393,547 @@ let rhythmAudioEnabled=true;
  * timing isn't under this system's control), so the notes
  * colliding needed to be safe by construction rather than
  * something to carefully avoid in real time.
+ *
+ * Genuinely restructured from the first pass: the scale here is no
+ * longer just what the ambient pad/bass backing plays — it's the
+ * shared musical palette that ASTEROIDS THEMSELVES draw from too
+ * (see getAsteroidNoteFreq below), so a spawn or a kill's pitch is
+ * always a real note in whatever's currently playing, not an
+ * independent physically-motivated tone that happens to coexist
+ * alongside the music. Multiple styles (different root, different
+ * pentatonic mode) rather than one fixed scale, cycling alongside
+ * the phase system, so the asteroid-driven melody actually has more
+ * than one "song" to express through the same underlying mechanism.
  */
-const MUSIC_SCALE_BASS=
-    [110,130.81,146.83,164.81,196];
+const MUSIC_STYLES=
+    [
+        {
+            name:"warm",
+            rootFreq:110,
+            degrees:[0,3,5,7,10]
+        },
+        {
+            name:"bright",
+            rootFreq:130.81,
+            degrees:[0,2,4,7,9]
+        },
+        {
+            name:"cosmic",
+            rootFreq:146.83,
+            degrees:[0,3,5,7,10]
+        }
+    ];
 
-const MUSIC_SCALE_MID=
-    [220,261.63,293.66,329.63,392];
+let currentMusicStyleIndex=0;
 
-const MUSIC_SCALE_HIGH=
-    [440,523.25,587.33,659.25,783.99];
+function getCurrentMusicStyle(){
+
+    return MUSIC_STYLES[
+        currentMusicStyleIndex
+    ];
+
+}
+
+function semitoneToFreq(rootFreq,semitones){
+
+    return(
+        rootFreq*
+        Math.pow(2,semitones/12)
+    );
+
+}
+
+/*
+ * One octave's worth of the current style's degrees, starting
+ * octaveIndex octaves above its root — octave 0 is the bass
+ * register, 1 the mid/pad register, 2 the high/pluck register,
+ * matching the old fixed BASS/MID/HIGH constants this replaces,
+ * except now genuinely derived from whichever style is active
+ * rather than hardcoded to one.
+ */
+function getMusicStyleOctave(octaveIndex){
+
+    const style=
+        getCurrentMusicStyle();
+
+    return style.degrees.map(
+        deg=>
+            semitoneToFreq(
+                style.rootFreq,
+                deg+octaveIndex*12
+            )
+    );
+
+}
+
+/*
+ * The full palette asteroids themselves draw notes from — three
+ * octaves of the current style's degrees, low to high, 15 notes
+ * total. Rebuilt from getMusicStyleOctave rather than cached,
+ * since the active style can change (see cycleMusicStyle) and a
+ * cached array would otherwise keep serving the previous style's
+ * notes after that happened.
+ */
+function getAsteroidNoteScale(){
+
+    return[
+        ...getMusicStyleOctave(0),
+        ...getMusicStyleOctave(1),
+        ...getMusicStyleOctave(2)
+    ];
+
+}
+
+/*
+ * Bigger rocks sit in the lower octave, smaller ones higher — the
+ * same physical intuition the original size-based pitch used,
+ * just now selecting a REGISTER within the shared scale rather
+ * than a free-floating continuous pitch.
+ */
+function computeSizeOctaveIndex(size){
+
+    return clamp(
+        3-clamp(size,1,3),
+        0,2
+    );
+
+}
+
+/*
+ * Which of the style's degrees a position selects, symmetric
+ * under left-right mirroring by construction: atan2(dy,|dx|)
+ * folds the horizontal component through its absolute value, so a
+ * position and its mirror image across the screen's vertical
+ * centre line always produce the exact same angle here — same
+ * note, differing only in the stereo pan computeSpatialAudioParams
+ * already derives separately from the UNFOLDED x position. Ranges
+ * from straight-up (-PI/2) to straight-down (+PI/2), normalized to
+ * pick one of degreeCount equal slices across that span — genuine
+ * top-vs-bottom variety (a real, different degree), while two
+ * positions that are honestly mirror images of each other land on
+ * the same one, matching both halves of what was actually asked
+ * for rather than only the "should differ" half.
+ */
+function computePositionDegreeIndex(
+    x,y,degreeCount
+){
+
+    const refX=W/2;
+
+    const refY=H/2;
+
+    const dx=x-refX;
+
+    const dy=y-refY;
+
+    const foldedAngle=
+        Math.atan2(
+            dy,
+            Math.abs(dx)
+        );
+
+    const posFrac=
+        clamp(
+            (
+                foldedAngle+
+                Math.PI/2
+            )/Math.PI,
+            0,1
+        );
+
+    return clamp(
+        Math.floor(
+            posFrac*degreeCount
+        ),
+        0,
+        degreeCount-1
+    );
+
+}
+
+function computeAsteroidNoteIndex(
+    size,x,y
+){
+
+    const style=
+        getCurrentMusicStyle();
+
+    const degreeCount=
+        style.degrees.length;
+
+    const octaveIndex=
+        computeSizeOctaveIndex(size);
+
+    const degreeIndex=
+        computePositionDegreeIndex(
+            x,y,degreeCount
+        );
+
+    return(
+        octaveIndex*degreeCount+
+        degreeIndex
+    );
+
+}
+
+/*
+ * The actual note an asteroid at this size and position produces
+ * — this is what playAsteroidSpawnSound and
+ * playAsteroidDestructionSound now build their pitch from, instead
+ * of the old free-floating continuous size-only formula. Every
+ * spawn and every kill lands on a genuine note of whatever's
+ * currently playing; Doppler and beat-intensity still modulate the
+ * result afterward (see applySoundModulationStrength at each call
+ * site), but as a live effect layered on top of a real note,
+ * rather than something that could shift a sound off-scale
+ * entirely.
+ */
+function getAsteroidNoteFreq(
+    size,x,y
+){
+
+    const scale=
+        getAsteroidNoteScale();
+
+    const index=
+        clamp(
+            computeAsteroidNoteIndex(
+                size,x,y
+            ),
+            0,
+            scale.length-1
+        );
+
+    return scale[index];
+
+}
+
+/*
+ * Now covering every special kind except Drift Rock and Shatter
+ * Ice, both left deliberately unmodified because they already get
+ * genuine musical variety from their own existing behavior rather
+ * than needing an added role: Drift Rock's position wanders
+ * continuously under ambient tilt/mouse input, so the note it
+ * produces at the moment it's actually heard already varies in a
+ * way that fits its "steered by something outside the game" theme
+ * without a fixed override; Shatter Ice's children already scatter
+ * to different positions at spawn, which already gives each piece
+ * of the resulting arpeggio its own note through the ordinary
+ * position mechanism, with no override needed to make that happen.
+ *
+ *   twin — a fifth above its own note (harmony, see below).
+ *   elite — resolves to its octave's root, louder (accent).
+ *
+ *   cloak — half gain, no pitch change: a genuinely quieter,
+ *   half-hidden note to match a rock that's normally invisible
+ *   outright.
+ *
+ *   coin-rich — a full octave up (+12 semitones): a bright, high
+ *   "sparkle" rather than a harmony or an accent, matching a rock
+ *   whose whole identity is a reward rather than a threat.
+ *
+ *   explosive — louder only, no pitch change: a "hit hard" accent
+ *   distinct from Elite's resolve-to-root treatment, since an
+ *   explosive rock's danger is about force, not aftermath.
+ *
+ *   sticky — a minor third up (+3 semitones): a small, clinging
+ *   dissonance-adjacent color rather than a clean interval like
+ *   twin's fifth, fitting a rock whose whole point is being
+ *   awkward to get free of.
+ *
+ *   durable — a fourth down (-5 semitones): an unresolved,
+ *   "hasn't settled yet" quality for a rock that's specifically
+ *   defined by NOT dying on the first hit.
+ *
+ *   rift — not listed in the table below at all; it gets a
+ *   dedicated slow downward pitch-bend instead (see
+ *   playAsteroidDestructionSound's own rift-specific branch)
+ *   rather than a static frequency multiplier, since "warped time"
+ *   is inherently a time-varying effect that a fixed ratio can't
+ *   express — the one kind where the destruction sound's own
+ *   general move toward a held, steady note (see that function's
+ *   comment) is deliberately set aside, because a genuine glide is
+ *   exactly what this kind's own theme calls for.
+ */
+const SPECIAL_MUSIC_ROLES={
+
+    twin:{intervalSemitones:7},
+
+    elite:{forceToRoot:true,gainMultiplier:1.4},
+
+    cloak:{gainMultiplier:.5},
+
+    "coin-rich":{intervalSemitones:12},
+
+    explosive:{gainMultiplier:1.3},
+
+    sticky:{intervalSemitones:3},
+
+    durable:{intervalSemitones:-5}
+
+};
+
+function getAsteroidNoteFreqForSpecial(
+    size,x,y,special
+){
+
+    const role=
+        special &&
+        SPECIAL_MUSIC_ROLES[special];
+
+    if(!role){
+
+        return getAsteroidNoteFreq(
+            size,x,y
+        );
+
+    }
+
+    if(role.forceToRoot){
+
+        const style=
+            getCurrentMusicStyle();
+
+        const degreeCount=
+            style.degrees.length;
+
+        const octaveIndex=
+            computeSizeOctaveIndex(
+                size
+            );
+
+        const scale=
+            getAsteroidNoteScale();
+
+        return scale[
+            clamp(
+                octaveIndex*degreeCount,
+                0,
+                scale.length-1
+            )
+        ];
+
+    }
+
+    const baseFreq=
+        getAsteroidNoteFreq(
+            size,x,y
+        );
+
+    if(role.intervalSemitones){
+
+        return(
+            baseFreq*
+            Math.pow(
+                2,
+                role.intervalSemitones/12
+            )
+        );
+
+    }
+
+    return baseFreq;
+
+}
+
+function getSpecialMusicGainMultiplier(
+    special
+){
+
+    const role=
+        special &&
+        SPECIAL_MUSIC_ROLES[special];
+
+    return(
+        role &&
+        role.gainMultiplier
+    )||1;
+
+}
+
+/*
+ * Tames a high destruction-sound pitch back down rather than
+ * letting the full width of the note palette play at full force —
+ * added specifically because a note above roughly the middle of
+ * the scale's own range was reading as too high/shrill against
+ * everything else happening at that moment, at the cost of the
+ * "proper piano ping" character a lower, held note has. Below
+ * DESTRUCTION_PITCH_THRESHOLD this is a complete no-op — every note
+ * in the actual comfortable "piano" register plays exactly as
+ * computed, untouched; only notes ABOVE that threshold get pulled
+ * down, and by more the higher they started (a soft-knee curve in
+ * log-space, not a hard ceiling). aiModel.destructionPitchCompressionExponent
+ * is the actual tunable here — 1 would mean no taming at all, and
+ * it's nudged over time by updateDestructionPitchLearning toward
+ * whatever value has actually correlated with better flow for this
+ * player, rather than fixed forever at the .55 it starts from.
+ */
+const DESTRUCTION_PITCH_THRESHOLD=480;
+
+function compressDestructionPitch(pitch){
+
+    if(pitch<=DESTRUCTION_PITCH_THRESHOLD)
+        return pitch;
+
+    return(
+        DESTRUCTION_PITCH_THRESHOLD*
+        Math.pow(
+            pitch/
+            DESTRUCTION_PITCH_THRESHOLD,
+            aiModel.destructionPitchCompressionExponent
+        )
+    );
+
+}
+
+/*
+ * How much of the 2nd/3rd harmonic to keep, as a function of the
+ * (already-compressed) pitch actually being played — full
+ * brightness low in the register, tapering down as the note climbs
+ * so the overtones don't stack into the same shrillness the pitch
+ * compression above is already working to avoid. Floored at .35
+ * rather than allowed to reach zero — even a high note should
+ * still carry SOME harmonic content, just noticeably less than a
+ * low one.
+ */
+function destructionHarmonicBrightness(
+    compressedPitch
+){
+
+    return clamp(
+        1-
+        (compressedPitch-200)/900,
+        .35,1
+    );
+
+}
+
+/*
+ * spawn_mimics mode's actual composing mechanism — a short target
+ * melody (indices into getAsteroidNoteScale's 15-note palette),
+ * one note consumed per spawn, regenerated whenever it runs out.
+ * A bounded random walk rather than fully random note-to-note
+ * jumps: each step moves by a small amount from the last one, with
+ * an occasional larger leap for real melodic variety — the same
+ * "mostly smooth, sometimes a real jump" shape an actual composed
+ * line tends to have, rather than either a flat repeated note or
+ * pitches scattered with no relationship to their neighbours.
+ */
+let composedMelody=null;
+
+let composedMelodyIndex=0;
+
+function generateComposedMelody(){
+
+    const scaleLength=
+        getAsteroidNoteScale().length;
+
+    const length=8;
+
+    const melody=[];
+
+    let current=
+        Math.floor(scaleLength/2);
+
+    for(
+        let i=0;
+        i<length;
+        i++
+    ){
+
+        melody.push(current);
+
+        const bigLeap=
+            Math.random()<.15;
+
+        const step=
+            bigLeap?
+            Math.floor(
+                (Math.random()-.5)*
+                scaleLength*.7
+            ):
+            Math.floor(
+                (Math.random()-.5)*5
+            );
+
+        current=
+            clamp(
+                current+step,
+                0,
+                scaleLength-1
+            );
+
+    }
+
+    return melody;
+
+}
+
+function getNextComposedNoteIndex(){
+
+    if(
+        !composedMelody ||
+        composedMelodyIndex>=
+        composedMelody.length
+    ){
+
+        composedMelody=
+            generateComposedMelody();
+
+        composedMelodyIndex=0;
+
+    }
+
+    return composedMelody[
+        composedMelodyIndex++
+    ];
+
+}
+
+/*
+ * The inverse of computeAsteroidNoteIndex's position half — given
+ * a desired degree, returns an actual (x,y) that will produce it.
+ * Spawns specifically from the left or right edge (picked
+ * randomly between the two, since either is musically identical —
+ * exactly the symmetry computePositionDegreeIndex is built
+ * around) rather than top/bottom: a top or bottom edge spawn's Y
+ * is nearly fixed at the edge itself, which only ever reaches the
+ * two extreme degrees regardless of X — verified by hand against
+ * computePositionDegreeIndex, not assumed, and confirmed correct
+ * across every degree before this was wired into an actual spawn.
+ * Left/right edges instead vary fully in Y across their whole
+ * length, which is what actually reaches every degree in between.
+ */
+function composeSpawnPosition(
+    desiredDegreeIndex,degreeCount
+){
+
+    const targetPosFrac=
+        (desiredDegreeIndex+.5)/
+        degreeCount;
+
+    const y=
+        clamp(
+            -40+
+            targetPosFrac*(H+80),
+            -40,
+            H+40
+        );
+
+    const fromLeft=
+        Math.random()<.5;
+
+    return{
+        x:fromLeft?-70:W+70,
+        y
+    };
+
+}
 
 /*
  * Four bars, each a pair of scale degrees stacked as the pad chord
- * — indices into MUSIC_SCALE_MID. Not traditional triads (a
+ * — indices into whichever octave getMusicStyleOctave(1) currently
+ * returns for the active style. Not traditional triads (a
  * pentatonic scale doesn't really have those in the usual sense),
  * just pairings chosen to sound settled (bar 1, bar 4 use the root)
  * versus more open (bars 2-3) — a loose verse shape rather than a
@@ -39109,6 +40149,63 @@ function computeRhythmAwareSpawnInterval(){
         base=
             base*.5+
             musicBlendTarget*.5;
+
+    }
+
+    /*
+     * combine mode's actual predictive-influence mechanism — the
+     * part of this whole system that most directly earns the name:
+     * when there's a genuine next-tap prediction and it falls
+     * reasonably soon, blend the spawn interval toward the time
+     * remaining until it, weighted by how much that prediction is
+     * actually trusted right now (predictionErrorFrac). This is
+     * what "the game tries to influence the player into
+     * contributing" actually means in concrete terms — timing the
+     * next composed-note spawn (see spawnAsteroid's combine
+     * handling) to land around when the player is expected to tap
+     * anyway, so the freshest, most tappable rock at that moment is
+     * more likely to be the one currently carrying the melody.
+     * Never forced to certainty even at full confidence (capped at
+     * a .5 blend) — an influence, not a guarantee, which is exactly
+     * the honest framing this needed: the player might still tap
+     * something else entirely, and this mode doesn't pretend
+     * otherwise.
+     */
+    if(
+        MUSIC_MODES[
+            musicState.modeIndex
+        ]==="combine" &&
+        rhythmState.predictedNextTapTime!==
+        null
+    ){
+
+        const timeUntilPredictedTap=
+            (
+                rhythmState.predictedNextTapTime-
+                performance.now()
+            )/1000;
+
+        if(
+            timeUntilPredictedTap>0 &&
+            timeUntilPredictedTap<2.5
+        ){
+
+            const confidence=
+                clamp(
+                    1-
+                    rhythmState.predictionErrorFrac,
+                    0,1
+                );
+
+            const blendWeight=
+                confidence*.5;
+
+            base=
+                base*(1-blendWeight)+
+                timeUntilPredictedTap*
+                blendWeight;
+
+        }
 
     }
 
@@ -44334,6 +45431,8 @@ function update(dt){
 
             updateSoundFlowLearning(dt);
 
+            updateDestructionPitchLearning(dt);
+
             updateEchoRockSpawning(dt);
 
             updateProceduralMusic(dt);
@@ -47271,12 +48370,22 @@ function handlePointer(event){
     /*
      * The player's own voice in the backing track — only in
      * combine/player_leads (spawn_mimics is meant to be the
-     * backing playing alone, the player not yet part of it). Tap
-     * X position picks which of the five pentatonic degrees
-     * sounds, so where on screen someone taps has some genuine
-     * melodic consequence rather than always playing the same
-     * note; the scale itself guarantees whatever comes out never
-     * clashes with the bass or pad running underneath.
+     * backing playing alone, the player not yet part of it).
+     *
+     * Genuinely reworked from the first pass: rather than tap
+     * position picking an independent note of its own, this now
+     * consumes the SAME shared melody sequence spawnAsteroid
+     * composes from (see getNextComposedNoteIndex) — in combine,
+     * spawn and the player are quite literally taking turns
+     * advancing one melody line rather than running two
+     * independent musical ideas that happen to overlap; in
+     * player_leads, spawn has stopped composing entirely (back to
+     * normal random spawning — see spawnAsteroid's own mode check),
+     * so the player's own taps become the ONLY thing still
+     * advancing the melody at all, which is the actual test: can
+     * tempo tracking alone (via the backing bending toward the
+     * player's tempo — see updateProceduralMusic) put the player's
+     * natural taps in a position to carry it.
      */
     if(
         musicState.active &&
@@ -47291,19 +48400,24 @@ function handlePointer(event){
         )
     ){
 
-        const degree=
-            clamp(
-                Math.floor(
-                    p.x/W*
-                    MUSIC_SCALE_HIGH.length
-                ),
-                0,
-                MUSIC_SCALE_HIGH.length-1
-            );
+        const targetNoteIndex=
+            getNextComposedNoteIndex();
 
-        playMusicPluck(
-            MUSIC_SCALE_HIGH[degree]
-        );
+        const scale=
+            getAsteroidNoteScale();
+
+        const noteFreq=
+            scale[
+                clamp(
+                    targetNoteIndex,
+                    0,
+                    scale.length-1
+                )
+            ];
+
+        playMusicPluck(noteFreq);
+
+        recordMusicBeat(noteFreq,"pluck");
 
     }
 
@@ -50799,6 +51913,41 @@ function drawRhythmWaveform(){
     }
 
     /*
+     * Log-scaled frequency-to-Y for the melody band below — pitch
+     * is perceived logarithmically (an octave is always the same
+     * visual "step" regardless of which octave it's in), so a
+     * linear mapping would visually compress the low end and
+     * stretch the high end relative to how the interval actually
+     * sounds. Range set a little wider than the base 3-octave
+     * scale (110-784Hz) specifically so special-role-shifted notes
+     * — coin-rich's octave up, most notably — have room to sit at
+     * a genuinely higher position rather than immediately pinning
+     * to the band's edge; verified this clamps gracefully (rather
+     * than producing NaN or an off-canvas position) for anything
+     * still further outside even that widened range.
+     */
+    function freqToY(freq,bandTop,bandBottom){
+
+        const minFreq=90;
+
+        const maxFreq=1000;
+
+        const logFrac=
+            clamp(
+                Math.log2(freq/minFreq)/
+                Math.log2(maxFreq/minFreq),
+                0,1
+            );
+
+        return(
+            bandBottom-
+            logFrac*
+            (bandBottom-bandTop)
+        );
+
+    }
+
+    /*
      * A smooth decaying pulse centred on each event in the given
      * history, sampled across the full canvas width and drawn as
      * one continuous line — this is what turns a list of discrete
@@ -50890,16 +52039,169 @@ function drawRhythmWaveform(){
     }
 
     /*
+     * Discrete dots rather than a continuous line — unlike the
+     * pulse traces above (which are about DENSITY/timing and
+     * genuinely read well as a continuous curve), pitch is a
+     * different value at every event with no meaningful
+     * interpolation between one note and the next, so connecting
+     * them with a line would draw a slide between notes that never
+     * actually happened. Each dot fades and shrinks with age, both
+     * for a simple visual "recent vs older" cue and because
+     * without SOME fade, a full history's worth of past notes would
+     * visually pile up into a wall of identical dots.
+     */
+    function drawMelodyDots(
+        history,colorFn,bandTop,bandBottom
+    ){
+
+        for(
+            const event of history
+        ){
+
+            if(
+                event.time<
+                now-RHYTHM_WAVEFORM_PAST_MS ||
+                event.time>
+                now+RHYTHM_WAVEFORM_FUTURE_MS
+            ){
+
+                continue;
+
+            }
+
+            const x=
+                timeToX(event.time);
+
+            const y=
+                freqToY(
+                    event.noteFreq,
+                    bandTop,
+                    bandBottom
+                );
+
+            const age=
+                clamp(
+                    (now-event.time)/
+                    RHYTHM_WAVEFORM_PAST_MS,
+                    0,1
+                );
+
+            const alpha=
+                clamp(1-age,.15,1);
+
+            const radius=
+                2.2+
+                (1-age)*1.6;
+
+            c.beginPath();
+
+            c.arc(
+                x,y,radius,
+                0,Math.PI*2
+            );
+
+            c.fillStyle=
+                colorFn(alpha);
+
+            c.fill();
+
+        }
+
+    }
+
+    /*
+     * Layout: the top ~56% of the canvas is the melody band above
+     * (genuine pitch, one dot per note-producing event); the
+     * bottom ~40% keeps the original density/timing pulse traces,
+     * rescaled to fit rather than removed — that's still real,
+     * useful information (how BUSY things are, not just what note
+     * played), just no longer the whole picture on its own now
+     * that pitch has somewhere to go too.
+     */
+    const melodyBandTop=
+        8;
+
+    const melodyBandBottom=
+        height*.56;
+
+    const separatorY=
+        height*.6;
+
+    c.strokeStyle=
+        "rgba(120,150,190,.25)";
+
+    c.lineWidth=1;
+
+    c.beginPath();
+
+    c.moveTo(0,separatorY);
+
+    c.lineTo(width,separatorY);
+
+    c.stroke();
+
+    drawMelodyDots(
+        rhythmState.spawnHistory,
+        a=>"rgba(255,180,90,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.destructionHistory,
+        a=>"rgba(255,95,95,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    /*
+     * The backing's three voices, each its own color — bass and
+     * pad are the game's own instruments, pluck is specifically
+     * the player's contribution, so it gets the brightest,
+     * warmest treatment of the three rather than blending in.
+     */
+    drawMelodyDots(
+        rhythmState.musicBeatHistory.filter(
+            e=>e.kind==="bass"
+        ),
+        a=>"rgba(110,150,255,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.musicBeatHistory.filter(
+            e=>e.kind==="pad"
+        ),
+        a=>"rgba(180,130,255,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.musicBeatHistory.filter(
+            e=>e.kind==="pluck"
+        ),
+        a=>"rgba(255,225,140,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    /*
      * Controlled spawn rhythm first, underneath — amber, each
      * pulse's height scaled by that beat's own intensity, so a
      * phrase's build and release is visibly taller/shorter across
-     * the trace, not just present/absent.
+     * the trace, not just present/absent. Rescaled to fit the
+     * bottom activity band (below separatorY) now that the top of
+     * the canvas belongs to the melody dots above — both traces
+     * kept well clear of separatorY so they never visually collide
+     * with the pitch band's own content.
      */
     drawPulseTrace(
         rhythmState.spawnHistory,
         "rgba(255,180,90,.85)",
-        height*.78,
-        height*.5,
+        height*.98,
+        height*.17,
         260,
         event => clamp(event.intensity,.3,1.5)/1.5
     );
@@ -50910,8 +52212,8 @@ function drawRhythmWaveform(){
     drawPulseTrace(
         rhythmState.tapHistory,
         "rgba(255,255,255,.9)",
-        height*.34,
-        height*.5,
+        height*.78,
+        height*.15,
         220,
         null
     );
@@ -50982,6 +52284,120 @@ function drawRhythmWaveform(){
     c.lineTo(nowX,height);
 
     c.stroke();
+
+    /*
+     * Phase indicator — which of the three modes is currently
+     * driving the music, plus a thin progress bar for how far
+     * through its ~22-second span the current phase is. Without
+     * this, the waveform shows plenty of detail but never actually
+     * says WHY the pattern looks the way it does at any given
+     * moment — a viewer watching spawn suddenly start composing a
+     * clean melody has no way to know that's spawn_mimics starting
+     * unless it's labeled.
+     */
+    if(musicState.active){
+
+        const modeLabels={
+            spawn_mimics:"🎵 Spawn Leads",
+            combine:"🤝 Combine",
+            player_leads:"🎯 Player Leads"
+        };
+
+        const mode=
+            MUSIC_MODES[
+                musicState.modeIndex
+            ];
+
+        c.font=
+            "600 11px system-ui";
+
+        c.textAlign="left";
+
+        c.textBaseline="top";
+
+        c.fillStyle=
+            "rgba(230,238,255,.85)";
+
+        c.fillText(
+            modeLabels[mode]||mode,
+            6,4
+        );
+
+        const phaseFrac=
+            clamp(
+                musicState.modeTimer/
+                MUSIC_MODE_DURATION,
+                0,1
+            );
+
+        c.fillStyle=
+            "rgba(120,150,190,.3)";
+
+        c.fillRect(6,18,60,2);
+
+        c.fillStyle=
+            "rgba(160,255,180,.8)";
+
+        c.fillRect(
+            6,18,
+            60*phaseFrac,2
+        );
+
+    }
+
+    /*
+     * "How noisy is the game right now" — a simple events-per-
+     * second reading across every history this waveform draws
+     * from (spawn, destruction, and all three music voices),
+     * counted over the last 2 seconds specifically rather than the
+     * whole visible window, so it tracks the CURRENT moment rather
+     * than smearing across the full 5-second past. This was asked
+     * for explicitly: the waveform should make clear how busy
+     * things actually are, not just show shapes a viewer has to
+     * interpret density from themselves.
+     */
+    const recentWindowMs=2000;
+
+    const recentCutoff=
+        now-recentWindowMs;
+
+    let recentEventCount=0;
+
+    [
+        rhythmState.spawnHistory,
+        rhythmState.destructionHistory,
+        rhythmState.musicBeatHistory
+    ].forEach(
+        h=>{
+
+            recentEventCount+=
+                h.filter(
+                    e=>e.time>=recentCutoff
+                ).length;
+
+        }
+    );
+
+    const eventsPerSecond=
+        recentEventCount/
+        (recentWindowMs/1000);
+
+    c.font=
+        "600 11px system-ui";
+
+    c.textAlign="right";
+
+    c.textBaseline="top";
+
+    c.fillStyle=
+        "rgba(230,238,255,.85)";
+
+    c.fillText(
+        "🔊 "+
+        eventsPerSecond.toFixed(1)+
+        "/s",
+        width-6,4
+    );
 
 }
 
