@@ -171,6 +171,46 @@ body{
     text-transform:uppercase;
 }
 
+.music-style-indicator{
+
+    margin-top:4px;
+
+    padding:3px 9px;
+
+    display:inline-flex;
+
+    align-items:center;
+
+    gap:4px;
+
+    background:
+        rgba(5,10,25,.55);
+
+    border:
+        1px solid
+        rgba(100,180,255,.15);
+
+    border-radius:10px;
+
+    backdrop-filter:
+        blur(6px);
+
+    font-size:8px;
+
+    letter-spacing:.5px;
+
+    color:#8fb8dd;
+
+    text-transform:uppercase;
+
+    pointer-events:none;
+}
+
+.music-style-indicator:empty{
+
+    display:none;
+}
+
 .stat-value{
 
     font-size:17px;
@@ -2997,6 +3037,11 @@ and (max-height:500px){
 
         </button>
 
+    </div>
+
+    <div
+        class="music-style-indicator"
+        id="musicStyleIndicator">
     </div>
 
 </div>
@@ -29958,6 +30003,33 @@ function recordMusicBeat(noteFreq,kind){
 }
 
 /*
+ * Same shape as recordMusicBeat above, for the non-asteroid,
+ * non-backing events — ship hits, shield deflects, pickups,
+ * power-ups. kind distinguishes which (e.g. "ship-hit",
+ * "shield-deflect", "pickup-coin", "power-up-ghost-shield") so the
+ * waveform can colour them distinctly from each other and from
+ * asteroid/backing events.
+ */
+function recordGameEvent(noteFreq,kind){
+
+    rhythmState.gameEventHistory.push({
+        time:performance.now(),
+        noteFreq,
+        kind
+    });
+
+    if(
+        rhythmState.gameEventHistory.length>
+        RHYTHM_GAME_EVENT_HISTORY_MAX
+    ){
+
+        rhythmState.gameEventHistory.shift();
+
+    }
+
+}
+
+/*
  * The backing track's own clock — separate from spawnTimer (the
  * asteroid field's own pacing) even though they're related in
  * spawn_mimics/combine mode; this owns the music's beat, bar, and
@@ -31703,6 +31775,649 @@ function playAsteroidDeflectionSound(
         );
 
     }
+
+}
+
+/*
+ * The ship actually getting hurt — genuinely distinct from an
+ * asteroid's own destruction sound, since this is a different kind
+ * of event (the player taking damage, not scoring a kill), and
+ * from the shield-deflect sound below (a real hit that cost a
+ * life, not one the shield caught). A dissonant two-tone interval
+ * (a minor second, the closest and harshest interval available —
+ * exactly why it reads as "wrong"/alarming rather than a musical
+ * note) rather than a clean harmonic pair, and genuinely darker
+ * the fewer hearts remain: heartsRemaining=2 (first hit) sits
+ * highest, 0 (the fatal hit) lowest and most ominous — the pitch
+ * itself carries how serious this particular hit was, not just a
+ * repeated identical damage cue. Genre-aware like every other
+ * asteroid sound in this system: edm/techno lean into a grittier,
+ * more electronic "alarm" quality (sawtooth), ambient stays a
+ * softer but still clearly negative sine-based tone. Positioned
+ * and Doppler-shifted from the actual incoming rock's own
+ * velocity — the ship sits at the spatial reference point itself,
+ * so this is centered, but a fast, direct hit still sounds
+ * different from a glancing one via the same Doppler mechanism
+ * every other asteroid sound already uses.
+ */
+function playShipHitSound(
+    x,y,vx,vy,heartsRemaining,size
+){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const spatial=
+        computeSpatialAudioParams(
+            x,y,vx,vy
+        );
+
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const master=
+        audioContext.createGain();
+
+    master.connect(
+        audioContext.destination
+    );
+
+    const duration=.42;
+
+    const peakGain=
+        .1*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    master.gain.setValueAtTime(
+        peakGain,
+        now
+    );
+
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    const basePitch=
+        (
+            180-
+            (
+                3-clamp(
+                    heartsRemaining,
+                    0,2
+                )
+            )*35
+        )*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    const oscType=
+        genre==="ambient"?
+        "sine":
+        "sawtooth";
+
+    [1,Math.pow(2,1/12)].forEach(
+        (ratio,i)=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type=oscType;
+
+            osc.frequency.setValueAtTime(
+                basePitch*ratio,
+                now
+            );
+
+            osc.frequency.exponentialRampToValueAtTime(
+                basePitch*ratio*.55,
+                now+duration
+            );
+
+            const gain=
+                audioContext.createGain();
+
+            gain.gain.value=
+                i===0?.7:.45;
+
+            osc.connect(gain);
+
+            gain.connect(master);
+
+            osc.start(now);
+
+            osc.stop(now+duration+.02);
+
+        }
+    );
+
+    const buffer=
+        getNoiseBuffer();
+
+    if(buffer){
+
+        const noiseSource=
+            audioContext.createBufferSource();
+
+        noiseSource.buffer=buffer;
+
+        const filter=
+            audioContext.createBiquadFilter();
+
+        filter.type="lowpass";
+
+        filter.frequency.value=1400;
+
+        const noiseGain=
+            audioContext.createGain();
+
+        const noiseDuration=.09;
+
+        noiseGain.gain.setValueAtTime(
+            .06,
+            now
+        );
+
+        noiseGain.gain.exponentialRampToValueAtTime(
+            .0001,
+            now+noiseDuration
+        );
+
+        noiseSource.connect(filter);
+
+        filter.connect(noiseGain);
+
+        noiseGain.connect(master);
+
+        noiseSource.start(now);
+
+        noiseSource.stop(
+            now+noiseDuration+.02
+        );
+
+    }
+
+    recordGameEvent(
+        basePitch,
+        "ship-hit-"+
+        clamp(heartsRemaining,0,2)
+    );
+
+}
+
+/*
+ * The shield catching a hit that WOULD have cost a life —
+ * deliberately the opposite character from playShipHitSound above:
+ * bright, ringing, and consonant (a genuine fifth interval, the
+ * cleanest possible pairing, rather than that function's harsh
+ * minor second) since this is a save, not damage. A quick metallic
+ * "ping" rather than a low ominous tone. Same spatial/Doppler
+ * treatment from the incoming rock's own trajectory, same
+ * genre-awareness (brighter square/sawtooth edge for edm/techno,
+ * a pure sine ring for ambient).
+ */
+function playShieldDeflectSound(
+    x,y,vx,vy,size
+){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const spatial=
+        computeSpatialAudioParams(
+            x,y,vx,vy
+        );
+
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const master=
+        audioContext.createGain();
+
+    master.connect(
+        audioContext.destination
+    );
+
+    const duration=.24;
+
+    const peakGain=
+        .07*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    master.gain.setValueAtTime(
+        peakGain,
+        now
+    );
+
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    const basePitch=
+        520*
+        applySoundModulationStrength(
+            spatial.dopplerMultiplier
+        );
+
+    const oscType=
+        genre==="ambient"?
+        "sine":
+        genre==="edm"?
+        "sawtooth":
+        "square";
+
+    [1,1.5].forEach(
+        (ratio,i)=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type=oscType;
+
+            osc.frequency.value=
+                basePitch*ratio;
+
+            const gain=
+                audioContext.createGain();
+
+            gain.gain.value=
+                i===0?.6:.35;
+
+            osc.connect(gain);
+
+            gain.connect(master);
+
+            osc.start(now);
+
+            osc.stop(now+duration+.02);
+
+        }
+    );
+
+    recordGameEvent(
+        basePitch,
+        "shield-deflect"
+    );
+
+}
+
+/*
+ * Coin, material, and heart pickups — genuinely part of the "the
+ * waveform holds everything that happened" record now, not the
+ * generic click every other UI action already uses. Still a real
+ * note from the current scale, same position-based degree
+ * selection playAsteroidSpawnSound itself uses, but pinned to the
+ * HIGH register specifically (bright and sparkly is the whole
+ * point of a reward cue) and voiced as a genuine bell — a
+ * fundamental plus a slightly-detuned fifth, the classic bell
+ * technique, since a true bell's overtones aren't a clean harmonic
+ * series the way a held note's are; that faint beating between two
+ * close-but-not-quite-locked pitches is what actually reads as
+ * "bell" rather than "note." kind shifts the interval so the three
+ * pickup types are genuinely distinguishable from each other, not
+ * just from asteroid sounds: coin plays the note itself, material
+ * a third above (a little brighter, matching materials being the
+ * rarer/more valuable pickup), heart a fourth below (warmer, since
+ * a heart is a relief rather than a reward).
+ */
+function playPickupSound(x,y,kind){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const spatial=
+        computeSpatialAudioParams(
+            x,y
+        );
+
+    const style=
+        getCurrentMusicStyle();
+
+    const degreeCount=
+        style.degrees.length;
+
+    const degreeIndex=
+        computePositionDegreeIndex(
+            x,y,degreeCount
+        );
+
+    const scale=
+        getAsteroidNoteScale();
+
+    const noteIndex=
+        clamp(
+            2*degreeCount+
+            degreeIndex,
+            0,
+            scale.length-1
+        );
+
+    let freq=
+        scale[noteIndex];
+
+    if(kind==="heart"){
+
+        freq*=
+            Math.pow(2,-5/12);
+
+    }else if(kind==="material"){
+
+        freq*=
+            Math.pow(2,4/12);
+
+    }
+
+    /*
+     * A real gap caught on review: every other new sound this
+     * session — spawn, destruction, ship-hit, shield-deflect — is
+     * genre-aware, but this one was still hardcoded to sine
+     * regardless of style. Triangle for edm/techno keeps the bell
+     * character genuinely intact (a full sawtooth or square here
+     * would turn a reward chime into something harsh) while still
+     * reading a little brighter and more electronic than ambient's
+     * pure sine — present, not overhauled.
+     */
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const oscType=
+        genre==="ambient"?
+        "sine":
+        "triangle";
+
+    const pan=
+        audioContext.createStereoPanner?
+        audioContext.createStereoPanner():
+        null;
+
+    const master=
+        audioContext.createGain();
+
+    if(pan){
+
+        pan.pan.setValueAtTime(
+            spatial.pan,
+            now
+        );
+
+        master.connect(pan);
+
+        pan.connect(
+            audioContext.destination
+        );
+
+    }else{
+
+        master.connect(
+            audioContext.destination
+        );
+
+    }
+
+    const duration=.4;
+
+    const peakGain=
+        .05*
+        spatial.distanceGain;
+
+    master.gain.setValueAtTime(
+        peakGain,
+        now
+    );
+
+    master.gain.exponentialRampToValueAtTime(
+        .0001,
+        now+duration
+    );
+
+    [1,1.5*Math.pow(2,3/1200)].forEach(
+        (ratio,i)=>{
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type=oscType;
+
+            osc.frequency.value=
+                freq*ratio;
+
+            const gain=
+                audioContext.createGain();
+
+            gain.gain.value=
+                i===0?.7:.4;
+
+            osc.connect(gain);
+
+            gain.connect(master);
+
+            osc.start(now);
+
+            osc.stop(now+duration+.02);
+
+        }
+    );
+
+    recordGameEvent(
+        freq,
+        "pickup-"+kind
+    );
+
+}
+
+/*
+ * Every power-up now has its own distinct identity instead of the
+ * generic click they all shared before — each one's sound is
+ * shaped to actually match what it does, not just to be different
+ * for its own sake: ghost-shield rises (something expanding
+ * outward, protecting); chrono-field falls, slow and stretched
+ * (the actual mechanism it applies to asteroids, applied to its
+ * own activation cue); regen-coil is a warm ascending 3-note
+ * arpeggio (restorative, the same register/character family as
+ * the heart pickup but grander, since this is a deliberate
+ * activation, not a passive collection); nova-burst is a bright,
+ * quick spray of notes from the current scale (an actual burst,
+ * matching it sweeping up every coin on the field at once). The
+ * arpeggiated ones draw real notes from getAsteroidNoteScale, kept
+ * musically coherent with everything else rather than an
+ * unrelated sound effect bolted on.
+ */
+function playPowerUpSound(kind){
+
+    if(!audioContext)
+        return;
+
+    const now=
+        audioContext.currentTime;
+
+    const master=
+        audioContext.createGain();
+
+    master.connect(
+        audioContext.destination
+    );
+
+    /*
+     * Same gap, same fix as playPickupSound above — both branches
+     * below were hardcoded to sine regardless of style. edm leans
+     * into the same grittier sawtooth its spawn/destruction sounds
+     * already use for the sweep-based ones below (a mechanical,
+     * sci-fi-effect character those already share) — but the
+     * arpeggiated ones (regen-coil, nova-burst) are melodic REWARD
+     * sounds, the same family as pickups, not sweep effects, so
+     * they get the gentler triangle treatment playPickupSound uses
+     * rather than the harsher sawtooth/square: a full square-wave
+     * arpeggio would read as buzzy rather than "warm", which
+     * regen-coil specifically needs to still sound like regardless
+     * of which genre happens to be playing.
+     */
+    const genre=
+        getCurrentMusicStyle().genre;
+
+    const sweepOscType=
+        genre==="ambient"?
+        "sine":
+        genre==="edm"?
+        "sawtooth":
+        "square";
+
+    const arpeggioOscType=
+        genre==="ambient"?
+        "sine":
+        "triangle";
+
+    if(
+        kind==="ghost-shield" ||
+        kind==="chrono-field"
+    ){
+
+        const duration=
+            kind==="ghost-shield"?
+            .5:.6;
+
+        const startFreq=
+            kind==="ghost-shield"?
+            200:500;
+
+        const endFreq=
+            kind==="ghost-shield"?
+            900:120;
+
+        master.gain.setValueAtTime(
+            .0001,
+            now
+        );
+
+        master.gain.exponentialRampToValueAtTime(
+            .05,
+            now+duration*.3
+        );
+
+        master.gain.exponentialRampToValueAtTime(
+            .0001,
+            now+duration
+        );
+
+        const osc=
+            audioContext.createOscillator();
+
+        osc.type=sweepOscType;
+
+        osc.frequency.setValueAtTime(
+            startFreq,
+            now
+        );
+
+        osc.frequency.exponentialRampToValueAtTime(
+            endFreq,
+            now+duration
+        );
+
+        osc.connect(master);
+
+        osc.start(now);
+
+        osc.stop(now+duration+.02);
+
+        recordGameEvent(
+            (startFreq+endFreq)/2,
+            "power-up-"+kind
+        );
+
+        return;
+
+    }
+
+    const scale=
+        getAsteroidNoteScale();
+
+    const rootIndex=
+        Math.floor(
+            scale.length/2
+        );
+
+    const pattern=
+        kind==="regen-coil"?
+        [0,2,4]:
+        [0,3,1,5];
+
+    const noteSpacing=
+        kind==="regen-coil"?
+        .09:.055;
+
+    const noteDuration=
+        kind==="regen-coil"?
+        .3:.18;
+
+    pattern.forEach(
+        (offset,i)=>{
+
+            const noteIndex=
+                clamp(
+                    rootIndex+offset,
+                    0,
+                    scale.length-1
+                );
+
+            const freq=
+                scale[noteIndex];
+
+            const startTime=
+                now+i*noteSpacing;
+
+            const osc=
+                audioContext.createOscillator();
+
+            osc.type=arpeggioOscType;
+
+            osc.frequency.value=
+                freq;
+
+            const gain=
+                audioContext.createGain();
+
+            gain.gain.setValueAtTime(
+                .06,
+                startTime
+            );
+
+            gain.gain.exponentialRampToValueAtTime(
+                .0001,
+                startTime+noteDuration
+            );
+
+            osc.connect(gain);
+
+            gain.connect(master);
+
+            osc.start(startTime);
+
+            osc.stop(
+                startTime+noteDuration+.02
+            );
+
+        }
+    );
+
+    recordGameEvent(
+        scale[rootIndex],
+        "power-up-"+kind
+    );
 
 }
 
@@ -36800,9 +37515,13 @@ function checkPlayerCollisions(){
                  * tracked against the AI model's fairness signal
                  * (a hit that never happened isn't evidence the
                  * field was too crowded). A distinct, smaller pale
-                 * flash instead of the normal explosion, and no
-                 * damage sound, so this reads as "the shield just
-                 * caught one" rather than a real, unnoticed hit.
+                 * flash, and now its own genuine sound (see
+                 * playShieldDeflectSound) rather than silence — a
+                 * bright, consonant "ping" instead of
+                 * playShipHitSound's dissonant alarm, so this reads
+                 * unambiguously as "the shield just caught one,"
+                 * audible and distinct from a real hit rather than
+                 * an unnoticed non-event.
                  */
                 asteroids.splice(
                     i,
@@ -36815,6 +37534,14 @@ function checkPlayerCollisions(){
                         a.y,
                         .7
                     )
+                );
+
+                playShieldDeflectSound(
+                    a.x,
+                    a.y,
+                    a.vx,
+                    a.vy,
+                    a.size
                 );
 
                 continue;
@@ -36881,8 +37608,19 @@ function checkPlayerCollisions(){
 
             aiWindow.deaths++;
 
-            sound(
-                "damage"
+            /*
+             * lives has already been decremented above, so this is
+             * genuinely "hearts remaining after this hit" — the
+             * pitch itself gets lower and more ominous the fewer
+             * hearts are left, see playShipHitSound's own comment.
+             */
+            playShipHitSound(
+                a.x,
+                a.y,
+                a.vx,
+                a.vy,
+                lives,
+                a.size
             );
 
             /*
@@ -38890,6 +39628,73 @@ const AI_LEARNING_RATE=.06;
  */
 const AI_REFERENCE_DIAGONAL=1100;
 
+/*
+ * The forward-looking predictive difficulty layer — genuinely
+ * different from aiModel above, which only ever reacts to a
+ * finished window's past performance. This predicts, BEFORE the
+ * outcome exists, how severe the next stretch of spawning is
+ * likely to feel, then nudges spawn pacing toward a target severity
+ * that itself depends on economic stakes (see
+ * computeEconomicStakes and getTargetSpawnSeverity) — and then
+ * genuinely closes the loop: compares its own prediction against
+ * what actually happened a few seconds later and takes a real
+ * gradient step on that gap, the same core learning rule aiModel
+ * uses, just aimed at a prediction this system explicitly made
+ * rather than reacting after the fact with no prior estimate to
+ * check itself against. Deliberately in-memory only, not persisted
+ * to localStorage the way aiModel/retentionModel are — this predicts
+ * the next few seconds of THIS session's field state, which doesn't
+ * carry meaning across a fresh session the way a learned sense of
+ * "this player's typical pace" does.
+ */
+const SPAWN_OUTCOME_FEATURE_COUNT=6;
+
+const SPAWN_OUTCOME_FEATURE_LABELS=[
+    "Field density",
+    "Field speed",
+    "Recent miss rate",
+    "Lives at risk",
+    "Economic stakes",
+    "Difficulty baseline"
+];
+
+const SPAWN_OUTCOME_CALIBRATION_INTERVAL=4;
+
+const SPAWN_OUTCOME_LEARNING_RATE=.08;
+
+function defaultSpawnOutcomeModel(){
+
+    return{
+
+        w:new Array(
+            SPAWN_OUTCOME_FEATURE_COUNT
+        ).fill(0),
+
+        b:0,
+
+        pendingFeatures:null,
+
+        pendingPredictedSeverity:null,
+
+        pendingSnapshot:null,
+
+        calibrationTimer:0,
+
+        lastActualSeverity:0,
+
+        lastCalibrationGap:0,
+
+        lastTargetSeverity:.5,
+
+        lastMultiplier:1
+
+    };
+
+}
+
+let spawnOutcomeModel=
+    defaultSpawnOutcomeModel();
+
 function defaultAIModel(){
 
     return{
@@ -39440,7 +40245,20 @@ let rhythmState={
      * it — the "orchestra" this was asked to become needs every
      * instrument represented, not only spawn and destruction.
      */
-    musicBeatHistory:[]
+    musicBeatHistory:[],
+
+    /*
+     * Every non-asteroid game event that now has its own real
+     * sound — ship hits (and their severity), shield deflects,
+     * pickups, power-ups — on the same shared timeline shape as
+     * musicBeatHistory above, specifically so the waveform can plot
+     * them the exact same way. This is the direct answer to "the
+     * waveform holds everything that happened": a heart lost, a
+     * coin collected, a shield saving a hit are all now genuinely
+     * part of that record, not just audible in the moment and
+     * otherwise unlogged.
+     */
+    gameEventHistory:[]
 
 };
 
@@ -39453,6 +40271,8 @@ const RHYTHM_FIELD_SNAPSHOT_MAX=30;
 const RHYTHM_SPAWN_HISTORY_MAX=40;
 
 const RHYTHM_MUSIC_BEAT_HISTORY_MAX=60;
+
+const RHYTHM_GAME_EVENT_HISTORY_MAX=40;
 
 
 /*
@@ -40325,6 +41145,420 @@ function difficultyIntensity(){
         0,
         1
     );
+
+}
+
+/*
+ * How much would actually be lost right now if the player died —
+ * the direct request to weigh "what they're carrying and where
+ * they're going" into difficulty. Two components: cargo value
+ * currently at risk (runCoins plus a rough coin-equivalent for
+ * carried materials — 15 was chosen the same honest-estimate way
+ * economicRisk's own 40-coin reference was, a reasonable starting
+ * point rather than a precisely priced figure, since materials
+ * don't have a single canonical sale price in this codebase) and
+ * how much of this run's progress would be wasted (wave, as a
+ * proxy for accumulated time/effort this session — matching the
+ * same wave/15 reference difficultyNorm and buildRetentionFeatures
+ * already use elsewhere, close enough to reuse the same scale
+ * rather than invent a third one). This is deliberately NOT the
+ * same thing as economicRisk above — that's a backward-looking
+ * measure of coins already lost to death; this is a forward-
+ * looking "how much is currently on the table" used to lower how
+ * much risk the predictive difficulty layer is willing to accept
+ * on the player's behalf (see getPredictiveDifficultyMultiplier).
+ */
+function computeEconomicStakes(){
+
+    const materialCount=
+        Object.values(
+            runMaterials
+        ).reduce(
+            (a,b)=>a+b,0
+        );
+
+    const cargoValue=
+        runCoins+
+        materialCount*15;
+
+    const cargoValueNorm=
+        clamp(
+            cargoValue/300,
+            0,1
+        );
+
+    const progressNorm=
+        clamp(
+            wave/12,
+            0,1
+        );
+
+    return clamp(
+        cargoValueNorm*.6+
+        progressNorm*.4,
+        0,1
+    );
+
+}
+
+/*
+ * The feature vector for the predictive difficulty layer — field
+ * state and recent performance read fresh every call, so this
+ * always reflects what's actually on screen right now rather than
+ * a stale snapshot. aiWindow's counters are read directly rather
+ * than waited-for-a-reset, since this needs "recent", not "since
+ * the last full AI_INTERVAL window closed" — those are different
+ * timescales on purpose.
+ */
+function buildSpawnOutcomeFeatures(){
+
+    const fieldDensity=
+        clamp(
+            asteroids.length/14,
+            0,1
+        );
+
+    let speedSum=0;
+
+    asteroids.forEach(
+        a=>{
+
+            speedSum+=
+                Math.hypot(
+                    a.vx,a.vy
+                );
+
+        }
+    );
+
+    const avgSpeed=
+        asteroids.length
+        ?speedSum/
+         asteroids.length
+        :0;
+
+    const fieldSpeed=
+        clamp(
+            avgSpeed/220,
+            0,1
+        );
+
+    const recentMissRate=
+        aiWindow.taps>0
+        ?clamp(
+            1-
+            (
+                aiWindow.kills/
+                aiWindow.taps
+            ),
+            0,1
+        )
+        :0;
+
+    const livesAtRisk=
+        clamp(
+            (3-lives)/3,
+            0,1
+        );
+
+    const stakes=
+        computeEconomicStakes();
+
+    const difficultyBaseline=
+        difficultyIntensity();
+
+    return[
+        fieldDensity,
+        fieldSpeed,
+        recentMissRate,
+        livesAtRisk,
+        stakes,
+        difficultyBaseline
+    ];
+
+}
+
+function predictSpawnOutcomeSeverity(features){
+
+    let z=
+        spawnOutcomeModel.b;
+
+    for(
+        let i=0;
+        i<SPAWN_OUTCOME_FEATURE_COUNT;
+        i++
+    ){
+
+        z+=
+            spawnOutcomeModel.w[i]*
+            features[i];
+
+    }
+
+    return clamp(
+        sigmoid(z),
+        0,1
+    );
+
+}
+
+/*
+ * The direct mechanism behind "how much they'd like to make it to
+ * the next planet" lowering acceptable risk — a comfortable target
+ * severity around .55 at zero stakes, pulled down toward a much
+ * more conservative .2-.3 as stakes climb toward 1. This is a
+ * deliberately fixed mapping rather than a learned one: it encodes
+ * a genuine design intent ("be gentler when more is on the line"),
+ * not a pattern to discover from data the way the severity
+ * prediction itself is.
+ */
+function getTargetSpawnSeverity(stakes){
+
+    return clamp(
+        .55-
+        stakes*.25,
+        .2,
+        .55
+    );
+
+}
+
+/*
+ * The actual forward-looking control signal — read by
+ * computeRhythmAwareSpawnInterval as a multiplier on top of
+ * everything else already feeding the spawn timer. Above 1 means
+ * "predicted harder than the current stakes justify, ease off";
+ * below 1 means "predicted easier than it could be, tighten up".
+ * Verified numerically before this shipped: an untrained model
+ * predicts a neutral .5 regardless of features (sigmoid of an
+ * all-zero dot product), high stakes genuinely produces more
+ * caution than low stakes given the identical predicted severity,
+ * and the multiplier stays within its clamped band at every
+ * extreme. Also where the pending prediction gets snapshotted for
+ * later calibration — only when nothing is already pending, so
+ * this doesn't overwrite an in-flight prediction every time a spawn
+ * interval happens to be recomputed before the calibration window
+ * has had a chance to close.
+ */
+function getPredictiveDifficultyMultiplier(){
+
+    const features=
+        buildSpawnOutcomeFeatures();
+
+    const predictedSeverity=
+        predictSpawnOutcomeSeverity(
+            features
+        );
+
+    const targetSeverity=
+        getTargetSpawnSeverity(
+            features[4]
+        );
+
+    const gap=
+        predictedSeverity-
+        targetSeverity;
+
+    const multiplier=
+        clamp(
+            1+gap*.7,
+            .75,
+            1.35
+        );
+
+    spawnOutcomeModel.lastTargetSeverity=
+        targetSeverity;
+
+    spawnOutcomeModel.lastMultiplier=
+        multiplier;
+
+    if(
+        !spawnOutcomeModel.pendingSnapshot
+    ){
+
+        spawnOutcomeModel.pendingFeatures=
+            features;
+
+        spawnOutcomeModel.pendingPredictedSeverity=
+            predictedSeverity;
+
+        spawnOutcomeModel.pendingSnapshot={
+            taps:aiWindow.taps,
+            kills:aiWindow.kills,
+            hitCount:aiWindow.hitCount,
+            hitSpeedSum:
+                aiWindow.hitSpeedSum,
+            deaths:aiWindow.deaths
+        };
+
+        spawnOutcomeModel.calibrationTimer=0;
+
+    }
+
+    return multiplier;
+
+}
+
+/*
+ * Closing the loop — the direct answer to "seeing how the player
+ * actually reacts compared to what was predicted should give a
+ * clear indication". Every SPAWN_OUTCOME_CALIBRATION_INTERVAL
+ * seconds after a prediction was made, this measures what actually
+ * happened across that same stretch (via the delta against the
+ * snapshot taken at prediction time, so this reads only the
+ * activity since THIS prediction, not everything accumulated since
+ * aiWindow's own last reset) and takes a real gradient step
+ * comparing the two — same core update rule as aiModel's own
+ * learning. actualSeverity blends three genuinely different signs
+ * of how it went: how often taps missed, how fast-moving anything
+ * that actually hit the player was, and whether a death happened
+ * at all.
+ */
+function updateSpawnOutcomeCalibration(dt){
+
+    if(
+        !spawnOutcomeModel.pendingSnapshot
+    ){
+
+        return;
+
+    }
+
+    spawnOutcomeModel.calibrationTimer+=
+        dt;
+
+    if(
+        spawnOutcomeModel.calibrationTimer<
+        SPAWN_OUTCOME_CALIBRATION_INTERVAL
+    ){
+
+        return;
+
+    }
+
+    const snap=
+        spawnOutcomeModel.pendingSnapshot;
+
+    /*
+     * Guarded against a real edge case found before this shipped:
+     * updateAIDifficulty resets aiWindow's own counters to 0 every
+     * AI_INTERVAL (5s) — a different, longer cadence than this
+     * layer's own SPAWN_OUTCOME_CALIBRATION_INTERVAL (4s), so a
+     * snapshot taken shortly before that reset fires would
+     * otherwise see aiWindow's counters read LOWER than the
+     * snapshot itself, producing a negative delta. Clamping each
+     * one to zero reads that case as "no data this cycle" — an
+     * honest, safe fallback — rather than a nonsensical negative
+     * count propagating into missRate/hitSeverity below.
+     */
+    const deltaTaps=
+        Math.max(
+            0,
+            aiWindow.taps-
+            snap.taps
+        );
+
+    const deltaKills=
+        Math.max(
+            0,
+            aiWindow.kills-
+            snap.kills
+        );
+
+    const deltaHitCount=
+        Math.max(
+            0,
+            aiWindow.hitCount-
+            snap.hitCount
+        );
+
+    const deltaHitSpeedSum=
+        Math.max(
+            0,
+            aiWindow.hitSpeedSum-
+            snap.hitSpeedSum
+        );
+
+    const deltaDeaths=
+        Math.max(
+            0,
+            aiWindow.deaths-
+            snap.deaths
+        );
+
+    const missRate=
+        deltaTaps>0
+        ?clamp(
+            1-
+            (
+                deltaKills/
+                deltaTaps
+            ),
+            0,1
+        )
+        :0;
+
+    const hitSeverity=
+        deltaHitCount>0
+        ?clamp(
+            deltaHitSpeedSum/
+            deltaHitCount,
+            0,1
+        )
+        :0;
+
+    const deathSeverity=
+        deltaDeaths>0
+        ?1
+        :0;
+
+    const actualSeverity=
+        clamp(
+            missRate*.35+
+            hitSeverity*.35+
+            deathSeverity*.3,
+            0,1
+        );
+
+    const predicted=
+        spawnOutcomeModel.
+        pendingPredictedSeverity;
+
+    const error=
+        actualSeverity-
+        predicted;
+
+    const features=
+        spawnOutcomeModel.
+        pendingFeatures;
+
+    for(
+        let i=0;
+        i<SPAWN_OUTCOME_FEATURE_COUNT;
+        i++
+    ){
+
+        spawnOutcomeModel.w[i]+=
+            SPAWN_OUTCOME_LEARNING_RATE*
+            error*
+            features[i];
+
+    }
+
+    spawnOutcomeModel.b+=
+        SPAWN_OUTCOME_LEARNING_RATE*
+        error;
+
+    spawnOutcomeModel.lastActualSeverity=
+        actualSeverity;
+
+    spawnOutcomeModel.lastCalibrationGap=
+        error;
+
+    spawnOutcomeModel.pendingSnapshot=
+        null;
+
+    spawnOutcomeModel.calibrationTimer=0;
 
 }
 
@@ -41583,6 +42817,19 @@ function computeRhythmAwareSpawnInterval(){
     base=
         base*
         getGenreSpawnRhythmMultiplier();
+
+    /*
+     * The forward-looking predictive layer — see
+     * getPredictiveDifficultyMultiplier's own comment. This is
+     * where "is the thing about to be spawned going to produce a
+     * fair outcome" actually gets applied to real spawn pacing,
+     * genuinely stakes-aware and genuinely predictive rather than
+     * only reacting after a window has already closed the way
+     * aiModel's own difficulty dial does.
+     */
+    base=
+        base*
+        getPredictiveDifficultyMultiplier();
 
     const beatIntensity=
         getNextRhythmBeatIntensity();
@@ -43901,8 +45148,8 @@ function activateRegenCoil(){
         "#8dffb0"
     );
 
-    sound(
-        "arrival"
+    playPowerUpSound(
+        "regen-coil"
     );
 
     if(
@@ -43967,7 +45214,9 @@ function activateGhostShield(){
         "#c9a8ff"
     );
 
-    sound("click");
+    playPowerUpSound(
+        "ghost-shield"
+    );
 
     if(
         empUses>=
@@ -44031,7 +45280,9 @@ function activateChronoField(){
         "#8de7ff"
     );
 
-    sound("click");
+    playPowerUpSound(
+        "chrono-field"
+    );
 
     if(
         empUses>=
@@ -44193,7 +45444,9 @@ function activateNovaBurst(){
 
     runItemUsesTotal++;
 
-    sound("click");
+    playPowerUpSound(
+        "nova-burst"
+    );
 
     shake=6;
 
@@ -47001,6 +48254,16 @@ function update(dt){
 
             updateAIDifficulty(dt);
 
+            /*
+             * Runs on its own much shorter cadence than
+             * updateAIDifficulty above (SPAWN_OUTCOME_CALIBRATION_
+             * INTERVAL, a few seconds, vs AI_INTERVAL's longer
+             * window) — genuinely a different timescale for a
+             * genuinely different job: closing the loop on THIS
+             * layer's own predictions, not reacting to the past.
+             */
+            updateSpawnOutcomeCalibration(dt);
+
             updateSoundFlowLearning(dt);
 
             updateDestructionPitchLearning(dt);
@@ -48685,6 +49948,49 @@ function updateHUD(){
             )
         );
 
+    const styleIndicatorEl=
+        document.getElementById(
+            "musicStyleIndicator"
+        );
+
+    if(styleIndicatorEl){
+
+        if(
+            musicState.active &&
+            rhythmAudioEnabled
+        ){
+
+            const style=
+                getCurrentMusicStyle();
+
+            const genreLabel=
+                style.genre.
+                charAt(0).
+                toUpperCase()+
+                style.genre.slice(1);
+
+            const styleLabel=
+                style.name.
+                charAt(0).
+                toUpperCase()+
+                style.name.slice(1);
+
+            styleIndicatorEl.
+                textContent=
+                "🎵 "+
+                styleLabel+
+                " — "+
+                genreLabel;
+
+        }else{
+
+            styleIndicatorEl.
+                textContent="";
+
+        }
+
+    }
+
 
     const ready=
         empCharge>=EMP_MAX &&
@@ -50130,8 +51436,10 @@ function handlePointer(event){
                     "#ff8d8d"
                 );
 
-                sound(
-                    "click"
+                playPickupSound(
+                    c.x,
+                    c.y,
+                    "heart"
                 );
 
                 continue;
@@ -50170,8 +51478,10 @@ function handlePointer(event){
                 "#ffd76b"
             );
 
-            sound(
-                "click"
+            playPickupSound(
+                c.x,
+                c.y,
+                "coin"
             );
 
         }
@@ -50252,8 +51562,10 @@ function handlePointer(event){
                 m.info.color
             );
 
-            sound(
-                "click"
+            playPickupSound(
+                m.x,
+                m.y,
+                "material"
             );
 
         }
@@ -50319,6 +51631,58 @@ function handlePointer(event){
     if(
         best!==-1
     ){
+
+        /*
+         * The order-error measurement itself — ranked by distance
+         * to the SHIP (genuine urgency), not distance to the tap
+         * (which is what the loop above already used to resolve
+         * which asteroid got hit). Rank 0 means the tapped asteroid
+         * really was the closest one on screen; a higher rank means
+         * something more urgent was available and went untapped.
+         * Only meaningful with more than one asteroid present —
+         * with zero or one, there's no real "order" to have gotten
+         * right or wrong, so this is skipped rather than forced to
+         * a value that wouldn't mean anything.
+         */
+        if(asteroids.length>1){
+
+            const shipDistances=
+                asteroids.map(
+                    a=>Math.hypot(
+                        a.x-W/2,
+                        a.y-H/2
+                    )
+                );
+
+            const tappedDistance=
+                shipDistances[best];
+
+            let rank=0;
+
+            for(
+                const d of shipDistances
+            ){
+
+                if(d<tappedDistance){
+
+                    rank++;
+
+                }
+
+            }
+
+            const orderErrorSample=
+                rank/
+                (asteroids.length-1);
+
+            rhythmState.orderErrorFrac+=
+                (
+                    orderErrorSample-
+                    rhythmState.orderErrorFrac
+                )*
+                RHYTHM_TEMPO_SMOOTHING;
+
+        }
 
         detonateAsteroid(
             best,
@@ -53403,27 +54767,181 @@ function renderAIMetrics(){
 
     html+=
         '<div class="metric-note">'+
-        'Your tempo: <b>'+tempoText+'</b> · steadiness '+
-        (
+        'Your tempo: <b>'+tempoText+'</b>'+
+        '</div>';
+
+    /*
+     * The actual error breakdown — three genuinely different
+     * dimensions rather than one blended number: tempo error is
+     * WHEN predictions miss (predictionErrorFrac, how wrong "the
+     * next gap repeats the last one" turns out to be); distribution
+     * error is HOW STEADY the player's own rhythm is regardless of
+     * whether it's predictable (tempoVarianceFrac — a player could
+     * have a perfectly real but wildly swinging pattern that reads
+     * as unsteady here while still being accurately predicted
+     * above); order error is WHICH asteroid gets tapped, not when
+     * (orderErrorFrac, see its own comment in handlePointer). Shown
+     * as error itself (0%=none, 100%=worst) with the bar's length
+     * growing directly with the error magnitude — the intuitive
+     * reading (longer bar = more error), rather than trying to
+     * force metricRow's negative/deficit styling into double duty
+     * here, which would need inverting the value and reads as
+     * backwards on a plain error metric like this.
+     */
+    html+=
+        metricRow(
+            "Tempo error",
+            clamp(
+                rhythmState.predictionErrorFrac,
+                0,1
+            ),
             (
-                1-
-                clamp(
-                    rhythmState.tempoVarianceFrac,
-                    0,1
-                )
-            )*100
-        ).toFixed(0)+
-        '% · next-tap prediction accuracy '+
-        (
-            (
-                1-
                 clamp(
                     rhythmState.predictionErrorFrac,
                     0,1
-                )
+                )*100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        metricRow(
+            "Distribution error",
+            clamp(
+                rhythmState.tempoVarianceFrac,
+                0,1
+            ),
+            (
+                clamp(
+                    rhythmState.tempoVarianceFrac,
+                    0,1
+                )*100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        metricRow(
+            "Order error",
+            clamp(
+                rhythmState.orderErrorFrac,
+                0,1
+            ),
+            (
+                clamp(
+                    rhythmState.orderErrorFrac,
+                    0,1
+                )*100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        '<div class="metric-note">'+
+        'Tempo: how wrong the next-tap timing prediction is. '+
+        'Distribution: how steady your own rhythm is, independent '+
+        'of whether it\'s predictable. Order: how often the '+
+        'asteroid you tapped was actually the most urgent one on '+
+        'screen (closest to the ship), not just any valid target.'+
+        '</div>';
+
+    /*
+     * The predictive difficulty layer, surfaced directly rather
+     * than left as an invisible internal adjustment — the whole
+     * point of asking for this was visibility into what it's
+     * actually doing. Predicted/target/actual are shown together
+     * specifically so the gap between predicted and actual (the
+     * calibration signal itself) is something a reader can see for
+     * themselves, not just a number the model claims internally.
+     */
+    html+=
+        '<div class="metric-group-title">'+
+        'Predictive difficulty'+
+        '</div>';
+
+    const currentStakes=
+        computeEconomicStakes();
+
+    html+=
+        metricRow(
+            "Economic stakes",
+            currentStakes,
+            (currentStakes*100).
+            toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        metricRow(
+            "Predicted severity",
+            spawnOutcomeModel.
+            pendingPredictedSeverity===
+            null
+            ?0
+            :spawnOutcomeModel.
+             pendingPredictedSeverity,
+            spawnOutcomeModel.
+            pendingPredictedSeverity===
+            null
+            ?"not yet predicted"
+            :(
+                spawnOutcomeModel.
+                pendingPredictedSeverity*
+                100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        metricRow(
+            "Target severity",
+            spawnOutcomeModel.
+            lastTargetSeverity,
+            (
+                spawnOutcomeModel.
+                lastTargetSeverity*100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    html+=
+        metricRow(
+            "Actual severity (last check)",
+            spawnOutcomeModel.
+            lastActualSeverity,
+            (
+                spawnOutcomeModel.
+                lastActualSeverity*100
+            ).toFixed(0)+"%",
+            {min:0,max:1}
+        );
+
+    const multiplierPercent=
+        (
+            (
+                spawnOutcomeModel.
+                lastMultiplier-1
             )*100
-        ).toFixed(0)+
-        '%'+
+        );
+
+    html+=
+        '<div class="metric-note">'+
+        'Currently spawning <b>'+
+        (
+            multiplierPercent>=0
+            ?"slower/easier"
+            :"faster/harder"
+        )+
+        '</b> than the baseline pace by <b>'+
+        Math.abs(multiplierPercent).
+        toFixed(0)+
+        '%</b>, based on how severe the '+
+        'model predicts the next stretch will feel versus how '+
+        'much is currently at stake. Actual severity updates '+
+        'every '+SPAWN_OUTCOME_CALIBRATION_INTERVAL+
+        ' seconds and is what the model learns from — a '+
+        'persistent gap between predicted and actual is the '+
+        'model still calibrating, not a fixed bias.'+
         '</div>';
 
     html+=
@@ -53437,13 +54955,74 @@ function renderAIMetrics(){
 }
 
 /*
- * The rhythm waveform in the AI Metrics tab — three overlapping
- * pulse envelopes (actual taps, controlled spawn beats, and the
- * single predicted-next-tap marker) across a shared timeline
- * running from a few seconds in the past up to a little into the
- * predicted future. Each event is rendered as a smooth decaying
- * pulse rather than a bare tick, so the traces genuinely read as
- * waveforms rather than a scatter of dashes.
+ * Extrapolates the single predictedNextTapTime forward using the
+ * same tempoSeconds interval, repeatedly, until the future window
+ * is exhausted — the actual mechanism behind "predicting into the
+ * future while adjusting in realtime": every frame recomputes this
+ * fresh off whatever tempoSeconds/predictedNextTapTime currently
+ * are, so a tempo change is reflected in the very next frame's
+ * predicted sequence rather than lagging behind it. maxCount is a
+ * hard safety cap (verified before this shipped) — an
+ * unreasonably fast learned tempo could otherwise generate an
+ * unbounded number of predictions within the same fixed time
+ * window.
+ */
+function getPredictedFutureTapTimes(){
+
+    if(
+        rhythmState.predictedNextTapTime===
+        null ||
+        rhythmState.tempoSeconds===
+        null ||
+        rhythmState.tempoSeconds<=0
+    ){
+
+        return [];
+
+    }
+
+    const times=[];
+
+    const intervalMs=
+        rhythmState.tempoSeconds*1000;
+
+    const horizon=
+        performance.now()+
+        RHYTHM_WAVEFORM_FUTURE_MS;
+
+    let t=
+        rhythmState.predictedNextTapTime;
+
+    const maxCount=8;
+
+    let count=0;
+
+    while(
+        t<=horizon &&
+        count<maxCount
+    ){
+
+        times.push(t);
+
+        t+=intervalMs;
+
+        count++;
+
+    }
+
+    return times;
+
+}
+
+/*
+ * The rhythm waveform in the AI Metrics tab — pulse envelopes for
+ * actual taps, controlled spawn beats, every asteroid/backing/game
+ * event in the melody band, and a genuine predicted-future
+ * sequence (not just one marker) across a shared timeline running
+ * from a few seconds in the past up to a little into the predicted
+ * future. Each event is rendered as a smooth decaying pulse rather
+ * than a bare tick, so the traces genuinely read as waveforms
+ * rather than a scatter of dashes.
  */
 function drawRhythmWaveform(){
 
@@ -53816,6 +55395,61 @@ function drawRhythmWaveform(){
     );
 
     /*
+     * Every non-asteroid game event that now has its own real
+     * sound — see recordGameEvent's own comment. Grouped by
+     * category with its own color family, exactly like the
+     * bass/pad/pluck split above: a ship hit is the most severe
+     * event this game has, so it gets the harshest, most alarming
+     * red; a shield deflect (a save, not damage) the opposite —
+     * bright cyan-white; pickups a warm gold-green, matching the
+     * floating-text colors those already use; power-ups a distinct
+     * violet, since they're deliberate player actions rather than
+     * something that just happened to them.
+     */
+    drawMelodyDots(
+        rhythmState.gameEventHistory.filter(
+            e=>e.kind.startsWith(
+                "ship-hit"
+            )
+        ),
+        a=>"rgba(255,60,60,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.gameEventHistory.filter(
+            e=>e.kind===
+            "shield-deflect"
+        ),
+        a=>"rgba(190,255,250,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.gameEventHistory.filter(
+            e=>e.kind.startsWith(
+                "pickup"
+            )
+        ),
+        a=>"rgba(180,255,170,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    drawMelodyDots(
+        rhythmState.gameEventHistory.filter(
+            e=>e.kind.startsWith(
+                "power-up"
+            )
+        ),
+        a=>"rgba(210,140,255,"+a+")",
+        melodyBandTop,
+        melodyBandBottom
+    );
+
+    /*
      * Controlled spawn rhythm first, underneath — amber, each
      * pulse's height scaled by that beat's own intensity, so a
      * phrase's build and release is visibly taller/shorter across
@@ -53847,34 +55481,57 @@ function drawRhythmWaveform(){
     );
 
     /*
-     * The single predicted-next-tap marker, if it falls within
-     * the visible window — a dashed vertical line rather than a
-     * pulse, since this is a single point estimate, not a
-     * timeline of events like the two traces above it.
+     * The full predicted future sequence now, not just one marker
+     * — see getPredictedFutureTapTimes' own comment for how it's
+     * generated fresh every frame. Each predicted time draws BOTH
+     * a dashed guide line (so it's easy to read off the timeline)
+     * AND a small pulse marker sitting at the exact same height as
+     * the real tap trace above (height*.78) — the actual mechanism
+     * behind "lined up with what it expects": when a real tap
+     * lands at a predicted moment, its own white pulse appears at
+     * that same height, directly over where the prediction marker
+     * already was, so agreement or disagreement between the two is
+     * something you can see, not just something the model claims
+     * internally. Later predictions in the sequence — further out,
+     * inherently less certain since they're extrapolated from an
+     * extrapolation — fade progressively rather than all reading
+     * with equal confidence.
      */
-    if(
-        rhythmState.predictedNextTapTime!==
-        null
-    ){
+    const predictedTimes=
+        getPredictedFutureTapTimes();
 
-        const predictedX=
-            timeToX(
-                rhythmState.predictedNextTapTime
-            );
+    predictedTimes.forEach(
+        (predictedTime,i)=>{
 
-        if(
-            predictedX>=0 &&
-            predictedX<=width
-        ){
+            const predictedX=
+                timeToX(predictedTime);
+
+            if(
+                predictedX<0 ||
+                predictedX>width
+            ){
+
+                return;
+
+            }
+
+            const confidence=
+                clamp(
+                    1-i*.22,
+                    .18,1
+                );
 
             c.save();
 
             c.setLineDash([4,4]);
 
             c.strokeStyle=
-                "rgba(160,255,180,.8)";
+                "rgba(160,255,180,"+
+                (confidence*.75)+
+                ")";
 
-            c.lineWidth=1.5;
+            c.lineWidth=
+                i===0?1.5:1;
 
             c.beginPath();
 
@@ -53889,9 +55546,25 @@ function drawRhythmWaveform(){
 
             c.restore();
 
-        }
+            c.beginPath();
 
-    }
+            c.arc(
+                predictedX,
+                height*.78,
+                3+
+                (i===0?1.5:0),
+                0,Math.PI*2
+            );
+
+            c.fillStyle=
+                "rgba(160,255,180,"+
+                confidence+
+                ")";
+
+            c.fill();
+
+        }
+    );
 
     /*
      * "Now" line — everything left of it is history, everything
