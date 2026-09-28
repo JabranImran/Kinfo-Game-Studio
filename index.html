@@ -21515,6 +21515,36 @@ function drawPlanetFocusScene(){
      * around rather than sitting fixed in one spot.
      */
 
+    /*
+     * Depth of a point on the ground, as its height toward the
+     * viewer on the planet's disc (1 at the disc centre, 0 at the
+     * silhouette) — the same z projectSphere reports, but computed
+     * from any SCREEN position, so a sprite can be sorted by where
+     * its FEET touch the ground rather than where its centre is
+     * drawn. Structures are anchored at their ground point already;
+     * pets and the ship are anchored at their centre, so callers
+     * pass a point below it.
+     */
+    const groundDepthAt=(gx,gy)=>{
+
+        const dx=gx-cx;
+
+        const dy=gy-cy;
+
+        return Math.sqrt(
+            Math.max(
+                0,
+                1-(dx*dx+dy*dy)/
+                (radius*radius)
+            )
+        );
+
+    };
+
+    let surfaceQueue=[];
+
+    let surfaceAlpha=1;
+
     if(
         surfaceItems.length &&
         flight<.95
@@ -21738,36 +21768,22 @@ function drawPlanetFocusScene(){
                 if(mode==="measure"){
 
                     /*
-                     * Depth is measured at the item's BASE — where it
-                     * actually meets the ground — not its centre. A
-                     * big structure's centre sits well above its
-                     * feet, so comparing centres let a pet standing
-                     * beside its lower half draw in front of the
-                     * building's upper half (reading as walking on
-                     * top of it), and a pet at the building's own
-                     * spot vanish behind it entirely. cos of the
-                     * billboard tilt turns the half-height into a
-                     * screen-space y offset, so this stays right
-                     * wherever on the sphere the item is.
+                     * Depth is the ground point's z — how far it
+                     * sits toward the viewer on the sphere — not
+                     * screen height. Screen y only means "nearer"
+                     * while the camera looks at the planet's top
+                     * from one fixed angle; while roaming the whole
+                     * planet rotates and tilts around the pet, and
+                     * things standing off to a side or on the far
+                     * slope were being ordered wrongly. z stays
+                     * correct from any camera angle, which is what
+                     * makes these flat cut-outs read as standing up
+                     * in real 3D space.
                      */
-                    const measuredSize=
-                        Math.max(
-                            item.kind==="ship"?40:68,
-                            width*(
-                                item.kind==="ship"
-                                ?.115
-                                :.19
-                            )
-                        );
-
                     surfaceDepths[index]=
-                        iy+
-                        measuredSize*.38*
-                        Math.cos(
-                            Math.atan2(
-                                iy-cy,
-                                ix-cx
-                            )+Math.PI/2
+                        groundDepthAt(
+                            ix,
+                            iy
                         );
 
                     return;
@@ -22367,13 +22383,22 @@ function drawPlanetFocusScene(){
 
                     if(mode==="measure"){
 
-                        /* feet, not centre — see drawSurfaceItem */
+                        /*
+                         * Sorted by the pet's FEET (a little below
+                         * where it's drawn), which is the point that
+                         * actually touches the ground and so decides
+                         * whether it's in front of or behind a
+                         * building.
+                         */
                         petDepths[petIndex]=
-                            py+
-                            Math.max(
-                                22,
-                                width*.065
-                            )*.42;
+                            groundDepthAt(
+                                px,
+                                py+
+                                Math.max(
+                                    22,
+                                    width*.065
+                                )*.45
+                            );
 
                         return;
 
@@ -22465,7 +22490,8 @@ function drawPlanetFocusScene(){
                 ){
 
                     drawQueue.push({
-                        y:surfaceDepths[index],
+                        label:item.structureId || item.kind,
+                        z:surfaceDepths[index],
                         draw:()=>
                             drawSurfaceItem(
                                 item,index,"draw"
@@ -22486,7 +22512,8 @@ function drawPlanetFocusScene(){
                 ){
 
                     drawQueue.push({
-                        y:petDepths[petIndex],
+                        label:"pet"+petIndex,
+                        z:petDepths[petIndex],
                         draw:()=>
                             drawFocusPet(
                                 pet,petIndex,"draw"
@@ -22498,42 +22525,23 @@ function drawPlanetFocusScene(){
             }
         );
 
-        drawQueue.sort(
-            (a,b)=>a.y-b.y
-        );
-
         /*
-         * Each entry is isolated: one item throwing mid-draw used
-         * to abort the whole scene function, taking everything
-         * drawn afterward (the ship and the roaming pet) with it and
-         * leaving unbalanced canvas state behind. Now the failure is
-         * logged, the canvas state is put back, and the rest of the
-         * frame still draws.
+         * Not drawn here any more: the ship and the roaming pet
+         * are defined further down, and they have to be sorted
+         * into the SAME queue as the structures and pets so the
+         * ship can be behind a building in front of it, and the
+         * pilot pet can walk in front of or behind buildings like
+         * any other pet. Everything is drawn together at the end
+         * of the scene function, back to front by depth.
          */
-        drawQueue.forEach(
-            entry=>{
+        surfaceQueue=
+            drawQueue;
 
-                c.save();
-
-                try{
-
-                    entry.draw();
-
-                }catch(drawError){
-
-                    console.error(
-                        "Surface item draw failed:",
-                        drawError
-                    );
-
-                }finally{
-
-                    c.restore();
-
-                }
-
-            }
-        );
+        surfaceAlpha=
+            Math.max(
+                0,
+                1-flight*1.6
+            );
 
         c.restore();
 
@@ -22585,6 +22593,8 @@ function drawPlanetFocusScene(){
      * never leave the other missing — that's how the ship and the
      * roaming pet could both go missing at once.
      */
+    const drawShipLayer=()=>{
+
     c.save();
 
     try{
@@ -22772,6 +22782,8 @@ function drawPlanetFocusScene(){
 
     }
 
+    };
+
     /*
      * The roaming pet, drawn topmost and always exactly at screen
      * centre by construction — the camera shift earlier in this
@@ -22781,6 +22793,8 @@ function drawPlanetFocusScene(){
      * which pet to draw and where, layered on top of data that
      * hasn't changed at all.
      */
+    const drawRoamingLayer=()=>{
+
     if(roamingActive){
 
       c.save();
@@ -23037,6 +23051,119 @@ function drawPlanetFocusScene(){
         c.restore();
 
       }
+
+    }
+
+    };
+
+    /*
+     * ONE depth-sorted pass for everything standing on the planet:
+     * structures, idle pets, the ship (while it's sitting on the
+     * ground) and the roaming pilot pet. Sorted by projected z,
+     * far to near, so each flat sprite covers — or is covered by —
+     * exactly the things it's genuinely in front of or behind,
+     * like cardboard cut-outs standing in the scene. The ship is
+     * only sorted while it's at rest; once a launch starts it
+     * rises toward the viewer and is drawn on top, as before.
+     */
+    canvas._shipHitArea=null;
+
+    const composeQueue=
+        surfaceQueue.map(
+            entry=>({
+                label:entry.label,
+                z:entry.z,
+                alpha:surfaceAlpha,
+                draw:entry.draw
+            })
+        );
+
+    const shipSorted=
+        flightProgress<=.001 &&
+        focusShips.length>0 &&
+        shipVisible;
+
+    if(shipSorted){
+
+        composeQueue.push({
+            z:groundDepthAt(
+                shipProj.x,
+                shipProj.y+
+                Math.max(38,width*.11)*.9
+            ),
+            alpha:1,
+            draw:drawShipLayer
+        });
+
+    }
+
+    if(roamingActive){
+
+        composeQueue.push({
+            z:(()=>{
+
+                const roamDepthProj=
+                    projectSphere(
+                        roamingLat,
+                        roamingLon,
+                        roamViewLat,
+                        roamViewLon,
+                        cx,
+                        cy,
+                        radius
+                    );
+
+                return groundDepthAt(
+                    roamDepthProj.x,
+                    roamDepthProj.y+
+                    Math.max(
+                        26,
+                        width*.075
+                    )*.45
+                );
+
+            })(),
+            alpha:1,
+            draw:drawRoamingLayer
+        });
+
+    }
+
+    composeQueue.sort(
+        (a,b)=>a.z-b.z
+    );
+
+    composeQueue.forEach(
+        entry=>{
+
+            c.save();
+
+            c.globalAlpha=
+                entry.alpha;
+
+            try{
+
+                entry.draw();
+
+            }catch(drawError){
+
+                console.error(
+                    "Scene item draw failed:",
+                    drawError
+                );
+
+            }finally{
+
+                c.restore();
+
+            }
+
+        }
+    );
+
+    if(!shipSorted){
+
+        drawShipLayer();
 
     }
 
@@ -28339,45 +28466,16 @@ function renderPlanetDetail(id){
                     pet.id;
 
                 /*
-                 * A card, like the shop's: the pet itself big on top
-                 * (tapping it expands the card to full details),
-                 * with feeding and role underneath. Perk and pilot
-                 * training detail only render when expanded.
+                 * Changing a pet's role lives in the EXPANDED card
+                 * only — on the collapsed card it was two buttons
+                 * and a label squeezed into a third of a row. The
+                 * collapsed card just states the current role.
                  */
-                html+=
-                    '<div class="pet-card">'+
-                    '<div class="pet-card-main" data-action="toggle-pet-card" '+
-                    'data-pet="'+pet.id+'">'+
-                    '<canvas class="pet-card-canvas" id="'+petCanvasId+
-                    '" width="132" height="132"></canvas>'+
-                    '<div class="item-shop-card-name">'+
-                    (
-                        SPECIES_DISPLAY_NAMES[pet.species] ||
-                        'Native pet'
-                    )+
-                    '</div>'+
-                    '<div class="item-shop-card-meta">Energy '+
-                    '<span style="color:'+energyColor+';">'+
-                    Math.round(pet.energy)+'%</span> · '+
-                    (role==="pilot" ? 'Pilot' : 'Builder')+
-                    '<br><span style="opacity:.55;">'+
-                    (petExpanded ? 'Tap to collapse' : 'Tap for details')+
-                    '</span></div>'+
-                    '</div>'+
-                    '<div class="pet-card-actions">'+
-                    '<button class="control-btn" style="width:100%;'+
-                    'padding:7px 10px;" data-action="feed-pet" '+
-                    'data-pet="'+pet.id+'" '+
-                    (
-                        pet.energy>=100 ||
-                        getTotalAvailableCoins(id)<
-                        PET_FOOD_COST
-                        ?'disabled'
-                        :''
-                    )+
-                    '>Feed ('+PET_FOOD_COST+' '+COIN_ICON_HTML+')</button>'+
-                    '<div style="display:flex;gap:6px;align-items:center;">'+
-                    '<span style="font-size:9px;color:#8fa7c7;">Role:</span>'+
+                const roleRowHtml=
+                    '<div style="display:flex;gap:6px;align-items:center;'+
+                    'flex-wrap:wrap;margin-bottom:8px;">'+
+                    '<span style="font-size:10px;color:#8fa7c7;">Role:</span>'+
+
                     '<button class="shape-btn'+
                     (
                         role==="builder"
@@ -28416,11 +28514,53 @@ function renderPlanetDetail(id){
                         '</button>'
                         :''
                     )+
+                    '</div>';
+
+                /*
+                 * A card, like the shop's: the pet itself big on top
+                 * (tapping it expands the card to full details),
+                 * with feeding and role underneath. Perk and pilot
+                 * training detail only render when expanded.
+                 */
+                html+=
+                    '<div class="pet-card">'+
+                    '<div class="pet-card-main" data-action="toggle-pet-card" '+
+                    'data-pet="'+pet.id+'">'+
+                    '<canvas class="pet-card-canvas" id="'+petCanvasId+
+                    '" width="132" height="132"></canvas>'+
+                    '<div class="item-shop-card-name">'+
+                    (
+                        SPECIES_DISPLAY_NAMES[pet.species] ||
+                        'Native pet'
+                    )+
                     '</div>'+
+                    '<div class="item-shop-card-meta">Energy '+
+                    '<span style="color:'+energyColor+';">'+
+                    Math.round(pet.energy)+'%</span><br>'+
+                    '<span style="color:#bcecff;font-weight:700;">'+
+                    (role==="pilot" ? '✈ Pilot' : '🔧 Builder')+
+                    '</span>'+
+                    '<br><span style="opacity:.55;">'+
+                    (petExpanded ? 'Tap to collapse' : 'Tap for details')+
+                    '</span></div>'+
+                    '</div>'+
+                    '<div class="pet-card-actions">'+
+                    '<button class="control-btn" style="width:100%;'+
+                    'padding:7px 10px;" data-action="feed-pet" '+
+                    'data-pet="'+pet.id+'" '+
+                    (
+                        pet.energy>=100 ||
+                        getTotalAvailableCoins(id)<
+                        PET_FOOD_COST
+                        ?'disabled'
+                        :''
+                    )+
+                    '>Feed ('+PET_FOOD_COST+' '+COIN_ICON_HTML+')</button>'+
                     '</div>'+
                     (
                         petExpanded
-                        ?'<div class="pet-card-detail">'
+                        ?'<div class="pet-card-detail">'+
+                         roleRowHtml
                         :''
                     );
 
