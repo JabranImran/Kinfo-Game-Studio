@@ -1234,6 +1234,31 @@ body{
     filter:grayscale(.5);
 }
 
+.game-over-return{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    width:100%;
+}
+
+.game-over-return-btn{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin:0;
+}
+
+.game-over-return-name{
+    font-weight:900;
+    letter-spacing:.5px;
+}
+
+.game-over-return-info{
+    font-size:10px;
+    opacity:.65;
+}
+
 .planet-icon{
 
     font-size:23px;
@@ -2527,6 +2552,56 @@ and (max-height:500px){
  * action always wins over the row's "toggle-shop-row" beneath
  * it.
  */
+/*
+ * Pet cards reuse the shop card's look; expanded ones widen to the
+ * full row so the perk and pilot-training detail has room.
+ */
+.pet-card{
+    border:1px solid rgba(100,190,255,.25);
+    border-radius:16px;
+    background:linear-gradient(180deg,rgba(20,32,54,.55),rgba(9,13,22,.55));
+    overflow:hidden;
+    flex:0 0 auto;
+    width:150px;
+}
+
+.pet-card:has(.pet-card-detail){
+    width:100%;
+}
+
+.pet-card-main{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    padding:14px 12px 8px;
+    cursor:pointer;
+}
+
+.pet-card-canvas{
+    display:block;
+    width:100px;
+    height:100px;
+    border-radius:16px;
+    background:radial-gradient(circle at 50% 35%,rgba(100,190,255,.12),rgba(0,0,0,.35));
+    border:1px solid rgba(100,190,255,.18);
+}
+
+.pet-card-actions{
+    padding:0 12px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.pet-card-detail{
+    padding:10px 12px 12px;
+    background:rgba(0,0,0,.2);
+    font-size:10px;
+    color:#8fa7c7;
+    line-height:1.5;
+}
+
 .shop-row{
     display:flex;
     align-items:center;
@@ -3513,15 +3588,6 @@ and (max-height:500px){
 
             </button>
 
-            <button
-                class="pause-tab"
-                id="pauseTabBtnFleet"
-                type="button">
-
-                🚀 Fleet
-
-            </button>
-
         </div>
 
         <div id="pauseTabMenu">
@@ -3548,14 +3614,6 @@ and (max-height:500px){
 
             </button>
 
-            <button
-                class="big-button secondary-button"
-                id="pauseRestart">
-
-                Restart
-
-            </button>
-
             <div id="pauseShipCardContent"></div>
 
         </div>
@@ -3565,14 +3623,6 @@ and (max-height:500px){
             class="hidden">
 
             <div id="aiMetricsContent"></div>
-
-        </div>
-
-        <div
-            id="pauseTabFleet"
-            class="hidden">
-
-            <div id="fleetContent"></div>
 
         </div>
 
@@ -3679,21 +3729,16 @@ and (max-height:500px){
 
         </button>
 
-        <button
-            class="big-button secondary-button"
-            id="restartButton">
+        <div class="leaderboard-title">
 
-            Try Again
+            Return To
 
-        </button>
+        </div>
 
-        <button
-            class="big-button secondary-button"
-            id="menuButton">
-
-            Main Menu
-
-        </button>
+        <div
+            class="game-over-return"
+            id="gameOverReturnButtons">
+        </div>
 
     </div>
 
@@ -6543,7 +6588,64 @@ const MATERIAL_ICON_HTML={
 
 };
 
+/*
+ * Ship cargo is ONE shared capacity across everything carried, not
+ * a cap per item: materials and vault food (perk stock — cookies
+ * and the like; never power-ups) all count against the same total.
+ * Food rides in the same ship.materials object under a "food:"
+ * prefixed key, so launch, flight, landing, and loss-on-death all
+ * carry it with no separate plumbing.
+ */
+const FOOD_KEY_PREFIX="food:";
+
+function isFoodKey(key){
+
+    return(
+        typeof key==="string" &&
+        key.startsWith(FOOD_KEY_PREFIX)
+    );
+
+}
+
+function getFoodPerkId(key){
+
+    return key.slice(
+        FOOD_KEY_PREFIX.length
+    );
+
+}
+
+function getCargoUsed(materials){
+
+    return Object.values(
+        materials || {}
+    ).reduce(
+        (a,b) => a+(Number(b) || 0),
+        0
+    );
+
+}
+
+function getShipCargoCapacity(bonus){
+
+    return MATERIAL_CAP+(bonus || 0);
+
+}
+
 function getMaterialIconHtml(materialId){
+
+    if(isFoodKey(materialId)){
+
+        const foodPerk=
+            PERKS[
+                getFoodPerkId(materialId)
+            ];
+
+        return(
+            foodPerk && foodPerk.icon
+        ) || "🍪";
+
+    }
 
     return(
         MATERIAL_ICON_HTML[materialId] ||
@@ -7389,10 +7491,10 @@ function getWorkingPetCount(planetId){
 }
 
 /*
- * One-time fee each time a pet is switched INTO the pilot role
- * (not out of it) — reflects the actual training investment,
- * not just a free label swap. Re-assigning it back to pilot
- * later (after being demoted to builder) pays it again.
+ * One-time pilot's licence fee per pet — paid the first time a
+ * pet is switched INTO the pilot role, then remembered on the pet
+ * itself (pet.pilotLicensed), so re-assigning it to pilot after a
+ * spell as a builder never charges again.
  */
 const PET_PILOT_ASSIGNMENT_FEE=6;
 
@@ -7417,9 +7519,16 @@ function setPetRole(planetId,petId,role){
     const currentRole=
         pet.role || "builder";
 
+    /*
+     * The fee is a one-time pilot's licence, not a per-assignment
+     * charge: once pet.pilotLicensed is set it stays set through
+     * any number of role switches, so demoting a pet to builder
+     * and promoting it again later costs nothing.
+     */
     if(
         newRole==="pilot" &&
-        currentRole!=="pilot"
+        currentRole!=="pilot" &&
+        !pet.pilotLicensed
     ){
 
         if(
@@ -7430,12 +7539,14 @@ function setPetRole(planetId,petId,role){
         )
             return;
 
+        pet.pilotLicensed=true;
+
         addRankPoints(
             10,"Assigned a pilot"
         );
 
         showShipToast(
-            "Pilot training fee paid — "+
+            "Pilot licence purchased — "+
             PET_PILOT_ASSIGNMENT_FEE+" "+COIN_ICON_HTML
         );
 
@@ -7528,56 +7639,38 @@ function computePetCost(planetId){
 }
 
 /*
- * The first 3 pets on any one planet need only coins. The 4th
- * onward each need a rank reached too — index 0 here is the 4th
- * pet's own requirement, index 1 the 5th's, and so on. Interleaved
- * with the planet unlock ranks above (one planet, one pet slot,
- * one planet...) so a rank-up alternates between opening a new
- * world and growing the roster at home.
+ * Pet CAPACITY per planet is no longer rank-gated — the exponential
+ * price in computePetCost is the natural soft cap. What rank gates
+ * now is pet STYLES: each planet's roster (see PET_ROSTER_BY_PLANET)
+ * offers its first three styles from the start, and every style
+ * after that needs a rank — the planet's own unlock rank plus 3,
+ * then 2 further for each style after that. Earth (unlock rank 0) is
+ * the only roster past three styles today, so this only bites there
+ * for now: Koala at rank 3.
  */
-const PET_SLOT_UNLOCK_RANKS=
-    [3,5,7,9,11,13,15];
+function getPetStyleUnlockRank(planetId,styleIndex){
 
-/*
- * null means this slot is free (still within the first 3, no
- * rank needed at all) — existingCount is however many pets this
- * planet already has, so existingCount itself IS the index of
- * the pet about to be bought (0-indexed: buying the 4th pet means
- * existingCount is already 3).
- */
-function getPetSlotUnlockRank(existingCount){
-
-    if(existingCount<3)
+    if(styleIndex<3)
         return null;
 
+    const planet=
+        getPlanet(planetId);
+
     return(
-        PET_SLOT_UNLOCK_RANKS[
-            existingCount-3
-        ] ||
-        /*
-         * Past the named list (a 11th+ pet, not currently
-         * reachable at only 20 ranks total, but a safe fallback
-         * regardless) — one rank further than the last named
-         * slot for each additional one past it.
-         */
-        PET_SLOT_UNLOCK_RANKS[
-            PET_SLOT_UNLOCK_RANKS.length-1
-        ]+
-        (
-            existingCount-3-
-            (PET_SLOT_UNLOCK_RANKS.length-1)
-        )*2
+        (planet ? planet.unlockRank || 0 : 0)+
+        3+
+        (styleIndex-3)*2
     );
 
 }
 
-function isNextPetSlotUnlocked(planetId){
-
-    const existing=
-        getPetCount(planetId);
+function isPetStyleUnlocked(planetId,styleIndex){
 
     const neededRank=
-        getPetSlotUnlockRank(existing);
+        getPetStyleUnlockRank(
+            planetId,
+            styleIndex
+        );
 
     if(neededRank===null)
         return true;
@@ -7707,13 +7800,6 @@ function resolvePetEnergy(planetId){
 }
 
 function buyPet(planetId){
-
-    if(
-        !isNextPetSlotUnlocked(
-            planetId
-        )
-    )
-        return;
 
     const cost=
         computePetCost(planetId);
@@ -9293,8 +9379,9 @@ const STRUCTURE_UPGRADES={
             icon:"📦",
             description:
                 "Adds an optional toggle when building a ship "+
-                "here: +10 material capacity per type, for a "+
-                "steeper coin cost.",
+                "here (or a retrofit for one already docked): "+
+                "+10 total cargo capacity, for a steeper coin "+
+                "cost.",
             unlockMaterials:[
                 {materialId:"volatile-alloy",amount:4},
                 {materialId:"magnetic-resin",amount:4}
@@ -10446,6 +10533,92 @@ function paintShipCargoPreviews(planetId,ships){
  * Engine drawn cold (flameActive false) since these are resting,
  * docked ships, not mid-flight.
  */
+/*
+ * Paints the "New Ship" card in the factory tab — a freshly built
+ * ship always starts with the default custom style and no perk or
+ * cargo pets, so this is exactly what would roll out of the factory.
+ */
+function paintFactoryBuildPreview(){
+
+    const canvas=
+        document.getElementById(
+            "factoryBuildPreview"
+        );
+
+    if(
+        !canvas ||
+        typeof ShapeObject==="undefined"
+    )
+        return;
+
+    const ctx2d=
+        canvas.getContext("2d");
+
+    ctx2d.clearRect(
+        0,0,
+        canvas.width,
+        canvas.height
+    );
+
+    const previewShip={
+        styleId:"custom1",
+        perk:null,
+        cargoPets:[]
+    };
+
+    try{
+
+        const cargoPetInfo=
+            getCargoPetPreviewInfo(
+                previewShip
+            );
+
+        ctx2d.save();
+
+        ctx2d.translate(
+            canvas.width/2,
+            canvas.height/2
+        );
+
+        ctx2d.scale(.34,.34);
+
+        ctx2d.translate(
+            -200,-140
+        );
+
+        drawCargoAura(
+            ctx2d,
+            cargoPetInfo
+        );
+
+        getShipStyleShapes(
+            previewShip.styleId
+        ).forEach(
+            shape=>{
+
+                shape.draw(
+                    ctx2d,
+                    false,
+                    cargoPetInfo,
+                    null
+                );
+
+            }
+        );
+
+        ctx2d.restore();
+
+    }catch(error){
+
+        console.error(
+            "Factory build preview failed:",
+            error
+        );
+
+    }
+
+}
+
 function paintShipPreviews(planetId,ships){
 
     if(
@@ -12952,13 +13125,94 @@ function depositAllShipMaterial(planetId,materialId){
 
     if(total>0){
 
-        addToMaterialBank(
-            planetId,
-            materialId,
-            total
-        );
+        if(isFoodKey(materialId)){
+
+            addPerkStock(
+                planetId,
+                getFoodPerkId(materialId),
+                total
+            );
+
+        }else{
+
+            addToMaterialBank(
+                planetId,
+                materialId,
+                total
+            );
+
+        }
 
     }
+
+}
+
+/*
+ * Loads vault food (perk stock) onto a docked ship, as much as
+ * fits in whatever cargo room is left — the same one-click,
+ * take-what-fits behaviour as withdrawMaterialToShip.
+ */
+function withdrawFoodToShip(planetId,shipId,perkId){
+
+    const ship=
+        (
+            planetSave.ships[
+                planetId
+            ] || []
+        ).find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        !PERKS[perkId]
+    )
+        return;
+
+    if(!ship.materials){
+
+        ship.materials={};
+
+    }
+
+    const room=
+        getShipCargoCapacity(
+            ship.materialCapBonus
+        )-
+        getCargoUsed(
+            ship.materials
+        );
+
+    const amount=
+        Math.min(
+            getPerkStock(
+                planetId,
+                perkId
+            ),
+            room
+        );
+
+    if(amount<=0)
+        return;
+
+    const key=
+        FOOD_KEY_PREFIX+perkId;
+
+    ship.materials[key]=
+        (ship.materials[key] || 0)+
+        amount;
+
+    addPerkStock(
+        planetId,
+        perkId,
+        -amount
+    );
+
+    savePlanetProgress();
+
+    renderPlanetDetail(
+        planetId
+    );
 
 }
 
@@ -12994,11 +13248,23 @@ function depositShipMaterials(planetId,shipId){
 
         if(amount>0){
 
-            addToMaterialBank(
-                planetId,
-                materialId,
-                amount
-            );
+            if(isFoodKey(materialId)){
+
+                addPerkStock(
+                    planetId,
+                    getFoodPerkId(materialId),
+                    amount
+                );
+
+            }else{
+
+                addToMaterialBank(
+                    planetId,
+                    materialId,
+                    amount
+                );
+
+            }
 
             depositedAny=true;
 
@@ -13059,9 +13325,12 @@ function withdrawMaterialToShip(planetId,shipId,materialId){
         ] || 0;
 
     const room=
-        MATERIAL_CAP+
-        (ship.materialCapBonus || 0)-
-        currentOnShip;
+        getShipCargoCapacity(
+            ship.materialCapBonus
+        )-
+        getCargoUsed(
+            ship.materials
+        );
 
     const amount=
         Math.min(
@@ -14607,10 +14876,40 @@ function getPetRosterForPlanet(planetId){
 
 function pickRandomPetSpecies(planetId){
 
-    const roster=
+    /*
+     * Only styles the player's rank has unlocked can come up. The
+     * rank lookup is guarded because the save-migration pass calls
+     * this during load, before rank data may exist — in that case
+     * (or if it somehow filters everything out) the full roster is
+     * used rather than failing.
+     */
+    let roster=
         getPetRosterForPlanet(
             planetId
         );
+
+    try{
+
+        const unlockedRoster=
+            roster.filter(
+                (speciesId,index) =>
+                    isPetStyleUnlocked(
+                        planetId,
+                        index
+                    )
+            );
+
+        if(unlockedRoster.length){
+
+            roster=unlockedRoster;
+
+        }
+
+    }catch(error){
+
+        /* rank not ready yet — full roster */
+
+    }
 
     return roster[
         Math.floor(
@@ -18860,9 +19159,24 @@ function drawStarMapScene(){
                     dim:
                         !selectable &&
                         zoom<.15,
+                    /*
+                     * The pulsing ring means "there's a ship here
+                     * to launch". While choosing a destination
+                     * every selectable world is a valid target so
+                     * they all keep it; at home, a world that's
+                     * been visited but has no ship docked is
+                     * still selectable to VIEW, but draws as a
+                     * plain planet (not dimmed, not ringed) so
+                     * the rings alone show where a ship waits.
+                     */
                     highlight:
                         selectable &&
-                        zoom<.15
+                        zoom<.15 &&
+                        (
+                            starMapMode==="destination" ||
+                            p.id==="earth" ||
+                            getShipCount(p.id)>0
+                        )
                 }
             );
 
@@ -21752,8 +22066,12 @@ function drawPlanetFocusScene(){
                     ){
 
                         const targetId=
-                            activeBuild.type===
-                            "ship"
+                            (
+                                activeBuild.type===
+                                "ship" ||
+                                activeBuild.type===
+                                "ship-service"
+                            )
                             ?"ship-factory"
                             :activeBuild.structureId;
 
@@ -22796,16 +23114,70 @@ function renderPlanetFocus(){
                 chosenLaunchShip.pendingPilot
             );
 
-        launchBtn.innerHTML=
-            ROCKET_ICON_HTML+
+        /*
+         * A planet with no ship docked has nothing to launch, so
+         * the button turns into the next useful step instead: buy
+         * a ship factory (opens the Shop, where an unbuilt
+         * factory lives) or, once one exists here, build a ship
+         * (opens the factory's own tab). Earth always has its
+         * free starter ship, so it always launches.
+         */
+        const planetHasShip=
+            !!planet &&
             (
-                orbitalReady
-                ?" Launch to Orbit"
-                :" Launch Mission"
+                planet.id==="earth" ||
+                getShipCount(planet.id)>0
             );
+
+        const hasFactory=
+            !!planet &&
+            (
+                hasStructure(
+                    planet.id,"ship-factory"
+                ) ||
+                getBuildQueue(planet.id).some(
+                    b =>
+                        b.type==="structure" &&
+                        b.structureId===
+                        "ship-factory"
+                )
+            );
+
+        if(planetHasShip){
+
+            launchBtn.dataset.mode="launch";
+
+            launchBtn.innerHTML=
+                ROCKET_ICON_HTML+
+                (
+                    orbitalReady
+                    ?" Launch to Orbit"
+                    :" Launch Mission"
+                );
+
+        }else if(hasFactory){
+
+            launchBtn.dataset.mode="build-ship";
+
+            launchBtn.innerHTML=
+                getStructureIconHtml(
+                    "ship-factory"
+                )+" Build Ship";
+
+        }else{
+
+            launchBtn.dataset.mode="buy-factory";
+
+            launchBtn.innerHTML=
+                getStructureIconHtml(
+                    "ship-factory"
+                )+" Buy Ship Factory";
+
+        }
 
         launchBtn.classList.toggle(
             "orbital-ready",
+            planetHasShip &&
             orbitalReady
         );
 
@@ -23392,6 +23764,74 @@ function resolveBuildQueue(planetId){
 
             }else if(
                 build.type===
+                "ship-service"
+            ){
+
+                const servedShip=
+                    getShips(planetId).find(
+                        s => s.id===build.shipId
+                    );
+
+                if(servedShip){
+
+                    if(build.serviceId==="restore-heart"){
+
+                        servedShip.lives=
+                            Math.min(
+                                3,
+                                (
+                                    Number(
+                                        servedShip.lives
+                                    ) || 3
+                                )+1
+                            );
+
+                    }else if(
+                        build.serviceId==="cargo-hold"
+                    ){
+
+                        servedShip.materialCapBonus=
+                            (
+                                servedShip.
+                                materialCapBonus || 0
+                            )+10;
+
+                    }else if(
+                        build.serviceId==="pet-bay"
+                    ){
+
+                        servedShip.cargoPetCapacity=
+                            Math.max(
+                                2,
+                                servedShip.
+                                cargoPetCapacity || 1
+                            );
+
+                    }else if(
+                        build.serviceId==="pet-bay-2"
+                    ){
+
+                        servedShip.cargoPetCapacity=
+                            Math.max(
+                                3,
+                                servedShip.
+                                cargoPetCapacity || 1
+                            );
+
+                    }
+
+                    showShipToast(
+                        (
+                            SHIP_SERVICES[
+                                build.serviceId
+                            ] || {name:"Service"}
+                        ).name+" complete!"
+                    );
+
+                }
+
+            }else if(
+                build.type===
                 "structure"
             ){
 
@@ -23544,6 +23984,219 @@ function computeShipBuildDuration(planetId){
 
 }
 
+/*
+ * Work the ship factory can do on a ship that's ALREADY docked
+ * here. restore-heart comes with every factory; the three
+ * retrofits mirror the build-time toggles and need the matching
+ * factory upgrade purchased first. Every job costs coins, needs at
+ * least one working builder pet, runs faster with more of them
+ * (same labour formula as building a ship), and spends energy from
+ * each working pet on it — energyPerPet is what each one pays.
+ */
+const SHIP_SERVICES={
+    "restore-heart":{
+        name:"Restore Heart",
+        cost:8,
+        energyPerPet:3,
+        baseSeconds:30,
+        requiresUpgrade:null
+    },
+    "cargo-hold":{
+        name:"Cargo Hold",
+        cost:6,
+        energyPerPet:5,
+        baseSeconds:60,
+        requiresUpgrade:"ship-factory-cargo-hold"
+    },
+    "pet-bay":{
+        name:"Pet Bay",
+        cost:8,
+        energyPerPet:5,
+        baseSeconds:60,
+        requiresUpgrade:"ship-factory-pet-bay"
+    },
+    "pet-bay-2":{
+        name:"Pet Bay II",
+        cost:10,
+        energyPerPet:5,
+        baseSeconds:75,
+        requiresUpgrade:"ship-factory-dual-perk"
+    }
+};
+
+function isShipServiceApplicable(ship,serviceId){
+
+    if(serviceId==="restore-heart")
+        return (Number(ship.lives)||3)<3;
+
+    if(serviceId==="cargo-hold")
+        return !((ship.materialCapBonus||0)>=10);
+
+    if(serviceId==="pet-bay")
+        return (ship.cargoPetCapacity||1)<2;
+
+    if(serviceId==="pet-bay-2")
+        return (ship.cargoPetCapacity||1)===2;
+
+    return false;
+
+}
+
+function getShipServiceJob(shipId){
+
+    for(const planet of PLANETS){
+
+        const job=
+            getBuildQueue(planet.id).find(
+                b =>
+                    b.type==="ship-service" &&
+                    b.shipId===shipId
+            );
+
+        if(job)
+            return job;
+
+    }
+
+    return null;
+
+}
+
+function isShipInService(ship){
+
+    return !!(
+        ship &&
+        getShipServiceJob(ship.id)
+    );
+
+}
+
+function computeShipServiceDuration(planetId,serviceId){
+
+    const pets=
+        getWorkingPetCount(planetId);
+
+    return Math.max(
+        10,
+        Math.round(
+            SHIP_SERVICES[serviceId].baseSeconds/
+            (1+pets*.6)
+        )
+    );
+
+}
+
+function queueShipService(planetId,shipId,serviceId){
+
+    const service=
+        SHIP_SERVICES[serviceId];
+
+    if(
+        !service ||
+        !hasStructure(
+            planetId,"ship-factory"
+        )
+    )
+        return;
+
+    const ship=
+        getShips(planetId).find(
+            s => s.id===shipId
+        );
+
+    if(
+        !ship ||
+        isShipInService(ship) ||
+        !isShipServiceApplicable(
+            ship,serviceId
+        )
+    )
+        return;
+
+    if(
+        service.requiresUpgrade &&
+        !isUpgradePurchased(
+            planetId,
+            service.requiresUpgrade
+        )
+    )
+        return;
+
+    const workingPets=
+        getPets(planetId).filter(
+            pet =>
+                pet.energy>0 &&
+                (pet.role || "builder")===
+                "builder"
+        );
+
+    if(!workingPets.length){
+
+        showShipToast(
+            "A builder pet with energy is needed "+
+            "to do this work."
+        );
+
+        return;
+
+    }
+
+    if(
+        !spendCoins(
+            planetId,
+            service.cost
+        )
+    )
+        return;
+
+    workingPets.forEach(
+        pet=>{
+
+            pet.energy=
+                Math.max(
+                    0,
+                    pet.energy-
+                    service.energyPerPet
+                );
+
+        }
+    );
+
+    if(!planetSave.buildQueue){
+
+        planetSave.buildQueue={};
+
+    }
+
+    if(!planetSave.buildQueue[planetId]){
+
+        planetSave.buildQueue[planetId]=[];
+
+    }
+
+    planetSave.buildQueue[planetId].push({
+        type:"ship-service",
+        shipId:ship.id,
+        serviceId:serviceId,
+        startedAt:Date.now(),
+        durationSeconds:
+            computeShipServiceDuration(
+                planetId,serviceId
+            )
+    });
+
+    savePlanetProgress();
+
+    showShipToast(
+        service.name+" started."
+    );
+
+    renderPlanetDetail(
+        planetId
+    );
+
+}
+
 function queueShipBuild(planetId,options){
 
     options=options || {};
@@ -23569,7 +24222,7 @@ function queueShipBuild(planetId,options){
         hasPurchasedToggleUpgrade(
             planetId,
             "ship-factory",
-            "dual-perk"
+            "pet-bay-2"
         );
 
     const usePetBay=
@@ -23858,7 +24511,18 @@ function getEarthLaunchCandidates(){
 
     }
 
-    return[...real];
+    /*
+     * A ship mid-service isn't ready to fly — prefer any that
+     * are, but never leave the list empty on their account.
+     */
+    const ready=
+        real.filter(
+            s => !isShipInService(s)
+        );
+
+    return ready.length
+        ?[...ready]
+        :[...real];
 
 }
 
@@ -23955,10 +24619,20 @@ function resolveDefaultStartPlanet(){
 
 }
 
-function resolveLaunchShip(ships){
+function resolveLaunchShip(allShips){
 
-    if(!ships.length)
+    if(!allShips.length)
         return null;
+
+    const readyShips=
+        allShips.filter(
+            s => !isShipInService(s)
+        );
+
+    const ships=
+        readyShips.length
+        ?readyShips
+        :allShips;
 
     const chosen=
         ships.find(
@@ -24306,6 +24980,9 @@ let expandedShipPickerKey=null;
  */
 let expandedPetPerkId=null;
 
+/* Which pet card is expanded to show full details. */
+let expandedPetCardId=null;
+
 /*
  * Which ship's card is expanded into the full "ship interior"
  * view (pilot/powerup/pet/storage bays), in the Ships tab's
@@ -24324,6 +25001,57 @@ let expandedShipCardId=null;
  * "like they are shown on the Home Screen" — a real picture of
  * the actual ship, not a name in a list.
  */
+/*
+ * One vault item as a card, matching the shop's: the item big on
+ * top, its actions stacked underneath, and tapping the card (not a
+ * button — the nearest data-action wins) expands the full details.
+ * pickerHtml, when present, is a ship/pet picker that belongs to
+ * one of the buttons and stays attached to the card it came from.
+ */
+function renderVaultCardHtml(o){
+
+    const expanded=
+        expandedShopRowId===
+        o.rowKey;
+
+    return(
+        '<div class="item-shop-card">'+
+        '<div class="item-shop-card-main" '+
+        'data-action="toggle-shop-row" '+
+        'data-row="'+o.rowKey+'">'+
+        '<div class="item-shop-card-icon">'+
+        o.iconHtml+
+        '</div>'+
+        '<div class="item-shop-card-name">'+
+        o.name+
+        '</div>'+
+        '<div class="item-shop-card-meta">×'+
+        o.count+
+        '</div>'+
+        '</div>'+
+        '<div class="item-shop-card-btn-wrap" '+
+        'style="display:flex;flex-direction:column;gap:6px;">'+
+        o.buttonsHtml+
+        '</div>'+
+        (
+            o.pickerHtml
+            ?'<div style="padding:0 10px 10px;">'+
+             o.pickerHtml+
+             '</div>'
+            :''
+        )+
+        (
+            expanded
+            ?'<div class="shop-row-detail">'+
+             o.description+
+             '</div>'
+            :''
+        )+
+        '</div>'
+    );
+
+}
+
 function renderShipPickerHtml(planetId,ships,pickerKey,pickAction,extraAttrs){
 
     if(!ships.length){
@@ -24702,6 +25430,7 @@ function paintGalleryStylePreviews(){
  */
 let shipBuildToggles={
     cargoHold:false,
+    petBay:false,
     dualPerk:false
 };
 
@@ -24922,7 +25651,7 @@ function startPlanetMenuTipChecking(){
 
 }
 
-function openPlanetDetail(id){
+function openPlanetDetail(id,startTab){
 
     initAudio();
 
@@ -24930,13 +25659,16 @@ function openPlanetDetail(id){
 
     planetDetailId=id;
 
-    planetDetailTab="vault";
+    planetDetailTab=
+        startTab || "vault";
 
     expandedShopRowId=null;
 
     expandedShipPickerKey=null;
 
     expandedPetPerkId=null;
+
+    expandedPetCardId=null;
 
     expandedShipCardId=null;
 
@@ -25011,6 +25743,8 @@ function closePlanetDetail(){
     expandedShipPickerKey=null;
 
     expandedPetPerkId=null;
+
+    expandedPetCardId=null;
 
     expandedShipCardId=null;
 
@@ -26557,25 +27291,35 @@ function renderPlanetDetail(id){
                                         MATERIALS[materialId] ||
                                         MATERIALS["aether-dust"];
 
-                                    const cap=
-                                        MATERIAL_CAP+
-                                        (ship.materialCapBonus || 0);
-
                                     return(
                                         '<span'+
-                                        (
-                                            count>=cap
-                                            ?' class="state-good"'
-                                            :''
-                                        )+
                                         ' style="font-size:9px;color:#8fa7c7;">'+
                                         getMaterialIconHtml(materialId)+' '+
-                                        count+'/'+cap+
+                                        count+
                                         '</span>'
                                     );
 
                                 }
                             ).join("")+
+                            '<span'+
+                            (
+                                getCargoUsed(
+                                    ship.materials
+                                )>=
+                                getShipCargoCapacity(
+                                    ship.materialCapBonus
+                                )
+                                ?' class="state-good"'
+                                :''
+                            )+
+                            ' style="font-size:9px;color:#8fa7c7;'+
+                            'margin-left:auto;">Cargo '+
+                            getCargoUsed(
+                                ship.materials
+                            )+'/'+
+                            getShipCargoCapacity(
+                                ship.materialCapBonus
+                            )+'</span>'+
                             '</div>'+
                             '<button class="control-btn" data-action="deposit-materials" data-ship="'+
                             ship.id+'" style="width:auto;padding:7px 10px;margin-top:8px;'+
@@ -26709,6 +27453,30 @@ function renderPlanetDetail(id){
             ([,count]) => count>0
         );
 
+    const sellLabel=
+        computeSellPrice(id)+' '+COIN_ICON_HTML;
+
+    const sendBtn=
+        (pickerKey,iconHtml,label)=>
+            '<button class="control-btn" '+
+            'data-action="toggle-ship-picker" '+
+            'data-picker="'+pickerKey+'" '+
+            'style="width:100%;padding:7px 10px;">'+
+            iconHtml+' → '+label+'</button>';
+
+    const sellBtn=
+        (action,attrs)=>
+            '<button class="remove-btn" '+
+            'data-action="'+action+'" '+attrs+
+            ' style="width:100%;">Sell '+
+            sellLabel+'</button>';
+
+    /*
+     * The vault as cards, like the shop: power-ups and materials
+     * together under Planet Stock, then Food. Each card carries its
+     * own actions (send to a ship, sell, feed) underneath a big
+     * view of the item, and expands on tap for the full details.
+     */
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title" style="display:flex;'+
@@ -26730,6 +27498,9 @@ function renderPlanetDetail(id){
 
     }else{
 
+        html+=
+            '<div class="item-shop-card-row">';
+
         stockEntries.forEach(
             ([itemId,count])=>{
 
@@ -26739,45 +27510,39 @@ function renderPlanetDetail(id){
                 const equipPickerKey=
                     "equip-"+itemId;
 
-                const equipPickerOpen=
-                    expandedShipPickerKey===
-                    equipPickerKey;
-
                 html+=
-                    '<div class="selected-shape-info">'+
-                    '<span>'+getItemIconHtml(itemId)+' '+info.name+
-                    ' <span style="opacity:.6;font-size:9px;">×'+
-                    count+'</span></span>'+
-                    '<div style="display:flex;gap:6px;">'+
-                    '<button class="control-btn" data-action="toggle-ship-picker" '+
-                    'data-picker="'+equipPickerKey+'" '+
-                    'style="width:auto;padding:7px 10px;'+
-                    'display:flex;align-items:center;gap:5px;">'+
-                    '<span>'+getItemIconHtml(itemId)+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>'+ROCKET_ICON_HTML+'</span>'+
-                    '</button>'+
-                    '<button class="remove-btn" data-action="sell-item" '+
-                    'style="display:flex;align-items:center;gap:5px;" '+
-                    'data-item="'+itemId+'">'+
-                    '<span>'+getItemIconHtml(itemId)+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>'+COIN_ICON_HTML+'</span>'+
-                    '<span>'+computeSellPrice(id)+'</span>'+
-                    '</button>'+
-                    '</div>'+
-                    '</div>'+
-                    (
-                        equipPickerOpen
-                        ?renderShipPickerHtml(
-                            id,
-                            ships,
-                            equipPickerKey,
-                            "pick-ship-equip-item",
-                            'data-item="'+itemId+'"'
-                        )
-                        :''
-                    );
+                    renderVaultCardHtml({
+                        rowKey:"vault-"+equipPickerKey,
+                        iconHtml:getItemIconHtml(itemId),
+                        name:info.name,
+                        count:count,
+                        buttonsHtml:
+                            sendBtn(
+                                equipPickerKey,
+                                getItemIconHtml(itemId),
+                                ROCKET_ICON_HTML
+                            )+
+                            sellBtn(
+                                "sell-item",
+                                'data-item="'+itemId+'"'
+                            ),
+                        pickerHtml:
+                            expandedShipPickerKey===
+                            equipPickerKey
+                            ?renderShipPickerHtml(
+                                id,
+                                ships,
+                                equipPickerKey,
+                                "pick-ship-equip-item",
+                                'data-item="'+itemId+'"'
+                            )
+                            :'',
+                        description:
+                            (info.description || '')+
+                            '<div style="margin-top:6px;">'+
+                            'Equip it on a docked ship, or sell it '+
+                            'for coins.</div>'
+                    });
 
             }
         );
@@ -26792,60 +27557,62 @@ function renderPlanetDetail(id){
                 const sendPickerKey=
                     "material-"+materialId;
 
-                const sendPickerOpen=
-                    expandedShipPickerKey===
-                    sendPickerKey;
+                const sourcePlanet=
+                    getPlanet(info.planetId);
 
                 html+=
-                    '<div class="selected-shape-info">'+
-                    '<span>'+getMaterialIconHtml(materialId)+' '+info.name+
-                    ' <span style="opacity:.6;font-size:9px;">×'+
-                    count+'</span></span>'+
-                    '<div style="display:flex;gap:6px;">'+
-                    '<button class="control-btn" data-action="toggle-ship-picker" '+
-                    'data-picker="'+sendPickerKey+'" '+
-                    'style="width:auto;padding:7px 10px;'+
-                    'display:flex;align-items:center;gap:5px;">'+
-                    '<span>'+getMaterialIconHtml(materialId)+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>'+ROCKET_ICON_HTML+'</span>'+
-                    '</button>'+
-                    '<button class="remove-btn" data-action="sell-material" '+
-                    'style="display:flex;align-items:center;gap:5px;" '+
-                    'data-material="'+materialId+'">'+
-                    '<span>'+getMaterialIconHtml(materialId)+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>'+COIN_ICON_HTML+'</span>'+
-                    '<span>'+computeSellPrice(id)+'</span>'+
-                    '</button>'+
-                    '</div>'+
-                    '</div>'+
-                    (
-                        sendPickerOpen
-                        ?renderShipPickerHtml(
-                            id,
-                            ships,
-                            sendPickerKey,
-                            "pick-ship-material",
-                            'data-material="'+materialId+'"'
-                        )
-                        :''
-                    );
+                    renderVaultCardHtml({
+                        rowKey:"vault-"+sendPickerKey,
+                        iconHtml:getMaterialIconHtml(materialId),
+                        name:info.name,
+                        count:count,
+                        buttonsHtml:
+                            sendBtn(
+                                sendPickerKey,
+                                getMaterialIconHtml(materialId),
+                                ROCKET_ICON_HTML
+                            )+
+                            sellBtn(
+                                "sell-material",
+                                'data-material="'+materialId+'"'
+                            ),
+                        pickerHtml:
+                            expandedShipPickerKey===
+                            sendPickerKey
+                            ?renderShipPickerHtml(
+                                id,
+                                ships,
+                                sendPickerKey,
+                                "pick-ship-material",
+                                'data-material="'+materialId+'"'
+                            )
+                            :'',
+                        description:
+                            'A material'+
+                            (
+                                sourcePlanet
+                                ?' gathered from '+
+                                 sourcePlanet.name+
+                                 '\'s asteroid field'
+                                :''
+                            )+
+                            '. Selling it counts toward unlocking '+
+                            'perks and structures; loading it onto a '+
+                            'ship carries it elsewhere, using cargo '+
+                            'space.'
+                    });
 
             }
         );
+
+        html+=
+            '</div>';
 
     }
 
     html+=
         '</div>';
 
-    /*
-     * Food — every owned unit of a perk's food, sellable the
-     * same way as any material, plus a Feed to Pet picker
-     * (mirroring materials' Send to Ship) so leveling up a pet
-     * doesn't require leaving the Vault tab at all.
-     */
     const ownedFoodEntries=
         Object.values(PERKS).filter(
             p =>
@@ -26856,7 +27623,8 @@ function renderPlanetDetail(id){
 
         html+=
             '<div class="customizer-section">'+
-            '<div class="customizer-section-title">Food</div>';
+            '<div class="customizer-section-title">Food</div>'+
+            '<div class="item-shop-card-row">';
 
         ownedFoodEntries.forEach(
             perkFood=>{
@@ -26871,9 +27639,9 @@ function renderPlanetDetail(id){
                     "feed-vault-"+
                     perkFood.id;
 
-                const feedPickerOpen=
-                    expandedShipPickerKey===
-                    feedPickerKey;
+                const loadPickerKey=
+                    "load-food-"+
+                    perkFood.id;
 
                 const matchingPets=
                     getPets(id).filter(
@@ -26882,46 +27650,77 @@ function renderPlanetDetail(id){
                             perkFood.species
                     );
 
-                html+=
-                    '<div class="selected-shape-info">'+
-                    '<span>'+perkFood.icon+' '+
-                    perkFood.name+
-                    ' <span style="opacity:.6;font-size:9px;">×'+
-                    foodCount+'</span></span>'+
-                    '<div style="display:flex;gap:6px;">'+
-                    '<button class="control-btn" data-action="toggle-ship-picker" '+
-                    'data-picker="'+feedPickerKey+'" '+
-                    'style="width:auto;padding:7px 10px;'+
-                    'display:flex;align-items:center;gap:5px;">'+
-                    '<span>'+perkFood.icon+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>🐾</span>'+
-                    '</button>'+
-                    '<button class="remove-btn" data-action="sell-perk-stock" '+
-                    'style="display:flex;align-items:center;gap:5px;" '+
-                    'data-perk="'+perkFood.id+'">'+
-                    '<span>'+perkFood.icon+'</span>'+
-                    '<span style="opacity:.5;">→</span>'+
-                    '<span>'+COIN_ICON_HTML+'</span>'+
-                    '<span>'+computeSellPrice(id)+'</span>'+
-                    '</button>'+
-                    '</div>'+
-                    '</div>'+
-                    (
-                        feedPickerOpen
-                        ?renderPetFeedPickerHtml(
+                /*
+                 * Only one picker is ever open at a time (they
+                 * share expandedShipPickerKey), so whichever this
+                 * card owns is the one shown.
+                 */
+                let pickerHtml='';
+
+                if(
+                    expandedShipPickerKey===
+                    feedPickerKey
+                ){
+
+                    pickerHtml=
+                        renderPetFeedPickerHtml(
                             matchingPets,
                             feedPickerKey,
                             perkFood.id,
                             id
-                        )
-                        :''
-                    );
+                        );
+
+                }else if(
+                    expandedShipPickerKey===
+                    loadPickerKey
+                ){
+
+                    pickerHtml=
+                        renderShipPickerHtml(
+                            id,
+                            ships,
+                            loadPickerKey,
+                            "pick-ship-food",
+                            'data-perk="'+perkFood.id+'"'
+                        );
+
+                }
+
+                html+=
+                    renderVaultCardHtml({
+                        rowKey:"vault-"+feedPickerKey,
+                        iconHtml:perkFood.icon,
+                        name:perkFood.name,
+                        count:foodCount,
+                        buttonsHtml:
+                            '<button class="control-btn" '+
+                            'data-action="toggle-ship-picker" '+
+                            'data-picker="'+feedPickerKey+'" '+
+                            'style="width:100%;padding:7px 10px;">'+
+                            perkFood.icon+' → 🐾 Feed</button>'+
+                            sendBtn(
+                                loadPickerKey,
+                                perkFood.icon,
+                                ROCKET_ICON_HTML
+                            )+
+                            sellBtn(
+                                "sell-perk-stock",
+                                'data-perk="'+perkFood.id+'"'
+                            ),
+                        pickerHtml:pickerHtml,
+                        description:
+                            (perkFood.description || '')+
+                            '<div style="margin-top:6px;">'+
+                            'Feed it to a matching pet, carry it to '+
+                            'another planet on a ship (it uses cargo '+
+                            'space), or sell it.</div>'
+                    });
 
             }
         );
 
         html+=
+            '</div>'+
             '</div>';
 
     }
@@ -26949,14 +27748,6 @@ function renderPlanetDetail(id){
         getTotalAvailableCoins(id)>=
         petCost;
 
-    const nextPetSlotRank=
-        getPetSlotUnlockRank(
-            pets.length
-        );
-
-    const nextPetSlotUnlocked=
-        isNextPetSlotUnlocked(id);
-
     html+=
         '<div class="customizer-section">'+
         '<div class="customizer-section-title">🐾 Pets</div>';
@@ -26969,6 +27760,9 @@ function renderPlanetDetail(id){
             '</div>';
 
     }else{
+
+        html+=
+            '<div class="item-shop-card-row">';
 
         pets.forEach(
             (pet,petCardIndex)=>{
@@ -26988,18 +27782,38 @@ function renderPlanetDetail(id){
                     id+"_"+
                     petCardIndex;
 
+                const petExpanded=
+                    expandedPetCardId===
+                    pet.id;
+
+                /*
+                 * A card, like the shop's: the pet itself big on top
+                 * (tapping it expands the card to full details),
+                 * with feeding and role underneath. Perk and pilot
+                 * training detail only render when expanded.
+                 */
                 html+=
-                    '<div class="selected-shape-info" style="flex-direction:column;align-items:stretch;gap:8px;">'+
-                    '<div style="display:flex;justify-content:space-between;align-items:center;">'+
-                    '<div style="display:flex;align-items:center;gap:10px;">'+
-                    '<canvas id="'+petCanvasId+'" width="72" height="72" '+
-                    'style="display:block;background:rgba(0,0,0,.25);'+
-                    'border-radius:10px;flex-shrink:0;"></canvas>'+
-                    '<span>🐾 Energy: '+
-                    '<span style="color:'+energyColor+';">'+
-                    Math.round(pet.energy)+'%</span></span>'+
+                    '<div class="pet-card">'+
+                    '<div class="pet-card-main" data-action="toggle-pet-card" '+
+                    'data-pet="'+pet.id+'">'+
+                    '<canvas class="pet-card-canvas" id="'+petCanvasId+
+                    '" width="132" height="132"></canvas>'+
+                    '<div class="item-shop-card-name">'+
+                    (
+                        SPECIES_DISPLAY_NAMES[pet.species] ||
+                        'Native pet'
+                    )+
                     '</div>'+
-                    '<button class="control-btn" style="width:auto;'+
+                    '<div class="item-shop-card-meta">Energy '+
+                    '<span style="color:'+energyColor+';">'+
+                    Math.round(pet.energy)+'%</span> · '+
+                    (role==="pilot" ? 'Pilot' : 'Builder')+
+                    '<br><span style="opacity:.55;">'+
+                    (petExpanded ? 'Tap to collapse' : 'Tap for details')+
+                    '</span></div>'+
+                    '</div>'+
+                    '<div class="pet-card-actions">'+
+                    '<button class="control-btn" style="width:100%;'+
                     'padding:7px 10px;" data-action="feed-pet" '+
                     'data-pet="'+pet.id+'" '+
                     (
@@ -27010,7 +27824,6 @@ function renderPlanetDetail(id){
                         :''
                     )+
                     '>Feed ('+PET_FOOD_COST+' '+COIN_ICON_HTML+')</button>'+
-                    '</div>'+
                     '<div style="display:flex;gap:6px;align-items:center;">'+
                     '<span style="font-size:9px;color:#8fa7c7;">Role:</span>'+
                     '<button class="shape-btn'+
@@ -27035,6 +27848,7 @@ function renderPlanetDetail(id){
                         'data-role="pilot" '+
                         (
                             role!=="pilot" &&
+                            !pet.pilotLicensed &&
                             getTotalAvailableCoins(id)<
                             PET_PILOT_ASSIGNMENT_FEE
                             ?'disabled'
@@ -27042,14 +27856,21 @@ function renderPlanetDetail(id){
                         )+
                         '>✈ Pilot'+
                         (
-                            role!=="pilot"
+                            role!=="pilot" &&
+                            !pet.pilotLicensed
                             ?' ('+PET_PILOT_ASSIGNMENT_FEE+' '+COIN_ICON_HTML+')'
                             :''
                         )+
                         '</button>'
                         :''
                     )+
-                    '</div>';
+                    '</div>'+
+                    '</div>'+
+                    (
+                        petExpanded
+                        ?'<div class="pet-card-detail">'
+                        :''
+                    );
 
                 /*
                  * Perk detail — only shown once this species
@@ -27068,12 +27889,14 @@ function renderPlanetDetail(id){
                             pet.species
                         );
 
-                    if(!petPerk)
+                    if(
+                        !petPerk ||
+                        !petExpanded
+                    )
                         return;
 
                     const petPerkExpanded=
-                        expandedPetPerkId===
-                        pet.id;
+                        true;
 
                     const petPerkLevel=
                         pet.perkLevel || 1;
@@ -27108,16 +27931,10 @@ function renderPlanetDetail(id){
                         ).join(" + ");
 
                     html+=
-                        '<button class="control-btn" data-action="toggle-pet-perk" '+
-                        'data-pet="'+pet.id+'" style="width:auto;padding:7px 10px;'+
-                        'align-self:flex-start;display:flex;align-items:center;gap:6px;'+
-                        'margin-top:6px;">'+
-                        '<span>'+petPerk.icon+' Perk: '+petPerk.name+
-                        ' Lv.'+petPerkLevel+'</span>'+
-                        '<span style="opacity:.6;">'+
-                        (petPerkExpanded ? "▲" : "▼")+
-                        '</span>'+
-                        '</button>'+
+                        '<div style="font-size:11px;font-weight:700;'+
+                        'color:#c9a8ff;margin-top:4px;">'+
+                        petPerk.icon+' Perk: '+petPerk.name+
+                        ' Lv.'+petPerkLevel+'</div>'+
                         (
                             petPerkExpanded
                             ?'<div style="padding:8px;border-radius:10px;'+
@@ -27151,6 +27968,7 @@ function renderPlanetDetail(id){
                 })();
 
                 if(
+                    petExpanded &&
                     role==="pilot" &&
                     hasPilotTraining
                 ){
@@ -27281,10 +28099,14 @@ function renderPlanetDetail(id){
                 }
 
                 html+=
+                    (petExpanded ? '</div>' : '')+
                     '</div>';
 
             }
         );
+
+        html+=
+            '</div>';
 
     }
 
@@ -27325,30 +28147,14 @@ function renderPlanetDetail(id){
     }
 
     html+=
-        nextPetSlotUnlocked
-        ?(
-            '<button class="big-button secondary-button" '+
-            'style="margin-top:10px;" data-action="buy-pet" '+
-            (
-                canAffordPet
-                ?''
-                :'disabled'
-            )+
-            '>Buy Pet ('+petCost+' '+COIN_ICON_HTML+')</button>'
-        )
-        :(
-            /*
-             * Kept simple, per request — just the locked state
-             * and which rank clears it, no extra explanation of
-             * why. disabled rather than left clickable and
-             * silently doing nothing, and no cost shown since
-             * there's nothing to spend yet regardless of coins.
-             */
-            '<button class="big-button secondary-button" '+
-            'style="margin-top:10px;" disabled>'+
-            '🔒 Reach Rank '+nextPetSlotRank+
-            '</button>'
+        '<button class="big-button secondary-button" '+
+        'style="margin-top:10px;" data-action="buy-pet" '+
+        (
+            canAffordPet
+            ?''
+            :'disabled'
         )+
+        '>Buy Pet ('+petCost+' '+COIN_ICON_HTML+')</button>'+
         '</div>';
 
     /*
@@ -27375,7 +28181,14 @@ function renderPlanetDetail(id){
 
             html+=
                 '<div style="display:flex;flex-direction:column;'+
-                'align-items:center;gap:4px;width:64px;">'+
+                'align-items:center;gap:4px;width:64px;'+
+                (
+                    isPetStyleUnlocked(
+                        id,speciesIndex
+                    )
+                    ?''
+                    :'opacity:.4;'
+                )+'">'+
                 '<canvas id="'+galleryCanvasId+'" width="64" height="64" '+
                 'style="display:block;background:rgba(0,0,0,.25);'+
                 'border-radius:10px;"></canvas>'+
@@ -27387,6 +28200,17 @@ function renderPlanetDetail(id){
                     :speciesId
                 )+
                 '</span>'+
+                (
+                    isPetStyleUnlocked(
+                        id,speciesIndex
+                    )
+                    ?''
+                    :'<span style="font-size:9px;color:#5c7ba0;">'+
+                     'Rank '+
+                     getPetStyleUnlockRank(
+                         id,speciesIndex
+                     )+'</span>'
+                )+
                 '</div>';
 
         }
@@ -27741,6 +28565,12 @@ function renderPlanetDetail(id){
                 "ship-factory-cargo-hold"
             );
 
+        const hasPetBayUpgrade=
+            isUpgradePurchased(
+                id,
+                "ship-factory-pet-bay"
+            );
+
         const hasDualPerkUpgrade=
             isUpgradePurchased(
                 id,
@@ -27755,10 +28585,16 @@ function renderPlanetDetail(id){
             hasDualPerkUpgrade &&
             shipBuildToggles.dualPerk;
 
+        const usePetBay=
+            hasPetBayUpgrade &&
+            shipBuildToggles.petBay &&
+            !useDualPerk;
+
         const shipCost=
             computeShipBuildCost(id)+
             (useCargoHold ? 3 : 0)+
-            (useDualPerk ? 5 : 0);
+            (useDualPerk ? 5 : 0)+
+            (usePetBay ? 4 : 0);
 
         const shipDuration=
             computeShipBuildDuration(id);
@@ -27779,65 +28615,96 @@ function renderPlanetDetail(id){
             '">'+workingPetsHere+' currently working'+
             '</span>'+
             ') — more '+
-            'working pets means faster builds. Current build '+
-            'time: '+shipDuration+'s.'+
+            'working pets means faster builds.'+
             '</div>';
 
-        if(
-            hasCargoHoldUpgrade ||
-            hasDualPerkUpgrade
-        ){
+        /*
+         * The ship you'd get, shown as a card before you commit —
+         * same look as the shop's cards and the ships already
+         * docked. Stats reflect whichever upgrade toggles are on,
+         * and the toggles themselves live on the card, so the
+         * whole decision (what it is, what it costs, how long it
+         * takes) reads in one place instead of a row of separate
+         * controls.
+         */
+        const previewCargo=
+            getShipCargoCapacity(
+                useCargoHold ? 10 : 0
+            );
 
-            html+=
-                '<div style="display:flex;gap:6px;flex-wrap:wrap;'+
-                'margin-bottom:8px;">';
+        const previewPetBay=
+            useDualPerk
+            ?3
+            :usePetBay
+            ?2
+            :1;
 
-            if(hasCargoHoldUpgrade){
-
-                html+=
-                    '<button class="shape-btn'+
-                    (
-                        shipBuildToggles.cargoHold
-                        ?' selected'
-                        :''
-                    )+
-                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
-                    'data-action="toggle-ship-build-option" '+
-                    'data-option="cargoHold">📦 Cargo Hold (+3 '+COIN_ICON_HTML+')</button>';
-
-            }
-
-            if(hasDualPerkUpgrade){
-
-                html+=
-                    '<button class="shape-btn'+
-                    (
-                        shipBuildToggles.dualPerk
-                        ?' selected'
-                        :''
-                    )+
-                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
-                    'data-action="toggle-ship-build-option" '+
-                    'data-option="dualPerk">🐾 Pet Bay II (+5 '+COIN_ICON_HTML+')</button>';
-
-            }
-
-            html+=
-                '</div>';
-
-        }
+        const toggleBtn=
+            (option,active,label)=>
+                '<button class="shape-btn'+
+                (active ? ' selected' : '')+
+                '" style="width:100%;padding:6px 8px;'+
+                'font-size:10px;" '+
+                'data-action="toggle-ship-build-option" '+
+                'data-option="'+option+'">'+
+                label+'</button>';
 
         html+=
-            '<div class="selected-shape-info">'+
-            '<span>Build a new ship'+
+            '<div class="item-shop-card" '+
+            'style="width:100%;margin-bottom:10px;">'+
+            '<div class="item-shop-card-main" '+
+            'style="cursor:default;">'+
+            '<canvas id="factoryBuildPreview" width="132" '+
+            'height="132" class="pet-card-canvas"></canvas>'+
+            '<div class="item-shop-card-name">New Ship</div>'+
+            '<div class="item-shop-card-meta">'+
+            '<span style="color:#ff8d8d;letter-spacing:2px;">'+
+            '♥♥♥</span> 3 hearts<br>'+
+            'Cargo '+previewCargo+'<br>'+
+            'Pet bay '+previewPetBay+'<br>'+
+            'Ready in '+shipDuration+'s'+
+            '</div>'+
+            '</div>'+
             (
-                useCargoHold ||
-                useDualPerk
-                ?' (upgraded)'
+                hasCargoHoldUpgrade ||
+                hasPetBayUpgrade ||
+                hasDualPerkUpgrade
+                ?'<div class="item-shop-card-btn-wrap" '+
+                 'style="display:flex;flex-direction:column;'+
+                 'gap:6px;padding-top:0;">'+
+                 (
+                     hasCargoHoldUpgrade
+                     ?toggleBtn(
+                         "cargoHold",
+                         shipBuildToggles.cargoHold,
+                         '📦 Cargo Hold +10 (+3 '+COIN_ICON_HTML+')'
+                      )
+                     :''
+                 )+
+                 (
+                     hasPetBayUpgrade
+                     ?toggleBtn(
+                         "petBay",
+                         usePetBay,
+                         '🐾 Pet Bay: 2 pets (+4 '+COIN_ICON_HTML+')'
+                      )
+                     :''
+                 )+
+                 (
+                     hasDualPerkUpgrade
+                     ?toggleBtn(
+                         "dualPerk",
+                         shipBuildToggles.dualPerk,
+                         '🐾 Pet Bay II: 3 pets (+5 '+COIN_ICON_HTML+')'
+                      )
+                     :''
+                 )+
+                 '</div>'
                 :''
             )+
-            '</span>'+
-            '<button class="remove-btn" style="background:'+
+            '<div class="item-shop-card-btn-wrap">'+
+            '<button class="remove-btn" style="width:100%;'+
+            'background:'+
             (
                 canAfford
                 ?'rgba(110,220,255,.18)'
@@ -27862,6 +28729,7 @@ function renderPlanetDetail(id){
                 :'disabled'
             )+
             '>Build '+shipCost+' '+COIN_ICON_HTML+'</button>'+
+            '</div>'+
             '</div>';
 
         if(shipBuilds.length){
@@ -27879,6 +28747,156 @@ function renderPlanetDetail(id){
             );
 
         }
+
+        /*
+         * Work on ships already docked here — heart restoration
+         * for anything below full, plus a retrofit for each
+         * factory upgrade already purchased. One job per ship at a
+         * time; a ship mid-service can't be launched.
+         */
+        const dockedHere=
+            getShips(id);
+
+        html+=
+            '<div class="customizer-section-title" '+
+            'style="margin-top:14px;">Ship Services</div>';
+
+        if(!dockedHere.length){
+
+            html+=
+                '<div class="metric-note">'+
+                'No ships docked here to work on.</div>';
+
+        }
+
+        dockedHere.forEach(
+            (dockedShip,shipNumber)=>{
+
+                const job=
+                    getShipServiceJob(
+                        dockedShip.id
+                    );
+
+                const shipLives=
+                    clamp(
+                        Number(dockedShip.lives)||3,
+                        1,3
+                    );
+
+                html+=
+                    '<div class="ship-bay">'+
+                    '<div class="ship-bay-label">Ship '+
+                    (shipNumber+1)+
+                    ' <span style="color:#ff8d8d;'+
+                    'letter-spacing:2px;">'+
+                    '♥'.repeat(shipLives)+
+                    '<span style="color:#5c7ba0;">'+
+                    '♡'.repeat(3-shipLives)+
+                    '</span></span></div>';
+
+                if(job){
+
+                    html+=
+                        '<div class="metric-note '+
+                        'state-warn">🏗 '+
+                        (
+                            SHIP_SERVICES[
+                                job.serviceId
+                            ] || {name:"Service"}
+                        ).name+' — '+
+                        formatRemaining(job)+
+                        '</div>';
+
+                }else{
+
+                    html+=
+                        '<div style="display:flex;gap:6px;'+
+                        'flex-wrap:wrap;margin-top:6px;">';
+
+                    let anyOption=false;
+
+                    Object.keys(
+                        SHIP_SERVICES
+                    ).forEach(
+                        serviceId=>{
+
+                            const service=
+                                SHIP_SERVICES[serviceId];
+
+                            if(
+                                !isShipServiceApplicable(
+                                    dockedShip,serviceId
+                                )
+                            )
+                                return;
+
+                            if(
+                                service.requiresUpgrade &&
+                                !isUpgradePurchased(
+                                    id,
+                                    service.requiresUpgrade
+                                )
+                            )
+                                return;
+
+                            anyOption=true;
+
+                            const affordable=
+                                getTotalAvailableCoins(id)>=
+                                service.cost &&
+                                workingPetsHere>0;
+
+                            html+=
+                                '<button class="shape-btn" '+
+                                'style="width:auto;padding:'+
+                                '6px 10px;font-size:10px;" '+
+                                'data-action='+
+                                '"queue-ship-service" '+
+                                'data-ship="'+
+                                dockedShip.id+
+                                '" data-service="'+
+                                serviceId+'" '+
+                                (
+                                    affordable
+                                    ?''
+                                    :'disabled'
+                                )+'>'+
+                                service.name+' ('+
+                                service.cost+' '+
+                                COIN_ICON_HTML+
+                                ') · '+
+                                computeShipServiceDuration(
+                                    id,serviceId
+                                )+'s</button>';
+
+                        }
+                    );
+
+                    if(!anyOption){
+
+                        html+=
+                            '<span style="font-size:10px;'+
+                            'color:#5c7ba0;">Nothing to '+
+                            'restore or upgrade.</span>';
+
+                    }
+
+                    html+=
+                        '</div>';
+
+                }
+
+                html+=
+                    '</div>';
+
+            }
+        );
+
+        html+=
+            '<div class="metric-note">'+
+            'Each job needs a working builder pet, gets '+
+            'faster with more of them, and spends a little '+
+            'of every working pet\'s energy.</div>';
 
         html+=
             renderStructureUpgradesHtml(
@@ -28502,6 +29520,8 @@ function renderPlanetDetail(id){
         ships
     );
 
+    paintFactoryBuildPreview();
+
     paintShipCargoPreviews(
         id,
         ships
@@ -28751,6 +29771,24 @@ document
                 planetDetailId,
                 shipId,
                 materialId
+            );
+
+            expandedShipPickerKey=null;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="pick-ship-food"
+        ){
+
+            withdrawFoodToShip(
+                planetDetailId,
+                shipId,
+                target.getAttribute(
+                    "data-perk"
+                )
             );
 
             expandedShipPickerKey=null;
@@ -29090,8 +30128,23 @@ document
 
             shipBuildToggles={
                 cargoHold:false,
+                petBay:false,
                 dualPerk:false
             };
+
+        }else if(
+            action==="queue-ship-service"
+        ){
+
+            queueShipService(
+                planetDetailId,
+                target.getAttribute(
+                    "data-ship"
+                ),
+                target.getAttribute(
+                    "data-service"
+                )
+            );
 
         }else if(
             action==="toggle-ship-build-option"
@@ -29104,6 +30157,7 @@ document
 
             if(
                 optionKey==="cargoHold" ||
+                optionKey==="petBay" ||
                 optionKey==="dualPerk"
             ){
 
@@ -29300,6 +30354,25 @@ document
                 planetDetailId,
                 petId,
                 role
+            );
+
+        }else if(
+            action==="toggle-pet-card"
+        ){
+
+            const cardPetId=
+                target.getAttribute(
+                    "data-pet"
+                );
+
+            expandedPetCardId=
+                expandedPetCardId===
+                cardPetId
+                ?null
+                :cardPetId;
+
+            renderPlanetDetail(
+                planetDetailId
             );
 
         }else if(
@@ -35102,11 +36175,23 @@ function resolveCapsuleOutcome(wasSafe){
 
             if(materialSaved>0){
 
-                addToMaterialBank(
-                    fieldStartPlanetId,
-                    materialId,
-                    materialSaved
-                );
+                if(isFoodKey(materialId)){
+
+                    addPerkStock(
+                        fieldStartPlanetId,
+                        getFoodPerkId(materialId),
+                        materialSaved
+                    );
+
+                }else{
+
+                    addToMaterialBank(
+                        fieldStartPlanetId,
+                        materialId,
+                        materialSaved
+                    );
+
+                }
 
                 materialsSavedTotal+=
                     materialSaved;
@@ -41711,29 +42796,24 @@ let rhythmAudioEnabled=true;
  */
 const MUSIC_STYLES=
     [
+        /*
+         * Techno leads the array and is unlocked from the start —
+         * a livelier welcome than the original ambient backing,
+         * which swapped into techno's old rank-6 slot. Index 0 is
+         * also what currentMusicStyleIndex starts on, so a brand
+         * new game opens on techno without any extra special-casing.
+         */
         {
-            name:"warm",
-            genre:"ambient",
-            rootFreq:110,
-            degrees:[0,3,5,7,10],
-            baseBeatInterval:.56,
-            unlockRank:0
-        },
-        {
-            name:"bright",
-            genre:"ambient",
+            name:"euphoria",
+            genre:"techno",
             rootFreq:130.81,
             degrees:[0,2,4,7,9],
-            baseBeatInterval:.56,
-            unlockRank:0
-        },
-        {
-            name:"cosmic",
-            genre:"ambient",
-            rootFreq:146.83,
-            degrees:[0,3,5,7,10],
-            baseBeatInterval:.56,
-            unlockRank:0
+            baseBeatInterval:60/132,
+            unlockRank:0,
+            planetWeights:{
+                zenith:2.4,
+                helios:2
+            }
         },
         {
             name:"pulse",
@@ -41748,16 +42828,28 @@ const MUSIC_STYLES=
             }
         },
         {
-            name:"euphoria",
-            genre:"techno",
+            name:"warm",
+            genre:"ambient",
+            rootFreq:110,
+            degrees:[0,3,5,7,10],
+            baseBeatInterval:.56,
+            unlockRank:6
+        },
+        {
+            name:"bright",
+            genre:"ambient",
             rootFreq:130.81,
             degrees:[0,2,4,7,9],
-            baseBeatInterval:60/132,
-            unlockRank:6,
-            planetWeights:{
-                zenith:2.4,
-                helios:2
-            }
+            baseBeatInterval:.56,
+            unlockRank:6
+        },
+        {
+            name:"cosmic",
+            genre:"ambient",
+            rootFreq:146.83,
+            degrees:[0,3,5,7,10],
+            baseBeatInterval:.56,
+            unlockRank:6
         }
     ];
 
@@ -50316,6 +51408,8 @@ function endGame(){
 
     renderPlanetMap();
 
+    renderGameOverReturnButtons();
+
 }
 
 
@@ -51490,8 +52584,8 @@ function handlePointer(event){
 
     /*
      * Material collection: same tap-to-collect pattern as
-     * coins, but capped — collecting past MATERIAL_CAP for
-     * that material wastes it instead of over-filling, a real
+     * coins, but capped — collecting past the ship's total cargo
+     * capacity wastes it instead of over-filling, a real
      * incentive to actually go deposit rather than hoard.
      */
     for(
@@ -51522,9 +52616,10 @@ function handlePointer(event){
             );
 
             if(
-                current>=
-                MATERIAL_CAP+
-                currentShipMaterialCapBonus
+                getCargoUsed(runMaterials)>=
+                getShipCargoCapacity(
+                    currentShipMaterialCapBonus
+                )
             ){
 
                 floatingText(
@@ -51867,14 +52962,6 @@ document
 
 document
 .getElementById(
-    "pauseTabBtnFleet"
-)
-.innerHTML=
-    ROCKET_ICON_HTML+
-    " Fleet";
-
-document
-.getElementById(
     "focusLaunchBtn"
 )
 .addEventListener(
@@ -51885,6 +52972,32 @@ document
 
         event.preventDefault();
         event.stopPropagation();
+
+        const mode=
+            event.currentTarget.
+            dataset.mode;
+
+        if(mode==="buy-factory"){
+
+            openPlanetDetail(
+                selectedStartPlanet,
+                "shop"
+            );
+
+            return;
+
+        }
+
+        if(mode==="build-ship"){
+
+            openPlanetDetail(
+                selectedStartPlanet,
+                "structure-ship-factory"
+            );
+
+            return;
+
+        }
 
         launchWithAnimation();
 
@@ -52694,8 +53807,8 @@ canvas.addEventListener(
    ORBITAL SPACE — drag controls
    Steering follows the direction the finger is actually
    dragging. Speed is set by how far the current touch point is
-   from the ship (which always sits at screen centre) — drag out
-   further to go faster, bring it in closer to slow down. Only
+   from where the drag STARTED — drag out further to go faster,
+   bring it back toward the start to slow down. Only
    active while actually in orbital space, so it can never
    interfere with the normal game's own tap and swipe handling.
 ========================================================= */
@@ -52849,29 +53962,29 @@ canvas.addEventListener(
 );
 
 /*
- * Speed from how far the current touch point sits from the
- * ship, which is always pinned at screen centre — a small
- * deadzone right at the ship holds minimum speed, then it ramps
+ * Speed from how far the current touch point has been dragged
+ * from WHERE THE DRAG STARTED, not from the ship — the ship is
+ * always pinned at screen centre, so measuring against it meant a
+ * finger resting anywhere off-centre already read as "far" before
+ * any real dragging happened, and starting a drag near the ship
+ * made it nearly impossible to reach top speed. Anchoring to the
+ * touch-down point means the same short, comfortable drag gives
+ * the same result wherever on the screen it begins: a small
+ * deadzone right at the anchor holds minimum speed, then it ramps
  * up to maximum by ORBITAL_SPEED_DRAG_MAX_RADIUS pixels out.
- * Bringing the finger back in slows down exactly the same way,
- * since this reads the current distance fresh every call rather
- * than accumulating anything.
+ * Bringing the finger back toward where it started slows down
+ * exactly the same way, since this reads the current distance
+ * fresh every call rather than accumulating anything. Both points
+ * are raw client coordinates, so the canvas offset cancels out.
  */
 function updateOrbitalSpeedFromDrag(event){
 
-    /*
-     * Reuses the same rect-relative conversion pointerPosition()
-     * already uses everywhere else — the canvas's CSS size is
-     * always exactly W×H (see resize()), so no extra scale
-     * factor is needed here.
-     */
-    const p=
-        pointerPosition(event);
-
     const distance=
         Math.hypot(
-            p.x-W/2,
-            p.y-H/2
+            event.clientX-
+            orbitalDragStartX,
+            event.clientY-
+            orbitalDragStartY
         );
 
     const maxRadius=
@@ -53193,25 +54306,6 @@ document
 );
 
 
-document
-.getElementById(
-    "pauseRestart"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-
-        startGame();
-
-    },
-    {
-        passive:false
-    }
-);
-
-
 /* =========================================================
    AI METRICS TAB
 ========================================================= */
@@ -53239,13 +54333,6 @@ function switchPauseTab(tab, silent){
     );
 
     document.getElementById(
-        "pauseTabBtnFleet"
-    ).classList.toggle(
-        "active",
-        tab==="fleet"
-    );
-
-    document.getElementById(
         "pauseTabMenu"
     ).classList.toggle(
         "hidden",
@@ -53259,22 +54346,9 @@ function switchPauseTab(tab, silent){
         tab!=="metrics"
     );
 
-    document.getElementById(
-        "pauseTabFleet"
-    ).classList.toggle(
-        "hidden",
-        tab!=="fleet"
-    );
-
     if(tab==="metrics"){
 
         renderAIMetrics();
-
-    }
-
-    if(tab==="fleet"){
-
-        renderFleetOverview();
 
     }
 
@@ -53313,24 +54387,6 @@ document
     },
     {passive:false}
 );
-
-document
-.getElementById(
-    "pauseTabBtnFleet"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        switchPauseTab("fleet");
-
-    },
-    {passive:false}
-);
-
 
 /*
  * One row: a label, a 0..1 (or -1..1 for weights) bar, and a
@@ -53435,189 +54491,6 @@ function formatSessionTime(t){
 }
 
 /*
- * A read-only overview of the entire fleet, reachable from the
- * pause menu — every planet with a ship, a build in progress,
- * or a factory, without having to quit back to the start
- * screen just to check.
- */
-function renderFleetOverview(){
-
-    resolveAllBuildQueues();
-
-    const container=
-        document.getElementById(
-            "fleetContent"
-        );
-
-    if(!container)
-        return;
-
-    let html=
-        '<div class="customizer-title">'+ROCKET_ICON_HTML+' Fleet Overview</div>'+
-        '<div class="subtitle" style="text-align:center;margin-bottom:16px;">'+
-        'Every ship, wherever it\'s docked</div>';
-
-    let totalShips=0;
-
-    PLANETS.forEach(
-        planet=>{
-
-            const ships=
-                planet.id==="earth"
-                ?(planetSave.ships.earth || [])
-                :(getShips(planet.id) || []);
-
-            const queue=
-                getBuildQueue(
-                    planet.id
-                );
-
-            const pets=
-                getPetCount(
-                    planet.id
-                );
-
-            const hasFactory=
-                hasStructure(
-                    planet.id,
-                    "ship-factory"
-                );
-
-            if(
-                !ships.length &&
-                !queue.length &&
-                !hasFactory
-            ){
-
-                return;
-
-            }
-
-            totalShips+=
-                ships.length;
-
-            html+=
-                '<div class="customizer-section">'+
-                '<div class="customizer-section-title">'+
-                getPlanetIconHtml(planet.id)+' '+planet.name+
-                '</div>';
-
-            if(hasFactory){
-
-                html+=
-                    '<div class="metric-note">'+
-                    '🏭 Ship Factory · 🐾 '+pets+
-                    ' pet(s) stationed</div>';
-
-            }
-
-            if(!ships.length){
-
-                html+=
-                    '<div class="metric-note">'+
-                    'No ships docked here.'+
-                    '</div>';
-
-            }else{
-
-                ships.forEach(
-                    ship=>{
-
-                        const materialSummary=
-                            Object.entries(
-                                ship.materials || {}
-                            ).filter(
-                                ([,count]) => count>0
-                            ).map(
-                                ([materialId,count])=>{
-
-                                    const info=
-                                        MATERIALS[materialId] ||
-                                        MATERIALS["aether-dust"];
-
-                                    return getMaterialIconHtml(materialId)+count;
-
-                                }
-                            ).join(" ");
-
-                        html+=
-                            '<div class="selected-shape-info">'+
-                            '<span>'+
-                            ship.score.toLocaleString()+
-                            ' pts · '+COIN_ICON_HTML+
-                            (ship.coins || 0)+
-                            (
-                                materialSummary
-                                ?' · '+materialSummary
-                                :''
-                            )+
-                            '</span>'+
-                            '<span style="font-size:9px;opacity:.7;">'+
-                            getEquippedLabel(ship)+
-                            '</span>'+
-                            '</div>';
-
-                    }
-                );
-
-            }
-
-            queue.forEach(
-                build=>{
-
-                    const remaining=
-                        Math.max(
-                            0,
-                            Math.ceil(
-                                (
-                                    build.startedAt+
-                                    build.durationSeconds*1000-
-                                    Date.now()
-                                )/1000
-                            )
-                        );
-
-                    const label=
-                        build.type==="ship"
-                        ?"🏗 Ship building"
-                        :"🏗 "+
-                          (
-                              STRUCTURES[
-                                  build.structureId
-                              ] || {name:"Structure"}
-                          ).name+
-                          " building";
-
-                    html+=
-                        '<div class="metric-note">'+
-                        label+' — '+remaining+
-                        's left</div>';
-
-                }
-            );
-
-            html+=
-                '</div>';
-
-        }
-    );
-
-    if(!totalShips){
-
-        html+=
-            '<div class="metric-note">'+
-            'No ships anywhere yet — launch from Earth to '+
-            'get started.'+
-            '</div>';
-
-    }
-
-    container.innerHTML=
-        html;
-
-}
-
-/*
  * A read-only view of the ship actually being flown right now —
  * the ship-builder's own card stripped down to viewing only, no
  * vault, no swapping style or equipment, since none of that
@@ -53675,6 +54548,34 @@ function renderPauseShipCard(){
         'editing is back at the ship\'s home planet</div>'+
         '<canvas id="pauseShipPreview" width="90" height="90" '+
         'style="display:block;margin:0 auto 10px;"></canvas>'+
+
+        /*
+         * Hearts and pilot, read-only — the same two facts the
+         * ship's own card shows at its home planet. Hearts use the
+         * plain ♥/♡ glyphs the HUD already uses (text, not emoji);
+         * the pilot line is the card's own "Autopilot — you fly
+         * this one" wording, since the ship being flown right now
+         * is always the player's own.
+         */
+        '<div class="ship-bay">'+
+        '<div class="ship-bay-label">Hearts</div>'+
+        '<div class="ship-bay-content">'+
+        '<span style="font-size:16px;letter-spacing:3px;'+
+        'color:#ff8d8d;">'+
+        '♥'.repeat(Math.max(0,lives))+
+        '<span style="color:#5c7ba0;">'+
+        '♡'.repeat(Math.max(0,3-lives))+
+        '</span></span>'+
+        '<span style="font-size:10px;color:#8fa7c7;">'+
+        Math.max(0,lives)+' of 3</span>'+
+        '</div></div>'+
+
+        '<div class="ship-bay">'+
+        '<div class="ship-bay-label">Pilot</div>'+
+        '<div class="ship-bay-content">'+
+        '<span style="font-size:10px;color:#8fa7c7;">'+
+        'Autopilot — you fly this one</span>'+
+        '</div></div>'+
 
         '<div class="ship-bay">'+
         '<div class="ship-bay-label">Equipped</div>'+
@@ -55707,50 +56608,103 @@ const RHYTHM_WAVEFORM_PAST_MS=5000;
 const RHYTHM_WAVEFORM_FUTURE_MS=1500;
 
 
-document
-.getElementById(
-    "restartButton"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
+/*
+ * Where to go after a ship is lost: one button per planet that
+ * still has a ship docked, each returning straight to that
+ * planet's home view. Earth is always offered — it never runs out
+ * of ships (see getShipCount), so a player who just lost their
+ * last ship anywhere else always has somewhere to go. Replaces the
+ * old Try Again / Main Menu pair, which skipped the planet choice
+ * entirely.
+ */
+function renderGameOverReturnButtons(){
 
-        event.preventDefault();
-
-        startGame();
-
-    },
-    {
-        passive:false
-    }
-);
-
-
-document
-.getElementById(
-    "menuButton"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
-
-        event.preventDefault();
-
-        gameOverScreen.classList.add(
-            "hidden"
+    const container=
+        document.getElementById(
+            "gameOverReturnButtons"
         );
 
-        startScreen.classList.remove(
-            "hidden"
+    if(!container)
+        return;
+
+    container.innerHTML="";
+
+    const planetsWithShips=
+        PLANETS.filter(
+            p =>
+                p.id==="earth" ||
+                (
+                    getShipCount(p.id)>0 &&
+                    isPlanetUnlocked(p.id)
+                )
         );
 
-        renderPlanetMap();
+    planetsWithShips.forEach(
+        planet=>{
 
-    },
-    {
-        passive:false
-    }
-);
+            const button=
+                document.createElement(
+                    "button"
+                );
+
+            button.type="button";
+
+            button.className=
+                "big-button secondary-button "+
+                "game-over-return-btn";
+
+            const shipCount=
+                getShipCount(planet.id);
+
+            button.innerHTML=
+                '<span class="game-over-return-name">'+
+                planet.name+
+                '</span>'+
+                '<span class="game-over-return-info">'+
+                (
+                    shipCount===Infinity
+                    ?"Free starter ship"
+                    :shipCount+" ship"+
+                     (
+                         shipCount===1
+                         ?""
+                         :"s"
+                     )+" docked"
+                )+
+                '</span>';
+
+            button.addEventListener(
+                "pointerdown",
+                event=>{
+
+                    event.preventDefault();
+
+                    sound("click");
+
+                    gameOverScreen.classList.add(
+                        "hidden"
+                    );
+
+                    startScreen.classList.remove(
+                        "hidden"
+                    );
+
+                    selectStartPlanet(
+                        planet.id
+                    );
+
+                },
+                {passive:false}
+            );
+
+            container.appendChild(
+                button
+            );
+
+        }
+    );
+
+}
 
 
 /* =========================================================
@@ -57319,7 +58273,7 @@ function renderRankCircle(flashAmount){
  * Every rank-gated thing in the game, grouped by which rank number
  * actually unlocks it — planets (PLANETS' own unlockRank, same
  * field isPlanetUnlocked already reads), pet slots
- * (PET_SLOT_UNLOCK_RANKS, the 4th slot onward), and now music
+ * (pet styles past a planet's first three), and now music
  * styles (MUSIC_STYLES' own unlockRank, read by
  * isMusicStyleUnlocked the exact same way). One shared list rather
  * than three separate ones, since a player asking "what does rank
@@ -57383,15 +58337,30 @@ function buildRankUnlocksList(){
         }
     );
 
-    PET_SLOT_UNLOCK_RANKS.forEach(
-        (rankNumber,i)=>{
+    PLANETS.forEach(
+        planet=>{
 
-            addItem(
-                rankNumber,
-                "pets",
-                "Pet slots",
-                "🐾",
-                "Pet slot "+(i+4)
+            getPetRosterForPlanet(
+                planet.id
+            ).forEach(
+                (speciesId,styleIndex)=>{
+
+                    addItem(
+                        getPetStyleUnlockRank(
+                            planet.id,
+                            styleIndex
+                        ),
+                        "pets",
+                        "Pet styles",
+                        "🐾",
+                        (
+                            SPECIES_DISPLAY_NAMES[
+                                speciesId
+                            ] || speciesId
+                        )+" ("+planet.name+")"
+                    );
+
+                }
             );
 
         }
