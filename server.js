@@ -163,7 +163,8 @@ function sendRoster(room){
         room,
         {
             type:'roster',
-            players:rosterFor(room)
+            players:rosterFor(room),
+            hostId:room.hostId
         },
         null
     );
@@ -222,6 +223,24 @@ function removePlayerFromRoom(player){
         rooms.delete(room.code);
 
     }else{
+
+        /*
+         * The host's system sits at the centre of everyone's star
+         * map — if the host themselves leaves, someone still has
+         * to hold that position, so the room isn't left pointing
+         * at a player who's no longer there. Whoever's been
+         * connected longest (the map's insertion order) takes over,
+         * the same predictable rule every remaining client can
+         * compute identically without the server needing to pick
+         * favourites.
+         */
+        if(room.hostId===player.id){
+
+            room.hostId=
+                room.players.keys().
+                next().value;
+
+        }
 
         sendRoster(room);
 
@@ -349,6 +368,14 @@ function handleMessage(player,message){
         const room={
             code,
             players:new Map(),
+            /*
+             * The player who created the room — the star map's
+             * layout uses this to put their system at the centre
+             * and everyone else's arranged around it, the same way
+             * on every client, since they all read this one shared
+             * fact from the server rather than each guessing.
+             */
+            hostId:player.id,
             /*
              * shipKey -> {byId, byName}. Namespaced by ownerId+':'+
              * shipId rather than bare shipId, since each player's
