@@ -562,6 +562,51 @@ body{
     transform:translateX(-50%);
 }
 
+.star-map-owner-row{
+    position:absolute;
+    top:15%;
+    left:0;
+    right:0;
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    flex-wrap:wrap;
+    padding:0 16px;
+}
+
+.star-map-owner-row.hidden{
+    display:none;
+}
+
+.star-map-owner-btn{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    padding:5px 11px;
+    border-radius:20px;
+    border:1px solid rgba(100,190,255,.25);
+    background:rgba(5,10,25,.6);
+    backdrop-filter:blur(6px);
+    color:#8fa7c7;
+    font-size:9.5px;
+    font-weight:700;
+    letter-spacing:.3px;
+    cursor:pointer;
+}
+
+.star-map-owner-btn.active{
+    background:rgba(100,190,255,.22);
+    border-color:rgba(120,200,255,.6);
+    color:#eaf6ff;
+}
+
+.star-map-owner-dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    flex-shrink:0;
+}
+
 
 /* =========================================================
    ZOOMED PLANET VIEW (chrome-free start screen)
@@ -2934,6 +2979,91 @@ and (max-height:500px){
 }
 
 /*
+ * The Leaderboard/Multiplayer split — same visual language as
+ * pause-tab above, just its own class since it lives in a
+ * different screen.
+ */
+.mp-tab-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+}
+
+.mp-tab-btn{
+    flex:1;
+    padding:10px 6px;
+    border:1px solid rgba(100,190,255,.22);
+    border-radius:11px;
+    background:rgba(255,255,255,.035);
+    color:#8fa7c7;
+    font-size:10.5px;
+    font-weight:800;
+    letter-spacing:.5px;
+    cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.mp-tab-btn.active{
+    background:rgba(100,190,255,.18);
+    border-color:rgba(120,200,255,.55);
+    color:#bcecff;
+}
+
+.mp-room-code{
+    font-size:28px;
+    font-weight:900;
+    letter-spacing:6px;
+    text-align:center;
+    color:#bcecff;
+    background:rgba(100,190,255,.1);
+    border:1px solid rgba(100,190,255,.3);
+    border-radius:12px;
+    padding:14px;
+    margin:10px 0;
+}
+
+.mp-roster-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border-radius:10px;
+    background:rgba(255,255,255,.03);
+    margin-bottom:6px;
+    font-size:11px;
+}
+
+.mp-roster-dot{
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    flex-shrink:0;
+}
+
+.mp-visit-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:9px 12px;
+    border-radius:10px;
+    background:rgba(255,255,255,.035);
+    border:1px solid rgba(100,190,255,.15);
+    margin-bottom:6px;
+    cursor:pointer;
+}
+
+.mp-error-box{
+    font-size:10px;
+    color:#ff9d7a;
+    background:rgba(255,110,80,.1);
+    border:1px solid rgba(255,110,80,.3);
+    border-radius:8px;
+    padding:8px 10px;
+    margin:8px 0;
+}
+
+/*
  * Planet menu tabs. Unlike the pause menu's fixed three, this
  * bar can hold six or more (one per structure), so it scrolls
  * horizontally instead of squeezing tabs into unreadable
@@ -3291,6 +3421,19 @@ and (max-height:500px){
     <div class="star-map-title" id="starMapTitle"></div>
 
     <div class="star-map-hint" id="starMapHint"></div>
+
+    <!--
+        Only populated (and shown) while in a multiplayer room and
+        NOT picking a mission destination — whose star map is being
+        looked at right now, switchable between "mine" and each
+        room-mate's. Destination-picking always stays on the local
+        player's own map, since a mission belongs to whoever's
+        actually flying it.
+    -->
+    <div
+        class="star-map-owner-row hidden"
+        id="starMapOwnerRow">
+    </div>
 
     <button class="focus-btn star-map-close" id="starMapCloseBtn">
         ✕ Close
@@ -3843,26 +3986,62 @@ and (max-height:500px){
         </div>
 
         <div
-            class="logo"
-            style="font-size:40px">
+            class="mp-tab-row"
+            id="leaderboardTabRow">
 
-            LEADERBOARD
+            <button
+                class="mp-tab-btn active"
+                id="leaderboardTabBtnScores"
+                data-lb-tab="scores">
+
+                🏆 Leaderboard
+
+            </button>
+
+            <button
+                class="mp-tab-btn"
+                id="leaderboardTabBtnMultiplayer"
+                data-lb-tab="multiplayer">
+
+                🌐 Multiplayer
+
+            </button>
 
         </div>
 
-        <div class="leaderboard-box">
+        <div id="leaderboardTabScores">
 
             <div
-                id="mainLeaderboard"
-                class="leaderboard">
+                class="logo"
+                style="font-size:40px">
 
-                Loading leaderboard...
+                LEADERBOARD
 
             </div>
 
+            <div class="leaderboard-box">
+
+                <div
+                    id="mainLeaderboard"
+                    class="leaderboard">
+
+                    Loading leaderboard...
+
+                </div>
+
+            </div>
+
+            <div id="mainLeaderboardStatus"></div>
+
         </div>
 
-        <div id="mainLeaderboardStatus"></div>
+        <div
+            id="leaderboardTabMultiplayer"
+            class="hidden">
+
+            <div id="multiplayerPanel"></div>
+
+        </div>
 
         <button
             class="big-button secondary-button"
@@ -11711,17 +11890,1607 @@ function getSkillTitle(){
 let planetSave=
     loadPlanetSave();
 
+/*
+ * The player's OWN real save. planetSave keeps its single-player
+ * meaning everywhere in this codebase unchanged — every existing
+ * render/read function reads that one bare global, and that's
+ * deliberately left alone. What multiplayer adds is that while
+ * VIEWING another room member's planet, planetSave is temporarily
+ * pointed at THEIR mirrored copy instead (see
+ * mpEnterRemotePlanetView/mpExitRemotePlanetView below), so every
+ * one of those existing functions just works, unmodified, against
+ * whichever planet is actually on screen. localPlanetSave always
+ * holds this player's own real save regardless of what planetSave
+ * is currently swapped to, so there's always a way back to "mine".
+ */
+let localPlanetSave=planetSave;
+
+/*
+ * Which room member owns the planet currently on screen — null
+ * means "my own". The single fact executePlanetDetailAction and
+ * the multiplayer action-forwarding check both consult to decide
+ * whether an action can run directly or has to be sent to the real
+ * owner instead.
+ */
+let activePlanetOwnerId=null;
+
 
 function savePlanetProgress(
     data=planetSave
 ){
+
+    /*
+     * A hard safety net, not just tidiness: this must never write
+     * anything but the local player's own real save into their own
+     * localStorage slot. Every legitimate call path already keeps
+     * data===localPlanetSave true (own mutations only ever run
+     * against planetSave when it's pointed at localPlanetSave;
+     * replaying a remote visitor's action explicitly re-points
+     * planetSave at localPlanetSave first — see
+     * mpHandleRemotePlanetAction) — but the cost of ever being
+     * wrong here is actually overwriting a real player's save file
+     * with someone else's planet data, so this is checked rather
+     * than assumed. localPlanetSave is briefly null during the
+     * very first load's one-time save-migration call (before it's
+     * been assigned at all), which is allowed through explicitly —
+     * there's nothing to compare against yet, and that data IS the
+     * player's own save, just freshly converted.
+     */
+    if(
+        localPlanetSave!==null &&
+        data!==localPlanetSave
+    ){
+
+        return;
+
+    }
 
     localStorage.setItem(
         SAVE_KEY,
         JSON.stringify(data)
     );
 
+    /*
+     * The entire mechanism behind "anything they do, they see
+     * live" — every mutating action in this game, without
+     * exception, already ends by calling savePlanetProgress (this
+     * is the one point all 54-plus call sites funnel through), so
+     * hooking a broadcast in exactly here means every one of them
+     * is now a live multiplayer update with no other code needing
+     * to know multiplayer exists at all.
+     */
+    if(
+        typeof mp!=="undefined" &&
+        mp.connected
+    ){
+
+        mpSend({
+            type:"sync",
+            planetSave:data
+        });
+
+    }
+
 }
+
+
+/* =========================================================
+   MULTIPLAYER
+   ========================================================= */
+
+/*
+ * Server URL matches what's already deployed and working — same
+ * host, same package.json, just the room-based protocol this game
+ * actually needs instead of the original flat-arena test relay.
+ */
+let MULTIPLAYER_SERVER_URL=
+    "wss://kinfo-game-studio.onrender.com";
+
+let mp={
+
+    ws:null,
+    connected:false,
+    connecting:false,
+    myId:null,
+
+    myName:
+        localStorage.getItem(
+            "mpPlayerName"
+        ) || "",
+
+    myColour:"#6ee7ff",
+
+    roomCode:null,
+    isHost:false,
+    roster:[],
+
+    /* ownerId -> their planetSave mirror, kept live by 'sync' */
+    remotePlanetSaves:{},
+
+    /* ownerId -> {name, colour} */
+    remotePlayerInfo:{},
+
+    /* playerId -> last presence tick {space,planetId,x,y,angle,vx,vy,lives} */
+    remotePresence:{},
+
+    /* "ownerId:shipId" -> {byId,byName} */
+    claimedShips:{},
+
+    lastError:null
+
+};
+
+function mpShipKey(ownerId,shipId){
+
+    return ownerId+":"+shipId;
+
+}
+
+function mpIsShipClaimedByOther(ownerId,shipId){
+
+    const claim=
+        mp.claimedShips[
+            mpShipKey(ownerId,shipId)
+        ];
+
+    return(
+        !!claim &&
+        claim.byId!==mp.myId
+    );
+
+}
+
+function mpSend(message){
+
+    if(
+        mp.ws &&
+        mp.ws.readyState===1
+    ){
+
+        try{
+
+            mp.ws.send(
+                JSON.stringify(message)
+            );
+
+        }catch(error){}
+
+    }
+
+}
+
+/*
+ * The player's own save, broadcast fresh — used right after a
+ * host/join succeeds (so the room sees this player's planets
+ * immediately, not only after their next mutation) and is
+ * otherwise just what savePlanetProgress's own hook already does
+ * on every real change.
+ */
+function mpBroadcastOwnSave(){
+
+    if(mp.connected){
+
+        mpSend({
+            type:"sync",
+            planetSave:localPlanetSave
+        });
+
+    }
+
+}
+
+let mpLastRoamPresenceSendTime=0;
+
+const MP_ROAM_PRESENCE_INTERVAL_MS=180;
+
+/*
+ * Called every frame roaming is active (see drawPlanetFocusScene),
+ * throttled so it's a steady trickle rather than a flood — a
+ * position update roughly 5-6 times a second reads as smooth
+ * movement to someone watching, without spamming the relay on
+ * every single animation frame. ownerId is whichever planet is
+ * ACTUALLY being roamed on: this player's own id when roaming at
+ * home, or the room-mate's id when visiting (activePlanetOwnerId),
+ * so mpRenderRemoteRoamingPets below can tell whether a given
+ * remote pet belongs on the planet currently on screen.
+ */
+function mpBroadcastRoamPresence(){
+
+    if(!mp.connected)
+        return;
+
+    const now=
+        performance.now();
+
+    if(
+        now-mpLastRoamPresenceSendTime<
+        MP_ROAM_PRESENCE_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastRoamPresenceSendTime=now;
+
+    const ship=
+        (
+            getShips(
+                selectedStartPlanet
+            ) || []
+        ).find(
+            s => s.id===roamingShipId
+        );
+
+    const pet=
+        ship && ship.pendingPilot;
+
+    if(!pet)
+        return;
+
+    mpSend({
+        type:"presence",
+        space:"roaming",
+        ownerId:
+            activePlanetOwnerId ||
+            mp.myId,
+        planetId:selectedStartPlanet,
+        lat:roamingLat,
+        lon:roamingLon,
+        petSpecies:pet.species,
+        petId:pet.id
+    });
+
+}
+
+/*
+ * The mirror image of broadcasting — every OTHER room-mate
+ * currently roaming on the SAME planet as the one on screen right
+ * now, drawn as real pets using the exact same drawSpacePet call
+ * the local roaming pet uses. "Same planet" means both the planet
+ * id AND its owner match — Alice roaming on her own Earth and Bob
+ * roaming on HIS OWN Earth are two completely unrelated places
+ * even though the id string is identical, and must never be drawn
+ * as if they were the same spot.
+ */
+function mpGetRemoteRoamersHere(){
+
+    if(!mp.connected)
+        return[];
+
+    const hereOwnerId=
+        activePlanetOwnerId ||
+        mp.myId;
+
+    const now=
+        performance.now();
+
+    return Object.keys(
+        mp.remotePresence
+    ).filter(
+        playerId=>{
+
+            const presence=
+                mp.remotePresence[
+                    playerId
+                ];
+
+            return(
+                presence &&
+                presence.space===
+                "roaming" &&
+                presence.ownerId===
+                hereOwnerId &&
+                presence.planetId===
+                selectedStartPlanet &&
+                presence.lat!==null &&
+                presence.lon!==null &&
+                /*
+                 * Stale presence (the sender navigated away, lost
+                 * connection, or simply stopped sending) is dropped
+                 * after a few missed intervals rather than left
+                 * frozen on screen forever — see the timestamp
+                 * stamped on receipt in mpHandleMessage.
+                 */
+                presence.receivedAt &&
+                now-presence.receivedAt<
+                MP_ROAM_PRESENCE_INTERVAL_MS*4
+            );
+
+        }
+    ).map(
+        playerId=>({
+            playerId,
+            name:
+                (
+                    mp.remotePlayerInfo[
+                        playerId
+                    ] || {}
+                ).name || "Player",
+            colour:
+                (
+                    mp.remotePlayerInfo[
+                        playerId
+                    ] || {}
+                ).colour || "#6ee7ff",
+            presence:
+                mp.remotePresence[
+                    playerId
+                ]
+        })
+    );
+
+}
+
+function mpDisconnectSocket(){
+
+    if(mp.ws){
+
+        try{
+
+            mp.ws.onopen=null;
+            mp.ws.onmessage=null;
+            mp.ws.onclose=null;
+            mp.ws.onerror=null;
+
+            mp.ws.close();
+
+        }catch(error){}
+
+    }
+
+    mp.ws=null;
+
+}
+
+function mpResetRoomState(){
+
+    mp.connected=false;
+    mp.roomCode=null;
+    mp.isHost=false;
+    mp.roster=[];
+    mp.remotePlanetSaves={};
+    mp.remotePlayerInfo={};
+    mp.remotePresence={};
+    mp.claimedShips={};
+
+    if(activePlanetOwnerId){
+
+        mpExitRemotePlanetView();
+
+    }
+
+}
+
+function mpLeaveRoom(){
+
+    mpSend({type:"leave"});
+
+    mpDisconnectSocket();
+
+    mpResetRoomState();
+
+    if(
+        typeof renderMultiplayerPanel===
+        "function"
+    ){
+
+        renderMultiplayerPanel();
+
+    }
+
+    if(typeof renderPlanetMap==="function"){
+
+        renderPlanetMap();
+
+    }
+
+}
+
+function mpConnectAndSend(firstMessage){
+
+    if(mp.connecting)
+        return;
+
+    mp.connecting=true;
+
+    mp.lastError=null;
+
+    mpDisconnectSocket();
+
+    let socket;
+
+    try{
+
+        socket=new WebSocket(
+            MULTIPLAYER_SERVER_URL
+        );
+
+    }catch(error){
+
+        mp.connecting=false;
+
+        mp.lastError=
+            "Couldn't reach the "+
+            "multiplayer server.";
+
+        renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    mp.ws=socket;
+
+    socket.onopen=()=>{
+
+        mpSend(firstMessage);
+
+    };
+
+    socket.onmessage=event=>{
+
+        let message;
+
+        try{
+
+            message=JSON.parse(
+                event.data
+            );
+
+        }catch(error){
+
+            return;
+
+        }
+
+        mpHandleMessage(message);
+
+    };
+
+    socket.onclose=()=>{
+
+        const wasConnected=
+            mp.connected;
+
+        mp.connecting=false;
+
+        mpResetRoomState();
+
+        if(wasConnected){
+
+            mp.lastError=
+                "Disconnected from the "+
+                "multiplayer server.";
+
+        }
+
+        renderMultiplayerPanel();
+
+        if(typeof renderPlanetMap==="function"){
+
+            renderPlanetMap();
+
+        }
+
+    };
+
+    socket.onerror=()=>{};
+
+}
+
+function mpHostRoom(name){
+
+    mp.myName=
+        String(name || "Player")
+            .slice(0,18) ||
+        "Player";
+
+    localStorage.setItem(
+        "mpPlayerName",
+        mp.myName
+    );
+
+    mpConnectAndSend({
+        type:"host",
+        name:mp.myName,
+        colour:mp.myColour
+    });
+
+}
+
+function mpJoinRoom(code,name){
+
+    mp.myName=
+        String(name || "Player")
+            .slice(0,18) ||
+        "Player";
+
+    localStorage.setItem(
+        "mpPlayerName",
+        mp.myName
+    );
+
+    mpConnectAndSend({
+        type:"join",
+        code:String(code || "")
+            .trim().toUpperCase(),
+        name:mp.myName,
+        colour:mp.myColour
+    });
+
+}
+
+function mpHandleMessage(message){
+
+    if(message.type==="welcome"){
+
+        mp.myId=message.id;
+
+        return;
+
+    }
+
+    if(
+        message.type==="hosted" ||
+        message.type==="joined"
+    ){
+
+        mp.connected=true;
+        mp.connecting=false;
+        mp.roomCode=message.code;
+        mp.isHost=
+            message.type==="hosted";
+        mp.lastError=null;
+
+        mpBroadcastOwnSave();
+
+        renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="error"){
+
+        mp.connecting=false;
+
+        mp.lastError=
+            message.message ||
+            "Something went wrong.";
+
+        renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="roster"){
+
+        mp.roster=
+            message.players || [];
+
+        renderMultiplayerPanel();
+
+        if(
+            typeof renderStarMapOwnerRow===
+            "function"
+        ){
+
+            renderStarMapOwnerRow();
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="left"){
+
+        delete mp.remotePlanetSaves[
+            message.id
+        ];
+
+        delete mp.remotePlayerInfo[
+            message.id
+        ];
+
+        delete mp.remotePresence[
+            message.id
+        ];
+
+        Object.keys(
+            mp.claimedShips
+        ).forEach(
+            key=>{
+
+                if(
+                    key.indexOf(
+                        message.id+":"
+                    )===0
+                ){
+
+                    delete mp.claimedShips[
+                        key
+                    ];
+
+                }
+
+            }
+        );
+
+        if(
+            activePlanetOwnerId===
+            message.id
+        ){
+
+            mpExitRemotePlanetView();
+
+        }
+
+        if(
+            typeof renderPlanetMap===
+            "function"
+        ){
+
+            renderPlanetMap();
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="sync"){
+
+        mp.remotePlanetSaves[
+            message.id
+        ]=message.planetSave || {};
+
+        mp.remotePlayerInfo[
+            message.id
+        ]={
+            name:message.name || "Player",
+            colour:
+                message.colour ||
+                "#6ee7ff"
+        };
+
+        /*
+         * Live means live: if this is the planet actually on
+         * screen right now, re-point planetSave at the freshly
+         * arrived mirror (a new object every sync, so the old
+         * reference genuinely is stale) and redraw immediately
+         * instead of waiting for whatever next unrelated render
+         * happens to pick it up.
+         */
+        if(
+            activePlanetOwnerId===
+            message.id
+        ){
+
+            planetSave=
+                mp.remotePlanetSaves[
+                    message.id
+                ];
+
+            if(planetDetailId){
+
+                renderPlanetDetail(
+                    planetDetailId
+                );
+
+            }
+
+            if(
+                typeof renderPlanetFocus===
+                "function"
+            ){
+
+                renderPlanetFocus();
+
+            }
+
+        }
+
+        if(
+            typeof renderPlanetMap===
+            "function"
+        ){
+
+            renderPlanetMap();
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="presence"){
+
+        message.receivedAt=
+            performance.now();
+
+        mp.remotePresence[
+            message.id
+        ]=message;
+
+        return;
+
+    }
+
+    if(message.type==="fieldEvent"){
+
+        if(
+            typeof mpHandleRemoteFieldEvent===
+            "function"
+        ){
+
+            mpHandleRemoteFieldEvent(
+                message
+            );
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="shipClaimed"){
+
+        mp.claimedShips[
+            message.shipKey
+        ]={
+            byId:message.byId,
+            byName:message.byName
+        };
+
+        if(planetDetailId){
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="shipReleased"){
+
+        delete mp.claimedShips[
+            message.shipKey
+        ];
+
+        if(planetDetailId){
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="shipClaimDenied"){
+
+        showShipToast(
+            (message.byName || "Someone")+
+            " already has that ship."
+        );
+
+        return;
+
+    }
+
+    if(message.type==="shipClaims"){
+
+        (message.claims || []).forEach(
+            claim=>{
+
+                mp.claimedShips[
+                    claim.shipKey
+                ]={
+                    byId:claim.byId,
+                    byName:claim.byName
+                };
+
+            }
+        );
+
+        if(planetDetailId){
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="planetAction"){
+
+        mpHandleRemotePlanetAction(
+            message
+        );
+
+        return;
+
+    }
+
+}
+
+/*
+ * Every action name executePlanetDetailAction's giant branch chain
+ * recognises, split into the two categories that actually matter
+ * for multiplayer — verified against the real code for every one
+ * of them, not guessed: LOCAL never touches planetSave, only this
+ * viewer's own on-screen UI state (which tab is open, which card
+ * is expanded, a build-option checkbox for a ship not yet queued),
+ * so it always runs directly on whichever planet is being looked
+ * at, exactly like today. MUTATING genuinely changes the planet's
+ * real data — coins, materials, pets, ships, structures — and per
+ * this game's "the planet is shared" design, runs locally only
+ * when the current viewer owns the planet on screen; otherwise
+ * it's sent to the room and the real owner's client is the one
+ * that actually executes it (see mpHandleRemotePlanetAction).
+ */
+const MP_LOCAL_ONLY_ACTIONS=
+    new Set([
+        "close-planet-detail",
+        "planet-tab",
+        "toggle-ship-picker",
+        "toggle-equip",
+        "toggle-ship-card",
+        "toggle-style",
+        "toggle-ship-cargo",
+        "toggle-shop-row",
+        "toggle-ship-build-option",
+        "design-structure",
+        "customize-ship",
+        "select-gallery-style",
+        "toggle-pet-card",
+        "toggle-pet-perk",
+        "toggle-ship-pilot"
+    ]);
+
+/*
+ * select-launch-ship is neither of the above — it never mutates
+ * planetSave at all (selectedLaunchShipId is a bare local variable,
+ * not part of the save), but it DOES need real cross-player
+ * exclusivity ("if a ship is selected by a player no one else can
+ * select it"), handled separately by the claim system rather than
+ * the generic forward-to-owner path, since a selection isn't
+ * something the owner needs to execute on anyone's behalf — it's a
+ * room-wide lock the server itself arbitrates directly.
+ */
+const MP_CLAIM_ACTIONS=
+    new Set(["select-launch-ship"]);
+
+/*
+ * The full set of data-* attribute names any branch in
+ * executePlanetDetailAction reads, captured generically off
+ * whatever element was actually clicked — this is what lets a
+ * single forwarding mechanism serve all 30-plus mutating actions
+ * without a hand-written case for each one's own specific
+ * arguments.
+ */
+const MP_FORWARDED_ATTRS=
+    [
+        "data-action","data-ship","data-item","data-material",
+        "data-option","data-perk","data-pet","data-picker",
+        "data-role","data-row","data-service","data-stat",
+        "data-structure","data-structure-name","data-style",
+        "data-tab","data-upgrade","data-destination"
+    ];
+
+function mpCaptureTargetAttrs(target){
+
+    const attrs={};
+
+    MP_FORWARDED_ATTRS.forEach(
+        name=>{
+
+            const value=
+                target.getAttribute(
+                    name
+                );
+
+            if(value!==null){
+
+                attrs[name]=value;
+
+            }
+
+        }
+    );
+
+    return attrs;
+
+}
+
+/*
+ * A plain object standing in for the real DOM element a network
+ * message came from — deliberately minimal, just enough for
+ * executePlanetDetailAction and everything it calls to work: every
+ * branch only ever reads target.getAttribute(...), so that's all
+ * this needs to implement.
+ */
+function mpSyntheticTarget(attrs){
+
+    return{
+
+        disabled:false,
+        tagName:"BUTTON",
+
+        getAttribute(name){
+
+            return(
+                attrs[name]!==undefined
+                ?attrs[name]
+                :null
+            );
+
+        },
+
+        /*
+         * Some branches trigger a visual flourish (a coin/item
+         * icon flying from the clicked button) that reads the
+         * real element's on-screen position via
+         * getBoundingClientRect — there's no real element here,
+         * so this returns a harmless zero-size rect rather than
+         * throwing. The owner's screen loses that one cosmetic
+         * animation for a remotely-triggered action; the actual
+         * mutation beneath it is unaffected either way.
+         */
+        getBoundingClientRect(){
+
+            return{
+                left:0,top:0,
+                right:0,bottom:0,
+                width:0,height:0,
+                x:0,y:0
+            };
+
+        },
+
+        closest(){
+
+            return null;
+
+        },
+
+        classList:{
+            contains:()=>false,
+            add(){},
+            remove(){},
+            toggle(){}
+        }
+
+    };
+
+}
+
+/*
+ * Called from the real pointerdown listener, BEFORE
+ * executePlanetDetailAction ever runs — the actual fork in the
+ * road between "just do it" (my own planet, or a local-only
+ * action) and "send it to whoever really owns this planet". Returns
+ * true when it has fully handled the click itself (forwarded it,
+ * or resolved a claim), in which case the caller must NOT also call
+ * executePlanetDetailAction — false means proceed exactly as
+ * single-player already does.
+ */
+function mpInterceptPlanetAction(target){
+
+    if(!activePlanetOwnerId){
+
+        return false;
+
+    }
+
+    const action=
+        target.getAttribute(
+            "data-action"
+        );
+
+    if(MP_LOCAL_ONLY_ACTIONS.has(action)){
+
+        return false;
+
+    }
+
+    if(MP_CLAIM_ACTIONS.has(action)){
+
+        const shipId=
+            target.getAttribute(
+                "data-ship"
+            );
+
+        if(
+            mpIsShipClaimedByOther(
+                activePlanetOwnerId,
+                shipId
+            )
+        ){
+
+            const claim=
+                mp.claimedShips[
+                    mpShipKey(
+                        activePlanetOwnerId,
+                        shipId
+                    )
+                ];
+
+            showShipToast(
+                (
+                    claim && claim.byName
+                ) || "Someone"+
+                " already has that ship."
+            );
+
+            return true;
+
+        }
+
+        mpSend({
+            type:"claimShip",
+            ownerId:activePlanetOwnerId,
+            shipId
+        });
+
+        selectedLaunchShipId=
+            shipId;
+
+        renderPlanetDetail(
+            planetDetailId
+        );
+
+        return true;
+
+    }
+
+    /*
+     * Anything not explicitly local-only or a claim is treated as
+     * mutating by default — a new action added later that forgets
+     * to be classified is safer failing this way (sent to the true
+     * owner, exactly like every other real mutation) than the
+     * other way around (silently applied to a visitor's own,
+     * non-authoritative mirror, which is the actual split-brain
+     * risk this whole design exists to avoid).
+     */
+    if(!mp.connected){
+
+        return false;
+
+    }
+
+    mpSend({
+        type:"planetAction",
+        payload:{
+            ownerId:activePlanetOwnerId,
+            planetId:planetDetailId,
+            attrs:mpCaptureTargetAttrs(
+                target
+            )
+        }
+    });
+
+    return true;
+
+}
+
+/*
+ * Runs on the OWNER's client when a room-mate's forwarded action
+ * arrives — reuses executePlanetDetailAction completely unchanged,
+ * so a remote sell/buy/build/assign is executed by exactly the same
+ * code a local click would run, against this player's own real
+ * save. Temporarily points planetSave/planetDetailId at the target
+ * planet for the call (they might currently be looking at something
+ * else, or nothing at all) and restores both afterward — if they
+ * WERE already looking at this exact planet, the branch's own
+ * renderPlanetDetail call already refreshed it live, which is
+ * exactly "the owner sees it happening too".
+ */
+function mpHandleRemotePlanetAction(message){
+
+    if(
+        message.ownerId!==mp.myId ||
+        !message.attrs
+    ){
+
+        return;
+
+    }
+
+    const previousPlanetSave=
+        planetSave;
+
+    const previousOwnerId=
+        activePlanetOwnerId;
+
+    const previousPlanetDetailId=
+        planetDetailId;
+
+    planetSave=localPlanetSave;
+    activePlanetOwnerId=null;
+    planetDetailId=message.planetId;
+
+    try{
+
+        executePlanetDetailAction(
+            mpSyntheticTarget(
+                message.attrs
+            )
+        );
+
+    }catch(error){
+
+        console.error(
+            "Remote planet action "+
+            "failed:",
+            error
+        );
+
+    }
+
+    planetSave=previousPlanetSave;
+    activePlanetOwnerId=
+        previousOwnerId;
+    planetDetailId=
+        previousPlanetDetailId;
+
+    /*
+     * If the owner wasn't already looking at the planet the action
+     * just landed on, their screen shouldn't visually jump there —
+     * put back whatever they actually had open (or nothing).
+     */
+    if(
+        previousPlanetDetailId!==
+        message.planetId &&
+        previousPlanetDetailId
+    ){
+
+        renderPlanetDetail(
+            previousPlanetDetailId
+        );
+
+    }
+
+}
+
+/*
+ * Switches the whole game's view of "the current planet" onto a
+ * room-mate's — every existing render/read function keeps working
+ * unmodified because they all read the same bare planetSave global,
+ * which this simply repoints. Read-only in spirit (mutations are
+ * routed to the real owner instead, see mpInterceptPlanetAction),
+ * but nothing stops the LOCAL functions used for viewing/navigating
+ * from running exactly as they do on an owned planet.
+ */
+function mpEnterRemotePlanetView(ownerId){
+
+    const remoteSave=
+        mp.remotePlanetSaves[ownerId];
+
+    if(!remoteSave){
+
+        return false;
+
+    }
+
+    planetSave=remoteSave;
+    activePlanetOwnerId=ownerId;
+
+    return true;
+
+}
+
+function mpExitRemotePlanetView(){
+
+    planetSave=localPlanetSave;
+    activePlanetOwnerId=null;
+
+}
+
+/*
+ * A planet is worth listing for a room-mate when there's actually
+ * something there to visit — Earth always (every save has it,
+ * guaranteed non-empty), otherwise only if their save shows real
+ * activity on it (a ship, a structure, pets, or a non-empty bank).
+ * Deliberately simple rather than replicating this game's full
+ * rank-unlock math against a remote save (which would mean
+ * swapping planetSave just to ask a question) — "did they actually
+ * do something here" is both simpler and more useful than "is it
+ * theoretically unlocked" for deciding what to show in a room-mate
+ * visit list.
+ */
+function mpRemotePlanetHasActivity(remoteSave,planetId){
+
+    if(planetId==="earth")
+        return true;
+
+    if(
+        (
+            (remoteSave.ships || {})[
+                planetId
+            ] || []
+        ).length
+    )
+        return true;
+
+    if(
+        Object.keys(
+            (remoteSave.structures || {})[
+                planetId
+            ] || {}
+        ).length
+    )
+        return true;
+
+    if(
+        (
+            (remoteSave.pets || {})[
+                planetId
+            ] || []
+        ).length
+    )
+        return true;
+
+    if(
+        (
+            (remoteSave.banks || {})[
+                planetId
+            ] || 0
+        )>0
+    )
+        return true;
+
+    return false;
+
+}
+
+function mpVisitRemotePlanet(ownerId,planetId){
+
+    if(!mpEnterRemotePlanetView(ownerId)){
+
+        return;
+
+    }
+
+    leaderboardScreen.classList.add(
+        "hidden"
+    );
+
+    startScreen.classList.add(
+        "hidden"
+    );
+
+    openPlanetDetail(planetId);
+
+}
+
+function renderMultiplayerPanel(){
+
+    const el=
+        document.getElementById(
+            "multiplayerPanel"
+        );
+
+    if(!el)
+        return;
+
+    if(!mp.connected){
+
+        el.innerHTML=
+            '<div class="metric-note" '+
+            'style="margin-bottom:10px;">'+
+            'Play together — host a room and '+
+            'share the code, or join a friend\'s. '+
+            'Everyone sees each other\'s planets '+
+            'live, and can land on them too.'+
+            '</div>'+
+
+            (
+                mp.lastError
+                ?'<div class="mp-error-box">'+
+                 mp.lastError+
+                 '</div>'
+                :''
+            )+
+
+            '<input type="text" id="mpNameInput" '+
+            'placeholder="Your name" maxlength="18" '+
+            'value="'+
+            (mp.myName || "").replace(/"/g,"&quot;")+
+            '" style="width:100%;box-sizing:border-box;'+
+            'padding:10px 12px;border-radius:10px;'+
+            'border:1px solid rgba(100,190,255,.25);'+
+            'background:rgba(255,255,255,.04);'+
+            'color:#e8f4ff;font-size:12px;'+
+            'margin-bottom:10px;">'+
+
+            '<button class="big-button" id="mpHostBtn"'+
+            (
+                mp.connecting
+                ?' disabled'
+                :''
+            )+'>'+
+            (
+                mp.connecting
+                ?"Connecting…"
+                :"Host a Room"
+            )+
+            '</button>'+
+
+            '<div style="display:flex;gap:8px;'+
+            'margin-top:8px;">'+
+            '<input type="text" id="mpCodeInput" '+
+            'placeholder="ROOM CODE" maxlength="5" '+
+            'style="flex:1;box-sizing:border-box;'+
+            'padding:10px 12px;border-radius:10px;'+
+            'border:1px solid rgba(100,190,255,.25);'+
+            'background:rgba(255,255,255,.04);'+
+            'color:#e8f4ff;font-size:14px;'+
+            'text-transform:uppercase;'+
+            'letter-spacing:3px;text-align:center;">'+
+            '<button class="big-button secondary-button" '+
+            'id="mpJoinBtn" style="flex:0 0 auto;'+
+            'padding:0 18px;"'+
+            (
+                mp.connecting
+                ?' disabled'
+                :''
+            )+'>Join</button>'+
+            '</div>';
+
+        return;
+
+    }
+
+    let html=
+        '<div class="mp-room-code">'+
+        mp.roomCode+
+        '</div>'+
+        '<div class="metric-note" '+
+        'style="text-align:center;margin-top:-4px;">'+
+        (
+            mp.isHost
+            ?"Share this code — "
+            :"Connected — "
+        )+
+        mp.roster.length+' player'+
+        (mp.roster.length===1 ? "" : "s")+
+        ' in the room</div>';
+
+    html+=
+        '<div style="margin:12px 0;">';
+
+    mp.roster.forEach(
+        player=>{
+
+            const isMe=
+                player.id===mp.myId;
+
+            html+=
+                '<div class="mp-roster-row">'+
+                '<div class="mp-roster-dot" '+
+                'style="background:'+
+                (player.colour || "#6ee7ff")+
+                ';"></div>'+
+                '<div style="flex:1;">'+
+                player.name+
+                (isMe ? " (you)" : "")+
+                '</div>'+
+                '</div>';
+
+        }
+    );
+
+    html+=
+        '</div>';
+
+    const others=
+        mp.roster.filter(
+            p => p.id!==mp.myId
+        );
+
+    if(others.length){
+
+        html+=
+            '<div class="customizer-section-title" '+
+            'style="margin-bottom:8px;">'+
+            'Visit a planet</div>';
+
+        others.forEach(
+            player=>{
+
+                const remoteSave=
+                    mp.remotePlanetSaves[
+                        player.id
+                    ];
+
+                if(!remoteSave){
+
+                    html+=
+                        '<div class="metric-note">'+
+                        player.name+
+                        '\'s planets haven\'t '+
+                        'loaded yet…</div>';
+
+                    return;
+
+                }
+
+                PLANETS.forEach(
+                    planet=>{
+
+                        if(
+                            !mpRemotePlanetHasActivity(
+                                remoteSave,
+                                planet.id
+                            )
+                        ){
+
+                            return;
+
+                        }
+
+                        const shipCount=
+                            (
+                                (
+                                    remoteSave.ships ||
+                                    {}
+                                )[planet.id] || []
+                            ).length;
+
+                        html+=
+                            '<div class="mp-visit-row" '+
+                            'data-mp-visit-owner="'+
+                            player.id+
+                            '" data-mp-visit-planet="'+
+                            planet.id+'">'+
+                            '<span>'+planet.icon+' '+
+                            player.name+
+                            '\'s '+planet.name+
+                            '</span>'+
+                            '<span style="font-size:9px;'+
+                            'color:#8fa7c7;">'+
+                            (
+                                shipCount>0
+                                ?"🚀 "+shipCount
+                                :"visit"
+                            )+
+                            '</span>'+
+                            '</div>';
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+    html+=
+        '<button class="big-button secondary-button" '+
+        'id="mpLeaveBtn" style="margin-top:8px;">'+
+        'Leave Room</button>';
+
+    el.innerHTML=html;
+
+}
+
+document
+.getElementById(
+    "multiplayerPanel"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const hostBtn=
+            event.target.closest(
+                "#mpHostBtn"
+            );
+
+        if(hostBtn){
+
+            const nameInput=
+                document.getElementById(
+                    "mpNameInput"
+                );
+
+            mpHostRoom(
+                nameInput
+                ?nameInput.value
+                :""
+            );
+
+            renderMultiplayerPanel();
+
+            return;
+
+        }
+
+        const joinBtn=
+            event.target.closest(
+                "#mpJoinBtn"
+            );
+
+        if(joinBtn){
+
+            const nameInput=
+                document.getElementById(
+                    "mpNameInput"
+                );
+
+            const codeInput=
+                document.getElementById(
+                    "mpCodeInput"
+                );
+
+            if(
+                !codeInput ||
+                !codeInput.value.trim()
+            ){
+
+                return;
+
+            }
+
+            mpJoinRoom(
+                codeInput.value,
+                nameInput
+                ?nameInput.value
+                :""
+            );
+
+            renderMultiplayerPanel();
+
+            return;
+
+        }
+
+        const leaveBtn=
+            event.target.closest(
+                "#mpLeaveBtn"
+            );
+
+        if(leaveBtn){
+
+            mpLeaveRoom();
+
+            return;
+
+        }
+
+        const visitRow=
+            event.target.closest(
+                "[data-mp-visit-owner]"
+            );
+
+        if(visitRow){
+
+            mpVisitRemotePlanet(
+                visitRow.getAttribute(
+                    "data-mp-visit-owner"
+                ),
+                visitRow.getAttribute(
+                    "data-mp-visit-planet"
+                )
+            );
+
+        }
+
+    },
+    {passive:true}
+);
 
 /*
  * The skill portion of rank — pulled live from aiModel's own
@@ -19744,10 +21513,98 @@ function updateZoom(){
 }
 
 
+/*
+ * Whose star map is on screen — "Mine" plus one button per
+ * room-mate. Only shown while connected and not picking a mission
+ * destination (see openStarMap). Switching just repoints
+ * planetSave via mpEnterRemotePlanetView/mpExitRemotePlanetView —
+ * the canvas itself picks the change up on its very next frame
+ * (drawStarMapScene reads the same bare planetSave global every
+ * existing planet already does), so nothing else here needs to
+ * force a redraw.
+ */
+function renderStarMapOwnerRow(){
+
+    const row=
+        document.getElementById(
+            "starMapOwnerRow"
+        );
+
+    if(!row)
+        return;
+
+    const showRow=
+        mp.connected &&
+        starMapMode!=="destination";
+
+    row.classList.toggle(
+        "hidden",
+        !showRow
+    );
+
+    if(!showRow){
+
+        row.innerHTML="";
+
+        return;
+
+    }
+
+    let html=
+        '<button class="star-map-owner-btn'+
+        (
+            !activePlanetOwnerId
+            ?" active"
+            :""
+        )+'" data-star-map-owner="">'+
+        '🏠 Mine</button>';
+
+    mp.roster.filter(
+        p => p.id!==mp.myId
+    ).forEach(
+        player=>{
+
+            html+=
+                '<button class="star-map-owner-btn'+
+                (
+                    activePlanetOwnerId===
+                    player.id
+                    ?" active"
+                    :""
+                )+'" data-star-map-owner="'+
+                player.id+'">'+
+                '<span class="star-map-owner-dot" '+
+                'style="background:'+
+                (player.colour || "#6ee7ff")+
+                ';"></span>'+
+                player.name+
+                '</button>';
+
+        }
+    );
+
+    row.innerHTML=html;
+
+}
+
 function openStarMap(mode){
 
     starMapMode=
         mode || "navigate";
+
+    /*
+     * A mission destination is always chosen on the local player's
+     * OWN map — it belongs to whoever's actually flying it, not
+     * whichever room-mate happened to be visited last.
+     */
+    if(
+        starMapMode==="destination" &&
+        activePlanetOwnerId
+    ){
+
+        mpExitRemotePlanetView();
+
+    }
 
     const el=
         document.getElementById(
@@ -19777,6 +21634,8 @@ function openStarMap(mode){
         starMapMode==="destination"
         ?"none"
         :"";
+
+    renderStarMapOwnerRow();
 
     el.classList.remove("hidden");
 
@@ -19808,7 +21667,7 @@ function openStarMap(mode){
 
 }
 
-function closeStarMap(){
+function closeStarMap(keepRemoteView){
 
     const el=
         document.getElementById(
@@ -19818,6 +21677,27 @@ function closeStarMap(){
     if(el){
 
         el.classList.add("hidden");
+
+    }
+
+    /*
+     * Resets to the local player's own view by default — every
+     * call site except the one that immediately continues into
+     * selectStartPlanet for a room-mate's tapped planet (which
+     * passes keepRemoteView=true to carry that choice forward)
+     * doesn't know anything about multiplayer remote-viewing and
+     * shouldn't silently leave the game pointed at someone else's
+     * save after it runs. The destination-picking flow doesn't
+     * need this at all — openStarMap already forces local view
+     * the moment that mode is opened, so activePlanetOwnerId is
+     * already null by the time its own close happens.
+     */
+    if(
+        !keepRemoteView &&
+        activePlanetOwnerId
+    ){
+
+        mpExitRemotePlanetView();
 
     }
 
@@ -20882,6 +22762,15 @@ function drawPlanetFocusScene(){
     if(roamingActive){
 
         updateRoamingMovement();
+
+        if(
+            typeof mpBroadcastRoamPresence===
+            "function"
+        ){
+
+            mpBroadcastRoamPresence();
+
+        }
 
     }
 
@@ -23129,6 +25018,131 @@ function drawPlanetFocusScene(){
 
     }
 
+    /*
+     * Every room-mate currently roaming on THIS exact planet
+     * (same id, same owner) — sorted into the same depth-ordered
+     * queue as everything else, so a remote pet walking behind a
+     * structure is covered by it exactly like the local one is.
+     * Drawn with the plain "idle" walk cycle (no per-frame speed
+     * boost) rather than trying to reconstruct their actual
+     * movement state, which isn't part of what's broadcast — still
+     * reads as a pet standing/ambling rather than frozen, and
+     * updates to their real position every time a new presence
+     * tick arrives.
+     */
+    if(
+        typeof mpGetRemoteRoamersHere===
+        "function"
+    ){
+
+        mpGetRemoteRoamersHere().forEach(
+            roamer=>{
+
+                const remoteProj=
+                    projectSphere(
+                        roamer.presence.lat,
+                        roamer.presence.lon,
+                        roamViewLat,
+                        roamViewLon,
+                        cx,
+                        cy,
+                        radius
+                    );
+
+                const remoteDepth=
+                    groundDepthAt(
+                        remoteProj.x,
+                        remoteProj.y+
+                        Math.max(
+                            26,
+                            width*.075
+                        )*.45
+                    );
+
+                composeQueue.push({
+                    z:remoteDepth,
+                    alpha:1,
+                    draw:()=>{
+
+                        let remoteSeed=0;
+
+                        const seedSource=
+                            roamer.presence.
+                            petId || "";
+
+                        for(
+                            let i=0;
+                            i<seedSource.length;
+                            i++
+                        ){
+
+                            remoteSeed+=
+                                seedSource.
+                                charCodeAt(i);
+
+                        }
+
+                        drawSpacePet(
+                            c,
+                            selectedStartPlanet,
+                            remoteProj.x,
+                            remoteProj.y,
+                            Math.max(
+                                26,
+                                width*.075
+                            ),
+                            100,
+                            remoteSeed,
+                            roamer.presence.
+                            petSpecies ||
+                            "procedural",
+                            false,
+                            "builder",
+                            1
+                        );
+
+                        /*
+                         * A small name tag identifies whose pet
+                         * this is — without it, a visitor watching
+                         * a room-mate's own concurrent activity on
+                         * their own planet would just see an
+                         * unexplained extra pet.
+                         */
+                        c.save();
+
+                        c.font=
+                            "700 9px sans-serif";
+
+                        c.textAlign="center";
+
+                        c.fillStyle=
+                            roamer.colour;
+
+                        c.shadowColor=
+                            "rgba(0,0,0,.8)";
+
+                        c.shadowBlur=4;
+
+                        c.fillText(
+                            roamer.name,
+                            remoteProj.x,
+                            remoteProj.y-
+                            Math.max(
+                                26,
+                                width*.075
+                            )*.62
+                        );
+
+                        c.restore();
+
+                    }
+                });
+
+            }
+        );
+
+    }
+
     composeQueue.sort(
         (a,b)=>a.z-b.z
     );
@@ -23611,7 +25625,31 @@ function renderPlanetFocus(){
                 )
             );
 
-        if(planetHasShip){
+        if(
+            planetHasShip &&
+            activePlanetOwnerId
+        ){
+
+            /*
+             * Managing a room-mate's planet (vault, shop, ships,
+             * pets, factory) is real and live — actually flying
+             * one of their ships is a separate, much bigger piece
+             * (shared orbital space, a shared asteroid field, both
+             * players seeing each other move) that doesn't exist
+             * yet. Saying so plainly here beats silently launching
+             * a single-player mission against swapped save data,
+             * which the rest of this game's systems (scoring, AI
+             * difficulty, the run's own economy) all assume is the
+             * local player's own.
+             */
+            launchBtn.dataset.mode=
+                "remote-locked";
+
+            launchBtn.innerHTML=
+                "🌐 Multiplayer flight "+
+                "coming soon";
+
+        }else if(planetHasShip){
 
             launchBtn.dataset.mode="launch";
 
@@ -23646,7 +25684,8 @@ function renderPlanetFocus(){
         launchBtn.classList.toggle(
             "orbital-ready",
             planetHasShip &&
-            orbitalReady
+            orbitalReady &&
+            !activePlanetOwnerId
         );
 
     }
@@ -26218,6 +28257,19 @@ function closePlanetDetail(){
     expandedPetCardId=null;
 
     expandedShipCardId=null;
+
+    /*
+     * Leaving the planet detail screen always returns planetSave
+     * to the local player's own — otherwise the NEXT screen that
+     * happens to read the bare planetSave global (the star map, the
+     * home screen, anything) would keep reading whichever room-mate
+     * was last being visited.
+     */
+    if(activePlanetOwnerId){
+
+        mpExitRemotePlanetView();
+
+    }
 
     hidePlanetMenuTip(true);
 
@@ -30369,44 +32421,44 @@ document
     }
 );
 
-document
-.getElementById(
-    "planetDetailContent"
-)
-.addEventListener(
-    "pointerdown",
-    event=>{
+/*
+ * Extracted, byte-for-byte unchanged from what used to be inline
+ * in the pointerdown listener below, so it can be called from two
+ * places: a real click on this player's own screen (the listener
+ * just below), and a REMOTE action arriving over multiplayer for a
+ * planet this client owns (see handleRemotePlanetAction) — which
+ * builds a synthetic "target" object (just getAttribute/disabled/
+ * tagName, everything every branch below actually reads) from the
+ * network message instead of a real DOM element, and calls this
+ * function exactly as if the click had happened locally. This is
+ * what lets every one of the 49 actions below — sell, buy, build,
+ * assign a pilot, all of it — genuinely run the SAME code whether
+ * triggered by this player or relayed from someone visiting this
+ * player's planet, rather than needing a second, separately
+ * maintained implementation of each one.
+ */
+function executePlanetDetailAction(target){
 
-        const target=
-            event.target.closest(
-                "[data-action]"
-            );
+    if(
+        !target ||
+        target.disabled ||
+        !planetDetailId ||
+        target.tagName===
+        "INPUT"
+    )
+        return;
 
-        if(
-            !target ||
-            target.disabled ||
-            !planetDetailId ||
-            target.tagName===
-            "INPUT"
-        )
-            return;
+    const shipId=
+        target.getAttribute(
+            "data-ship"
+        );
 
-        event.preventDefault();
-        event.stopPropagation();
+    const action=
+        target.getAttribute(
+            "data-action"
+        );
 
-        sound("click");
-
-        const shipId=
-            target.getAttribute(
-                "data-ship"
-            );
-
-        const action=
-            target.getAttribute(
-                "data-action"
-            );
-
-        if(action==="close-planet-detail"){
+    if(action==="close-planet-detail"){
 
             closePlanetDetail();
 
@@ -31285,7 +33337,50 @@ document
 
         }
 
-        renderPlanetMap();
+    renderPlanetMap();
+
+}
+
+document
+.getElementById(
+    "planetDetailContent"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const target=
+            event.target.closest(
+                "[data-action]"
+            );
+
+        if(
+            !target ||
+            target.disabled ||
+            !planetDetailId ||
+            target.tagName===
+            "INPUT"
+        )
+            return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        if(
+            mpInterceptPlanetAction(
+                target
+            )
+        ){
+
+            return;
+
+        }
+
+        executePlanetDetailAction(
+            target
+        );
 
     },
     {passive:false}
@@ -53815,6 +55910,19 @@ document
 
         }
 
+        if(mode==="remote-locked"){
+
+            showShipToast(
+                "You can manage this "+
+                "planet, but flying its "+
+                "ships together isn't "+
+                "ready yet."
+            );
+
+            return;
+
+        }
+
         launchWithAnimation();
 
     },
@@ -53893,6 +56001,59 @@ document
         sound("click");
 
         closeStarMap();
+
+    },
+    {passive:false}
+);
+
+document
+.getElementById(
+    "starMapOwnerRow"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const btn=
+            event.target.closest(
+                "[data-star-map-owner]"
+            );
+
+        if(!btn)
+            return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        sound("click");
+
+        const ownerId=
+            btn.getAttribute(
+                "data-star-map-owner"
+            );
+
+        if(ownerId){
+
+            mpEnterRemotePlanetView(
+                ownerId
+            );
+
+        }else{
+
+            mpExitRemotePlanetView();
+
+        }
+
+        /*
+         * A fresh zoom target for whichever map is now showing —
+         * without this the camera stays aimed at wherever it
+         * happened to be (a planet id that's meaningless on the
+         * new map's own selectable/zoom state until the next
+         * explicit zoom).
+         */
+        zoomPlanetId=null;
+
+        renderStarMapOwnerRow();
 
     },
     {passive:false}
@@ -53996,7 +56157,7 @@ document
                 area.planetId,
                 ()=>{
 
-                    closeStarMap();
+                    closeStarMap(true);
 
                     startZoomOut();
 
@@ -57951,6 +60112,68 @@ document
     {
         passive:false
     }
+);
+
+document
+.getElementById(
+    "leaderboardTabRow"
+)
+.addEventListener(
+    "pointerdown",
+    event=>{
+
+        const btn=
+            event.target.closest(
+                "[data-lb-tab]"
+            );
+
+        if(!btn)
+            return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const tab=
+            btn.getAttribute(
+                "data-lb-tab"
+            );
+
+        document.getElementById(
+            "leaderboardTabBtnScores"
+        ).classList.toggle(
+            "active",
+            tab==="scores"
+        );
+
+        document.getElementById(
+            "leaderboardTabBtnMultiplayer"
+        ).classList.toggle(
+            "active",
+            tab==="multiplayer"
+        );
+
+        document.getElementById(
+            "leaderboardTabScores"
+        ).classList.toggle(
+            "hidden",
+            tab!=="scores"
+        );
+
+        document.getElementById(
+            "leaderboardTabMultiplayer"
+        ).classList.toggle(
+            "hidden",
+            tab!=="multiplayer"
+        );
+
+        if(tab==="multiplayer"){
+
+            renderMultiplayerPanel();
+
+        }
+
+    },
+    {passive:false}
 );
 
 
