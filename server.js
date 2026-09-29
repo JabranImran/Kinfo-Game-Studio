@@ -181,6 +181,34 @@ function removePlayerFromRoom(player){
     if(!room)
         return;
 
+    /*
+     * A player who disconnects mid-flight shouldn't leave a ship
+     * permanently locked for everyone else in the room — release
+     * every claim they were holding and tell the room.
+     */
+    room.claimedShips.forEach(
+        (claim,shipKey)=>{
+
+            if(claim.byId===player.id){
+
+                room.claimedShips.delete(
+                    shipKey
+                );
+
+                broadcastToRoom(
+                    room,
+                    {
+                        type:'shipReleased',
+                        shipKey
+                    },
+                    null
+                );
+
+            }
+
+        }
+    );
+
     room.players.delete(player.id);
 
     broadcastToRoom(
@@ -321,6 +349,16 @@ function handleMessage(player,message){
         const room={
             code,
             players:new Map(),
+            /*
+             * shipKey -> {byId, byName}. Namespaced by ownerId+':'+
+             * shipId rather than bare shipId, since each player's
+             * save generates its own ship ids independently (two
+             * different players can each have a "ship_1") — without
+             * the owner prefix those would collide and one player's
+             * claim could wrongly block another player's unrelated
+             * ship.
+             */
+            claimedShips:new Map(),
             createdAt:Date.now()
         };
 
@@ -426,6 +464,25 @@ function handleMessage(player,message){
          * so the newcomer's star map and field don't sit empty
          * until those players next happen to act or move.
          */
+        if(room.claimedShips.size){
+
+            send(
+                player.ws,
+                {
+                    type:'shipClaims',
+                    claims:
+                        [...room.claimedShips.entries()].map(
+                            ([shipKey,claim])=>({
+                                shipKey,
+                                byId:claim.byId,
+                                byName:claim.byName
+                            })
+                        )
+                }
+            );
+
+        }
+
         room.players.forEach(
             existing=>{
 
@@ -507,16 +564,37 @@ function handleMessage(player,message){
 
     if(message.type==='presence'){
 
+        /*
+         * A flat, generic bag rather than one schema per space —
+         * orbital flight needs x/y/vx/vy/angle, roaming needs
+         * lat/lon and which pet is walking around; ownerId is
+         * common to both (whose planet this presence is actually
+         * happening on, since a visitor's own presence is reported
+         * against the planet they're currently on, not their own).
+         * The server never interprets any of these, only relays
+         * them, so a new space can add whatever fields it needs
+         * without a server change.
+         */
         player.presence={
             space:message.space || null,
             planetId:message.planetId || null,
-            targetPlayerId:
-                message.targetPlayerId || null,
+            ownerId:message.ownerId || null,
             x:Number(message.x) || 0,
             y:Number(message.y) || 0,
             angle:Number(message.angle) || 0,
             vx:Number(message.vx) || 0,
             vy:Number(message.vy) || 0,
+            lat:
+                Number.isFinite(message.lat)
+                ?message.lat
+                :null,
+            lon:
+                Number.isFinite(message.lon)
+                ?message.lon
+                :null,
+            petSpecies:
+                message.petSpecies || null,
+            petId:message.petId || null,
             lives:
                 Number.isFinite(message.lives)
                 ?message.lives
@@ -551,6 +629,110 @@ function handleMessage(player,message){
             Object.assign(
                 {type:'fieldEvent',id:player.id},
                 {event:message.event || {}}
+            ),
+            player.id
+        );
+
+        return;
+
+    }
+
+    if(message.type==='claimShip'){
+
+        const shipKey=
+            String(message.ownerId || '')+
+            ':'+
+            String(message.shipId || '');
+
+        const existing=
+            room.claimedShips.get(shipKey);
+
+        if(
+            existing &&
+            existing.byId!==player.id
+        ){
+
+            send(
+                player.ws,
+                {
+                    type:'shipClaimDenied',
+                    shipKey,
+                    byName:existing.byName
+                }
+            );
+
+            return;
+
+        }
+
+        room.claimedShips.set(
+            shipKey,
+            {byId:player.id,byName:player.name}
+        );
+
+        broadcastToRoom(
+            room,
+            {
+                type:'shipClaimed',
+                shipKey,
+                byId:player.id,
+                byName:player.name
+            },
+            null
+        );
+
+        return;
+
+    }
+
+    if(message.type==='releaseShip'){
+
+        const shipKey=
+            String(message.ownerId || '')+
+            ':'+
+            String(message.shipId || '');
+
+        const existing=
+            room.claimedShips.get(shipKey);
+
+        if(
+            !existing ||
+            existing.byId!==player.id
+        ){
+
+            return;
+
+        }
+
+        room.claimedShips.delete(shipKey);
+
+        broadcastToRoom(
+            room,
+            {type:'shipReleased',shipKey},
+            null
+        );
+
+        return;
+
+    }
+
+    if(message.type==='planetAction'){
+
+        /*
+         * A visitor's mutating action on a planet they don't own —
+         * relayed as-is to the room; only the actual owner's client
+         * (matching message.ownerId to its own id) will recognise
+         * it as theirs to execute. See handleRemotePlanetAction on
+         * the client for how it's replayed against the owner's
+         * real save using the exact same local action-handling code
+         * a click from the owner themselves would run.
+         */
+        broadcastToRoom(
+            room,
+            Object.assign(
+                {type:'planetAction',fromId:player.id,
+                 fromName:player.name},
+                message.payload || {}
             ),
             player.id
         );
