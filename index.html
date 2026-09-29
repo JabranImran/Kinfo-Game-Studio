@@ -12004,6 +12004,14 @@ let mp={
     isHost:false,
     roster:[],
 
+    /*
+     * Who created this room — the single shared fact every client
+     * computes the star map's multi-system layout from (host at
+     * the centre, everyone else arranged around them). Kept
+     * separate from isHost above, which only ever describes ME.
+     */
+    hostId:null,
+
     /* ownerId -> their planetSave mirror, kept live by 'sync' */
     remotePlanetSaves:{},
 
@@ -12470,16 +12478,10 @@ function mpHandleMessage(message){
         mp.roster=
             message.players || [];
 
+        mp.hostId=
+            message.hostId || null;
+
         renderMultiplayerPanel();
-
-        if(
-            typeof renderStarMapOwnerRow===
-            "function"
-        ){
-
-            renderStarMapOwnerRow();
-
-        }
 
         return;
 
@@ -13167,9 +13169,22 @@ function mpVisitRemotePlanet(ownerId,planetId){
         "hidden"
     );
 
-    startScreen.classList.add(
+    /*
+     * Routed through the exact same path a local planet tap
+     * already uses (selectStartPlanet), rather than opening
+     * planetDetail directly over a hidden startScreen — that
+     * mistake (hiding the whole home screen instead of just the
+     * leaderboard overlay) was the actual cause of the stuck-on-
+     * close bug: with startScreen hidden, nothing else was ever
+     * shown in its place, so closing the planet menu left every
+     * screen hidden and every button — even pause — pointed at
+     * elements that were never actually visible.
+     */
+    startScreen.classList.remove(
         "hidden"
     );
+
+    selectStartPlanet(planetId);
 
     openPlanetDetail(planetId);
 
@@ -20348,7 +20363,9 @@ function getStarMapSelectable(){
 
 }
 
-function drawStarMapScene(){
+function drawStarMapScene(
+    skipCanvasSetup,translateX,translateY
+){
 
     const canvas=
         document.getElementById(
@@ -20376,23 +20393,39 @@ function drawStarMapScene(){
             2
         );
 
-    if(
-        canvas.width!==
-        Math.floor(width*dpr)
-    ){
+    /*
+     * skipCanvasSetup/translateX/translateY exist for exactly one
+     * caller — drawMultiplayerStarMap, which draws several complete
+     * systems (this player's own plus every room-mate's) onto the
+     * SAME canvas in one frame by calling this function once per
+     * system. Every existing call site passes none of these
+     * (defaulting to false/0/0), so single-player behaviour is
+     * completely unchanged — the actual clear-and-redraw of the
+     * canvas, and the starfield backdrop, only need to happen ONCE
+     * per frame regardless of how many systems get drawn onto it
+     * afterward, which is what skipCanvasSetup actually skips.
+     */
+    if(!skipCanvasSetup){
 
-        canvas.width=
-            Math.floor(width*dpr);
+        if(
+            canvas.width!==
+            Math.floor(width*dpr)
+        ){
 
-    }
+            canvas.width=
+                Math.floor(width*dpr);
 
-    if(
-        canvas.height!==
-        Math.floor(height*dpr)
-    ){
+        }
 
-        canvas.height=
-            Math.floor(height*dpr);
+        if(
+            canvas.height!==
+            Math.floor(height*dpr)
+        ){
+
+            canvas.height=
+                Math.floor(height*dpr);
+
+        }
 
     }
 
@@ -20403,14 +20436,34 @@ function drawStarMapScene(){
         dpr,0,0,dpr,0,0
     );
 
-    drawSpaceGradientBackdrop(
-        c,width,height
-    );
+    if(
+        translateX ||
+        translateY
+    ){
+
+        c.translate(
+            translateX || 0,
+            translateY || 0
+        );
+
+    }
+
+    if(!skipCanvasSetup){
+
+        drawSpaceGradientBackdrop(
+            c,width,height
+        );
+
+    }
 
     const time=
         performance.now()/1000;
 
-    drawSharedStars(c,width,height);
+    if(!skipCanvasSetup){
+
+        drawSharedStars(c,width,height);
+
+    }
 
     /*
      * Route lines, drawn under the planets.
@@ -20868,7 +20921,24 @@ function drawStarMapScene(){
     starMapSelectable=
         getStarMapSelectable();
 
-    canvas._starHitAreas=[];
+    /*
+     * Accumulates across systems rather than resetting every call
+     * — when drawMultiplayerStarMap calls this once per room-mate's
+     * system in a single frame, only the FIRST call (skipCanvasSetup
+     * false) should clear what's left over from last frame; every
+     * subsequent system's areas need to be ADDED to the same array,
+     * not replace it, or only the last system drawn would ever be
+     * tappable.
+     */
+    if(!skipCanvasSetup){
+
+        canvas._starHitAreas=[];
+
+    }else if(!canvas._starHitAreas){
+
+        canvas._starHitAreas=[];
+
+    }
 
     const mapRadius=
         Math.max(
@@ -21102,9 +21172,20 @@ function drawStarMapScene(){
              */
             if(zoom<.15){
 
+                /*
+                 * translateX/translateY are added here because
+                 * canvas.translate() shifts where things are
+                 * DRAWN but has no effect on these plain JS
+                 * numbers — without adding it back in, every
+                 * offset (room-mate) system's hit areas would be
+                 * stored at their un-translated, system-local
+                 * position instead of their true on-screen one,
+                 * silently making every remote planet un-tappable
+                 * (or worse, tappable at the wrong screen spot).
+                 */
                 canvas._starHitAreas.push({
-                    x:px,
-                    y:py,
+                    x:px+(translateX || 0),
+                    y:py+(translateY || 0),
                     r:pr*1.9,
                     planetId:p.id,
                     selectable:selectable
@@ -21227,6 +21308,316 @@ function drawStarMapScene(){
 
 }
 
+/*
+ * The actual multi-system star map — draws this player's own
+ * system plus every room-mate's, each one a complete, unmodified
+ * call to drawStarMapScene (so all of its existing zoom/route/
+ * animation logic keeps working exactly as it always has),
+ * offset by that system's slot in mpGetSystemLayout and the
+ * current free-drag pan. Falls straight through to a single plain
+ * call when not connected, or while zoomed into one specific
+ * planet (see openStarMap and the tap handler — zooming into a
+ * remote planet already swaps planetSave to its real owner before
+ * the zoom starts, so the existing single-system path is already
+ * looking at the right data without this needing to do anything
+ * extra during a zoom).
+ */
+function drawMultiplayerStarMap(){
+
+    /*
+     * zoomPlanetId alone is NOT a reliable "currently zoomed"
+     * signal — openStarMap sets it as the starting reference the
+     * very moment the map opens (so the initial pull-back animation
+     * has somewhere to pull back FROM) and nothing ever clears it
+     * back to null afterward, so it stays set long after the
+     * camera has fully arrived at the overview. zoomProgress is
+     * the actual "how zoomed in is the camera right now" value —
+     * checking zoomPlanetId here caused the multi-system view to
+     * never render at all, silently falling back to the
+     * single-system path on every single frame.
+     */
+    if(
+        !mp.connected ||
+        zoomProgress>.01
+    ){
+
+        drawStarMapScene();
+
+        return;
+
+    }
+
+    const canvas=
+        document.getElementById(
+            "starMapCanvas"
+        );
+
+    if(!canvas)
+        return;
+
+    const width=
+        canvas.clientWidth;
+
+    const height=
+        canvas.clientHeight;
+
+    if(
+        !width ||
+        !height
+    )
+        return;
+
+    /* must match drawStarMapScene's own identical formula */
+    const mapHeight=
+        height*.66;
+
+    const layout=
+        mpGetSystemLayout();
+
+    const ownOffset=
+        layout[mp.myId] ||
+        {dx:0,dy:0};
+
+    const dpr=
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    if(
+        canvas.width!==
+        Math.floor(width*dpr)
+    ){
+
+        canvas.width=
+            Math.floor(width*dpr);
+
+    }
+
+    if(
+        canvas.height!==
+        Math.floor(height*dpr)
+    ){
+
+        canvas.height=
+            Math.floor(height*dpr);
+
+    }
+
+    const c=
+        canvas.getContext("2d");
+
+    c.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+
+    drawSpaceGradientBackdrop(
+        c,width,height
+    );
+
+    drawSharedStars(c,width,height);
+
+    const ownerIds=
+        Object.keys(layout);
+
+    const localSave=
+        localPlanetSave;
+
+    const labels=[];
+
+    ownerIds.forEach(
+        (ownerId,index)=>{
+
+            const slot=
+                layout[ownerId];
+
+            const pixelDX=
+                (
+                    (
+                        slot.dx-
+                        ownOffset.dx
+                    )/100
+                )*width+
+                starMapPanX;
+
+            const pixelDY=
+                (
+                    (
+                        slot.dy-
+                        ownOffset.dy
+                    )/100
+                )*mapHeight+
+                starMapPanY;
+
+            const isMe=
+                ownerId===mp.myId;
+
+            const remoteSave=
+                isMe
+                ?null
+                :mp.remotePlanetSaves[
+                    ownerId
+                ];
+
+            /*
+             * A room-mate whose save hasn't arrived yet (they just
+             * joined, or their sync is still in flight) simply
+             * isn't drawn this frame rather than drawing an empty
+             * or stale system — it'll appear the moment their real
+             * sync lands.
+             */
+            if(!isMe && !remoteSave){
+
+                return;
+
+            }
+
+            const previousPlanetSave=
+                planetSave;
+
+            if(!isMe){
+
+                planetSave=remoteSave;
+
+            }
+
+            /*
+             * NOT simply the array's current length — drawStarMapScene
+             * itself resets _starHitAreas to empty on the FIRST
+             * system drawn each frame (skipCanvasSetup===false,
+             * i.e. index===0), so the count immediately before its
+             * new pushes is genuinely 0 for that one call, not
+             * whatever was left over from the previous frame. Using
+             * the raw pre-call length here meant the reset always
+             * silently discarded the correct starting point,
+             * leaving whichever system happened to draw first
+             * (the host's, since it's always first in the layout)
+             * with every one of its hit areas left completely
+             * untagged — still fully visible and clickable, just
+             * with no way to tell whose planet had actually been
+             * tapped.
+             */
+            const hitAreaCountBefore=
+                index>0
+                ?(
+                    canvas._starHitAreas ||
+                    []
+                 ).length
+                :0;
+
+            try{
+
+                drawStarMapScene(
+                    index>0,
+                    pixelDX,
+                    pixelDY
+                );
+
+                /*
+                 * Every hit area this particular system's draw
+                 * call just added gets tagged with whose planet it
+                 * actually is — the tap handler needs this to know
+                 * which player's save to act on, since two
+                 * different systems can easily have a same-named
+                 * "mars" area overlapping in the exact same list.
+                 */
+                if(canvas._starHitAreas){
+
+                    for(
+                        let i=
+                            hitAreaCountBefore;
+                        i<
+                        canvas._starHitAreas.
+                        length;
+                        i++
+                    ){
+
+                        canvas._starHitAreas[
+                            i
+                        ].ownerId=ownerId;
+
+                    }
+
+                }
+
+            }catch(error){
+
+                console.error(
+                    "Multiplayer star map "+
+                    "system draw failed:",
+                    error
+                );
+
+            }finally{
+
+                planetSave=
+                    previousPlanetSave;
+
+            }
+
+            const info=
+                isMe
+                ?{
+                    name:"You",
+                    colour:mp.myColour
+                 }
+                :(
+                    mp.remotePlayerInfo[
+                        ownerId
+                    ] ||
+                    {name:"Player",colour:"#6ee7ff"}
+                );
+
+            labels.push({
+                x:pixelDX+width/2,
+                y:pixelDY+height*.06,
+                text:
+                    slot.isHost
+                    ?info.name+" (Host)"
+                    :info.name,
+                colour:info.colour
+            });
+
+        }
+    );
+
+    /*
+     * Labels drawn as a separate pass, after every system, so
+     * they're never covered by a neighbouring system's own
+     * planets/routes — legibility matters more here than strict
+     * per-system draw ordering.
+     */
+    c.save();
+
+    labels.forEach(
+        label=>{
+
+            c.font=
+                "800 11px sans-serif";
+
+            c.textAlign="center";
+
+            c.fillStyle=
+                label.colour;
+
+            c.shadowColor=
+                "rgba(0,0,0,.85)";
+
+            c.shadowBlur=6;
+
+            c.fillText(
+                label.text,
+                label.x,
+                label.y
+            );
+
+        }
+    );
+
+    c.restore();
+
+}
+
 function starMapLoop(){
 
     const el=
@@ -21247,7 +21638,7 @@ function starMapLoop(){
 
     try{
 
-        drawStarMapScene();
+        drawMultiplayerStarMap();
 
     }catch(error){
 
@@ -21312,6 +21703,22 @@ let zoomProgress=0;
 let zoomTarget=0;
 let zoomPlanetId=null;
 let zoomOnArrive=null;
+
+/*
+ * Free-drag panning across the multi-system star map — pixel
+ * offsets, reset to (0,0) every time the map opens (openStarMap),
+ * since "0,0" always means this player's own system framed exactly
+ * where single-player already frames it. Only meaningful while
+ * connected to a room and not zoomed into a specific planet; see
+ * drawMultiplayerStarMap.
+ */
+let starMapPanX=0;
+let starMapPanY=0;
+
+let starMapDragging=false;
+let starMapDragLastX=0;
+let starMapDragLastY=0;
+let starMapDragMoved=false;
 
 /*
  * Flight animation. flightProgress runs 0 (ship resting on the
@@ -21524,6 +21931,92 @@ function updateZoom(){
  * existing planet already does), so nothing else here needs to
  * force a redraw.
  */
+/*
+ * A system offset per room-mate, in the same 0-100-ish units the
+ * star map's own planets already use (PLANETS' x/y span roughly
+ * 18-82, so 110 units of separation clears one full system with
+ * room to spare). The host's system always sits at (0,0) — the
+ * star map's existing, unmodified centre — everyone else arranged
+ * around it as one of six fixed slots (up to MAX_PLAYERS_PER_ROOM),
+ * assigned by sorting every OTHER player's id and walking the
+ * slots in that order. Every client computes this independently
+ * from the same roster and the same hostId (both now genuinely
+ * shared facts from the server, not something the client that
+ * happened to host gets to decide alone), so it lands on the exact
+ * same layout everywhere without the server needing to dictate
+ * positions itself.
+ */
+const MP_SYSTEM_SLOTS=
+    [
+        {dx:110,dy:0},
+        {dx:-110,dy:0},
+        {dx:0,dy:110},
+        {dx:0,dy:-110},
+        {dx:110,dy:110},
+        {dx:-110,dy:110}
+    ];
+
+function mpGetSystemLayout(){
+
+    const hostId=
+        mp.hostId || mp.myId;
+
+    const layout={};
+
+    layout[hostId]={
+        dx:0,dy:0,isHost:true
+    };
+
+    const others=
+        mp.roster.
+        map(p=>p.id).
+        filter(id=>id!==hostId).
+        sort();
+
+    others.forEach(
+        (id,index)=>{
+
+            const slot=
+                MP_SYSTEM_SLOTS[
+                    index%
+                    MP_SYSTEM_SLOTS.length
+                ];
+
+            layout[id]={
+                dx:slot.dx,
+                dy:slot.dy,
+                isHost:false
+            };
+
+        }
+    );
+
+    return layout;
+
+}
+
+/*
+ * Which system offset applies to the LOCAL player right now — my
+ * own (from the shared layout, so my planets sit in whatever slot
+ * I've been assigned within the room) while connected, or (0,0)
+ * — no offset at all — outside multiplayer entirely, so
+ * single-player is completely unaffected by any of this.
+ */
+function mpGetOwnSystemOffset(){
+
+    if(!mp.connected)
+        return{dx:0,dy:0};
+
+    const layout=
+        mpGetSystemLayout();
+
+    return(
+        layout[mp.myId] ||
+        {dx:0,dy:0}
+    );
+
+}
+
 function renderStarMapOwnerRow(){
 
     const row=
@@ -21636,7 +22129,15 @@ function openStarMap(mode){
         ?"none"
         :"";
 
-    renderStarMapOwnerRow();
+    /*
+     * The old whose-map-is-this switcher (a row of "Mine"/name
+     * buttons) is retired now that every room-mate's system is
+     * drawn directly in the map itself — renderStarMapOwnerRow is
+     * simply no longer called anywhere, which leaves its element
+     * permanently empty and hidden (its default state) rather than
+     * risking a half-removed feature. See drawMultiplayerStarMap
+     * for what replaced it.
+     */
 
     el.classList.remove("hidden");
 
@@ -56063,8 +56564,19 @@ document
 /*
  * Tapping a glowing planet on the star map either selects it as
  * your launch point (navigate mode) or sets course for it
- * (destination mode). Dim planets are inert.
+ * (destination mode); dragging (only meaningful while connected to
+ * a room and not already zoomed into one planet — a single system
+ * always fits the existing viewport exactly like it always has)
+ * pans across every system instead. pointerdown only starts
+ * tracking; pointermove decides, past a small movement threshold,
+ * that this has become a drag rather than a tap; pointerup either
+ * finalizes the pan or — if the movement never crossed that
+ * threshold — runs the original tap-to-select logic using where
+ * the finger actually came down.
  */
+let starMapPointerDownX=0;
+let starMapPointerDownY=0;
+
 document
 .getElementById(
     "starMapCanvas"
@@ -56072,6 +56584,104 @@ document
 .addEventListener(
     "pointerdown",
     event=>{
+
+        const canvas=
+            event.currentTarget;
+
+        const rect=
+            canvas.getBoundingClientRect();
+
+        starMapPointerDownX=
+            event.clientX-rect.left;
+
+        starMapPointerDownY=
+            event.clientY-rect.top;
+
+        starMapDragLastX=
+            event.clientX;
+
+        starMapDragLastY=
+            event.clientY;
+
+        starMapDragMoved=false;
+
+        starMapDragging=
+            mp.connected &&
+            zoomProgress<.01;
+
+    },
+    {passive:true}
+);
+
+document
+.getElementById(
+    "starMapCanvas"
+)
+.addEventListener(
+    "pointermove",
+    event=>{
+
+        if(!starMapDragging)
+            return;
+
+        const dx=
+            event.clientX-
+            starMapDragLastX;
+
+        const dy=
+            event.clientY-
+            starMapDragLastY;
+
+        if(
+            !starMapDragMoved &&
+            Math.hypot(dx,dy)<6
+        ){
+
+            return;
+
+        }
+
+        starMapDragMoved=true;
+
+        starMapPanX+=dx;
+        starMapPanY+=dy;
+
+        starMapDragLastX=
+            event.clientX;
+
+        starMapDragLastY=
+            event.clientY;
+
+    },
+    {passive:true}
+);
+
+function starMapEndDrag(){
+
+    starMapDragging=false;
+
+}
+
+document
+.getElementById(
+    "starMapCanvas"
+)
+.addEventListener(
+    "pointerup",
+    event=>{
+
+        const wasDragged=
+            starMapDragMoved;
+
+        starMapEndDrag();
+
+        starMapDragMoved=false;
+
+        if(wasDragged){
+
+            return;
+
+        }
 
         const canvas=
             event.currentTarget;
@@ -56085,14 +56695,11 @@ document
         )
             return;
 
-        const rect=
-            canvas.getBoundingClientRect();
-
         const px=
-            event.clientX-rect.left;
+            starMapPointerDownX;
 
         const py=
-            event.clientY-rect.top;
+            starMapPointerDownY;
 
         for(
             const area of areas
@@ -56119,6 +56726,49 @@ document
             event.stopPropagation();
 
             sound("click");
+
+            /*
+             * The planetSave swap only makes sense for navigate
+             * mode (browsing/managing a planet's own menus) —
+             * chooseDestination below doesn't read planetSave at
+             * all (it works off score, currentPlanetId, and the
+             * fixed ROUTES/PLANETS definitions, none of which are
+             * owner-specific), and actually flying there stays
+             * fully local-authoritative for now, so destination
+             * mode deliberately leaves planetSave alone rather
+             * than risk leaving live gameplay state pointed at a
+             * room-mate's save.
+             */
+            const tappedOwnerId=
+                area.ownerId ||
+                mp.myId;
+
+            if(starMapMode!=="destination"){
+
+                const isOwnPlanet=
+                    !mp.connected ||
+                    tappedOwnerId===
+                    mp.myId;
+
+                if(isOwnPlanet){
+
+                    if(
+                        activePlanetOwnerId
+                    ){
+
+                        mpExitRemotePlanetView();
+
+                    }
+
+                }else{
+
+                    mpEnterRemotePlanetView(
+                        tappedOwnerId
+                    );
+
+                }
+
+            }
 
             /*
              * Zoom into the tapped world first, then act once
@@ -56175,6 +56825,26 @@ document
 
     },
     {passive:false}
+);
+
+document
+.getElementById(
+    "starMapCanvas"
+)
+.addEventListener(
+    "pointerleave",
+    starMapEndDrag,
+    {passive:true}
+);
+
+document
+.getElementById(
+    "starMapCanvas"
+)
+.addEventListener(
+    "pointercancel",
+    starMapEndDrag,
+    {passive:true}
 );
 
 /*
