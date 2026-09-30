@@ -5273,6 +5273,16 @@ let currentPlanetId="earth";
 
 let destinationPlanetId=null;
 
+/*
+ * Which room-mate (if any) owns the world currently being
+ * travelled to — null means it's this player's own, exactly like
+ * every planet ID already means before multiplayer existed at
+ * all. Set by chooseDestination when a bridge-connected remote hub
+ * is picked; read by the orbital/field co-presence layer to decide
+ * whether two players are genuinely approaching the same place.
+ */
+let destinationOwnerId=null;
+
 let selectedStartPlanet="earth";
 
 let score=0;
@@ -12230,6 +12240,139 @@ function mpGetRemoteRoamersHere(){
 
 }
 
+let mpLastOrbitalPresenceSendTime=0;
+
+const MP_ORBITAL_PRESENCE_INTERVAL_MS=150;
+
+/*
+ * Called every frame orbital flight is active (see updateOrbital),
+ * throttled the same way roaming presence already is. The
+ * ownerId/planetId broadcast here are genuinely about the
+ * DESTINATION being travelled toward, not the world just departed
+ * from — "in the same exact player's planet" (the actual request)
+ * means two players who both currently have that same world
+ * targeted, whether it's one of their own worlds or a bridge
+ * destination in someone else's system. Before any destination has
+ * actually been chosen yet (early in a flight, or free-flying with
+ * the star map not yet opened), planetId is null and nobody can
+ * match against it — there's genuinely nothing to be "in the same
+ * space" as until a real target exists.
+ */
+function mpBroadcastOrbitalPresence(){
+
+    if(!mp.connected)
+        return;
+
+    const now=
+        performance.now();
+
+    if(
+        now-
+        mpLastOrbitalPresenceSendTime<
+        MP_ORBITAL_PRESENCE_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastOrbitalPresenceSendTime=now;
+
+    mpSend({
+        type:"presence",
+        space:"orbital",
+        ownerId:
+            destinationOwnerId ||
+            mp.myId,
+        planetId:destinationPlanetId,
+        x:orbitalX,
+        y:orbitalY,
+        angle:orbitalHeading,
+        vx:
+            Math.cos(orbitalHeading)*
+            orbitalSpeed,
+        vy:
+            Math.sin(orbitalHeading)*
+            orbitalSpeed,
+        lives
+    });
+
+}
+
+/*
+ * The mirror image — every room-mate currently in orbital flight
+ * with the SAME destination actually targeted as this player's own
+ * (both ownerId and planetId matching; two different players both
+ * free-flying with no destination chosen yet are NOT considered
+ * "together", since null planetId never matches null planetId here
+ * — see the explicit check below). Used both to decide who to draw
+ * and, each frame, where.
+ */
+function mpGetRemoteShipsHere(){
+
+    if(
+        !mp.connected ||
+        !destinationPlanetId
+    )
+        return[];
+
+    const hereOwnerId=
+        destinationOwnerId ||
+        mp.myId;
+
+    const now=
+        performance.now();
+
+    return Object.keys(
+        mp.remotePresence
+    ).filter(
+        playerId=>{
+
+            const presence=
+                mp.remotePresence[
+                    playerId
+                ];
+
+            return(
+                presence &&
+                presence.space===
+                "orbital" &&
+                presence.ownerId===
+                hereOwnerId &&
+                presence.planetId &&
+                presence.planetId===
+                destinationPlanetId &&
+                presence.receivedAt &&
+                now-presence.receivedAt<
+                MP_ORBITAL_PRESENCE_INTERVAL_MS*
+                4
+            );
+
+        }
+    ).map(
+        playerId=>({
+            playerId,
+            name:
+                (
+                    mp.remotePlayerInfo[
+                        playerId
+                    ] || {}
+                ).name || "Player",
+            colour:
+                (
+                    mp.remotePlayerInfo[
+                        playerId
+                    ] || {}
+                ).colour || "#6ee7ff",
+            presence:
+                mp.remotePresence[
+                    playerId
+                ]
+        })
+    );
+
+}
+
 function mpDisconnectSocket(){
 
     if(mp.ws){
@@ -12655,6 +12798,15 @@ function mpHandleMessage(message){
 
         }
 
+        if(
+            typeof renderLaunchPreview===
+            "function"
+        ){
+
+            renderLaunchPreview();
+
+        }
+
         return;
 
     }
@@ -12670,6 +12822,15 @@ function mpHandleMessage(message){
             renderPlanetDetail(
                 planetDetailId
             );
+
+        }
+
+        if(
+            typeof renderLaunchPreview===
+            "function"
+        ){
+
+            renderLaunchPreview();
 
         }
 
@@ -12708,6 +12869,15 @@ function mpHandleMessage(message){
             renderPlanetDetail(
                 planetDetailId
             );
+
+        }
+
+        if(
+            typeof renderLaunchPreview===
+            "function"
+        ){
+
+            renderLaunchPreview();
 
         }
 
@@ -20327,18 +20497,57 @@ function getStarMapSelectable(){
         if(!current)
             return [];
 
-        return PLANETS.filter(
-            p =>
-                p.id!==current.id &&
-                isRoute(
-                    current.id,
-                    p.id
-                ) &&
-                score>=p.requirement &&
-                isPlanetUnlocked(p.id)
-        ).map(
-            p => p.id
-        );
+        const sameSystemSelectable=
+            PLANETS.filter(
+                p =>
+                    p.id!==current.id &&
+                    isRoute(
+                        current.id,
+                        p.id
+                    ) &&
+                    score>=p.requirement &&
+                    isPlanetUnlocked(p.id)
+            ).map(
+                p => p.id
+            );
+
+        /*
+         * Bridge connectivity — only relevant while actually
+         * drawing a DIFFERENT room-mate's system (starMapDrawingOwnerId
+         * set and not this player's own), and only from one hub to
+         * another: this player's current REAL position has to
+         * itself be a hub (earth or zenith) in their own system
+         * for a bridge to make sense at all, exactly like reaching
+         * any other world requires actually being connected to it.
+         */
+        if(
+            mp.connected &&
+            starMapDrawingOwnerId &&
+            starMapDrawingOwnerId!==
+            mp.myId &&
+            isBridgeHub(current.id)
+        ){
+
+            const bridgeSelectable=
+                PLANETS.filter(
+                    p =>
+                        isBridgeHub(p.id) &&
+                        score>=p.requirement &&
+                        isPlanetUnlocked(p.id)
+                ).map(
+                    p => p.id
+                );
+
+            return[
+                ...new Set([
+                    ...sameSystemSelectable,
+                    ...bridgeSelectable
+                ])
+            ];
+
+        }
+
+        return sameSystemSelectable;
 
     }
 
@@ -21425,6 +21634,17 @@ function drawMultiplayerStarMap(){
 
     const labels=[];
 
+    /*
+     * Each successfully-drawn system's own Earth/Zenith pixel
+     * position — collected here (rather than recomputed from
+     * scratch afterward) since this loop already has pixelDX/
+     * pixelDY and the owner's own planetSave in hand for exactly
+     * the one moment they're needed. Used below to actually draw
+     * the bridge connections in destination mode.
+     */
+    const hubPositions=
+        {};
+
     ownerIds.forEach(
         (ownerId,index)=>{
 
@@ -21505,7 +21725,32 @@ function drawMultiplayerStarMap(){
                  ).length
                 :0;
 
+            starMapDrawingOwnerId=
+                ownerId;
+
             try{
+
+                /*
+                 * A defensive outer save/restore, independent of
+                 * whatever drawStarMapScene does internally — if it
+                 * throws partway through one system (a malformed
+                 * remote save making isPlanetUnlocked misbehave,
+                 * say), any save() it called before the throw never
+                 * reaches its matching restore(), leaving the
+                 * canvas's internal state stack unbalanced. Because
+                 * setTransform only resets the transform matrix, not
+                 * that stack, properties like globalAlpha or an
+                 * active clip region can leak forward into every
+                 * subsequent system drawn that same frame — and
+                 * since the same context persists across frames,
+                 * potentially into every frame after that too, which
+                 * reads as "the whole map just went invisible" even
+                 * though only one system's data was ever actually
+                 * bad. This outer pair bounds the damage to the one
+                 * system that failed, regardless of what state
+                 * drawStarMapScene's own internals were left in.
+                 */
+                c.save();
 
                 drawStarMapScene(
                     index>0,
@@ -21540,6 +21785,73 @@ function drawMultiplayerStarMap(){
 
                 }
 
+                /*
+                 * Recovered from the SAME hit areas just tagged
+                 * above, rather than recomputed independently — a
+                 * hub's hit area already carries its true screen
+                 * position (translate included) and whether it's
+                 * actually unlocked for this owner, so this is
+                 * just picking out the two that matter.
+                 */
+                const systemAreas=
+                    (
+                        canvas._starHitAreas ||
+                        []
+                    ).filter(
+                        a => a.ownerId===ownerId
+                    );
+
+                MP_BRIDGE_HUBS.forEach(
+                    hubId=>{
+
+                        const hubArea=
+                            systemAreas.find(
+                                a =>
+                                    a.planetId===
+                                    hubId
+                            );
+
+                        if(hubArea){
+
+                            if(
+                                !hubPositions[
+                                    ownerId
+                                ]
+                            ){
+
+                                hubPositions[
+                                    ownerId
+                                ]={};
+
+                            }
+
+                            hubPositions[
+                                ownerId
+                            ][hubId]={
+                                x:hubArea.x,
+                                y:hubArea.y,
+                                /*
+                                 * isPlanetUnlocked directly, not
+                                 * hubArea.selectable — selectable's
+                                 * meaning differs by starMapMode
+                                 * (navigate mode's own ship/visited
+                                 * criteria vs destination mode's
+                                 * route criteria), where unlocked
+                                 * rank is specifically the one fact
+                                 * that actually matters for whether
+                                 * a bridge connection should exist.
+                                 */
+                                unlocked:
+                                    isPlanetUnlocked(
+                                        hubId
+                                    )
+                            };
+
+                        }
+
+                    }
+                );
+
             }catch(error){
 
                 console.error(
@@ -21550,8 +21862,39 @@ function drawMultiplayerStarMap(){
 
             }finally{
 
+                c.restore();
+
+                /*
+                 * Explicit belt-and-suspenders on top of the
+                 * restore() above — a single restore only unwinds
+                 * ONE level of the save stack, which isn't a full
+                 * guarantee if drawStarMapScene's own internals had
+                 * several NESTED saves pending at the exact moment
+                 * it threw. These are the specific properties
+                 * (beyond the transform matrix, already handled by
+                 * the next system's own setTransform call) that
+                 * would actually make content read as "gone" if
+                 * they leaked forward at a corrupted value — faded
+                 * to invisible, drawn with the wrong blend mode, or
+                 * hidden behind a stale shadow/clip — so they're
+                 * pinned back to their real defaults unconditionally
+                 * rather than trusted to the save stack alone.
+                 */
+                c.globalAlpha=1;
+
+                c.globalCompositeOperation=
+                    "source-over";
+
+                c.shadowBlur=0;
+
+                c.shadowColor=
+                    "transparent";
+
                 planetSave=
                     previousPlanetSave;
+
+                starMapDrawingOwnerId=
+                    null;
 
             }
 
@@ -21580,6 +21923,108 @@ function drawMultiplayerStarMap(){
 
         }
     );
+
+    /*
+     * The actual bridge connections — drawn AFTER every system
+     * (so a line between two systems is never covered by a THIRD
+     * system's own backdrop/routes drawn afterward), but before
+     * labels, so names stay legible on top. Only meaningful in
+     * destination mode: one line per distinct pair of owners × per
+     * pair of hubs (earth-earth, earth-zenith, zenith-earth,
+     * zenith-zenith — all four, exactly like this was asked for),
+     * and only when BOTH ends are actually unlocked for their own
+     * owner — an unreachable hub isn't a real connection yet, same
+     * spirit as how a locked planet's own ordinary routes already
+     * don't glow either.
+     */
+    if(starMapMode==="destination"){
+
+        const hubOwnerIds=
+            Object.keys(hubPositions);
+
+        for(
+            let i=0;
+            i<hubOwnerIds.length;
+            i++
+        ){
+
+            for(
+                let j=i+1;
+                j<hubOwnerIds.length;
+                j++
+            ){
+
+                const ownerA=
+                    hubOwnerIds[i];
+
+                const ownerB=
+                    hubOwnerIds[j];
+
+                MP_BRIDGE_HUBS.forEach(
+                    hubA=>{
+
+                        MP_BRIDGE_HUBS.forEach(
+                            hubB=>{
+
+                                const pointA=
+                                    hubPositions[
+                                        ownerA
+                                    ][hubA];
+
+                                const pointB=
+                                    hubPositions[
+                                        ownerB
+                                    ][hubB];
+
+                                if(
+                                    !pointA ||
+                                    !pointB ||
+                                    !pointA.unlocked ||
+                                    !pointB.unlocked
+                                ){
+
+                                    return;
+
+                                }
+
+                                c.save();
+
+                                c.setLineDash(
+                                    [3,7]
+                                );
+
+                                c.strokeStyle=
+                                    "rgba(170,140,255,.4)";
+
+                                c.lineWidth=1.5;
+
+                                c.beginPath();
+
+                                c.moveTo(
+                                    pointA.x,
+                                    pointA.y
+                                );
+
+                                c.lineTo(
+                                    pointB.x,
+                                    pointB.y
+                                );
+
+                                c.stroke();
+
+                                c.restore();
+
+                            }
+                        );
+
+                    }
+                );
+
+            }
+
+        }
+
+    }
 
     /*
      * Labels drawn as a separate pass, after every system, so
@@ -21955,6 +22400,39 @@ const MP_SYSTEM_SLOTS=
         {dx:110,dy:110},
         {dx:-110,dy:110}
     ];
+
+/*
+ * Earth and Zenith — the entry and the far end of every player's
+ * own system — are the two hubs a bridge route can connect
+ * between different owners' systems at. Deliberately not every
+ * planet: a full N-planet-by-N-planet mesh across every pair of
+ * players would make the destination map an unreadable tangle,
+ * where hub-to-hub keeps cross-system travel real and navigable
+ * (reach a hub within your own system via its normal routes, same
+ * as always, then bridge out from there) without needing new
+ * connectivity rules for the other eight worlds at all.
+ */
+const MP_BRIDGE_HUBS=
+    ["earth","zenith"];
+
+function isBridgeHub(planetId){
+
+    return MP_BRIDGE_HUBS.includes(
+        planetId
+    );
+
+}
+
+/*
+ * Which owner's system drawStarMapScene is CURRENTLY drawing, set
+ * by drawMultiplayerStarMap right before each system's own call
+ * and cleared after — getStarMapSelectable reads this (alongside
+ * planetSave, already swapped the same way) to know whether a hub
+ * world it's considering belongs to a DIFFERENT player's system,
+ * which is what actually makes a bridge connection valid rather
+ * than just any two hub worlds anywhere.
+ */
+let starMapDrawingOwnerId=null;
 
 function mpGetSystemLayout(){
 
@@ -26627,6 +27105,37 @@ function renderShipSelectButton(ship,isChosen){
         ?0
         :getShipMaterialTotal(ship);
 
+    /*
+     * Same claim lookup as the Ships tab's own select button —
+     * whichever planet is actually on screen right now owns the
+     * claim namespace, this player's own id normally or the
+     * room-mate's while browsing their planet.
+     */
+    const claimOwnerId=
+        activePlanetOwnerId ||
+        (
+            typeof mp!=="undefined"
+            ?mp.myId
+            :null
+        );
+
+    const claimedBy=
+        (
+            typeof mp!=="undefined" &&
+            claimOwnerId
+        )
+        ?mp.claimedShips[
+            mpShipKey(
+                claimOwnerId,
+                ship.id
+            )
+        ]
+        :null;
+
+    const claimedByOther=
+        claimedBy &&
+        claimedBy.byId!==mp.myId;
+
     return(
         '<button data-action="pick-launch-ship" '+
         'data-ship="'+ship.id+'" '+
@@ -26636,22 +27145,34 @@ function renderShipSelectButton(ship,isChosen){
         (
             isChosen
             ?"rgba(110,220,255,.5)"
+            :claimedByOther
+            ?"rgba(255,160,80,.4)"
             :"rgba(255,255,255,.12)"
         )+
         ';background:'+
         (
             isChosen
             ?"rgba(110,220,255,.14)"
+            :claimedByOther
+            ?"rgba(255,160,80,.12)"
             :"rgba(255,255,255,.03)"
         )+
         ';color:'+
         (
             isChosen
             ?"#bcecff"
+            :claimedByOther
+            ?"#ffc98f"
             :"#8fa7c7"
         )+
         ';cursor:pointer;">'+
         (isChosen ? "▶ " : "")+
+        (
+            claimedByOther
+            ?"🔒 Claimed by "+
+             claimedBy.byName+" · "
+            :""
+        )+
         (
             ship.isFresh
             ?"Fresh ship (∞) · "+
@@ -27790,12 +28311,67 @@ document
         event.preventDefault();
         event.stopPropagation();
 
-        sound("click");
-
-        selectedLaunchShipId=
+        const shipId=
             target.getAttribute(
                 "data-ship"
             );
+
+        /*
+         * The same claim check/broadcast mpInterceptPlanetAction
+         * already does for the Ships tab's own select button —
+         * this is a second, separate UI for the exact same action
+         * (the home screen's own quick-select list), so it needs
+         * the same protection rather than silently bypassing it.
+         */
+        const claimOwnerId=
+            activePlanetOwnerId ||
+            mp.myId;
+
+        if(
+            mp.connected &&
+            claimOwnerId &&
+            mpIsShipClaimedByOther(
+                claimOwnerId,
+                shipId
+            )
+        ){
+
+            const claim=
+                mp.claimedShips[
+                    mpShipKey(
+                        claimOwnerId,
+                        shipId
+                    )
+                ];
+
+            showShipToast(
+                (
+                    claim && claim.byName
+                ) || "Someone"+
+                " already has that ship."
+            );
+
+            return;
+
+        }
+
+        sound("click");
+
+        selectedLaunchShipId=
+            shipId;
+
+        if(
+            mp.connected &&
+            claimOwnerId
+        ){
+
+            mpSend({
+                type:"claimShip",
+                ownerId:claimOwnerId,
+                shipId
+            });
+
+        }
 
         renderLaunchPreview();
 
@@ -29981,6 +30557,42 @@ function renderPlanetDetail(id){
                         currentlySelectedShip.id===
                         ship.id;
 
+                    /*
+                     * The visual half of the claim system — someone
+                     * else having already selected this exact ship
+                     * needs to be obvious BEFORE tapping it, not
+                     * just a toast after the fact. The owner used
+                     * for the claim lookup is whichever planet is
+                     * actually on screen right now: this player's
+                     * own id normally, or the room-mate's while
+                     * browsing their planet (activePlanetOwnerId).
+                     */
+                    const claimOwnerId=
+                        activePlanetOwnerId ||
+                        (
+                            typeof mp!=="undefined"
+                            ?mp.myId
+                            :null
+                        );
+
+                    const claimedBy=
+                        (
+                            typeof mp!=="undefined" &&
+                            claimOwnerId
+                        )
+                        ?mp.claimedShips[
+                            mpShipKey(
+                                claimOwnerId,
+                                ship.id
+                            )
+                        ]
+                        :null;
+
+                    const claimedByOther=
+                        claimedBy &&
+                        claimedBy.byId!==
+                        mp.myId;
+
                     html+=
                         '<button class="control-btn" '+
                         'style="width:100%;margin-bottom:10px;'+
@@ -29989,6 +30601,10 @@ function renderPlanetDetail(id){
                             ?'background:rgba(80,200,120,.18);'+
                              'border-color:rgba(80,200,120,.5);'+
                              'color:#8ef0ae;'
+                            :claimedByOther
+                            ?'background:rgba(255,160,80,.14);'+
+                             'border-color:rgba(255,160,80,.4);'+
+                             'color:#ffc98f;'
                             :''
                         )+
                         '" '+
@@ -30002,6 +30618,9 @@ function renderPlanetDetail(id){
                         (
                             isSelectedForLaunch
                             ?'✓ Selected for Launch'
+                            :claimedByOther
+                            ?'🔒 Claimed by '+
+                             claimedBy.byName
                             :'Select for Launch'
                         )+
                         '</button>';
@@ -50940,6 +51559,15 @@ function updateOrbital(dt){
     orbitalY+=
         orbitalMoveY;
 
+    if(
+        typeof mpBroadcastOrbitalPresence===
+        "function"
+    ){
+
+        mpBroadcastOrbitalPresence();
+
+    }
+
     /*
      * The ship stays pinned at screen centre in every mode — it
      * never actually moves in screen space here, only the world
@@ -51439,6 +52067,160 @@ function drawOrbitalScene(){
         ctx.restore();
 
     }
+
+    if(
+        typeof drawRemoteOrbitalShips===
+        "function"
+    ){
+
+        drawRemoteOrbitalShips();
+
+    }
+
+}
+
+/*
+ * A simple, self-contained ship silhouette for a room-mate flying
+ * in the same orbital space — deliberately NOT reusing drawPlayer's
+ * own ship-drawing code, which is tightly bound to state that's
+ * only meaningful for the LOCAL ship (ghost shield alpha, the
+ * invulnerability flash, the launch/land swipe slide, this
+ * player's own chosen custom style). This is the same simple
+ * silhouette drawPlayer itself falls back to when no custom style
+ * is set, tinted in the room-mate's own assigned colour instead of
+ * the fixed local cyan, with a name tag so it's clear whose ship
+ * is whose when more than one is nearby.
+ */
+function drawRemoteShipAt(x,y,heading,colour,name){
+
+    ctx.save();
+
+    ctx.translate(x,y);
+
+    ctx.rotate(
+        heading+Math.PI/2
+    );
+
+    ctx.beginPath();
+
+    ctx.moveTo(0,-22);
+
+    ctx.lineTo(16,18);
+
+    ctx.lineTo(0,11);
+
+    ctx.lineTo(-16,18);
+
+    ctx.closePath();
+
+    ctx.fillStyle="#071522";
+
+    ctx.shadowBlur=14;
+
+    ctx.shadowColor=colour;
+
+    ctx.fill();
+
+    ctx.shadowBlur=0;
+
+    ctx.lineWidth=2;
+
+    ctx.strokeStyle=colour;
+
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.save();
+
+    ctx.font=
+        "700 10px sans-serif";
+
+    ctx.textAlign="center";
+
+    ctx.fillStyle=colour;
+
+    ctx.shadowColor=
+        "rgba(0,0,0,.8)";
+
+    ctx.shadowBlur=4;
+
+    ctx.fillText(
+        name,
+        x,
+        y-32
+    );
+
+    ctx.restore();
+
+}
+
+/*
+ * Every room-mate sharing this exact orbital space right now (see
+ * mpGetRemoteShipsHere's own comment on what "sharing" means) —
+ * positioned by the SAME negated-offset trick the planet itself
+ * uses: this ship sits at screen centre always, so a remote ship's
+ * screen position is simply its own world position minus this
+ * ship's, added to centre.
+ */
+function drawRemoteOrbitalShips(){
+
+    if(
+        typeof mpGetRemoteShipsHere!==
+        "function"
+    ){
+
+        return;
+
+    }
+
+    mpGetRemoteShipsHere().forEach(
+        remote=>{
+
+            const p=
+                remote.presence;
+
+            const screenX=
+                W/2+
+                (p.x-orbitalX);
+
+            const screenY=
+                H/2+
+                (p.y-orbitalY);
+
+            if(
+                screenX<-200 ||
+                screenX>W+200 ||
+                screenY<-200 ||
+                screenY>H+200
+            ){
+
+                return;
+
+            }
+
+            try{
+
+                drawRemoteShipAt(
+                    screenX,
+                    screenY,
+                    p.angle,
+                    remote.colour,
+                    remote.name
+                );
+
+            }catch(error){
+
+                console.error(
+                    "Remote ship draw "+
+                    "failed:",
+                    error
+                );
+
+            }
+
+        }
+    );
 
 }
 
@@ -51941,7 +52723,7 @@ function createDestinationBubbles(){
 }
 
 
-function chooseDestination(id){
+function chooseDestination(id,ownerId){
 
     const destination=
         getPlanet(id);
@@ -51955,16 +52737,38 @@ function chooseDestination(id){
     )
         return;
 
+    /*
+     * A valid choice is either a normal same-system route (as
+     * it's always been) OR a genuine bridge: this player's current
+     * REAL position and the tapped destination both have to be
+     * hubs, and the destination has to actually belong to a
+     * DIFFERENT player's system — ownerId undefined/null/mine all
+     * mean "my own system", where only the ordinary route check
+     * ever applied and still does.
+     */
+    const isBridgeChoice=
+        ownerId &&
+        ownerId!==mp.myId &&
+        mp.connected &&
+        isBridgeHub(currentPlanetId) &&
+        isBridgeHub(destination.id);
+
     if(
         !isRoute(
             currentPlanetId,
             destination.id
-        )
+        ) &&
+        !isBridgeChoice
     )
         return;
 
     destinationPlanetId=
         id;
+
+    destinationOwnerId=
+        isBridgeChoice
+        ?ownerId
+        :null;
 
     destinationLayer.classList.remove(
         "show"
@@ -56794,7 +57598,8 @@ document
                         startZoomOut();
 
                         chooseDestination(
-                            area.planetId
+                            area.planetId,
+                            tappedOwnerId
                         );
 
                     }
