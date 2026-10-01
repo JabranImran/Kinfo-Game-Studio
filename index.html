@@ -26611,23 +26611,59 @@ function renderPlanetFocus(){
         ){
 
             /*
-             * Managing a room-mate's planet (vault, shop, ships,
-             * pets, factory) is real and live — actually flying
-             * one of their ships is a separate, much bigger piece
-             * (shared orbital space, a shared asteroid field, both
-             * players seeing each other move) that doesn't exist
-             * yet. Saying so plainly here beats silently launching
-             * a single-player mission against swapped save data,
-             * which the rest of this game's systems (scoring, AI
-             * difficulty, the run's own economy) all assume is the
-             * local player's own.
+             * Whichever ship is currently explicitly selected (and
+             * therefore claimed) BY THIS PLAYER on this room-mate's
+             * planet — resolveEarthLaunchChoice/resolveLaunchShip
+             * now deliberately return null here instead of
+             * silently defaulting to one (see their own comments),
+             * so this is genuinely "has THIS player actually chosen
+             * a ship", not just "does one happen to exist".
              */
-            launchBtn.dataset.mode=
-                "remote-locked";
+            const claimedChoice=
+                planet.id==="earth"
+                ?resolveEarthLaunchChoice()
+                :resolveLaunchShip(
+                    getShips(planet.id) ||
+                    []
+                );
 
-            launchBtn.innerHTML=
-                "🌐 Multiplayer flight "+
-                "coming soon";
+            if(claimedChoice){
+
+                /*
+                 * Claiming works, and is real — nobody else can
+                 * take this exact ship while it's selected. Actually
+                 * flying it is held back one step further: landing
+                 * needs to write the run's earned score, coins and
+                 * materials back into the TRUE owner's save, not
+                 * this player's own — and doing that safely (without
+                 * ever risking silently losing a run's progress, or
+                 * writing it into the wrong save) needs its own
+                 * careful pass rather than reusing the single-player
+                 * landing code as-is.
+                 */
+                launchBtn.dataset.mode=
+                    "remote-locked";
+
+                launchBtn.innerHTML=
+                    "🔒 "+ROCKET_ICON_HTML+
+                    " Selected — flight "+
+                    "coming soon";
+
+            }else{
+
+                /*
+                 * Nothing of this player's own is selected yet —
+                 * the button's whole job right now is to get them
+                 * into ship-picking (the Ships tab, where claiming
+                 * actually happens), not to launch anything.
+                 */
+                launchBtn.dataset.mode=
+                    "select-ship";
+
+                launchBtn.innerHTML=
+                    "🚀 Select Ship";
+
+            }
 
         }else if(planetHasShip){
 
@@ -26663,9 +26699,9 @@ function renderPlanetFocus(){
 
         launchBtn.classList.toggle(
             "orbital-ready",
-            planetHasShip &&
-            orbitalReady &&
-            !activePlanetOwnerId
+            launchBtn.dataset.mode===
+            "launch" &&
+            orbitalReady
         );
 
     }
@@ -28056,19 +28092,90 @@ function getEarthLaunchCandidates(){
 
 }
 
+/*
+ * The actual source of truth for "which ship has THIS player
+ * claimed here" is mp.claimedShips — synced over the network, and
+ * the only thing another room-mate's client ever sees. 
+ * selectedLaunchShipId is deliberately just a local, ephemeral
+ * convenience value that selectStartPlanet already resets on every
+ * re-entry (correct for single-player's "forget my pick when I
+ * look elsewhere" feel) — which means it's the WRONG thing to rely
+ * on alone for "is a ship still claimed by me here", since
+ * re-entering a planet shouldn't make a real, still-held claim
+ * disappear.
+ */
+function mpFindMyClaimedShip(ownerId,ships){
+
+    if(
+        typeof mp==="undefined" ||
+        !mp.connected ||
+        !ownerId
+    ){
+
+        return null;
+
+    }
+
+    return(
+        ships.find(
+            s=>{
+
+                const claim=
+                    mp.claimedShips[
+                        mpShipKey(
+                            ownerId,
+                            s.id
+                        )
+                    ];
+
+                return(
+                    claim &&
+                    claim.byId===mp.myId
+                );
+
+            }
+        ) || null
+    );
+
+}
+
 function resolveEarthLaunchChoice(){
 
     const candidates=
         getEarthLaunchCandidates();
 
-    return(
+    const explicit=
         candidates.find(
             s =>
                 s.id===
                 selectedLaunchShipId
-        ) ||
-        candidates[0]
-    );
+        );
+
+    if(explicit)
+        return explicit;
+
+    /*
+     * No fallback default while genuinely visiting someone else's
+     * planet — an unclaimed ship sitting there isn't "mine" just
+     * because it happens to be first in the list; only an actual
+     * explicit selection (which claims it, see pick-launch-ship)
+     * should ever count as chosen. On this player's own planet,
+     * or outside multiplayer entirely, the old convenience default
+     * still applies exactly as before.
+     */
+    if(
+        mp.connected &&
+        activePlanetOwnerId
+    ){
+
+        return mpFindMyClaimedShip(
+            activePlanetOwnerId,
+            candidates
+        );
+
+    }
+
+    return candidates[0];
 
 }
 
@@ -28174,6 +28281,24 @@ function resolveLaunchShip(allShips){
     if(chosen)
         return chosen;
 
+    /*
+     * Same rule as resolveEarthLaunchChoice above — check the real,
+     * network-synced claim rather than returning null outright,
+     * since selectedLaunchShipId alone doesn't survive re-entering
+     * the planet even though a real claim still does.
+     */
+    if(
+        mp.connected &&
+        activePlanetOwnerId
+    ){
+
+        return mpFindMyClaimedShip(
+            activePlanetOwnerId,
+            ships
+        );
+
+    }
+
     return[...ships].sort(
         (a,b) =>
             b.score-a.score
@@ -28251,6 +28376,7 @@ function renderLaunchPreview(){
                 ship=>
                     renderShipSelectButton(
                         ship,
+                        !!chosen &&
                         ship.id===chosen.id
                     )
             ).join('')+
@@ -28283,6 +28409,7 @@ function renderLaunchPreview(){
             ship=>
                 renderShipSelectButton(
                     ship,
+                    !!chosen &&
                     ship.id===chosen.id
                 )
         ).join('')+
@@ -56037,6 +56164,17 @@ function startGame(){
                 ships
             );
 
+        if(!ship){
+
+            showShipToast(
+                "Select a ship here "+
+                "before launching."
+            );
+
+            return;
+
+        }
+
         const shipIndex=
             ships.findIndex(
                 s =>
@@ -57216,13 +57354,24 @@ document
 
         }
 
+        if(mode==="select-ship"){
+
+            openPlanetDetail(
+                selectedStartPlanet,
+                "ships"
+            );
+
+            return;
+
+        }
+
         if(mode==="remote-locked"){
 
             showShipToast(
-                "You can manage this "+
-                "planet, but flying its "+
-                "ships together isn't "+
-                "ready yet."
+                "Selected — this ship "+
+                "is yours to fly once "+
+                "multiplayer missions "+
+                "are ready."
             );
 
             return;
