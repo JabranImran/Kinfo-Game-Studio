@@ -185,7 +185,10 @@ function removePlayerFromRoom(player){
     /*
      * A player who disconnects mid-flight shouldn't leave a ship
      * permanently locked for everyone else in the room — release
-     * every claim they were holding and tell the room.
+     * every claim they were holding (as pilot) and tell the room.
+     * A disconnecting CO-pilot is a lighter case: just drop them
+     * from that crew and tell the room, since the pilot and the
+     * flight itself are unaffected by one co-pilot disappearing.
      */
     room.claimedShips.forEach(
         (claim,shipKey)=>{
@@ -200,7 +203,36 @@ function removePlayerFromRoom(player){
                     room,
                     {
                         type:'shipReleased',
-                        shipKey
+                        shipKey,
+                        coPilotIds:
+                            (claim.coPilots || []).
+                            map(c=>c.id)
+                    },
+                    null
+                );
+
+            }else if(
+                Array.isArray(
+                    claim.coPilots
+                ) &&
+                claim.coPilots.some(
+                    c=>c.id===player.id
+                )
+            ){
+
+                claim.coPilots=
+                    claim.coPilots.filter(
+                        c=>c.id!==player.id
+                    );
+
+                broadcastToRoom(
+                    room,
+                    {
+                        type:'crewUpdated',
+                        shipKey,
+                        byId:claim.byId,
+                        byName:claim.byName,
+                        coPilots:claim.coPilots
                     },
                     null
                 );
@@ -502,7 +534,9 @@ function handleMessage(player,message){
                             ([shipKey,claim])=>({
                                 shipKey,
                                 byId:claim.byId,
-                                byName:claim.byName
+                                byName:claim.byName,
+                                coPilots:
+                                    claim.coPilots || []
                             })
                         )
                 }
@@ -692,9 +726,21 @@ function handleMessage(player,message){
 
         }
 
+        /*
+         * coPilots lives alongside the pilot's own claim, under the
+         * same shipKey — a fresh array on every new claim (claiming
+         * an unclaimed ship always starts crewless), since a stale
+         * array from a PREVIOUS claim of this same ship would
+         * otherwise list people who were never actually invited to
+         * this one.
+         */
         room.claimedShips.set(
             shipKey,
-            {byId:player.id,byName:player.name}
+            {
+                byId:player.id,
+                byName:player.name,
+                coPilots:[]
+            }
         );
 
         broadcastToRoom(
@@ -703,7 +749,8 @@ function handleMessage(player,message){
                 type:'shipClaimed',
                 shipKey,
                 byId:player.id,
-                byName:player.name
+                byName:player.name,
+                coPilots:[]
             },
             null
         );
@@ -733,9 +780,109 @@ function handleMessage(player,message){
 
         room.claimedShips.delete(shipKey);
 
+        /*
+         * The whole crew needs telling, not just whoever released
+         * it — a co-pilot who'd readied up has no other way to
+         * learn the flight they were waiting on just evaporated.
+         */
         broadcastToRoom(
             room,
-            {type:'shipReleased',shipKey},
+            {
+                type:'shipReleased',
+                shipKey,
+                coPilotIds:
+                    (existing.coPilots || []).
+                    map(c=>c.id)
+            },
+            null
+        );
+
+        return;
+
+    }
+
+    if(
+        message.type==='joinCoPilot' ||
+        message.type==='leaveCoPilot' ||
+        message.type==='setCoPilotReady'
+    ){
+
+        const shipKey=
+            String(message.ownerId || '')+
+            ':'+
+            String(message.shipId || '');
+
+        const claim=
+            room.claimedShips.get(shipKey);
+
+        /*
+         * No crew to join/leave/ready-up on if nobody has actually
+         * claimed this ship yet, or if this player somehow IS the
+         * pilot (co-piloting your own claimed ship makes no sense).
+         */
+        if(
+            !claim ||
+            claim.byId===player.id
+        ){
+
+            return;
+
+        }
+
+        if(!Array.isArray(claim.coPilots)){
+
+            claim.coPilots=[];
+
+        }
+
+        if(message.type==='joinCoPilot'){
+
+            if(
+                !claim.coPilots.some(
+                    c=>c.id===player.id
+                )
+            ){
+
+                claim.coPilots.push({
+                    id:player.id,
+                    name:player.name,
+                    ready:false
+                });
+
+            }
+
+        }else if(message.type==='leaveCoPilot'){
+
+            claim.coPilots=
+                claim.coPilots.filter(
+                    c=>c.id!==player.id
+                );
+
+        }else{
+
+            const entry=
+                claim.coPilots.find(
+                    c=>c.id===player.id
+                );
+
+            if(entry){
+
+                entry.ready=
+                    !!message.ready;
+
+            }
+
+        }
+
+        broadcastToRoom(
+            room,
+            {
+                type:'crewUpdated',
+                shipKey,
+                byId:claim.byId,
+                byName:claim.byName,
+                coPilots:claim.coPilots
+            },
             null
         );
 
