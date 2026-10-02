@@ -768,6 +768,32 @@ function handleMessage(player,message){
 
     }
 
+    if(message.type==='shipLifecycle'){
+
+        /*
+         * The launch/landing handoff for a claimed ship someone is
+         * flying from a planet they don't own — just a relay, same
+         * shape as planetAction: only the real owner's client
+         * (message.ownerId matching its own id) acts on it. "launch"
+         * marks the ship in-flight in the owner's own save without
+         * removing it; "landing" carries the finished run's actual
+         * results back to be written in. The server never inspects
+         * which is which, only relays.
+         */
+        broadcastToRoom(
+            room,
+            Object.assign(
+                {type:'shipLifecycle',fromId:player.id,
+                 fromName:player.name},
+                message.payload || {}
+            ),
+            player.id
+        );
+
+        return;
+
+    }
+
     if(message.type==='leave'){
 
         removePlayerFromRoom(player);
