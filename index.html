@@ -5283,6 +5283,21 @@ let destinationPlanetId=null;
  */
 let destinationOwnerId=null;
 
+/*
+ * Set only while actually flying a ship CLAIMED from a room-mate's
+ * planet — the true owner this run's results belong to, and the
+ * planet it was docked at when launched. null for the overwhelming
+ * majority of flights (this player's own ship), in which case
+ * everything works exactly as it always has. See startGame (where
+ * these are set, right before planetSave is deliberately pointed
+ * back at this player's own save for the whole flight — never the
+ * remote owner's, even though that's where the ship's real record
+ * lives) and landAtCurrentPlanetInner (where they're read and
+ * cleared).
+ */
+let flyingShipOwnerId=null;
+let flyingShipOriginPlanetId=null;
+
 let selectedStartPlanet="earth";
 
 let score=0;
@@ -12895,6 +12910,16 @@ function mpHandleMessage(message){
 
     }
 
+    if(message.type==="shipLifecycle"){
+
+        mpHandleShipLifecycle(
+            message
+        );
+
+        return;
+
+    }
+
 }
 
 /*
@@ -13235,6 +13260,364 @@ function mpHandleRemotePlanetAction(message){
     }
 
 }
+
+/*
+ * Launching a claimed ship — tells the true owner's client to mark
+ * it in-flight (see mpHandleShipLifecycle) rather than removing it
+ * from their dock locally, which this player's client has no safe
+ * way to do (see startGame, which calls this instead of the normal
+ * removeShip/splice path for a remote-claimed ship, immediately
+ * before pointing planetSave back at this player's own save for
+ * the whole flight).
+ */
+function mpBroadcastShipLaunch(
+    ownerId,shipId,originPlanetId
+){
+
+    mpSend({
+        type:"shipLifecycle",
+        payload:{
+            ownerId,
+            action:"launch",
+            shipId,
+            originPlanetId
+        }
+    });
+
+}
+
+/*
+ * Landing with a claimed ship — carries the run's actual, final
+ * results (everything updateCurrentShipScore/updateCurrentShipCoins/
+ * syncCurrentShipFlightState would otherwise have written locally)
+ * to the true owner instead, who applies them to their own real
+ * save (see mpHandleShipLifecycle) and clears the in-flight flag.
+ */
+function mpBroadcastShipLanding(
+    ownerId,shipId,originPlanetId,
+    destinationPlanetId,shipData
+){
+
+    mpSend({
+        type:"shipLifecycle",
+        payload:{
+            ownerId,
+            action:"landing",
+            shipId,
+            originPlanetId,
+            destinationPlanetId,
+            shipData
+        }
+    });
+
+}
+
+/*
+ * Runs on the OWNER's client — the other half of the two functions
+ * above. Always operates on localPlanetSave directly (never the
+ * bare planetSave global, which could be pointed anywhere
+ * depending on what this player happens to be doing right now),
+ * so it's safe to run regardless of what screen the owner is
+ * currently looking at.
+ */
+function mpHandleShipLifecycle(message){
+
+    if(message.ownerId!==mp.myId)
+        return;
+
+    if(message.action==="launch"){
+
+        const ship=
+            mpFindShipAcrossPlanets(
+                localPlanetSave,
+                message.shipId
+            );
+
+        if(ship){
+
+            ship.inFlightBy=
+                message.fromId;
+
+            savePlanetProgress(
+                localPlanetSave
+            );
+
+            if(planetDetailId){
+
+                renderPlanetDetail(
+                    planetDetailId
+                );
+
+            }
+
+            if(
+                typeof renderLaunchPreview===
+                "function"
+            ){
+
+                renderLaunchPreview();
+
+            }
+
+        }
+
+        return;
+
+    }
+
+    if(message.action==="landing"){
+
+        mpApplyShipLanding(message);
+
+        return;
+
+    }
+
+}
+
+/*
+ * Searches every planet's docked ships for one matching id, rather
+ * than assuming it's still wherever it was launched from — needed
+ * because a claimed ship can be flown to a DIFFERENT planet within
+ * the owner's own system before landing (the whole point of
+ * interplanetary travel), so "originPlanetId" is only ever a
+ * starting hint, never a guarantee.
+ */
+function mpFindShipAcrossPlanets(save,shipId){
+
+    const byPlanet=
+        save.ships || {};
+
+    for(
+        const planetId in byPlanet
+    ){
+
+        const found=
+            (byPlanet[planetId] || []).
+            find(s => s.id===shipId);
+
+        if(found){
+
+            return found;
+
+        }
+
+    }
+
+    return null;
+
+}
+
+/*
+ * Applies a finished remote flight's real results to the true
+ * owner's own save — the receiving half of mpBroadcastShipLanding.
+ * Deliberately NOT a replay of landAtCurrentPlanetInner itself
+ * (which reads a long tail of the FLYING player's own local session
+ * globals that don't exist here at all) — just the same handful of
+ * fields updateCurrentShipCoins/updateCurrentShipScore/
+ * syncCurrentShipFlightState already write, applied directly from
+ * the message's own payload instead.
+ */
+function mpApplyShipLanding(message){
+
+    const data=
+        message.shipData || {};
+
+    const originId=
+        message.originPlanetId;
+
+    const destId=
+        message.destinationPlanetId ||
+        originId;
+
+    if(
+        !localPlanetSave.ships ||
+        !localPlanetSave.ships[
+            originId
+        ]
+    ){
+
+        console.error(
+            "Ship landing: no ships "+
+            "array at origin planet",
+            originId
+        );
+
+        return;
+
+    }
+
+    const originArray=
+        localPlanetSave.ships[
+            originId
+        ];
+
+    const index=
+        originArray.findIndex(
+            s => s.id===message.shipId
+        );
+
+    if(index===-1){
+
+        console.error(
+            "Ship landing: claimed "+
+            "ship no longer found at "+
+            "its origin — it may have "+
+            "been removed locally "+
+            "while away.",
+            message.shipId
+        );
+
+        return;
+
+    }
+
+    const ship=
+        originArray[index];
+
+    /*
+     * Exactly the fields updateCurrentShipScore/
+     * updateCurrentShipCoins/syncCurrentShipFlightState already
+     * write locally for a normal flight — applied here from the
+     * message instead of this player's own session globals.
+     */
+    ship.score=
+        Math.max(
+            ship.score || 0,
+            Math.floor(
+                Number(data.score) || 0
+            )
+        );
+
+    ship.coins=
+        Math.max(
+            0,
+            Math.floor(
+                Number(data.coins) || 0
+            )
+        );
+
+    ship.materials=
+        clampMaterials(
+            data.materials || {},
+            MATERIAL_CAP+
+            (
+                Number(
+                    data.materialCapBonus
+                ) || 0
+            )
+        );
+
+    ship.materialCapBonus=
+        Number(
+            data.materialCapBonus
+        ) || 0;
+
+    ship.equipment=
+        data.equipment || "emp";
+
+    ship.perk=
+        data.perk || null;
+
+    ship.perk2=
+        data.hasDualPerk
+        ?(data.perk2 || null)
+        :null;
+
+    ship.cargoPets=
+        Array.isArray(
+            data.cargoPets
+        )
+        ?data.cargoPets
+        :[];
+
+    ship.cargoPetCapacity=
+        Math.max(
+            1,
+            Math.floor(
+                Number(
+                    data.cargoPetCapacity
+                ) || 1
+            )
+        );
+
+    ship.wave=
+        Math.max(
+            1,
+            Math.floor(
+                Number(data.wave) || 1
+            )
+        );
+
+    ship.lives=
+        clamp(
+            Math.floor(
+                Number(data.lives) || 3
+            ),
+            1,3
+        );
+
+    ship.styleId=
+        data.styleId ||
+        ship.styleId ||
+        "custom1";
+
+    delete ship.inFlightBy;
+
+    /*
+     * Only actually moves between planets' arrays when the flight
+     * ended somewhere different from where it started — the common
+     * case (landing back at the same dock) just updates in place.
+     */
+    if(destId!==originId){
+
+        originArray.splice(index,1);
+
+        if(!localPlanetSave.ships[destId]){
+
+            localPlanetSave.ships[
+                destId
+            ]=[];
+
+        }
+
+        localPlanetSave.ships[
+            destId
+        ].push(ship);
+
+    }
+
+    localPlanetSave.visitedPlanets=
+        localPlanetSave.
+        visitedPlanets || {};
+
+    localPlanetSave.visitedPlanets[
+        destId
+    ]=true;
+
+    savePlanetProgress(
+        localPlanetSave
+    );
+
+    if(planetDetailId){
+
+        renderPlanetDetail(
+            planetDetailId
+        );
+
+    }
+
+    if(
+        typeof renderLaunchPreview===
+        "function"
+    ){
+
+        renderLaunchPreview();
+
+    }
+
+}
+
 
 /*
  * Switches the whole game's view of "the current planet" onto a
@@ -26630,24 +27013,23 @@ function renderPlanetFocus(){
             if(claimedChoice){
 
                 /*
-                 * Claiming works, and is real — nobody else can
-                 * take this exact ship while it's selected. Actually
-                 * flying it is held back one step further: landing
-                 * needs to write the run's earned score, coins and
-                 * materials back into the TRUE owner's save, not
-                 * this player's own — and doing that safely (without
-                 * ever risking silently losing a run's progress, or
-                 * writing it into the wrong save) needs its own
-                 * careful pass rather than reusing the single-player
-                 * landing code as-is.
+                 * A genuinely claimed ship can now actually fly —
+                 * startGame tells the true owner to mark it
+                 * in-flight instead of removing it locally, and
+                 * landAtCurrentPlanetInner sends the run's real
+                 * results back to them instead of writing anything
+                 * into this player's own save.
                  */
                 launchBtn.dataset.mode=
-                    "remote-locked";
+                    "launch";
 
                 launchBtn.innerHTML=
-                    "🔒 "+ROCKET_ICON_HTML+
-                    " Selected — flight "+
-                    "coming soon";
+                    ROCKET_ICON_HTML+
+                    (
+                        orbitalReady
+                        ?" Launch to Orbit"
+                        :" Launch Mission"
+                    );
 
             }else{
 
@@ -27632,7 +28014,19 @@ function isShipInService(ship){
 
     return !!(
         ship &&
-        getShipServiceJob(ship.id)
+        (
+            getShipServiceJob(ship.id) ||
+            /*
+             * A ship a room-mate has launched and is actively
+             * flying — still sitting in the dock list (so it
+             * doesn't look like it vanished), but genuinely
+             * unavailable for anything else until they land: no
+             * one else can select it, service it, or otherwise
+             * touch its record while its real state only exists on
+             * their device mid-flight.
+             */
+            ship.inFlightBy
+        )
     );
 
 }
@@ -52987,22 +53381,43 @@ function landAtCurrentPlanetInner(){
         return;
 
     /*
+     * Captured once, right up front — flyingShipOwnerId itself
+     * gets cleared further down (right before the broadcast, once
+     * everything that needs it has already run), so a single flag
+     * frozen at the true starting value is what every check below
+     * actually needs rather than re-reading a variable that's
+     * about to change out from under them.
+     */
+    const isRemoteLanding=
+        !!flyingShipOwnerId;
+
+    /*
      * Marks this planet as genuinely visited, independent of
      * whether a ship happens to stay docked here afterward —
      * used by the star map so a planet you've landed on before
      * stays tappable (to check what's stored there) even after
      * every ship eventually leaves, rather than only being
      * reachable while something's currently sitting on it.
+     * Skipped for a remote landing: currentPlanetId right now
+     * names a planet in the TRUE OWNER's id-space, and marking it
+     * "visited" in THIS player's own save could wrongly unlock
+     * their own same-named planet on their own star map before
+     * their own rank actually allows it.
      */
-    if(!planetSave.visitedPlanets){
+    if(!isRemoteLanding){
 
-        planetSave.visitedPlanets={};
+        if(!planetSave.visitedPlanets){
+
+            planetSave.visitedPlanets=
+                {};
+
+        }
+
+        planetSave.visitedPlanets[
+            currentPlanetId
+        ]=true;
 
     }
-
-    planetSave.visitedPlanets[
-        currentPlanetId
-    ]=true;
 
 
     /*
@@ -53017,64 +53432,81 @@ function landAtCurrentPlanetInner(){
      * case rather than the exception.
      */
 
-    const dockedHere=
-        currentShipId &&
-        getShips(
-            currentPlanetId
-        ) &&
-        getShips(
-            currentPlanetId
-        ).find(
-            s =>
-                s.id===
-                currentShipId
-        );
+    /*
+     * A flight flown with a ship claimed from a room-mate's planet
+     * never had any record in THIS player's own save to begin with
+     * — the normal dockedHere/createShip/update* path would either
+     * find nothing and create a brand new DUPLICATE ship here, or
+     * silently do nothing useful, so it's skipped entirely. The
+     * real results go back to the true owner instead — see further
+     * down, AFTER the score/rank/cargo-pet-training code below,
+     * since that's what actually finishes computing the final
+     * numbers (particularly each cargo pet's pilotPoints) that
+     * need to be IN the broadcast, not sent before they exist.
+     */
+    if(!isRemoteLanding){
 
-    if(!dockedHere){
-
-        const ship=
-            createShip(
-                currentPlanetId,
-                score,
-                runCoins,
-                currentShipEquipment,
-                wave,
-                lives,
-                runMaterials,
-                currentShipPerk,
-                currentShipMaterialCapBonus,
-                currentShipHasDualPerk,
-                currentShipPerk2,
-                currentShipCargoPetCapacity,
-                currentShipCargoPets,
-                currentShipStyleId
+        const dockedHere=
+            currentShipId &&
+            getShips(
+                currentPlanetId
+            ) &&
+            getShips(
+                currentPlanetId
+            ).find(
+                s =>
+                    s.id===
+                    currentShipId
             );
 
-        /*
-         * The pilot assignment survives the player's own flight —
-         * createShip doesn't take these, so they're restored onto
-         * the freshly rebuilt docked record here. Without this the
-         * assigned pet was silently lost on landing.
-         */
-        ship.pendingPilot=
-            currentShipPendingPilot;
+        if(!dockedHere){
 
-        ship.pendingDestinationId=
-            currentShipPendingDestinationId;
+            const ship=
+                createShip(
+                    currentPlanetId,
+                    score,
+                    runCoins,
+                    currentShipEquipment,
+                    wave,
+                    lives,
+                    runMaterials,
+                    currentShipPerk,
+                    currentShipMaterialCapBonus,
+                    currentShipHasDualPerk,
+                    currentShipPerk2,
+                    currentShipCargoPetCapacity,
+                    currentShipCargoPets,
+                    currentShipStyleId
+                );
 
-        ship.pendingRouteStops=
-            currentShipPendingRouteStops || [];
+            /*
+             * The pilot assignment survives the player's own
+             * flight — createShip doesn't take these, so they're
+             * restored onto the freshly rebuilt docked record
+             * here. Without this the assigned pet was silently
+             * lost on landing.
+             */
+            ship.pendingPilot=
+                currentShipPendingPilot;
 
-        currentShipId=
-            ship.id;
+            ship.pendingDestinationId=
+                currentShipPendingDestinationId;
 
-    }else{
+            ship.pendingRouteStops=
+                currentShipPendingRouteStops || [];
 
-        updateCurrentShipScore();
+            currentShipId=
+                ship.id;
 
-        updateCurrentShipCoins();
+        }else{
 
-        syncCurrentShipFlightState();
+            updateCurrentShipScore();
+
+            updateCurrentShipCoins();
+
+            syncCurrentShipFlightState();
+
+        }
 
     }
 
@@ -53095,11 +53527,24 @@ function landAtCurrentPlanetInner(){
      * free ship.
      */
     if(
+        !isRemoteLanding &&
         currentPlanetId===
         "earth" &&
         currentShipWasFresh
     ){
 
+        /*
+         * isRemoteLanding excluded explicitly, not just left to
+         * coincidence: currentShipId for a remote flight belongs
+         * to the TRUE OWNER's id namespace, not this player's own
+         * — ship ids are only ever unique WITHIN one player's own
+         * save, so this player's own Earth could easily happen to
+         * have an unrelated ship under that exact same id (every
+         * save's ids start from "ship_1" the same way). Without
+         * this guard, that coincidence could delete one of THIS
+         * player's own ships as a side effect of someone else's
+         * flight landing.
+         */
         const earthShip=
             (
                 getShips("earth") ||
@@ -53147,6 +53592,42 @@ function landAtCurrentPlanetInner(){
 
     }
 
+    /*
+     * Captured now, before runCoins resets to 0 just below — score
+     * and materials don't change again after this point either,
+     * so this is the true final snapshot of what this flight
+     * actually earned. cargoPets is deliberately a LIVE reference,
+     * not a copy: each pet's pilotPoints is still about to be
+     * updated further down (the training-points award for this
+     * flight), and this needs to reflect that once it actually
+     * gets sent — see the broadcast itself, near the end of this
+     * function, well after that update has happened. Built even
+     * when this isn't a remote landing, since it costs nothing and
+     * keeps this one block as the single place that assembles it.
+     */
+    const remoteLandingShipData=
+        {
+            score:score,
+            coins:runCoins,
+            materials:runMaterials,
+            equipment:
+                currentShipEquipment,
+            perk:currentShipPerk,
+            materialCapBonus:
+                currentShipMaterialCapBonus,
+            hasDualPerk:
+                currentShipHasDualPerk,
+            perk2:currentShipPerk2,
+            cargoPetCapacity:
+                currentShipCargoPetCapacity,
+            cargoPets:
+                currentShipCargoPets,
+            styleId:
+                currentShipStyleId,
+            wave:wave,
+            lives:lives
+        };
+
     runCoins=0;
 
     /*
@@ -53155,10 +53636,18 @@ function landAtCurrentPlanetInner(){
      * here but can never launch with it": previously launch
      * always silently used whichever docked ship had the
      * highest score, so a fresh or low-scoring landing could
-     * never win out over an older one.
+     * never win out over an older one. Deliberately NOT done for
+     * a remote landing — currentShipId still holds the TRUE
+     * OWNER's id for their ship at this point (needed below, for
+     * the broadcast itself), and ids are only ever unique within
+     * one player's own save, so setting it as "the" selection here
+     * could coincidentally auto-pick an unrelated ship of this
+     * player's own that just happens to share the same id.
      */
     selectedLaunchShipId=
-        currentShipId;
+        isRemoteLanding
+        ?null
+        :currentShipId;
 
     /*
      * A real first-mission milestone — checked BEFORE the
@@ -53265,6 +53754,51 @@ function landAtCurrentPlanetInner(){
             );
 
         }
+
+    }
+
+    /*
+     * The actual handoff, now that remoteLandingShipData reflects
+     * everything this flight really earned — including each cargo
+     * pet's updated pilotPoints from just above. currentShipId
+     * still correctly names the TRUE OWNER's ship record; nothing
+     * from here on needs it to, so it's safe to let go of now.
+     * The ship genuinely goes to wherever this player actually
+     * landed WITHIN the owner's system (currentPlanetId, captured
+     * before it's overwritten below) — not forced back to Earth —
+     * exactly like any other interplanetary flight. Only THIS
+     * player's own on-screen planet is reset to their own Earth
+     * afterward, since their own save has no presence anywhere in
+     * the owner's system to actually show.
+     */
+    if(isRemoteLanding){
+
+        const landedAtPlanetId=
+            currentPlanetId;
+
+        mpBroadcastShipLanding(
+            flyingShipOwnerId,
+            currentShipId,
+            flyingShipOriginPlanetId,
+            landedAtPlanetId,
+            remoteLandingShipData
+        );
+
+        mpSend({
+            type:"releaseShip",
+            ownerId:flyingShipOwnerId,
+            shipId:currentShipId
+        });
+
+        flyingShipOwnerId=null;
+
+        flyingShipOriginPlanetId=
+            null;
+
+        currentShipId=null;
+
+        currentPlanetId=
+            "earth";
 
     }
 
@@ -56017,10 +56551,38 @@ function startGame(){
         currentShipWasFresh=
             !!earthChoice.isFresh;
 
-        removeShip(
-            "earth",
-            earthChoice.id
-        );
+        /*
+         * A ship claimed from a room-mate's planet never gets
+         * removed from THEIR dock locally — this player has no
+         * safe way to write into their save at all. Instead the
+         * true owner is told to mark it in-flight (see
+         * mpBroadcastShipLaunch/mpHandleShipLifecycle), and
+         * flyingShipOwnerId is what tells landAtCurrentPlanetInner,
+         * much later, to send the run's real results back the same
+         * way instead of writing them in locally.
+         */
+        if(activePlanetOwnerId){
+
+            flyingShipOwnerId=
+                activePlanetOwnerId;
+
+            flyingShipOriginPlanetId=
+                "earth";
+
+            mpBroadcastShipLaunch(
+                activePlanetOwnerId,
+                earthChoice.id,
+                "earth"
+            );
+
+        }else{
+
+            removeShip(
+                "earth",
+                earthChoice.id
+            );
+
+        }
 
         currentShipId=
             earthChoice.id;
@@ -56182,7 +56744,26 @@ function startGame(){
                     ship.id
             );
 
-        if(shipIndex!==-1){
+        /*
+         * Same handoff as the Earth branch above — a claimed
+         * remote ship never gets spliced out locally; the true
+         * owner is told to mark it in-flight instead.
+         */
+        if(activePlanetOwnerId){
+
+            flyingShipOwnerId=
+                activePlanetOwnerId;
+
+            flyingShipOriginPlanetId=
+                chosen.id;
+
+            mpBroadcastShipLaunch(
+                activePlanetOwnerId,
+                ship.id,
+                chosen.id
+            );
+
+        }else if(shipIndex!==-1){
 
             ships.splice(
                 shipIndex,
@@ -56287,6 +56868,24 @@ function startGame(){
 
     }
 
+
+    /*
+     * The critical safety boundary for a remote-claimed flight:
+     * everything needed from the true owner's save (the ship's
+     * starting score/coins/materials/etc, copied into the launch*
+     * locals above) has already been read. From here on, planetSave
+     * is pointed back at THIS player's own save for the rest of the
+     * function and the entire mission that follows — launch stats,
+     * the field, orbital flight, scoring, difficulty, all of it —
+     * so nothing downstream can ever read or write into a room-
+     * mate's data by accident, regardless of what screen this
+     * player happened to be looking at when they launched.
+     */
+    if(activePlanetOwnerId){
+
+        mpExitRemotePlanetView();
+
+    }
 
     currentPlanetId=
         chosen.id;
@@ -57359,19 +57958,6 @@ document
             openPlanetDetail(
                 selectedStartPlanet,
                 "ships"
-            );
-
-            return;
-
-        }
-
-        if(mode==="remote-locked"){
-
-            showShipToast(
-                "Selected — this ship "+
-                "is yours to fly once "+
-                "multiplayer missions "+
-                "are ready."
             );
 
             return;
