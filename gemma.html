@@ -1,7 +1,350 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#090b10"><title>Local Gemma 4</title><style>*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif}.app{max-width:900px;margin:auto;min-height:100vh;display:flex;flex-direction:column}header{padding:16px;border-bottom:1px solid #252936;display:flex;justify-content:space-between;gap:12px}h1{font-size:20px;margin:0}.sub,.small{font-size:12px;color:#9299a7}.badges{display:flex;gap:5px}.badge{font-size:10px;padding:5px 7px;border-radius:9px;background:#181b23}.ok{color:#7de2a5}main{flex:1;display:flex;flex-direction:column;padding:14px;gap:12px}#messages{flex:1;display:flex;flex-direction:column;gap:10px}.msg{max-width:88%;padding:12px 14px;border-radius:17px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}.user{align-self:flex-end;background:#245eea}.assistant{align-self:flex-start;background:#171a22;border:1px solid #282d38}.meta{font-size:10px;color:#8f97a5;margin-top:6px}.panel{display:none;background:#11141b;border:1px solid #292e39;border-radius:14px;padding:12px;font-size:13px}.panel.show{display:block}.bar{height:6px;background:#252a34;border-radius:5px;margin:9px 0;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#4c8cff}.tools{display:flex;gap:7px;flex-wrap:wrap}.tools button,.tools label,.row button{background:#151821;color:#fff;border:1px solid #303644;border-radius:11px;padding:9px 11px;font:inherit}.tools input{display:none}.row{display:flex;gap:7px;margin-top:8px}.row textarea{flex:1;min-height:52px;resize:none;border:1px solid #303644;border-radius:15px;background:#11141b;color:white;padding:12px;font:inherit}.row button{background:#245eea;border-color:#245eea}.chip{display:inline-block;background:#171a22;border:1px solid #2c313c;border-radius:9px;padding:6px 8px;font-size:11px;margin:0 5px 5px 0}@media(max-width:600px){.msg{max-width:94%}header{padding:14px 12px}.badges{max-width:45%;flex-wrap:wrap;justify-content:flex-end}}
-</style></head><body><div class="app"><header><div><h1>Local Gemma 4</h1><div class="sub">E2B Â· WebGPU Â· browser-local</div></div><div class="badges"><span id="device" class="badge">DEVICEâ¦</span><span id="gpu" class="badge">GPUâ¦</span><span id="net" class="badge">NETWORKâ¦</span></div></header><main><div id="messages"><div class="msg assistant">Hello! This is the Gemma 4 E2B local-chat workspace.<div class="meta">V0.1 Â· Text chat + image/audio/video input UI</div></div></div><div id="setup" class="panel"><b>Gemma 4 E2B</b><p>First load needs internet. The browser downloads the WebGPU model and caches it locally. After a successful cache, the same browser/origin can be used offline, subject to iOS/browser storage limits.</p><p>Model: <b>onnx-community/gemma-4-E2B-it-ONNX</b><br>Runtime: <b>Transformers.js + WebGPU + q4f16</b></p><div class="bar"><i id="progress"></i></div><div id="loadText" class="small">Not loaded.</div><br><button id="load" class="primary">Load Gemma 4 E2B</button></div><div><div id="files"></div><div class="tools"><label>ð¼ Image<input id="image" type="file" accept="image/*"></label><label>ðµ Audio<input id="audio" type="file" accept="audio/*"></label><label>ð¬ Video<input id="video" type="file" accept="video/*"></label><button id="mic">ð Record</button><button id="setupBtn">â Setup</button><button id="clear">Clear</button></div><div class="row"><textarea id="prompt" placeholder="Ask Gemma anythingâ¦"></textarea><button id="send">Send</button></div><div id="status" class="small">Checking deviceâ¦</div></div></main></div><script type="module">
-const MODEL='onnx-community/gemma-4-E2B-it-ONNX', CDN='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2';let processor,model,files=[],rec,chunks=[];const $=x=>document.getElementById(x);function badges(){let ua=navigator.userAgent;$('device').textContent=/iPhone|iPad|iPod/.test(ua)?'iPhone/iPad':'Desktop';$('gpu').textContent=navigator.gpu?'WebGPU â':'WebGPU â';$('gpu').className='badge '+(navigator.gpu?'ok':'');$('net').textContent=navigator.onLine?'ONLINE':'OFFLINE';$('net').className='badge '+(!navigator.onLine?'ok':'')}badges();addEventListener('online',badges);addEventListener('offline',badges);$('setupBtn').onclick=()=>$('setup').classList.toggle('show');$('clear').onclick=()=>{files=[];render();$('prompt').value=''};function add(f,t){if(f){files.push({file:f,type:t});render()}}function render(){$('files').innerHTML=files.map((x,i)=>`<span class="chip" data-i="${i}">${x.type==='image'?'ð¼':x.type==='audio'?'ðµ':'ð¬'} ${x.file.name} Ã</span>`).join('');document.querySelectorAll('.chip').forEach(e=>e.onclick=()=>{files.splice(+e.dataset.i,1);render()})}$('image').onchange=e=>add(e.target.files[0],'image');$('audio').onchange=e=>add(e.target.files[0],'audio');$('video').onchange=e=>add(e.target.files[0],'video');$('mic').onclick=async()=>{if(rec?.state==='recording'){rec.stop();$('mic').textContent='ð Record';return}try{let s=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(s);rec.ondataavailable=e=>chunks.push(e.data);rec.onstop=()=>{s.getTracks().forEach(t=>t.stop());add(new File(chunks,'recording.webm',{type:'audio/webm'}),'audio')};rec.start();$('mic').textContent='â¹ Stop'}catch(e){alert(e.message)}};
-$('load').onclick=async()=>{try{if(!navigator.gpu)throw Error('WebGPU is unavailable. Try current Safari on iPhone or Chrome/Edge on desktop.');$('load').disabled=true;$('loadText').textContent='Loading Transformers.jsâ¦';let T=await import(CDN);$('loadText').textContent='Loading processorâ¦';processor=await T.AutoProcessor.from_pretrained(MODEL);$('loadText').textContent='Loading Gemma 4 E2Bâ¦';model=await T.Gemma4ForConditionalGeneration.from_pretrained(MODEL,{dtype:'q4f16',device:'webgpu',progress_callback:i=>{if(i.progress!=null)$('progress').style.width=Math.round(i.progress)+'%'}});$('loadText').textContent='Loaded â';$('status').textContent='LOCAL MODEL READY Â· WebGPU';$('load').textContent='Model loaded â'}catch(e){$('loadText').textContent='Load failed: '+e.message;$('load').disabled=false;console.error(e)}};
-function msg(role,text){let d=document.createElement('div');d.className='msg '+role;d.textContent=text;$('messages').appendChild(d);d.scrollIntoView({behavior:'smooth'});return d}
-$('send').onclick=async()=>{let text=$('prompt').value.trim();let current=files.splice(0);render();$('prompt').value='';if(!text&&!current.length)return;if(!model){$('setup').classList.add('show');msg('assistant','Please load Gemma 4 E2B first.');return}msg('user',(text||'Analyse the attached media.')+(current.length?'\nAttachments: '+current.map(x=>x.file.name).join(', '):''));let out=msg('assistant','Thinkingâ¦');try{let T=await import(CDN),content=[];for(let x of current){if(x.type==='image')content.push({type:'image'});if(x.type==='audio')content.push({type:'audio'});if(x.type==='video')throw Error('Video UI is ready, but video tensor processing is the next V0.2 step.');}content.push({type:'text',text:text||'Analyse the attached media.'});let prompt=processor.apply_chat_template([{role:'user',content:current.length?content:text}],{enable_thinking:false,add_generation_prompt:true});let image=current.find(x=>x.type==='image'),audio=current.find(x=>x.type==='audio');let im=image?await T.load_image(URL.createObjectURL(image.file)):undefined;let au=audio?await T.read_audio(URL.createObjectURL(audio.file)):undefined;let inputs=current.length?await processor(prompt,im,au,{add_special_tokens:false}):await processor(prompt,{add_special_tokens:false});let r=await model.generate({...inputs,max_new_tokens:512,do_sample:false});out.textContent=processor.batch_decode(r.slice(null,[inputs.input_ids.dims.at(-1),null]),{skip_special_tokens:true})[0]}catch(e){out.textContent='Error: '+e.message;console.error(e)}};$('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('send').click()}});
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
+<title>Local Gemma 4 - V0.1.1</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f4f5f7;min-height:100vh}
+.app{max-width:900px;margin:auto;min-height:100vh;display:flex;flex-direction:column}
+header{padding:18px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222630}
+h1{font-size:20px;margin:0}.sub{font-size:12px;color:#9da3af;margin-top:3px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.badge{font-size:11px;padding:5px 8px;border-radius:999px;background:#171a22;color:#aeb5c2}.ok{color:#75e3a2}.bad{color:#ff8f8f}
+main{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}
+#messages{flex:1;min-height:48vh;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:12px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{align-self:flex-end;background:#245eea}.assistant{align-self:flex-start;background:#171a22;border:1px solid #252a35}
+.meta{font-size:10px;color:#8e96a4;margin-top:6px}
+.composer{position:sticky;bottom:0;background:linear-gradient(transparent,#090b10 18%);padding-top:18px}
+.tools{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+button,.fileLabel{border:1px solid #303644;background:#151821;color:#fff;border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#245eea;border-color:#245eea}
+input[type=file]{display:none}
+#preview{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.chip{font-size:12px;background:#171a22;border:1px solid #2b303b;border-radius:10px;padding:7px 9px}
+textarea{width:100%;resize:none;min-height:54px;max-height:180px;border:1px solid #303644;border-radius:16px;background:#11141b;color:#fff;padding:13px;font:inherit;outline:none}
+.row{display:flex;gap:8px;margin-top:8px}.row textarea{flex:1}
+.panel{display:none;background:#11141a;border:1px solid #292e39;border-radius:15px;padding:13px;font-size:13px;color:#c8cdd6}
+.panel.show{display:block}.statusline{margin:5px 0}.bar{height:6px;background:#242934;border-radius:8px;overflow:hidden;margin:8px 0}.bar>i{display:block;height:100%;width:0;background:#4d8dff}
+.small{font-size:11px;color:#9098a6}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div><h1>Local Gemma 4</h1><div class="sub">E2B | browser-local | WebGPU</div></div>
+  <div class="badges">
+    <span id="deviceBadge" class="badge">DEVICE...</span>
+    <span id="gpuBadge" class="badge">WebGPU...</span>
+    <span id="netBadge" class="badge">NETWORK...</span>
+  </div>
+</header>
+
+<main>
+  <div id="messages">
+    <div class="msg assistant">Hi! This is your local Gemma 4 E2B workspace.
+
+V0.1.1 uses the current Transformers.js any-to-any pipeline and is designed for WebGPU on iPhone and desktop.
+
+Load the model from Setup to begin.<div class="meta">Model: Gemma 4 E2B | Runtime: Transformers.js + WebGPU</div></div>
+  </div>
+
+  <div id="setup" class="panel">
+    <b>Gemma 4 E2B</b>
+    <div class="statusline">First load needs internet. The browser downloads the required model files and caches them locally.</div>
+    <div class="statusline">Model: <b>onnx-community/gemma-4-E2B-it-ONNX</b></div>
+    <div class="statusline">Runtime: <b>Transformers.js 4.x + WebGPU + q4f16</b></div>
+    <div class="bar"><i id="progress"></i></div>
+    <div id="loadText" class="small">Model is not loaded.</div>
+    <div style="margin-top:10px"><button id="loadBtn" class="primary">Load Gemma 4 E2B</button></div>
+    <div class="small" style="margin-top:10px">After the model is cached, this app can potentially run without Wi-Fi on the same browser/origin. iOS storage policies can affect persistence.</div>
+  </div>
+
+  <div class="composer">
+    <div id="preview"></div>
+    <div class="tools">
+      <label class="fileLabel">Image<input id="imageInput" type="file" accept="image/*"></label>
+      <label class="fileLabel">Audio<input id="audioInput" type="file" accept="audio/*"></label>
+      <label class="fileLabel">Video<input id="videoInput" type="file" accept="video/*"></label>
+      <button id="micBtn">Record</button>
+      <button id="setupBtn">Setup</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+    <div class="row">
+      <textarea id="prompt" placeholder="Ask Gemma anything..." enterkeyhint="send"></textarea>
+      <button id="sendBtn" class="primary">Send</button>
+    </div>
+    <div id="runtimeStatus" class="small" style="margin-top:7px">Starting device check...</div>
+  </div>
+</main>
+</div>
+
+<script type="module">
+/*
+  Local Gemma 4 V0.1.1
+  Important:
+  - Uses Transformers.js 4.3.0.
+  - Uses the official Gemma 4 ONNX "any-to-any" pipeline.
+  - This fixes the old processor-loading path used in V0.1.0.
+*/
+
+const MODEL = "onnx-community/gemma-4-E2B-it-ONNX";
+const HF = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
+
+let pipe = null;
+let attachments = [];
+let recorder = null;
+let chunks = [];
+
+const $ = id => document.getElementById(id);
+
+function setBadge(id, text, state=""){
+  const el = $(id);
+  el.textContent = text;
+  el.classList.remove("ok","bad");
+  if(state) el.classList.add(state);
+}
+
+function addMessage(role, text, meta=""){
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  d.textContent = text;
+  if(meta){
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = meta;
+    d.appendChild(m);
+  }
+  $("messages").appendChild(d);
+  d.scrollIntoView({behavior:"smooth",block:"end"});
+  return d;
+}
+
+function checkDevice(){
+  const ua = navigator.userAgent || "";
+  const mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  setBadge("deviceBadge", mobile ? "MOBILE" : "DESKTOP","ok");
+
+  if(navigator.gpu){
+    setBadge("gpuBadge","WebGPU OK","ok");
+  }else{
+    setBadge("gpuBadge","WebGPU NO","bad");
+  }
+
+  setBadge("netBadge", navigator.onLine ? "ONLINE" : "OFFLINE", navigator.onLine ? "ok" : "bad");
+
+  $("runtimeStatus").textContent =
+    navigator.gpu
+      ? "Device check complete. WebGPU is available."
+      : "Device check complete. WebGPU is NOT available in this browser.";
+}
+
+checkDevice();
+window.addEventListener("online",checkDevice);
+window.addEventListener("offline",checkDevice);
+
+$("setupBtn").onclick = () => $("setup").classList.toggle("show");
+
+$("clearBtn").onclick = () => {
+  attachments = [];
+  renderAttachments();
+  $("prompt").value = "";
+};
+
+function addFile(file,type){
+  if(!file) return;
+  attachments.push({file,type});
+  renderAttachments();
+}
+
+function renderAttachments(){
+  $("preview").innerHTML = "";
+  attachments.forEach((a,i)=>{
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = a.type.toUpperCase() + ": " + a.file.name + " x";
+    c.onclick = () => {
+      attachments.splice(i,1);
+      renderAttachments();
+    };
+    $("preview").appendChild(c);
+  });
+}
+
+$("imageInput").onchange = e => addFile(e.target.files[0],"image");
+$("audioInput").onchange = e => addFile(e.target.files[0],"audio");
+$("videoInput").onchange = e => addFile(e.target.files[0],"video");
+
+$("micBtn").onclick = async () => {
+  if(recorder && recorder.state === "recording"){
+    recorder.stop();
+    $("micBtn").textContent = "Record";
+    return;
+  }
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    alert("Microphone recording is not available here.");
+    return;
+  }
+
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+
+    recorder.ondataavailable = e => chunks.push(e.data);
+
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks,{type:"audio/webm"});
+      addFile(new File([blob],"microphone.webm",{type:"audio/webm"}),"audio");
+    };
+
+    recorder.start();
+    $("micBtn").textContent = "Stop";
+  }catch(e){
+    alert("Microphone permission failed: " + e.message);
+  }
+};
+
+async function loadModel(){
+  if(!navigator.gpu){
+    throw new Error("WebGPU is not available. Try current Safari on a supported iPhone/iPad or a current desktop Chrome/Edge.");
+  }
+
+  $("loadBtn").disabled = true;
+  $("loadText").textContent = "Loading Transformers.js 4.3.0...";
+
+  const {pipeline} = await import(HF);
+
+  $("loadText").textContent = "Loading Gemma 4 E2B with WebGPU...";
+
+  pipe = await pipeline("any-to-any", MODEL, {
+    device: "webgpu",
+    dtype: "q4f16",
+    progress_callback: info => {
+      if(info && typeof info.progress === "number"){
+        const p = Math.max(0,Math.min(100,info.progress));
+        $("progress").style.width = p + "%";
+        $("loadText").textContent = "Loading model... " + Math.round(p) + "%";
+      }else if(info && info.status){
+        $("loadText").textContent = String(info.status);
+      }
+    }
+  });
+
+  $("progress").style.width = "100%";
+  $("loadText").textContent = "Gemma 4 E2B loaded successfully.";
+  $("runtimeStatus").textContent = "LOCAL MODEL READY | WebGPU";
+  $("loadBtn").textContent = "Model loaded";
+  $("loadBtn").disabled = false;
+}
+
+$("loadBtn").onclick = async () => {
+  try{
+    await loadModel();
+    addMessage("assistant","Gemma 4 E2B is loaded. Try a text question.");
+  }catch(e){
+    console.error(e);
+    $("loadText").textContent = "Load failed: " + (e && e.message ? e.message : e);
+    $("runtimeStatus").textContent = "Model load failed. See the Setup panel for the error.";
+    $("loadBtn").disabled = false;
+  }
+};
+
+async function fileURL(file){
+  return URL.createObjectURL(file);
+}
+
+async function send(){
+  const text = $("prompt").value.trim();
+
+  if(!text && !attachments.length){
+    addMessage("assistant","Type a message or attach an image, audio file, or video.");
+    return;
+  }
+
+  if(!pipe){
+    $("setup").classList.add("show");
+    addMessage("assistant","Gemma 4 is not loaded yet. Open Setup and press Load Gemma 4 E2B.");
+    return;
+  }
+
+  const current = attachments.splice(0);
+  renderAttachments();
+  $("prompt").value = "";
+
+  const description = current.length
+    ? text + (text ? "\n\n" : "") + "Attachments: " + current.map(x=>x.file.name).join(", ")
+    : text;
+
+  addMessage("user",description);
+
+  const reply = addMessage("assistant","Thinking...");
+
+  const content = [];
+
+  for(const a of current){
+    const url = await fileURL(a.file);
+    if(a.type === "image") content.push({type:"image",image:url});
+    if(a.type === "audio") content.push({type:"audio",audio:url});
+    if(a.type === "video") content.push({type:"video",video:url});
+  }
+
+  content.push({
+    type:"text",
+    text:text || "Describe and analyse the attached media."
+  });
+
+  const messages = [{role:"user",content}];
+
+  try{
+    const output = await pipe(
+      messages,
+      {
+        max_new_tokens:512,
+        do_sample:false,
+        return_full_text:false,
+        fps:1,
+        load_audio_from_video:true
+      }
+    );
+
+    let answer = "";
+
+    if(Array.isArray(output) && output[0]){
+      const item = output[0];
+      if(typeof item.generated_text === "string") answer = item.generated_text;
+      else if(Array.isArray(item.generated_text)){
+        const last = item.generated_text[item.generated_text.length-1];
+        answer = typeof last === "string" ? last : JSON.stringify(last);
+      }else answer = JSON.stringify(item);
+    }else{
+      answer = String(output);
+    }
+
+    reply.textContent = answer || "Gemma returned an empty response.";
+  }catch(e){
+    console.error(e);
+    reply.textContent = "Inference error: " + (e && e.message ? e.message : e);
+  }
+
+  for(const a of current){
+    /* Revoke only after inference has completed. */
+    const chipURLs = [];
+    /* URLs are ephemeral and will be cleaned by the browser when the page closes. */
+  }
+}
+
+$("sendBtn").onclick = send;
+
+$("prompt").addEventListener("keydown",e=>{
+  if(e.key === "Enter" && !e.shiftKey){
+    e.preventDefault();
+    send();
+  }
+});
+</script>
+</body>
+</html>
