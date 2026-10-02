@@ -12046,7 +12046,10 @@ let mp={
     /* playerId -> last presence tick {space,planetId,x,y,angle,vx,vy,lives} */
     remotePresence:{},
 
-    /* "ownerId:shipId" -> {byId,byName} */
+    /*
+     * "ownerId:shipId" -> {byId,byName,coPilots:[{id,name,ready}]}
+     * — the crew for a claimed ship, not just who's piloting it.
+     */
     claimedShips:{},
 
     lastError:null
@@ -12802,7 +12805,8 @@ function mpHandleMessage(message){
             message.shipKey
         ]={
             byId:message.byId,
-            byName:message.byName
+            byName:message.byName,
+            coPilots:message.coPilots || []
         };
 
         if(planetDetailId){
@@ -12822,11 +12826,42 @@ function mpHandleMessage(message){
 
         }
 
+        if(
+            typeof renderPlanetFocus===
+            "function"
+        ){
+
+            renderPlanetFocus();
+
+        }
+
         return;
 
     }
 
     if(message.type==="shipReleased"){
+
+        /*
+         * A stranded co-pilot (one who'd joined this exact crew)
+         * gets told plainly why their ready-up just evaporated,
+         * rather than silently losing track of a flight that no
+         * longer exists.
+         */
+        if(
+            Array.isArray(
+                message.coPilotIds
+            ) &&
+            message.coPilotIds.includes(
+                mp.myId
+            )
+        ){
+
+            showShipToast(
+                "The pilot backed out — "+
+                "that flight's off."
+            );
+
+        }
 
         delete mp.claimedShips[
             message.shipKey
@@ -12846,6 +12881,15 @@ function mpHandleMessage(message){
         ){
 
             renderLaunchPreview();
+
+        }
+
+        if(
+            typeof renderPlanetFocus===
+            "function"
+        ){
+
+            renderPlanetFocus();
 
         }
 
@@ -12873,7 +12917,9 @@ function mpHandleMessage(message){
                     claim.shipKey
                 ]={
                     byId:claim.byId,
-                    byName:claim.byName
+                    byName:claim.byName,
+                    coPilots:
+                        claim.coPilots || []
                 };
 
             }
@@ -12893,6 +12939,55 @@ function mpHandleMessage(message){
         ){
 
             renderLaunchPreview();
+
+        }
+
+        if(
+            typeof renderPlanetFocus===
+            "function"
+        ){
+
+            renderPlanetFocus();
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="crewUpdated"){
+
+        mp.claimedShips[
+            message.shipKey
+        ]={
+            byId:message.byId,
+            byName:message.byName,
+            coPilots:message.coPilots || []
+        };
+
+        if(planetDetailId){
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }
+
+        if(
+            typeof renderLaunchPreview===
+            "function"
+        ){
+
+            renderLaunchPreview();
+
+        }
+
+        if(
+            typeof renderPlanetFocus===
+            "function"
+        ){
+
+            renderPlanetFocus();
 
         }
 
@@ -12968,6 +13063,19 @@ const MP_LOCAL_ONLY_ACTIONS=
  */
 const MP_CLAIM_ACTIONS=
     new Set(["select-launch-ship"]);
+
+/*
+ * Joining, leaving, or readying up on someone else's claimed ship
+ * as a co-pilot — purely a room-wide social/coordination fact, like
+ * the claim itself, never planetSave data, so these are handled
+ * directly here too rather than forwarded to the owner to execute.
+ */
+const MP_CREW_ACTIONS=
+    new Set([
+        "join-copilot",
+        "leave-copilot",
+        "toggle-copilot-ready"
+    ]);
 
 /*
  * The full set of data-* attribute names any branch in
@@ -13147,6 +13255,63 @@ function mpInterceptPlanetAction(target){
         renderPlanetDetail(
             planetDetailId
         );
+
+        return true;
+
+    }
+
+    if(MP_CREW_ACTIONS.has(action)){
+
+        const shipId=
+            target.getAttribute(
+                "data-ship"
+            );
+
+        if(action==="join-copilot"){
+
+            mpJoinCoPilot(
+                activePlanetOwnerId,
+                shipId
+            );
+
+        }else if(
+            action==="leave-copilot"
+        ){
+
+            mpLeaveCoPilot(
+                activePlanetOwnerId,
+                shipId
+            );
+
+        }else{
+
+            const mine=
+                mpGetMyCoPilotEntry(
+                    activePlanetOwnerId,
+                    shipId
+                );
+
+            mpSetCoPilotReady(
+                activePlanetOwnerId,
+                shipId,
+                !(mine && mine.ready)
+            );
+
+        }
+
+        /*
+         * The server's own broadcast (crewUpdated) is what actually
+         * updates mp.claimedShips and re-renders once it round-
+         * trips — this just keeps the UI from looking totally inert
+         * for the instant before that arrives.
+         */
+        if(planetDetailId){
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }
 
         return true;
 
@@ -27034,16 +27199,60 @@ function renderPlanetFocus(){
             }else{
 
                 /*
-                 * Nothing of this player's own is selected yet —
-                 * the button's whole job right now is to get them
-                 * into ship-picking (the Ships tab, where claiming
-                 * actually happens), not to launch anything.
+                 * Not the pilot of anything here — but might still
+                 * be crew on someone else's claimed ship, in which
+                 * case this button's job is readying up, not
+                 * picking a ship at all.
                  */
-                launchBtn.dataset.mode=
-                    "select-ship";
+                const coPilotShip=
+                    mpFindMyCoPilotShip(
+                        activePlanetOwnerId,
+                        planet.id==="earth"
+                        ?getEarthLaunchCandidates()
+                        :(
+                            getShips(planet.id) ||
+                            []
+                        )
+                    );
 
-                launchBtn.innerHTML=
-                    "🚀 Select Ship";
+                const coPilotEntry=
+                    coPilotShip
+                    ?mpGetMyCoPilotEntry(
+                        activePlanetOwnerId,
+                        coPilotShip.id
+                    )
+                    :null;
+
+                if(coPilotEntry){
+
+                    launchBtn.dataset.mode=
+                        "toggle-ready";
+
+                    launchBtn.dataset.shipId=
+                        coPilotShip.id;
+
+                    launchBtn.innerHTML=
+                        coPilotEntry.ready
+                        ?"✅ Ready — waiting on "+
+                         "pilot"
+                        :"⏳ Tap When Ready";
+
+                }else{
+
+                    /*
+                     * Nothing of this player's own is selected yet
+                     * — the button's whole job right now is to get
+                     * them into ship-picking (the Ships tab, where
+                     * claiming actually happens), not to launch
+                     * anything.
+                     */
+                    launchBtn.dataset.mode=
+                        "select-ship";
+
+                    launchBtn.innerHTML=
+                        "🚀 Select Ship";
+
+                }
 
             }
 
@@ -28533,6 +28742,98 @@ function mpFindMyClaimedShip(ownerId,ships){
 
 }
 
+/*
+ * The claim entry for one specific ship, however this player
+ * relates to it — piloting it, co-piloting it, or neither. Every
+ * co-pilot UI piece (the join button, the ready toggle, the crew
+ * list) works off this single lookup rather than each re-deriving
+ * the same thing.
+ */
+function mpGetShipCrew(ownerId,shipId){
+
+    if(!ownerId)
+        return null;
+
+    return(
+        mp.claimedShips[
+            mpShipKey(ownerId,shipId)
+        ] || null
+    );
+
+}
+
+function mpGetMyCoPilotEntry(ownerId,shipId){
+
+    const crew=
+        mpGetShipCrew(ownerId,shipId);
+
+    if(!crew)
+        return null;
+
+    return(
+        (crew.coPilots || []).find(
+            c => c.id===mp.myId
+        ) || null
+    );
+
+}
+
+/*
+ * Which docked ship, if any, this player has joined as a co-pilot
+ * on — a planet could in principle have more than one claimed
+ * ship, but this player is only ever crew on one flight at a time,
+ * so the first match is the only one that can exist.
+ */
+function mpFindMyCoPilotShip(ownerId,ships){
+
+    if(!ownerId)
+        return null;
+
+    return(
+        ships.find(
+            s =>
+                !!mpGetMyCoPilotEntry(
+                    ownerId,
+                    s.id
+                )
+        ) || null
+    );
+
+}
+
+function mpJoinCoPilot(ownerId,shipId){
+
+    mpSend({
+        type:"joinCoPilot",
+        ownerId,
+        shipId
+    });
+
+}
+
+function mpLeaveCoPilot(ownerId,shipId){
+
+    mpSend({
+        type:"leaveCoPilot",
+        ownerId,
+        shipId
+    });
+
+}
+
+function mpSetCoPilotReady(
+    ownerId,shipId,ready
+){
+
+    mpSend({
+        type:"setCoPilotReady",
+        ownerId,
+        shipId,
+        ready:!!ready
+    });
+
+}
+
 function resolveEarthLaunchChoice(){
 
     const candidates=
@@ -29858,17 +30159,15 @@ function closePlanetDetail(){
     expandedShipCardId=null;
 
     /*
-     * Leaving the planet detail screen always returns planetSave
-     * to the local player's own — otherwise the NEXT screen that
-     * happens to read the bare planetSave global (the star map, the
-     * home screen, anything) would keep reading whichever room-mate
-     * was last being visited.
+     * Deliberately does NOT reset activePlanetOwnerId — this is
+     * just a sub-menu on top of whichever planet's surface is
+     * already on screen (own or a room-mate's), and closing it
+     * should leave that exactly as it was, the same way it would
+     * for any of this player's own planets. Switching whose planet
+     * is being looked at only happens through an actual navigation
+     * choice — the star map, or launching a flight — not as a side
+     * effect of closing a menu.
      */
-    if(activePlanetOwnerId){
-
-        mpExitRemotePlanetView();
-
-    }
 
     hidePlanetMenuTip(true);
 
@@ -31145,6 +31444,120 @@ function renderPlanetDetail(id){
                             :'Select for Launch'
                         )+
                         '</button>';
+
+                    /*
+                     * The crew — only meaningful once a pilot has
+                     * actually claimed the ship, and only shown
+                     * while genuinely visiting a room-mate's planet
+                     * (activePlanetOwnerId set); a ship on this
+                     * player's own, unvisited-by-anyone planet has
+                     * no crew UI to show at all.
+                     */
+                    if(
+                        claimedBy &&
+                        activePlanetOwnerId
+                    ){
+
+                        const coPilots=
+                            claimedBy.coPilots ||
+                            [];
+
+                        if(isSelectedForLaunch){
+
+                            /*
+                             * The pilot's own view: a plain,
+                             * read-only roster — joining/leaving/
+                             * readying up is each co-pilot's own
+                             * call, not something the pilot drives
+                             * from here.
+                             */
+                            html+=
+                                '<div class="metric-note" '+
+                                'style="text-align:left;">'+
+                                (
+                                    coPilots.length
+                                    ?'👥 Crew: '+
+                                     coPilots.map(
+                                        c=>
+                                            (
+                                                c.ready
+                                                ?'✅ '
+                                                :'⏳ '
+                                            )+c.name
+                                     ).join(", ")
+                                    :'👥 No co-pilots yet — '+
+                                     'room-mates can join from '+
+                                     'here.'
+                                )+
+                                '</div>';
+
+                        }else{
+
+                            const myCrewEntry=
+                                coPilots.find(
+                                    c=>
+                                        c.id===mp.myId
+                                );
+
+                            if(myCrewEntry){
+
+                                html+=
+                                    '<div class="metric-note" '+
+                                    'style="text-align:left;'+
+                                    'margin-bottom:6px;">'+
+                                    '👥 '+
+                                    coPilots.map(
+                                        c=>
+                                            (
+                                                c.ready
+                                                ?'✅ '
+                                                :'⏳ '
+                                            )+c.name
+                                    ).join(", ")+
+                                    '</div>'+
+                                    '<div style="display:flex;'+
+                                    'gap:6px;">'+
+                                    '<button class="control-btn" '+
+                                    'style="flex:1;'+
+                                    (
+                                        myCrewEntry.ready
+                                        ?'background:rgba(80,200,'+
+                                         '120,.18);border-color:'+
+                                         'rgba(80,200,120,.5);'+
+                                         'color:#8ef0ae;'
+                                        :''
+                                    )+
+                                    '" data-action="toggle-'+
+                                    'copilot-ready" data-ship="'+
+                                    ship.id+'">'+
+                                    (
+                                        myCrewEntry.ready
+                                        ?'✅ Ready'
+                                        :'⏳ Not Ready'
+                                    )+
+                                    '</button>'+
+                                    '<button class="control-btn" '+
+                                    'data-action="leave-copilot" '+
+                                    'data-ship="'+ship.id+'">'+
+                                    'Leave</button>'+
+                                    '</div>';
+
+                            }else{
+
+                                html+=
+                                    '<button class="control-btn" '+
+                                    'style="width:100%;" '+
+                                    'data-action="join-copilot" '+
+                                    'data-ship="'+ship.id+'">'+
+                                    '+ Co-pilot ('+
+                                    claimedBy.byName+
+                                    '\'s flight)</button>';
+
+                            }
+
+                        }
+
+                    }
 
                     /*
                      * ---- SHIP PREVIEW / STYLE ----
@@ -57959,6 +58372,30 @@ document
                 selectedStartPlanet,
                 "ships"
             );
+
+            return;
+
+        }
+
+        if(mode==="toggle-ready"){
+
+            const shipId=
+                event.currentTarget.
+                dataset.shipId;
+
+            const entry=
+                mpGetMyCoPilotEntry(
+                    activePlanetOwnerId,
+                    shipId
+                );
+
+            mpSetCoPilotReady(
+                activePlanetOwnerId,
+                shipId,
+                !(entry && entry.ready)
+            );
+
+            renderPlanetFocus();
 
             return;
 
