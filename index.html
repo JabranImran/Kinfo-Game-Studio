@@ -211,6 +211,99 @@ body{
     display:none;
 }
 
+#crewScoreboard{
+
+    margin-top:6px;
+
+    padding:6px 10px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:3px;
+
+    background:
+        rgba(5,10,25,.55);
+
+    border:
+        1px solid
+        rgba(100,180,255,.15);
+
+    border-radius:10px;
+
+    backdrop-filter:
+        blur(6px);
+
+    pointer-events:none;
+
+    max-width:200px;
+}
+
+#crewScoreboard.hidden{
+
+    display:none;
+}
+
+.crew-score-row{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:
+        space-between;
+
+    gap:10px;
+
+    font-size:10px;
+
+    letter-spacing:.3px;
+
+    color:#cfe6ff;
+}
+
+.crew-score-row .crew-score-name{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:5px;
+
+    overflow:hidden;
+
+    text-overflow:ellipsis;
+
+    white-space:nowrap;
+}
+
+.crew-score-row .crew-score-dot{
+
+    width:7px;
+
+    height:7px;
+
+    border-radius:50%;
+
+    flex-shrink:0;
+}
+
+.crew-score-row .crew-score-points{
+
+    font-weight:700;
+
+    color:#ffd76b;
+
+    flex-shrink:0;
+}
+
+.crew-score-row.crew-score-leader
+.crew-score-points{
+
+    color:#8ef0ae;
+}
+
 .stat-value{
 
     font-size:17px;
@@ -3330,6 +3423,11 @@ and (max-height:500px){
         id="musicStyleIndicator">
     </div>
 
+    <div
+        id="crewScoreboard"
+        class="hidden">
+    </div>
+
 </div>
 
 
@@ -5425,6 +5523,26 @@ let lastTime=0;
 let shake=0;
 
 let asteroids=[];
+
+/*
+ * A stable id for every asteroid and pickup — nothing in this
+ * game ever needed one before (a single player's own field never
+ * had to refer to an object by anything but its position in the
+ * array), but a co-pilot's client needs a way to say "I tapped
+ * THIS specific rock" that still means the same thing once that
+ * message reaches the pilot's own, independently-ordered arrays.
+ * One shared counter for every kind of field object, since the
+ * numbers never need to mean anything beyond "unique".
+ */
+let fieldObjectIdCounter=0;
+
+function nextFieldObjectId(){
+
+    fieldObjectIdCounter+=1;
+
+    return fieldObjectIdCounter;
+
+}
 let explosions=[];
 let particles=[];
 let stars=[];
@@ -12324,6 +12442,737 @@ const MP_ORBITAL_PRESENCE_INTERVAL_MS=150;
  * match against it — there's genuinely nothing to be "in the same
  * space" as until a real target exists.
  */
+let mpLastFieldSnapshotSendTime=0;
+
+const MP_FIELD_SNAPSHOT_INTERVAL_MS=120;
+
+/*
+ * The pilot's own real field — spawned, moved, and resolved by
+ * exactly the same code a solo player's would be, completely
+ * unmodified — broadcast periodically to any co-pilots so their
+ * screens can mirror it. A silent no-op for the overwhelming
+ * majority of field time (no crew, or no one connected), so this
+ * never touches single-player behaviour at all.
+ */
+function mpBroadcastFieldSnapshot(){
+
+    if(
+        !mp.connected ||
+        !currentShipId
+    ){
+
+        return;
+
+    }
+
+    const ownerId=
+        flyingShipOwnerId ||
+        mp.myId;
+
+    const crew=
+        mpGetShipCrew(
+            ownerId,
+            currentShipId
+        );
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return;
+
+    }
+
+    const now=
+        performance.now();
+
+    if(
+        now-
+        mpLastFieldSnapshotSendTime<
+        MP_FIELD_SNAPSHOT_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastFieldSnapshotSendTime=now;
+
+    mpSend({
+        type:"fieldEvent",
+        event:{
+            kind:"snapshot",
+            ownerId,
+            shipId:currentShipId,
+            asteroids:asteroids.map(
+                a=>({
+                    id:a.id,
+                    x:a.x,
+                    y:a.y,
+                    vx:a.vx,
+                    vy:a.vy,
+                    size:a.size,
+                    typeId:a.typeId,
+                    special:a.special,
+                    angle:a.angle,
+                    rotation:a.rotation,
+                    durability:a.durability,
+                    cloakVisible:
+                        a.cloakVisible
+                })
+            ),
+            coinPickups:coinPickups.map(
+                c=>({
+                    id:c.id,
+                    x:c.x,
+                    y:c.y,
+                    value:c.value,
+                    isHeart:c.isHeart
+                })
+            ),
+            materialPickups:
+                materialPickups.map(
+                    m=>({
+                        id:m.id,
+                        x:m.x,
+                        y:m.y,
+                        materialId:
+                            m.materialId
+                    })
+                ),
+            lives,
+            score,
+            wave
+        }
+    });
+
+}
+
+/*
+ * The receiving half, run on a CO-PILOT's client. Deliberately
+ * matches existing objects by id and updates them in place rather
+ * than discarding and rebuilding the whole array every snapshot —
+ * an asteroid that's still here a moment later should keep its own
+ * cosmetic animation state (cloak timing, vertex shape) continuing
+ * smoothly rather than visibly resetting several times a second.
+ * New ids become new (real, fully-constructed) Asteroid/pickup
+ * instances; ids no longer present are dropped, which is what
+ * actually removes a destroyed or collected object from this
+ * player's own screen.
+ */
+function mpApplyFieldSnapshot(event){
+
+    if(
+        coPilotSessionShipKey!==
+        mpShipKey(
+            event.ownerId,
+            event.shipId
+        )
+    ){
+
+        return;
+
+    }
+
+    const incomingAsteroidIds=
+        new Set(
+            event.asteroids.map(
+                a=>a.id
+            )
+        );
+
+    asteroids=
+        asteroids.filter(
+            a=>
+                incomingAsteroidIds.has(
+                    a.id
+                )
+        );
+
+    event.asteroids.forEach(
+        data=>{
+
+            let a=
+                asteroids.find(
+                    x=>x.id===data.id
+                );
+
+            if(!a){
+
+                a=
+                    new Asteroid(
+                        data.x,
+                        data.y,
+                        data.size,
+                        data.typeId,
+                        data.special
+                    );
+
+                a.id=data.id;
+
+                asteroids.push(a);
+
+            }
+
+            a.x=data.x;
+            a.y=data.y;
+            a.vx=data.vx;
+            a.vy=data.vy;
+            a.angle=data.angle;
+            a.rotation=data.rotation;
+            a.durability=
+                data.durability;
+            a.cloakVisible=
+                data.cloakVisible;
+
+        }
+    );
+
+    const incomingCoinIds=
+        new Set(
+            event.coinPickups.map(
+                c=>c.id
+            )
+        );
+
+    coinPickups=
+        coinPickups.filter(
+            c=>
+                incomingCoinIds.has(
+                    c.id
+                )
+        );
+
+    event.coinPickups.forEach(
+        data=>{
+
+            let c=
+                coinPickups.find(
+                    x=>x.id===data.id
+                );
+
+            if(!c){
+
+                c=
+                    new CoinPickup(
+                        data.x,
+                        data.y,
+                        data.value,
+                        data.isHeart
+                    );
+
+                c.id=data.id;
+
+                coinPickups.push(c);
+
+            }
+
+            c.x=data.x;
+            c.y=data.y;
+
+        }
+    );
+
+    const incomingMaterialIds=
+        new Set(
+            event.materialPickups.map(
+                m=>m.id
+            )
+        );
+
+    materialPickups=
+        materialPickups.filter(
+            m=>
+                incomingMaterialIds.has(
+                    m.id
+                )
+        );
+
+    event.materialPickups.forEach(
+        data=>{
+
+            let m=
+                materialPickups.find(
+                    x=>x.id===data.id
+                );
+
+            if(!m){
+
+                m=
+                    new MaterialPickup(
+                        data.x,
+                        data.y,
+                        data.materialId
+                    );
+
+                m.id=data.id;
+
+                materialPickups.push(
+                    m
+                );
+
+            }
+
+            m.x=data.x;
+            m.y=data.y;
+
+        }
+    );
+
+    lives=event.lives;
+    score=event.score;
+    wave=event.wave;
+
+}
+
+/*
+ * The actual entry point for every fieldEvent this client
+ * receives — message.event.kind decides what it actually is.
+ * "snapshot" (the pilot's periodic broadcast of their real field)
+ * is the only kind handled so far.
+ */
+function mpHandleRemoteFieldEvent(message){
+
+    const event=
+        message.event || {};
+
+    if(event.kind==="snapshot"){
+
+        mpApplyFieldSnapshot(event);
+
+        return;
+
+    }
+
+    if(event.kind==="tap"){
+
+        mpResolveRemoteTap(
+            message.id,
+            event
+        );
+
+        return;
+
+    }
+
+    if(event.kind==="scoreboard"){
+
+        if(
+            coPilotSessionShipKey===
+            mpShipKey(
+                event.ownerId,
+                event.shipId
+            )
+        ){
+
+            flightScoreboard=
+                event.scoreboard || {};
+
+            if(
+                typeof renderCrewScoreboard===
+                "function"
+            ){
+
+                renderCrewScoreboard();
+
+            }
+
+        }
+
+        return;
+
+    }
+
+}
+
+/*
+ * Whoever's tap is currently being resolved through handlePointer
+ * — null for the overwhelming majority of taps (this player's own
+ * local input, the ordinary case; a future leaderboard credit check
+ * should read null as "this ship's own pilot, mp.myId or no
+ * multiplayer at all" rather than needing it pre-filled), or a
+ * co-pilot's real id for the brief moment their forwarded tap is
+ * being replayed through this exact same function. Nothing reads
+ * this yet — set and restored correctly regardless, so the
+ * leaderboard crediting that will use it has a true record to
+ * build on without this needing to change later.
+ */
+let currentTapAttributedTo=null;
+
+/*
+ * playerId -> {name, colour, points} — this flight's individual
+ * leaderboard, maintained ONLY on the pilot's own client (the one
+ * genuine source of truth for what actually happened) and
+ * broadcast to co-pilots so their own screens can show it too.
+ * Reset at the start of every flight — see startGame.
+ */
+let flightScoreboard={};
+
+/*
+ * Credits whichever player currentTapAttributedTo names (or this
+ * player's own identity, if null — their own local tap) with
+ * points actually gained, measured as the real, net change to the
+ * shared score across one full handlePointer call — not any one
+ * internal scoring path picked out and duplicated here, which
+ * would risk silently missing one (a coin, an ability kill, a
+ * combo bonus) as this game's own scoring rules keep evolving. A
+ * silent no-op outside an actual crewed flight, so this never
+ * touches single-player or a pilot with no co-pilots at all.
+ */
+function mpCreditCurrentTap(scoreGained){
+
+    if(
+        scoreGained<=0 ||
+        !mp.connected ||
+        !currentShipId
+    ){
+
+        return;
+
+    }
+
+    const ownerId=
+        flyingShipOwnerId ||
+        mp.myId;
+
+    const crew=
+        mpGetShipCrew(
+            ownerId,
+            currentShipId
+        );
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return;
+
+    }
+
+    const creditId=
+        currentTapAttributedTo ||
+        mp.myId;
+
+    let creditName=
+        mp.myName || "Pilot";
+
+    let creditColour=
+        mp.myColour;
+
+    if(currentTapAttributedTo){
+
+        const entry=
+            crew.coPilots.find(
+                c=>
+                    c.id===
+                    currentTapAttributedTo
+            );
+
+        creditName=
+            (entry && entry.name) ||
+            "Player";
+
+        const rosterEntry=
+            mp.roster.find(
+                p=>
+                    p.id===
+                    currentTapAttributedTo
+            );
+
+        creditColour=
+            (
+                rosterEntry &&
+                rosterEntry.colour
+            ) || "#6ee7ff";
+
+    }
+
+    if(!flightScoreboard[creditId]){
+
+        flightScoreboard[creditId]=
+            {
+                name:creditName,
+                colour:creditColour,
+                points:0
+            };
+
+    }
+
+    flightScoreboard[creditId].
+        points+=scoreGained;
+
+    mpBroadcastScoreboard();
+
+    if(
+        typeof renderCrewScoreboard===
+        "function"
+    ){
+
+        renderCrewScoreboard();
+
+    }
+
+}
+
+/*
+ * Throttled the same way the field snapshot itself is — the
+ * scoreboard changes exactly as often as taps land, which during a
+ * busy moment could be very often, so this rides the same cadence
+ * rather than firing a message per individual point.
+ */
+let mpLastScoreboardSendTime=0;
+
+function mpBroadcastScoreboard(){
+
+    const now=
+        performance.now();
+
+    if(
+        now-
+        mpLastScoreboardSendTime<
+        MP_FIELD_SNAPSHOT_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastScoreboardSendTime=now;
+
+    mpSend({
+        type:"fieldEvent",
+        event:{
+            kind:"scoreboard",
+            ownerId:
+                flyingShipOwnerId ||
+                mp.myId,
+            shipId:currentShipId,
+            scoreboard:flightScoreboard
+        }
+    });
+
+}
+
+/*
+ * The HUD's own small, read-only view of flightScoreboard — called
+ * any time that object actually changes (a credit landing, a
+ * scoreboard broadcast arriving), on both the pilot's client and
+ * every co-pilot's. Hidden entirely whenever there's nothing to
+ * show (no crew this flight, or no hits landed yet), so a solo
+ * flight's HUD looks exactly as it always has.
+ */
+function renderCrewScoreboard(){
+
+    const el=
+        document.getElementById(
+            "crewScoreboard"
+        );
+
+    if(!el)
+        return;
+
+    const entries=
+        Object.keys(
+            flightScoreboard
+        ).map(
+            id=>
+                Object.assign(
+                    {id},
+                    flightScoreboard[
+                        id
+                    ]
+                )
+        );
+
+    if(!entries.length){
+
+        el.classList.add(
+            "hidden"
+        );
+
+        el.innerHTML="";
+
+        return;
+
+    }
+
+    entries.sort(
+        (a,b)=>
+            b.points-a.points
+    );
+
+    el.innerHTML=
+        entries.map(
+            (entry,index)=>
+                '<div class="crew-'+
+                'score-row'+
+                (
+                    index===0
+                    ?' crew-score-'+
+                     'leader'
+                    :''
+                )+
+                '">'+
+                '<span class="crew-'+
+                'score-name">'+
+                '<span class="crew-'+
+                'score-dot" '+
+                'style="background:'+
+                (entry.colour || '#6ee7ff')+
+                ';"></span>'+
+                escapeHTML(
+                    entry.name ||
+                    "Player"
+                )+
+                '</span>'+
+                '<span class="crew-'+
+                'score-points">'+
+                Math.round(
+                    entry.points
+                )+
+                '</span>'+
+                '</div>'
+        ).join("");
+
+    el.classList.remove(
+        "hidden"
+    );
+
+}
+
+/*
+ * Runs on the PILOT's client when a co-pilot's forwarded tap
+ * arrives. Reuses handlePointer completely unmodified — the exact
+ * same hit-testing, scoring, combo, and difficulty-tracking code a
+ * local tap already runs — by building a synthetic event whose
+ * resolved canvas-relative position (see pointerPosition) lands on
+ * the exact x/y the co-pilot actually tapped, regardless of either
+ * player's own screen size. This is the same "replay through the
+ * real function instead of reimplementing it" pattern already used
+ * for remote planet actions and remote ship landings.
+ */
+function mpResolveRemoteTap(fromId,event){
+
+    if(
+        event.ownerId!==mp.myId ||
+        event.shipId!==currentShipId ||
+        !running ||
+        worldState!=="field"
+    ){
+
+        return;
+
+    }
+
+    const rect=
+        canvas.getBoundingClientRect();
+
+    const syntheticEvent={
+        target:canvas,
+        clientX:
+            rect.left+event.x,
+        clientY:
+            rect.top+event.y,
+        preventDefault(){}
+    };
+
+    const previousAttribution=
+        currentTapAttributedTo;
+
+    currentTapAttributedTo=
+        fromId;
+
+    const scoreBeforeRemoteTap=
+        score;
+
+    try{
+
+        handlePointer(
+            syntheticEvent
+        );
+
+    }catch(error){
+
+        console.error(
+            "Resolving a co-pilot's "+
+            "tap failed:",
+            error
+        );
+
+    }finally{
+
+        if(
+            typeof mpCreditCurrentTap===
+            "function"
+        ){
+
+            mpCreditCurrentTap(
+                score-
+                scoreBeforeRemoteTap
+            );
+
+        }
+
+        currentTapAttributedTo=
+            previousAttribution;
+
+    }
+
+}
+
+/*
+ * Runs INSTEAD of the real update(dt) for a co-pilot during field
+ * combat — see loop(), which branches on coPilotSessionShipKey
+ * before ever calling the real one. The pilot's own ship is the
+ * only thing actually simulating this field (spawning, AI
+ * difficulty, scoring, collisions — none of that runs here at
+ * all); this just keeps what's ALREADY been received looking
+ * alive between snapshots, by calling each mirrored object's own
+ * real update() method (the same one a solo field already uses for
+ * cosmetic animation and position drift) rather than reimplementing
+ * motion by hand. Corrected back to the pilot's true positions the
+ * moment the next snapshot arrives, so any drift between snapshots
+ * never has room to compound into something visibly wrong.
+ */
+function updateCoPilotFieldMirror(dt){
+
+    if(
+        !running ||
+        paused ||
+        gameOver
+    ){
+
+        return;
+
+    }
+
+    dt=
+        Math.min(dt,.033);
+
+    worldTimer+=dt;
+
+    updateStars(dt);
+
+    asteroids.forEach(
+        a=>a.update(dt)
+    );
+
+    coinPickups.forEach(
+        c=>c.update(dt)
+    );
+
+    materialPickups.forEach(
+        m=>m.update(dt)
+    );
+
+}
+
 function mpBroadcastOrbitalPresence(){
 
     if(!mp.connected)
@@ -29283,6 +30132,17 @@ function mpMaybeBroadcastCrewLanded(
 let coPilotSessionShipKey=null;
 
 /*
+ * The same fact coPilotSessionShipKey already encodes, kept as two
+ * separate, explicit values too — parsing ownerId back out of the
+ * combined "ownerId:shipId" string would only be safe if shipId
+ * could never itself contain a colon, which isn't actually
+ * guaranteed anywhere. Set alongside it in mpStartCoPilotSession,
+ * cleared alongside it in mpEndCoPilotSession.
+ */
+let coPilotFollowingOwnerId=null;
+let coPilotFollowingShipId=null;
+
+/*
  * Runs on a CO-PILOT's client the moment the pilot's own crewLaunch
  * cue arrives. Deliberately reuses startGame() completely
  * unmodified for every session-global reset it already does —
@@ -29318,6 +30178,12 @@ function mpStartCoPilotSession(message){
             message.ownerId,
             message.shipId
         );
+
+    coPilotFollowingOwnerId=
+        message.ownerId;
+
+    coPilotFollowingShipId=
+        message.shipId;
 
     gameOver=false;
 
@@ -29373,6 +30239,10 @@ function mpEndCoPilotSession(){
     }
 
     coPilotSessionShipKey=null;
+
+    coPilotFollowingOwnerId=null;
+
+    coPilotFollowingShipId=null;
 
     worldState="planet";
 
@@ -39754,6 +40624,9 @@ class Asteroid{
         special=null
     ){
 
+        this.id=
+            nextFieldObjectId();
+
         this.x=x;
         this.y=y;
 
@@ -40601,6 +41474,9 @@ class CoinPickup{
 
     constructor(x,y,value,isHeart=false){
 
+        this.id=
+            nextFieldObjectId();
+
         this.x=x;
         this.y=y;
         this.value=value;
@@ -40853,6 +41729,9 @@ class CoinPickup{
 class MaterialPickup{
 
     constructor(x,y,materialId){
+
+        this.id=
+            nextFieldObjectId();
 
         this.x=x;
         this.y=y;
@@ -55247,6 +56126,15 @@ function update(dt){
 
         if(!inOrbital){
 
+            if(
+                typeof mpBroadcastFieldSnapshot===
+                "function"
+            ){
+
+                mpBroadcastFieldSnapshot();
+
+            }
+
             updateDifficulty(dt);
 
             updateAIDifficulty(dt);
@@ -57464,6 +58352,24 @@ let singularity=null;
 function startGame(){
 
     /*
+     * A fresh flight starts with a fresh leaderboard — whether
+     * this call is the actual pilot's own real launch, or a
+     * co-pilot's own session beginning (mpStartCoPilotSession calls
+     * startGame too), neither should carry over whatever a
+     * PREVIOUS flight's crew earned.
+     */
+    flightScoreboard={};
+
+    if(
+        typeof renderCrewScoreboard===
+        "function"
+    ){
+
+        renderCrewScoreboard();
+
+    }
+
+    /*
      * Every call after the very first one this page load is a
      * "try again" — the fastest, most direct enjoyment signal
      * there is. If a prediction from the run that just ended
@@ -58337,6 +59243,47 @@ function handlePointer(event){
 
     }
 
+    /*
+     * A co-pilot never resolves their own tap during field combat
+     * — the pilot's client is the only one with real authority
+     * over what's actually there to hit, and this player's own
+     * runCoins/lives/score are a completely separate session that
+     * has no business being touched by a tap aimed at the pilot's
+     * mirrored field. The position alone (already in the same
+     * canvas-relative space pointerPosition always resolves to,
+     * which is exactly what makes this safe regardless of either
+     * player's own screen size) is sent to the pilot, who replays
+     * it through this exact same function — see
+     * mpHandleRemoteFieldEvent's "tap" case — as if it had been
+     * their own local tap at that spot.
+     */
+    if(
+        coPilotSessionShipKey &&
+        worldState==="field"
+    ){
+
+        event.preventDefault();
+
+        const copilotTapPos=
+            pointerPosition(event);
+
+        mpSend({
+            type:"fieldEvent",
+            event:{
+                kind:"tap",
+                ownerId:
+                    coPilotFollowingOwnerId,
+                shipId:
+                    coPilotFollowingShipId,
+                x:copilotTapPos.x,
+                y:copilotTapPos.y
+            }
+        });
+
+        return;
+
+    }
+
     event.preventDefault();
 
     initAudio();
@@ -58778,7 +59725,36 @@ function handlePointer(event){
 
 canvas.addEventListener(
     "pointerdown",
-    handlePointer,
+    event=>{
+
+        /*
+         * Measures the real, net effect of this player's own LOCAL
+         * tap on the shared score — currentTapAttributedTo is null
+         * here (only ever set inside mpResolveRemoteTap, for the
+         * brief moment a CO-pilot's forwarded tap is being
+         * replayed), so this correctly credits the pilot's own
+         * identity. A silent no-op whenever mpCreditCurrentTap's
+         * own guards don't apply (no crew, not connected, nothing
+         * actually gained), so single-player is completely
+         * unaffected by this wrapper's own existence.
+         */
+        const scoreBeforeTap=
+            score;
+
+        handlePointer(event);
+
+        if(
+            typeof mpCreditCurrentTap===
+            "function"
+        ){
+
+            mpCreditCurrentTap(
+                score-scoreBeforeTap
+            );
+
+        }
+
+    },
     {
         passive:false
     }
@@ -63481,7 +64457,29 @@ function loop(time){
     lastTime=
         time;
 
-    update(dt);
+    /*
+     * A co-pilot in field combat never runs the real simulation at
+     * all — the pilot's client is the only one actually spawning,
+     * moving, or resolving anything; this player's own screen is
+     * just a mirror of it (see updateCoPilotFieldMirror's own
+     * comment). Orbital flight and every other state still run the
+     * real update() exactly as always, including for a co-pilot —
+     * orbital co-presence already works by each player genuinely
+     * flying their own ship, shown to each other via presence
+     * ticks, not by mirroring one shared simulation.
+     */
+    if(
+        coPilotSessionShipKey &&
+        worldState==="field"
+    ){
+
+        updateCoPilotFieldMirror(dt);
+
+    }else{
+
+        update(dt);
+
+    }
 
     draw();
 
