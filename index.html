@@ -28004,7 +28004,20 @@ function renderShipSelectButton(ship,isChosen){
                  :""
              )
         )+
-        '</button>'
+        '</button>'+
+        /*
+         * Same shared crew UI the Ships tab's own card already
+         * uses — this surface is the first, most prominent place a
+         * visitor actually sees a claimed ship, so it needs the
+         * real +Co-pilot button (and the ready/leave controls once
+         * joined) exactly as much as the deeper menu does, not a
+         * second, separately-maintained copy of it.
+         */
+        mpRenderCrewUiHtml(
+            ship,
+            claimedBy,
+            isChosen
+        )
     );
 
 }
@@ -29023,6 +29036,125 @@ function mpSetCoPilotReady(
 }
 
 /*
+ * The crew UI for one ship — shared between the Ships tab's own
+ * card and the home screen's quick-select list, so both surfaces
+ * genuinely run the same tested code rather than two separately-
+ * maintained copies that could quietly drift apart. Only meaningful
+ * once a pilot has actually claimed the ship, and only shown while
+ * genuinely visiting a room-mate's planet (activePlanetOwnerId
+ * set) — a ship on this player's own planet, or one nobody has
+ * claimed, has nothing to show here at all.
+ */
+function mpRenderCrewUiHtml(
+    ship,claimedBy,isSelectedForLaunch
+){
+
+    if(
+        !claimedBy ||
+        !activePlanetOwnerId
+    ){
+
+        return"";
+
+    }
+
+    const coPilots=
+        claimedBy.coPilots || [];
+
+    if(isSelectedForLaunch){
+
+        /*
+         * The pilot's own view: a plain, read-only roster —
+         * joining/leaving/readying up is each co-pilot's own call,
+         * not something the pilot drives from here.
+         */
+        return(
+            '<div class="metric-note" '+
+            'style="text-align:left;">'+
+            (
+                coPilots.length
+                ?'👥 Crew: '+
+                 coPilots.map(
+                    c=>
+                        (
+                            c.ready
+                            ?'✅ '
+                            :'⏳ '
+                        )+c.name
+                 ).join(", ")
+                :'👥 No co-pilots yet — '+
+                 'room-mates can join from '+
+                 'here.'
+            )+
+            '</div>'
+        );
+
+    }
+
+    const myCrewEntry=
+        coPilots.find(
+            c=>c.id===mp.myId
+        );
+
+    if(myCrewEntry){
+
+        return(
+            '<div class="metric-note" '+
+            'style="text-align:left;'+
+            'margin-bottom:6px;">'+
+            '👥 '+
+            coPilots.map(
+                c=>
+                    (
+                        c.ready
+                        ?'✅ '
+                        :'⏳ '
+                    )+c.name
+            ).join(", ")+
+            '</div>'+
+            '<div style="display:flex;'+
+            'gap:6px;">'+
+            '<button class="control-btn" '+
+            'style="flex:1;'+
+            (
+                myCrewEntry.ready
+                ?'background:rgba(80,200,'+
+                 '120,.18);border-color:'+
+                 'rgba(80,200,120,.5);'+
+                 'color:#8ef0ae;'
+                :''
+            )+
+            '" data-action="toggle-'+
+            'copilot-ready" data-ship="'+
+            ship.id+'">'+
+            (
+                myCrewEntry.ready
+                ?'✅ Ready'
+                :'⏳ Not Ready'
+            )+
+            '</button>'+
+            '<button class="control-btn" '+
+            'data-action="leave-copilot" '+
+            'data-ship="'+ship.id+'">'+
+            'Leave</button>'+
+            '</div>'
+        );
+
+    }
+
+    return(
+        '<button class="control-btn" '+
+        'style="width:100%;" '+
+        'data-action="join-copilot" '+
+        'data-ship="'+ship.id+'">'+
+        '+ Co-pilot ('+
+        claimedBy.byName+
+        '\'s flight)</button>'
+    );
+
+}
+
+/*
  * Called once per real launch (see missionJustLaunched, which this
  * both reads and clears) from the very first entry into orbital
  * space or the field — if this player is genuinely the claimed
@@ -29537,6 +29669,53 @@ document
 .addEventListener(
     "pointerdown",
     event=>{
+
+        /*
+         * The +Co-pilot / ready / leave buttons mpRenderCrewUiHtml
+         * adds alongside each ship here carry data-action values
+         * this listener never otherwise looks for at all (it only
+         * ever matched "pick-launch-ship") — meaning they rendered
+         * correctly and looked completely real, but tapping one did
+         * nothing whatsoever: nothing on this element was listening
+         * for them. mpInterceptPlanetAction already has this exact
+         * handling, tested and working for the Ships tab's own
+         * copy of these same buttons — reused here rather than
+         * writing a second copy, since the only thing actually
+         * different about this surface is which function re-renders
+         * the result afterward.
+         */
+        const crewTarget=
+            event.target.closest(
+                "[data-action]"
+            );
+
+        if(
+            crewTarget &&
+            MP_CREW_ACTIONS.has(
+                crewTarget.getAttribute(
+                    "data-action"
+                )
+            )
+        ){
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            sound("click");
+
+            if(
+                mpInterceptPlanetAction(
+                    crewTarget
+                )
+            ){
+
+                renderLaunchPreview();
+
+            }
+
+            return;
+
+        }
 
         const target=
             event.target.closest(
@@ -31861,119 +32040,12 @@ function renderPlanetDetail(id){
                         )+
                         '</button>';
 
-                    /*
-                     * The crew — only meaningful once a pilot has
-                     * actually claimed the ship, and only shown
-                     * while genuinely visiting a room-mate's planet
-                     * (activePlanetOwnerId set); a ship on this
-                     * player's own, unvisited-by-anyone planet has
-                     * no crew UI to show at all.
-                     */
-                    if(
-                        claimedBy &&
-                        activePlanetOwnerId
-                    ){
-
-                        const coPilots=
-                            claimedBy.coPilots ||
-                            [];
-
-                        if(isSelectedForLaunch){
-
-                            /*
-                             * The pilot's own view: a plain,
-                             * read-only roster — joining/leaving/
-                             * readying up is each co-pilot's own
-                             * call, not something the pilot drives
-                             * from here.
-                             */
-                            html+=
-                                '<div class="metric-note" '+
-                                'style="text-align:left;">'+
-                                (
-                                    coPilots.length
-                                    ?'👥 Crew: '+
-                                     coPilots.map(
-                                        c=>
-                                            (
-                                                c.ready
-                                                ?'✅ '
-                                                :'⏳ '
-                                            )+c.name
-                                     ).join(", ")
-                                    :'👥 No co-pilots yet — '+
-                                     'room-mates can join from '+
-                                     'here.'
-                                )+
-                                '</div>';
-
-                        }else{
-
-                            const myCrewEntry=
-                                coPilots.find(
-                                    c=>
-                                        c.id===mp.myId
-                                );
-
-                            if(myCrewEntry){
-
-                                html+=
-                                    '<div class="metric-note" '+
-                                    'style="text-align:left;'+
-                                    'margin-bottom:6px;">'+
-                                    '👥 '+
-                                    coPilots.map(
-                                        c=>
-                                            (
-                                                c.ready
-                                                ?'✅ '
-                                                :'⏳ '
-                                            )+c.name
-                                    ).join(", ")+
-                                    '</div>'+
-                                    '<div style="display:flex;'+
-                                    'gap:6px;">'+
-                                    '<button class="control-btn" '+
-                                    'style="flex:1;'+
-                                    (
-                                        myCrewEntry.ready
-                                        ?'background:rgba(80,200,'+
-                                         '120,.18);border-color:'+
-                                         'rgba(80,200,120,.5);'+
-                                         'color:#8ef0ae;'
-                                        :''
-                                    )+
-                                    '" data-action="toggle-'+
-                                    'copilot-ready" data-ship="'+
-                                    ship.id+'">'+
-                                    (
-                                        myCrewEntry.ready
-                                        ?'✅ Ready'
-                                        :'⏳ Not Ready'
-                                    )+
-                                    '</button>'+
-                                    '<button class="control-btn" '+
-                                    'data-action="leave-copilot" '+
-                                    'data-ship="'+ship.id+'">'+
-                                    'Leave</button>'+
-                                    '</div>';
-
-                            }else{
-
-                                html+=
-                                    '<button class="control-btn" '+
-                                    'style="width:100%;" '+
-                                    'data-action="join-copilot" '+
-                                    'data-ship="'+ship.id+'">'+
-                                    '+ Co-pilot ('+
-                                    claimedBy.byName+
-                                    '\'s flight)</button>';
-
-                            }
-
-                        }
-
-                    }
+                    html+=
+                        mpRenderCrewUiHtml(
+                            ship,
+                            claimedBy,
+                            isSelectedForLaunch
+                        );
 
                     /*
                      * ---- SHIP PREVIEW / STYLE ----
