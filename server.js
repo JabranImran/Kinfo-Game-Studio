@@ -890,6 +890,96 @@ function handleMessage(player,message){
 
     }
 
+    if(message.type==='crewLaunch'){
+
+        /*
+         * Sent by the pilot the moment they actually launch — the
+         * cue every READY co-pilot's own client is waiting for to
+         * start their own session of the same flight. Only the
+         * real pilot of this exact ship can send it; a message
+         * claiming to be a launch from anyone else is simply
+         * dropped rather than trusted.
+         */
+        const shipKey=
+            String(message.ownerId || '')+
+            ':'+
+            String(message.shipId || '');
+
+        const claim=
+            room.claimedShips.get(shipKey);
+
+        if(
+            !claim ||
+            claim.byId!==player.id
+        ){
+
+            return;
+
+        }
+
+        broadcastToRoom(
+            room,
+            {
+                type:'crewLaunch',
+                shipKey,
+                ownerId:message.ownerId,
+                shipId:message.shipId,
+                byId:claim.byId,
+                byName:claim.byName,
+                destinationOwnerId:
+                    message.destinationOwnerId ||
+                    null,
+                destinationPlanetId:
+                    message.destinationPlanetId ||
+                    null,
+                mode:message.mode || 'field'
+            },
+            player.id
+        );
+
+        return;
+
+    }
+
+    if(message.type==='crewLanded'){
+
+        /*
+         * The matching "come back down" cue — also pilot-only,
+         * same verification. Broadcast so every co-pilot's client
+         * knows to end its own session of this flight at the same
+         * moment the pilot's real one does, rather than being left
+         * mid-field with no ship to return to.
+         */
+        const shipKey=
+            String(message.ownerId || '')+
+            ':'+
+            String(message.shipId || '');
+
+        const claim=
+            room.claimedShips.get(shipKey);
+
+        if(
+            !claim ||
+            claim.byId!==player.id
+        ){
+
+            return;
+
+        }
+
+        broadcastToRoom(
+            room,
+            {
+                type:'crewLanded',
+                shipKey
+            },
+            player.id
+        );
+
+        return;
+
+    }
+
     if(message.type==='planetAction'){
 
         /*
