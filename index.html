@@ -5296,6 +5296,54 @@ let destinationOwnerId=null;
  * cleared).
  */
 let flyingShipOwnerId=null;
+
+/*
+ * Whose orbital space this player is CURRENTLY in — the actual
+ * shared-presence key, set at launch (to wherever they just
+ * departed from) and updated the moment a destination is chosen
+ * (to wherever they're now headed). Deliberately separate from
+ * destinationOwnerId/destinationPlanetId, which stay null until a
+ * destination is picked: two players who both just launched from
+ * the same planet are logically in the same orbital space around
+ * it from the moment they leave, not only once they happen to pick
+ * identical far-off destinations.
+ */
+let orbitalLocaleOwnerId=null;
+let orbitalLocalePlanetId=null;
+
+/*
+ * True only for the moment between startGame() and the very first
+ * time this mission actually enters orbital space or the field —
+ * both can be re-entered many times over one mission (bouncing
+ * between a field encounter and open travel, continuing a journey
+ * after landing briefly), and the crew-launch cue below must only
+ * ever fire once per real launch, not on every one of those
+ * re-entries, or a ready co-pilot's client would be told to
+ * restart its session mid-flight.
+ */
+let missionJustLaunched=false;
+
+/*
+ * Recomputed fresh rather than tracked incrementally — called both
+ * on every entry into orbital space (including re-entering it after
+ * a field encounter mid-journey) and the instant a destination is
+ * actually chosen, so it's always "wherever this player is headed
+ * if they've picked somewhere, otherwise wherever they most
+ * recently departed from" without needing to special-case a first
+ * launch versus a later leg of the same multi-hop trip.
+ */
+function mpUpdateOrbitalLocale(){
+
+    orbitalLocaleOwnerId=
+        destinationOwnerId ||
+        flyingShipOwnerId ||
+        mp.myId;
+
+    orbitalLocalePlanetId=
+        destinationPlanetId ||
+        currentPlanetId;
+
+}
 let flyingShipOriginPlanetId=null;
 
 let selectedStartPlanet="earth";
@@ -12300,9 +12348,9 @@ function mpBroadcastOrbitalPresence(){
         type:"presence",
         space:"orbital",
         ownerId:
-            destinationOwnerId ||
+            orbitalLocaleOwnerId ||
             mp.myId,
-        planetId:destinationPlanetId,
+        planetId:orbitalLocalePlanetId,
         x:orbitalX,
         y:orbitalY,
         angle:orbitalHeading,
@@ -12330,12 +12378,12 @@ function mpGetRemoteShipsHere(){
 
     if(
         !mp.connected ||
-        !destinationPlanetId
+        !orbitalLocalePlanetId
     )
         return[];
 
     const hereOwnerId=
-        destinationOwnerId ||
+        orbitalLocaleOwnerId ||
         mp.myId;
 
     const now=
@@ -12359,7 +12407,7 @@ function mpGetRemoteShipsHere(){
                 hereOwnerId &&
                 presence.planetId &&
                 presence.planetId===
-                destinationPlanetId &&
+                orbitalLocalePlanetId &&
                 presence.receivedAt &&
                 now-presence.receivedAt<
                 MP_ORBITAL_PRESENCE_INTERVAL_MS*
@@ -12543,6 +12591,40 @@ function mpConnectAndSend(firstMessage){
         }
 
     };
+
+    /*
+     * Keeps the server's lastSeen fresh regardless of what this
+     * player is actually doing — presence ticks only fire while
+     * roaming or in orbital flight, and the asteroid field itself
+     * currently broadcasts nothing at all, so a genuinely normal
+     * run spent fighting for more than the server's 45-second
+     * stale-connection window would otherwise get silently kicked
+     * out mid-mission by its own cleanup timer, looking exactly
+     * like leaving the room. One ping comfortably inside that
+     * window, for as long as this exact socket stays open.
+     */
+    const heartbeat=
+        setInterval(
+            ()=>{
+
+                if(
+                    mp.ws!==socket ||
+                    socket.readyState!==1
+                ){
+
+                    clearInterval(
+                        heartbeat
+                    );
+
+                    return;
+
+                }
+
+                mpSend({type:"ping"});
+
+            },
+            15000
+        );
 
     socket.onerror=()=>{};
 
@@ -12988,6 +13070,112 @@ function mpHandleMessage(message){
         ){
 
             renderPlanetFocus();
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="crewLaunch"){
+
+        if(message.byId===mp.myId)
+            return;
+
+        /*
+         * Only a co-pilot who had actually readied up gets pulled
+         * into the flight — crewLaunch is broadcast to the whole
+         * room (so bystanders could, in principle, see it happen),
+         * but someone who never joined this crew at all has no
+         * business being yanked into someone else's mission. Looked
+         * up fresh against this player's own crew membership rather
+         * than trusting a list on the message itself.
+         */
+        const crew=
+            mpGetShipCrew(
+                message.ownerId,
+                message.shipId
+            );
+
+        const amCoPilot=
+            crew &&
+            crew.byId===message.byId &&
+            (crew.coPilots || []).some(
+                c=>c.id===mp.myId
+            );
+
+        if(!amCoPilot)
+            return;
+
+        /*
+         * Whatever this player happened to be looking at gets
+         * closed first — startGame() (called from
+         * mpStartCoPilotSession) only ever hides the home/pause/
+         * game-over screens, since that's all a NORMAL launch ever
+         * needs to — a co-pilot could just as easily have a menu,
+         * the star map, or the leaderboard open instead, any of
+         * which would otherwise sit on top of the game they're
+         * about to be dropped into.
+         */
+        if(planetDetailId){
+
+            closePlanetDetail();
+
+        }
+
+        if(
+            typeof closeStarMap===
+            "function"
+        ){
+
+            closeStarMap();
+
+        }
+
+        leaderboardScreen.classList.add(
+            "hidden"
+        );
+
+        if(
+            typeof mpStartCoPilotSession===
+            "function"
+        ){
+
+            mpStartCoPilotSession(
+                message
+            );
+
+        }
+
+        return;
+
+    }
+
+    if(message.type==="crewLanded"){
+
+        /*
+         * Must match the SPECIFIC crew this session is actually
+         * part of, not just "some ship landed somewhere" — nothing
+         * stops a player from being listed as crew on more than one
+         * claimed ship at once, and without this check any one of
+         * them landing would wrongly end a session that's actually
+         * following a completely different flight.
+         */
+        if(
+            message.shipKey!==
+            coPilotSessionShipKey
+        ){
+
+            return;
+
+        }
+
+        if(
+            typeof mpEndCoPilotSession===
+            "function"
+        ){
+
+            mpEndCoPilotSession();
 
         }
 
@@ -28834,6 +29022,234 @@ function mpSetCoPilotReady(
 
 }
 
+/*
+ * Called once per real launch (see missionJustLaunched, which this
+ * both reads and clears) from the very first entry into orbital
+ * space or the field — if this player is genuinely the claimed
+ * pilot of the ship they just launched AND it has a crew, every
+ * co-pilot is told to start their own session of this same flight.
+ * A silent no-op for the overwhelming majority of launches (no
+ * crew, not connected, or not actually a tracked claim at all).
+ */
+function mpMaybeBroadcastCrewLaunch(mode){
+
+    if(!missionJustLaunched)
+        return;
+
+    missionJustLaunched=false;
+
+    if(
+        !mp.connected ||
+        !currentShipId
+    ){
+
+        return;
+
+    }
+
+    const ownerId=
+        flyingShipOwnerId ||
+        mp.myId;
+
+    const crew=
+        mpGetShipCrew(
+            ownerId,
+            currentShipId
+        );
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return;
+
+    }
+
+    /*
+     * Sends the already-resolved LOCALE, not raw destinationOwnerId/
+     * destinationPlanetId directly — those are still null until a
+     * destination is actually chosen, but orbitalLocale* (just
+     * computed by mpUpdateOrbitalLocale, called right before this)
+     * already correctly falls back to the departure planet in that
+     * case, which is exactly what a co-pilot's own session needs to
+     * match against from the very first moment, not only once a
+     * destination happens to get picked later in the flight.
+     */
+    mpSend({
+        type:"crewLaunch",
+        ownerId,
+        shipId:currentShipId,
+        destinationOwnerId:
+            orbitalLocaleOwnerId,
+        destinationPlanetId:
+            orbitalLocalePlanetId,
+        /*
+         * Which of the two a co-pilot's own session should enter —
+         * sent explicitly rather than left for their client to
+         * decide, since isOrbitalUnlocked() reads
+         * currentShipPendingPilot, which only ever means something
+         * for the actual flying ship, not a co-pilot's own session.
+         */
+        mode:mode || "field"
+    });
+
+}
+
+/*
+ * The landing-side counterpart — called once, right where
+ * landAtCurrentPlanetInner already knows this run is actually
+ * ending, before currentShipId/flyingShipOwnerId get cleared for
+ * the next one. Tells any still-aboard co-pilots to end their own
+ * session of this flight at the same moment, rather than being
+ * left stranded mid-field with the pilot already gone.
+ */
+function mpMaybeBroadcastCrewLanded(
+    ownerId,shipId
+){
+
+    if(
+        !mp.connected ||
+        !shipId
+    ){
+
+        return;
+
+    }
+
+    const crew=
+        mpGetShipCrew(ownerId,shipId);
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return;
+
+    }
+
+    mpSend({
+        type:"crewLanded",
+        ownerId,
+        shipId
+    });
+
+}
+
+/*
+ * Which crew (ownerId+shipId) this player's current session is
+ * actually flying along with as a co-pilot — null for the
+ * overwhelming majority of sessions (this player's own real
+ * flight). Set by mpStartCoPilotSession, read and cleared by
+ * mpEndCoPilotSession.
+ */
+let coPilotSessionShipKey=null;
+
+/*
+ * Runs on a CO-PILOT's client the moment the pilot's own crewLaunch
+ * cue arrives. Deliberately reuses startGame() completely
+ * unmodified for every session-global reset it already does —
+ * hand-replicating that same long list here would be a second,
+ * separately-maintained copy of logic that's already been tested,
+ * and risks silently missing one. The one thing startGame() can't
+ * get right on its own is whether to enter orbital space or go
+ * straight to the field: that decision normally comes from THIS
+ * player's own ship's pilot-pet assignment, which has nothing to
+ * do with the actual pilot's ship, so it's taken directly from the
+ * message instead, and entered explicitly rather than through the
+ * normal completeDeparture() animation flow (there's no time for
+ * an animation here — the co-pilot needs to be in exactly the same
+ * place as the pilot right now).
+ */
+function mpStartCoPilotSession(message){
+
+    if(running)
+        return;
+
+    const freshShip=
+        createShip(
+            "earth",0,0,"emp",1,3
+        );
+
+    selectedStartPlanet="earth";
+
+    selectedLaunchShipId=
+        freshShip.id;
+
+    coPilotSessionShipKey=
+        mpShipKey(
+            message.ownerId,
+            message.shipId
+        );
+
+    gameOver=false;
+
+    startGame();
+
+    if(message.mode==="orbital"){
+
+        enterOrbitalSpace();
+
+    }else{
+
+        enterAsteroidField();
+
+    }
+
+    /*
+     * Both calls above internally call mpUpdateOrbitalLocale(),
+     * which would otherwise compute THIS player's own locale (their
+     * own id, their own currentPlanetId) — deliberately overridden
+     * here, AFTER, with the pilot's real locale from the message,
+     * since that's what actually needs to match for co-presence.
+     * destinationOwnerId/destinationPlanetId themselves are left
+     * alone rather than also overwritten — they drive other things
+     * (mission progression, the star map) that are specifically
+     * about what THIS player chose to fly toward, which a co-pilot
+     * never did.
+     */
+    orbitalLocaleOwnerId=
+        message.destinationOwnerId;
+
+    orbitalLocalePlanetId=
+        message.destinationPlanetId;
+
+}
+
+/*
+ * The landing-side counterpart, run when the pilot's crewLanded
+ * cue arrives. Reuses the genuinely real landing flow too — this
+ * player's fresh ship earned whatever it earned, and lands on
+ * their own Earth exactly like any other solo flight would, which
+ * is the actual, deliberate design: co-piloting is real play with
+ * a real (if independent) reward, not a read-only ride-along.
+ */
+function mpEndCoPilotSession(){
+
+    if(
+        !running ||
+        !coPilotSessionShipKey
+    ){
+
+        return;
+
+    }
+
+    coPilotSessionShipKey=null;
+
+    worldState="planet";
+
+    currentPlanetId="earth";
+
+    landAtCurrentPlanet();
+
+}
+
 function resolveEarthLaunchChoice(){
 
     const candidates=
@@ -34830,6 +35246,30 @@ function executePlanetDetailAction(target){
                 shipId;
 
             savePlanetProgress();
+
+            /*
+             * This branch only ever runs for a ship on THIS
+             * player's own planet (a visitor's selection on a
+             * room-mate's planet goes through mpInterceptPlanetAction
+             * instead, never reaching executePlanetDetailAction at
+             * all) — but room-mates still need to know this ship
+             * is now piloted, or there'd be no way for anyone to
+             * join it as a co-pilot at all. Broadcasting a claim
+             * here is always safe even outside a room: mpSend is a
+             * silent no-op whenever mp.connected is false.
+             */
+            if(
+                typeof mp!=="undefined" &&
+                mp.connected
+            ){
+
+                mpSend({
+                    type:"claimShip",
+                    ownerId:mp.myId,
+                    shipId
+                });
+
+            }
 
             sound("click");
 
@@ -52029,6 +52469,24 @@ function enterOrbitalSpace(){
 
     worldTimer=0;
 
+    if(
+        typeof mpUpdateOrbitalLocale===
+        "function"
+    ){
+
+        mpUpdateOrbitalLocale();
+
+    }
+
+    if(
+        typeof mpMaybeBroadcastCrewLaunch===
+        "function"
+    ){
+
+        mpMaybeBroadcastCrewLaunch("orbital");
+
+    }
+
     /*
      * Same transition-triggered random pick as entering a field —
      * orbital space doesn't have its own destination planet yet
@@ -53172,6 +53630,32 @@ function enterAsteroidField(
     worldTimer=0;
 
     /*
+     * Covers the direct-to-field launch path (a ship without
+     * orbital unlocked skips enterOrbitalSpace entirely) — for any
+     * OTHER path into the field (arriving after orbital travel,
+     * encountering a belt mid-flight), missionJustLaunched is
+     * already false by the time execution reaches here, so both
+     * calls are naturally safe no-ops there.
+     */
+    if(
+        typeof mpUpdateOrbitalLocale===
+        "function"
+    ){
+
+        mpUpdateOrbitalLocale();
+
+    }
+
+    if(
+        typeof mpMaybeBroadcastCrewLaunch===
+        "function"
+    ){
+
+        mpMaybeBroadcastCrewLaunch("field");
+
+    }
+
+    /*
      * A fresh random pick every time a field actually starts —
      * this IS the "whenever there's a transition from asteroid
      * space or planet space" mechanism directly requested.
@@ -53704,6 +54188,15 @@ function chooseDestination(id,ownerId){
         ?ownerId
         :null;
 
+    if(
+        typeof mpUpdateOrbitalLocale===
+        "function"
+    ){
+
+        mpUpdateOrbitalLocale();
+
+    }
+
     destinationLayer.classList.remove(
         "show"
     );
@@ -53784,6 +54277,20 @@ function landAtCurrentPlanetInner(){
         worldState!=="planet"
     )
         return;
+
+    /*
+     * Captured before anything below can reassign currentShipId —
+     * a ship that departed normally (removeShip at launch, not the
+     * remote-claim path) is no longer docked anywhere by the time
+     * landing runs, so the dockedHere/createShip branch further
+     * down creates a genuinely NEW ship record and points
+     * currentShipId at IT instead. The crew this player might be
+     * piloting was claimed under the ORIGINAL id, so that's what
+     * the crewLanded broadcast has to key off, not whatever id
+     * currentShipId ends up holding by the end of this function.
+     */
+    const shipIdAtLandingStart=
+        currentShipId;
 
     const planet=
         getPlanet(
@@ -54171,6 +54678,26 @@ function landAtCurrentPlanetInner(){
     }
 
     /*
+     * Any still-aboard co-pilots need telling the flight just
+     * ended, win, lose, or anywhere in between — done here, before
+     * currentShipId/flyingShipOwnerId get cleared below, since this
+     * is the last point either is still valid for BOTH a local
+     * ship (owner is this player) and a remote-claimed one (owner
+     * is flyingShipOwnerId).
+     */
+    if(
+        typeof mpMaybeBroadcastCrewLanded===
+        "function"
+    ){
+
+        mpMaybeBroadcastCrewLanded(
+            flyingShipOwnerId || mp.myId,
+            shipIdAtLandingStart
+        );
+
+    }
+
+    /*
      * The actual handoff, now that remoteLandingShipData reflects
      * everything this flight really earned — including each cargo
      * pet's updated pilotPoints from just above. currentShipId
@@ -54217,6 +54744,21 @@ function landAtCurrentPlanetInner(){
 
     savePlanetProgress();
 
+    /*
+     * Cleared on every landing, remote-ship flights included —
+     * next mission's enterOrbitalSpace/chooseDestination will
+     * recompute these fresh from scratch, and leaving stale values
+     * sitting here between missions risks a future orbital-presence
+     * check matching against a destination this player isn't
+     * actually travelling to anymore.
+     */
+    destinationPlanetId=null;
+
+    destinationOwnerId=null;
+
+    orbitalLocaleOwnerId=null;
+
+    orbitalLocalePlanetId=null;
 
     running=false;
 
@@ -57299,6 +57841,8 @@ function startGame(){
         mpExitRemotePlanetView();
 
     }
+
+    missionJustLaunched=true;
 
     currentPlanetId=
         chosen.id;
