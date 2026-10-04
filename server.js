@@ -20,6 +20,9 @@
  */
 
 const http=require('http');
+const fs=require('fs');
+const path=require('path');
+const crypto=require('crypto');
 const WebSocket=require('ws');
 
 const PORT=process.env.PORT || 3000;
@@ -70,6 +73,18 @@ function makeRoomCode(){
     }while(rooms.has(code));
 
     return code;
+
+}
+
+/*
+ * A per-player secret, issued on host/join and required to resume
+ * that same seat later — the player id itself is visible to every
+ * room-mate (it's in the roster), so it can't double as proof of
+ * identity on its own.
+ */
+function makeToken(){
+
+    return crypto.randomBytes(18).toString('hex');
 
 }
 
@@ -133,6 +148,36 @@ function sanitizeName(name){
 
 }
 
+/*
+ * Every member gets a colour nobody else in the room is using —
+ * it's what tells players apart on name tags, tap rings and the
+ * crew scoreboard, so two players sharing one would make all of
+ * those ambiguous. Assigned by the server (the only place that can
+ * see the whole room), first free colour in this order.
+ */
+const PLAYER_PALETTE=[
+    '#6ee7ff','#ff7ab6','#ffd166',
+    '#8ef0ae','#b39dff','#ff9f6b'
+];
+
+function pickFreeColour(room,forPlayer){
+
+    const used=new Set(
+        [...room.players.values()]
+            .filter(p=>p!==forPlayer)
+            .map(p=>p.colour)
+    );
+
+    return(
+        PLAYER_PALETTE.find(c=>!used.has(c)) ||
+        PLAYER_PALETTE[
+            room.players.size %
+            PLAYER_PALETTE.length
+        ]
+    );
+
+}
+
 function sanitizeColour(colour){
 
     return(
@@ -151,7 +196,9 @@ function rosterFor(room){
             id:p.id,
             name:p.name,
             colour:p.colour,
-            hasSave:!!p.planetSave
+            hasSave:!!p.planetSave,
+            online:!!p.online,
+            lastSeen:p.lastSeen
         })
     );
 
@@ -171,16 +218,13 @@ function sendRoster(room){
 
 }
 
-function removePlayerFromRoom(player){
-
-    if(!player || !player.roomCode)
-        return;
-
-    const room=
-        rooms.get(player.roomCode);
-
-    if(!room)
-        return;
+/*
+ * Releases everything LIVE a player was holding — ship claims they
+ * were piloting, crew seats they'd taken — whether they're leaving
+ * the room for good or just going offline. A ship can't stay locked
+ * to someone who isn't there to fly it.
+ */
+function releasePlayerClaims(room,player){
 
     /*
      * A player who disconnects mid-flight shouldn't leave a ship
@@ -242,6 +286,99 @@ function removePlayerFromRoom(player){
         }
     );
 
+}
+
+/*
+ * A closed connection is NOT leaving — the player stays a member of
+ * the room (their planet stays visible to everyone, their seat is
+ * kept for when they come back) and is just marked offline. Only an
+ * explicit 'leave' removes them. `ws` guards against a stale socket's
+ * close event arriving after the same player already reconnected on
+ * a new one.
+ */
+function markPlayerOffline(player,ws){
+
+    if(!player || player.ws!==ws)
+        return;
+
+    player.ws=null;
+
+    player.online=false;
+
+    player.presence=null;
+
+    if(!player.roomCode)
+        return;
+
+    const room=
+        rooms.get(player.roomCode);
+
+    if(!room)
+        return;
+
+    releasePlayerClaims(room,player);
+
+    /*
+     * Also free claims OTHER players held on this player's ships —
+     * those can't be launched while the owner is away. (A flight
+     * already under way is unaffected: its results are queued for
+     * the owner instead, see shipLifecycle.)
+     */
+    room.claimedShips.forEach(
+        (claim,shipKey)=>{
+
+            if(
+                shipKey.indexOf(
+                    player.id+':'
+                )===0
+            ){
+
+                room.claimedShips.delete(
+                    shipKey
+                );
+
+                broadcastToRoom(
+                    room,
+                    {
+                        type:'shipReleased',
+                        shipKey,
+                        coPilotIds:
+                            (claim.coPilots || []).
+                            map(cp=>cp.id)
+                    },
+                    null
+                );
+
+            }
+
+        }
+    );
+
+    broadcastToRoom(
+        room,
+        {type:'playerOffline',id:player.id},
+        null
+    );
+
+    sendRoster(room);
+
+    schedulePersist();
+
+}
+
+function removePlayerFromRoom(player){
+
+    if(!player || !player.roomCode)
+        return;
+
+    const room=
+        rooms.get(player.roomCode);
+
+    if(!room)
+        return;
+
+    releasePlayerClaims(room,player);
+
     room.players.delete(player.id);
 
     broadcastToRoom(
@@ -268,9 +405,14 @@ function removePlayerFromRoom(player){
          */
         if(room.hostId===player.id){
 
+            const members=
+                [...room.players.values()];
+
             room.hostId=
-                room.players.keys().
-                next().value;
+                (
+                    members.find(p=>p.online) ||
+                    members[0]
+                ).id;
 
         }
 
@@ -279,6 +421,8 @@ function removePlayerFromRoom(player){
     }
 
     player.roomCode=null;
+
+    schedulePersist();
 
 }
 
@@ -308,16 +452,27 @@ wss.on(
     'connection',
     ws=>{
 
-        const player={
-            id:makePlayerId(),
-            ws,
-            name:'Player',
-            colour:'#6ee7ff',
-            roomCode:null,
-            planetSave:null,
-            presence:null,
-            lastSeen:Date.now()
+        /*
+         * conn.player can be SWAPPED by a successful 'resume' — this
+         * connection then speaks as the stored member it reclaimed,
+         * not the throwaway identity it started with.
+         */
+        const conn={
+            player:{
+                id:makePlayerId(),
+                token:null,
+                ws,
+                online:true,
+                name:'Player',
+                colour:'#6ee7ff',
+                roomCode:null,
+                planetSave:null,
+                presence:null,
+                lastSeen:Date.now()
+            }
         };
+
+        const player=conn.player;
 
         send(
             ws,
@@ -352,10 +507,64 @@ wss.on(
 
                 }
 
-                player.lastSeen=Date.now();
+                conn.player.lastSeen=Date.now();
+
+                if(message.type==='resume'){
+
+                    resumePlayer(conn,ws,message);
+
+                    return;
+
+                }
+
+                /*
+                 * Leaving while NOT currently resumed (pressed Leave
+                 * while the app was still reconnecting) — proven by
+                 * the same token, so a seat can always be given up,
+                 * not only while connected.
+                 */
+                if(message.type==='leaveRoom'){
+
+                    const room=
+                        rooms.get(
+                            String(message.code || '')
+                                .trim().toUpperCase()
+                        );
+
+                    const member=
+                        room &&
+                        room.players.get(
+                            String(message.id || '')
+                        );
+
+                    if(
+                        member &&
+                        member.token &&
+                        member.token===message.token
+                    ){
+
+                        if(member.ws && member.ws!==ws){
+
+                            try{ member.ws.close(); }catch(error){}
+
+                        }
+
+                        member.ws=null;
+
+                        removePlayerFromRoom(member);
+
+                    }
+
+                    send(ws,{type:'leftRoom'});
+
+                    try{ ws.close(); }catch(error){}
+
+                    return;
+
+                }
 
                 handleMessage(
-                    player,
+                    conn.player,
                     message
                 );
 
@@ -364,12 +573,12 @@ wss.on(
 
         ws.on(
             'close',
-            ()=>removePlayerFromRoom(player)
+            ()=>markPlayerOffline(conn.player,ws)
         );
 
         ws.on(
             'error',
-            ()=>removePlayerFromRoom(player)
+            ()=>markPlayerOffline(conn.player,ws)
         );
 
     }
@@ -430,14 +639,25 @@ function handleMessage(player,message){
 
         player.roomCode=code;
 
+        player.token=makeToken();
+
+        player.online=true;
+
+        player.colour=
+            pickFreeColour(room,player);
+
         send(
             player.ws,
             {
                 type:'hosted',
                 code,
-                id:player.id
+                id:player.id,
+                token:player.token,
+                colour:player.colour
             }
         );
+
+        schedulePersist();
 
         sendRoster(room);
 
@@ -484,7 +704,9 @@ function handleMessage(player,message){
                     message:
                         'That room is full ('+
                         MAX_PLAYERS_PER_ROOM+
-                        ' players).'
+                        ' members — offline members '+
+                        'keep their seat until they '+
+                        'leave the room).'
                 }
             );
 
@@ -508,14 +730,25 @@ function handleMessage(player,message){
 
         player.roomCode=code;
 
+        player.token=makeToken();
+
+        player.online=true;
+
+        player.colour=
+            pickFreeColour(room,player);
+
         send(
             player.ws,
             {
                 type:'joined',
                 code,
-                id:player.id
+                id:player.id,
+                token:player.token,
+                colour:player.colour
             }
         );
+
+        schedulePersist();
 
         /*
          * Catch the new arrival up on everyone already there —
@@ -566,7 +799,10 @@ function handleMessage(player,message){
 
                 }
 
-                if(existing.presence){
+                if(
+                    existing.online &&
+                    existing.presence
+                ){
 
                     send(
                         player.ws,
@@ -607,6 +843,8 @@ function handleMessage(player,message){
         player.planetSave=
             message.planetSave || null;
 
+        schedulePersist();
+
         broadcastToRoom(
             room,
             {
@@ -633,8 +871,8 @@ function handleMessage(player,message){
          * happening on, since a visitor's own presence is reported
          * against the planet they're currently on, not their own).
          * The server never interprets any of these, only relays
-         * them, so a new space can add whatever fields it needs
-         * without a server change.
+         * them — but it does relay ONLY the fields listed here, so
+         * a new presence field genuinely needs adding below too.
          */
         player.presence={
             space:message.space || null,
@@ -659,6 +897,14 @@ function handleMessage(player,message){
             lives:
                 Number.isFinite(message.lives)
                 ?message.lives
+                :null,
+            styleId:
+                typeof message.styleId==='string'
+                ?message.styleId.slice(0,32)
+                :null,
+            styleOwnerId:
+                typeof message.styleOwnerId==='string'
+                ?message.styleOwnerId.slice(0,64)
                 :null
         };
 
@@ -932,7 +1178,10 @@ function handleMessage(player,message){
                 destinationPlanetId:
                     message.destinationPlanetId ||
                     null,
-                mode:message.mode || 'field'
+                mode:message.mode || 'field',
+                styleId:message.styleId || null,
+                styleOwnerId:
+                    message.styleOwnerId || null
             },
             player.id
         );
@@ -1008,22 +1257,49 @@ function handleMessage(player,message){
     if(message.type==='shipLifecycle'){
 
         /*
-         * The launch/landing handoff for a claimed ship someone is
-         * flying from a planet they don't own — just a relay, same
-         * shape as planetAction: only the real owner's client
-         * (message.ownerId matching its own id) acts on it. "launch"
-         * marks the ship in-flight in the owner's own save without
-         * removing it; "landing" carries the finished run's actual
-         * results back to be written in. The server never inspects
-         * which is which, only relays.
+         * The launch/landing/death handoff for a claimed ship
+         * someone is flying from a planet they don't own — just a
+         * relay, same shape as planetAction: only the real owner's
+         * client (message.ownerId matching its own id) acts on it.
+         * "launch" marks the ship in-flight in the owner's own save
+         * without removing it; "landing" carries the finished run's
+         * actual results back to be written in; "lost" means the
+         * flight ended in death rather than a landing, and the
+         * owner's record is removed entirely rather than updated.
+         * The server never inspects which is which, only relays.
          */
-        broadcastToRoom(
-            room,
+        const lifecycleMessage=
             Object.assign(
                 {type:'shipLifecycle',fromId:player.id,
                  fromName:player.name},
                 message.payload || {}
-            ),
+            );
+
+        /*
+         * The owner's device is what applies this — if they're
+         * offline (closed the app mid-way through someone flying
+         * their ship), hold it and deliver it the moment they
+         * reconnect, rather than losing that flight's results.
+         */
+        const owner=
+            room.players.get(
+                lifecycleMessage.ownerId
+            );
+
+        if(owner && !owner.online){
+
+            owner.pendingLifecycle=
+                (owner.pendingLifecycle || [])
+                    .concat([lifecycleMessage])
+                    .slice(-50);
+
+            schedulePersist();
+
+        }
+
+        broadcastToRoom(
+            room,
+            lifecycleMessage,
             player.id
         );
 
@@ -1069,17 +1345,20 @@ setInterval(
                     p=>{
 
                         if(
+                            p.online &&
                             now-p.lastSeen>
                             STALE_MS
                         ){
 
+                            const staleWs=p.ws;
+
+                            markPlayerOffline(p,staleWs);
+
                             try{
 
-                                p.ws.terminate();
+                                staleWs.terminate();
 
                             }catch(error){}
-
-                            removePlayerFromRoom(p);
 
                         }
 
@@ -1093,7 +1372,363 @@ setInterval(
     15*1000
 );
 
+/*
+ * Rooms are only ever removed by their last member leaving — or,
+ * so abandoned rooms don't accumulate forever, after nobody in them
+ * has been online for this long.
+ */
+const ROOM_EXPIRY_MS=30*24*60*60*1000;
+
+setInterval(
+    ()=>{
+
+        const now=Date.now();
+
+        rooms.forEach(
+            (room,code)=>{
+
+                const members=
+                    [...room.players.values()];
+
+                if(
+                    !members.some(p=>p.online) &&
+                    members.every(
+                        p=>now-(p.lastSeen || 0)>
+                        ROOM_EXPIRY_MS
+                    )
+                ){
+
+                    rooms.delete(code);
+
+                    schedulePersist();
+
+                }
+
+            }
+        );
+
+    },
+    60*60*1000
+);
+
+/* ---- RESUME: reclaim a stored seat on a new connection ---- */
+function resumePlayer(conn,ws,message){
+
+    const code=
+        String(message.code || '')
+            .trim()
+            .toUpperCase();
+
+    const room=
+        rooms.get(code);
+
+    const member=
+        room &&
+        room.players.get(
+            String(message.id || '')
+        );
+
+    if(
+        !member ||
+        !member.token ||
+        member.token!==message.token
+    ){
+
+        send(
+            ws,
+            {
+                type:'resumeFailed',
+                message:
+                    room
+                    ?'Your seat in room "'+code+
+                     '" could not be restored.'
+                    :'Room "'+code+
+                     '" no longer exists.'
+            }
+        );
+
+        return;
+
+    }
+
+    /*
+     * Already connected elsewhere (a second tab, or a reconnect that
+     * beat the old socket's close) — the newest connection wins.
+     */
+    if(
+        member.ws &&
+        member.ws!==ws
+    ){
+
+        const oldWs=member.ws;
+
+        member.ws=null;
+
+        try{
+
+            oldWs.close();
+
+        }catch(error){}
+
+    }
+
+    member.ws=ws;
+
+    member.online=true;
+
+    member.lastSeen=Date.now();
+
+    conn.player=member;
+
+    if(
+        [...room.players.values()].some(
+            p=>p!==member &&
+            p.colour===member.colour
+        )
+    ){
+
+        member.colour=
+            pickFreeColour(room,member);
+
+    }
+
+    send(
+        ws,
+        {
+            type:'resumed',
+            code,
+            id:member.id,
+            token:member.token,
+            colour:member.colour,
+            isHost:room.hostId===member.id
+        }
+    );
+
+    if(room.claimedShips.size){
+
+        send(
+            ws,
+            {
+                type:'shipClaims',
+                claims:
+                    [...room.claimedShips.entries()].map(
+                        ([shipKey,claim])=>({
+                            shipKey,
+                            byId:claim.byId,
+                            byName:claim.byName,
+                            coPilots:
+                                claim.coPilots || []
+                        })
+                    )
+            }
+        );
+
+    }
+
+    room.players.forEach(
+        existing=>{
+
+            if(existing.id===member.id)
+                return;
+
+            if(existing.planetSave){
+
+                send(
+                    ws,
+                    {
+                        type:'sync',
+                        id:existing.id,
+                        name:existing.name,
+                        colour:existing.colour,
+                        planetSave:
+                            existing.planetSave
+                    }
+                );
+
+            }
+
+        }
+    );
+
+    sendRoster(room);
+
+    (member.pendingLifecycle || []).forEach(
+        queued=>send(ws,queued)
+    );
+
+    member.pendingLifecycle=[];
+
+    schedulePersist();
+
+}
+
+/* ---- PERSISTENCE: rooms survive a server restart ---- */
+let persistFile=null;
+
+let persistTimer=null;
+
+function schedulePersist(){
+
+    if(!persistFile)
+        return;
+
+    clearTimeout(persistTimer);
+
+    persistTimer=
+        setTimeout(persistNow,2000);
+
+}
+
+function persistNow(){
+
+    if(!persistFile)
+        return;
+
+    const data=
+        [...rooms.values()].map(
+            room=>({
+                code:room.code,
+                hostId:room.hostId,
+                createdAt:room.createdAt,
+                players:
+                    [...room.players.values()].map(
+                        p=>({
+                            id:p.id,
+                            token:p.token,
+                            name:p.name,
+                            colour:p.colour,
+                            planetSave:p.planetSave,
+                            lastSeen:p.lastSeen,
+                            pendingLifecycle:
+                                p.pendingLifecycle || []
+                        })
+                    )
+            })
+        );
+
+    try{
+
+        const tmp=persistFile+'.tmp';
+
+        fs.writeFileSync(
+            tmp,
+            JSON.stringify(data)
+        );
+
+        fs.renameSync(tmp,persistFile);
+
+    }catch(error){
+
+        console.error(
+            'Could not save rooms:',
+            error.message
+        );
+
+    }
+
+}
+
+function enablePersistence(file){
+
+    persistFile=file;
+
+    try{
+
+        if(!fs.existsSync(file))
+            return;
+
+        const data=
+            JSON.parse(
+                fs.readFileSync(file,'utf8')
+            );
+
+        (Array.isArray(data)?data:[]).forEach(
+            r=>{
+
+                if(!r || !r.code)
+                    return;
+
+                const room={
+                    code:r.code,
+                    hostId:r.hostId,
+                    createdAt:r.createdAt || Date.now(),
+                    claimedShips:new Map(),
+                    players:new Map()
+                };
+
+                (r.players || []).forEach(
+                    p=>{
+
+                        if(!p || !p.id)
+                            return;
+
+                        room.players.set(
+                            p.id,
+                            {
+                                id:p.id,
+                                token:p.token,
+                                ws:null,
+                                online:false,
+                                name:p.name || 'Player',
+                                colour:p.colour || '#6ee7ff',
+                                roomCode:r.code,
+                                planetSave:p.planetSave || null,
+                                presence:null,
+                                lastSeen:p.lastSeen || 0,
+                                pendingLifecycle:
+                                    p.pendingLifecycle || []
+                            }
+                        );
+
+                    }
+                );
+
+                if(room.players.size){
+
+                    rooms.set(r.code,room);
+
+                }
+
+            }
+        );
+
+        console.log(
+            'Restored '+rooms.size+
+            ' room(s) from disk.'
+        );
+
+    }catch(error){
+
+        console.error(
+            'Could not load saved rooms:',
+            error.message
+        );
+
+    }
+
+}
+
 if(require.main===module){
+
+    enablePersistence(
+        process.env.ROOMS_FILE ||
+        path.join(
+            __dirname,
+            'rooms-data.json'
+        )
+    );
+
+    const shutdown=()=>{
+
+        persistNow();
+
+        process.exit(0);
+
+    };
+
+    process.on('SIGTERM',shutdown);
+
+    process.on('SIGINT',shutdown);
 
     server.listen(
         PORT,
@@ -1105,4 +1740,4 @@ if(require.main===module){
 
 }
 
-module.exports={server,wss,rooms};
+module.exports={server,wss,rooms,enablePersistence,persistNow};
