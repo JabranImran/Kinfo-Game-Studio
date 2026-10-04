@@ -5560,11 +5560,22 @@ let asteroids=[];
  */
 let fieldObjectIdCounter=0;
 
+/*
+ * Ids must also be unique ACROSS devices now that orbital asteroids
+ * are shared — a per-page random salt keeps two players' counters
+ * from ever producing the same id (still a plain, safe integer).
+ */
+const FIELD_OBJECT_ID_SALT=
+    1+Math.floor(Math.random()*1e6);
+
 function nextFieldObjectId(){
 
     fieldObjectIdCounter+=1;
 
-    return fieldObjectIdCounter;
+    return(
+        FIELD_OBJECT_ID_SALT*1e6+
+        fieldObjectIdCounter
+    );
 
 }
 let explosions=[];
@@ -9301,8 +9312,16 @@ function launchPendingMission(planetId,shipId){
 
     if(
         getTotalPlayerShipCount()<2
-    )
+    ){
+
+        showShipToast(
+            "Keep another ship docked first — "+
+            "a pet can't take your only ship."
+        );
+
         return;
+
+    }
 
     const pet=
         ship.pendingPilot;
@@ -12297,7 +12316,8 @@ function savePlanetProgress(
      */
     if(
         typeof mp!=="undefined" &&
-        mp.connected
+        mp.connected &&
+        !mp.awaitingOwnSave
     ){
 
         mpSend({
@@ -12312,6 +12332,8 @@ function savePlanetProgress(
                     }
                 )
         });
+
+        mpStoreSharedBase(data);
 
     }
 
@@ -12371,6 +12393,9 @@ let mp={
      */
     claimedShips:{},
 
+    /* ownerId -> version number of the remotePlanetSaves copy */
+    remoteSaveRevs:{},
+
     lastError:null
 
 };
@@ -12423,7 +12448,10 @@ function mpSend(message){
  */
 function mpBroadcastOwnSave(){
 
-    if(mp.connected){
+    if(
+        mp.connected &&
+        !mp.awaitingOwnSave
+    ){
 
         mpSend({
             type:"sync",
@@ -12437,6 +12465,8 @@ function mpBroadcastOwnSave(){
                     }
                 )
         });
+
+        mpStoreSharedBase(localPlanetSave);
 
     }
 
@@ -13274,6 +13304,28 @@ function mpHandleRemoteFieldEvent(message){
 
     }
 
+    if(event.kind==="orbitalSnapshot"){
+
+        mpApplyOrbitalSnapshot(
+            message.id,
+            event
+        );
+
+        return;
+
+    }
+
+    if(event.kind==="orbitalChange"){
+
+        mpApplyOrbitalChange(
+            message.id,
+            event
+        );
+
+        return;
+
+    }
+
     if(event.kind==="tapPing"){
 
         mpReceiveTapPing(
@@ -13982,6 +14034,642 @@ function mpGetRemoteShipsHere(){
 
 }
 
+/* =========================================================
+   SHARED ORBITAL FIELD
+   Everyone in the same orbital space (same owner's system, same
+   planet) flies through ONE set of asteroids. One device runs the
+   field — spawns, moves, keeps it under the load cap — and shares
+   it in WORLD coordinates; the others mirror it, each placing the
+   asteroids relative to its own camera, so a rock is in the same
+   spot in space for everybody.
+
+   Destroying a rock is still handled by the destroyer's own device
+   (their score, their coins), which then reports what changed —
+   the rock gone, the fragments it split into, ids included — so
+   everyone's field stays the same field.
+
+   Who runs it: whoever is already running it keeps doing so. A
+   newcomer listens briefly before ever taking over, so arriving
+   never wipes an established field; if the one running it leaves,
+   the remaining player with the lowest id takes over within about
+   a second, keeping the asteroids already on screen.
+========================================================= */
+const MP_ORBITAL_SNAPSHOT_INTERVAL_MS=150;
+const MP_ORBITAL_AUTHORITY_TIMEOUT_MS=1200;
+const MP_ORBITAL_LISTEN_MS=700;
+const MP_ORBITAL_PENDING_MS=2000;
+
+const mpOrbitalAuth={
+    localeKey:null,
+    authorityId:null,
+    lastSnapshotAt:0,
+    enteredAt:0
+};
+
+let mpLastOrbitalSnapshotAt=0;
+
+/* ids this device just destroyed / created and reported — kept out
+   of (or in) the mirror until the field's runner has caught up */
+const mpOrbitalPendingDestroyed=new Map();
+const mpOrbitalPendingAdded=new Map();
+
+let mpOrbitalPrev=new Map();
+
+function mpOrbitalPeers(){
+
+    if(
+        typeof mp==="undefined" ||
+        !mp.connected ||
+        worldState!=="orbital" ||
+        !running
+    ){
+
+        return [];
+
+    }
+
+    return mpGetRemoteShipsHere().filter(
+        r=>r.presence
+    );
+
+}
+
+function mpOrbitalLocale(){
+
+    return{
+        ownerId:
+            orbitalLocaleOwnerId ||
+            mp.myId,
+        planetId:
+            orbitalLocalePlanetId
+    };
+
+}
+
+function mpIsOrbitalAuthority(){
+
+    const peers=
+        mpOrbitalPeers();
+
+    const key=
+        getOrbitalLocaleKey();
+
+    const now=
+        performance.now();
+
+    if(mpOrbitalAuth.localeKey!==key){
+
+        mpOrbitalAuth.localeKey=key;
+
+        mpOrbitalAuth.authorityId=null;
+
+        mpOrbitalAuth.lastSnapshotAt=0;
+
+        mpOrbitalAuth.enteredAt=now;
+
+    }
+
+    if(!peers.length){
+
+        mpOrbitalAuth.authorityId=
+            typeof mp!=="undefined"
+            ?mp.myId
+            :null;
+
+        return true;
+
+    }
+
+    if(mpOrbitalAuth.authorityId===mp.myId)
+        return true;
+
+    const authorityStillHere=
+        mpOrbitalAuth.authorityId &&
+        peers.some(
+            p=>p.playerId===
+            mpOrbitalAuth.authorityId
+        ) &&
+        now-mpOrbitalAuth.lastSnapshotAt<
+        MP_ORBITAL_AUTHORITY_TIMEOUT_MS;
+
+    if(authorityStillHere)
+        return false;
+
+    if(
+        now-mpOrbitalAuth.enteredAt<
+        MP_ORBITAL_LISTEN_MS
+    ){
+
+        return false;
+
+    }
+
+    const lowest=
+        [mp.myId,...peers.map(p=>p.playerId)]
+            .sort()[0];
+
+    if(lowest===mp.myId){
+
+        mpOrbitalAuth.authorityId=mp.myId;
+
+        return true;
+
+    }
+
+    return false;
+
+}
+
+function mpIsOrbitalFollower(){
+
+    return(
+        worldState==="orbital" &&
+        mpOrbitalPeers().length>0 &&
+        !mpIsOrbitalAuthority()
+    );
+
+}
+
+function mpOrbitalWorldOffset(){
+
+    return{
+        x:orbitalX-W/2,
+        y:orbitalY-H/2
+    };
+
+}
+
+function mpSerializeOrbitalAsteroid(a,o){
+
+    return{
+        id:a.id,
+        wx:a.x+o.x,
+        wy:a.y+o.y,
+        vx:a.vx,
+        vy:a.vy,
+        size:a.size,
+        typeId:a.typeId,
+        special:a.special,
+        angle:a.angle,
+        rotation:a.rotation,
+        durability:a.durability,
+        cloakVisible:a.cloakVisible
+    };
+
+}
+
+function mpOrbitalAsteroidFromData(d,o){
+
+    const a=
+        new Asteroid(
+            d.wx-o.x,
+            d.wy-o.y,
+            d.size,
+            d.typeId,
+            d.special
+        );
+
+    a.id=d.id;
+
+    mpOrbitalApplyData(a,d,o);
+
+    return a;
+
+}
+
+function mpOrbitalApplyData(a,d,o){
+
+    a.x=d.wx-o.x;
+    a.y=d.wy-o.y;
+    a.vx=d.vx;
+    a.vy=d.vy;
+
+    if(d.angle!==undefined) a.angle=d.angle;
+    if(d.rotation!==undefined) a.rotation=d.rotation;
+    if(d.durability!==undefined) a.durability=d.durability;
+    if(d.cloakVisible!==undefined) a.cloakVisible=d.cloakVisible;
+
+}
+
+function mpPrunePending(){
+
+    const now=performance.now();
+
+    [mpOrbitalPendingDestroyed,mpOrbitalPendingAdded].forEach(
+        m=>m.forEach(
+            (t,id)=>{
+
+                if(now-t>MP_ORBITAL_PENDING_MS){
+
+                    m.delete(id);
+
+                }
+
+            }
+        )
+    );
+
+}
+
+/* ---- the device running the field ---- */
+function mpBroadcastOrbitalSnapshot(){
+
+    /*
+     * Asked every orbital frame — including while alone — so that a
+     * player who has had this orbital space to themselves is already
+     * on record as running it when someone else arrives. (Asking
+     * only once others were present made both decide at the same
+     * moment, and a newcomer could take over an established field.)
+     */
+    const isRunner=
+        mpIsOrbitalAuthority();
+
+    if(
+        !isRunner ||
+        !mpOrbitalPeers().length
+    ){
+
+        return;
+
+    }
+
+    const now=performance.now();
+
+    if(
+        now-mpLastOrbitalSnapshotAt<
+        MP_ORBITAL_SNAPSHOT_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastOrbitalSnapshotAt=now;
+
+    const o=mpOrbitalWorldOffset();
+
+    const loc=mpOrbitalLocale();
+
+    getOrbitalWave();
+
+    mpSend({
+        type:"fieldEvent",
+        event:{
+            kind:"orbitalSnapshot",
+            ownerId:loc.ownerId,
+            planetId:loc.planetId,
+            activity:orbitalActivity,
+            asteroids:
+                asteroids.map(
+                    a=>mpSerializeOrbitalAsteroid(a,o)
+                )
+        }
+    });
+
+}
+
+function mpApplyOrbitalChange(fromId,event){
+
+    const loc=mpOrbitalLocale();
+
+    if(
+        !running ||
+        worldState!=="orbital" ||
+        event.ownerId!==loc.ownerId ||
+        event.planetId!==loc.planetId ||
+        !mpIsOrbitalAuthority()
+    ){
+
+        return;
+
+    }
+
+    const gone=
+        new Set(event.destroyed || []);
+
+    let weight=0;
+
+    asteroids=
+        asteroids.filter(
+            a=>{
+
+                if(gone.has(a.id)){
+
+                    weight+=
+                        asteroidLoadWeight(a.size);
+
+                    return false;
+
+                }
+
+                return true;
+
+            }
+        );
+
+    const o=mpOrbitalWorldOffset();
+
+    (event.added || []).forEach(
+        d=>{
+
+            if(
+                !asteroids.some(
+                    a=>a.id===d.id
+                )
+            ){
+
+                asteroids.push(
+                    mpOrbitalAsteroidFromData(d,o)
+                );
+
+            }
+
+        }
+    );
+
+    if(weight>0){
+
+        addOrbitalActivity(weight);
+
+    }
+
+    /* share the result promptly rather than on the next tick */
+    mpLastOrbitalSnapshotAt=0;
+
+}
+
+/* ---- every other device in that orbital space ---- */
+function mpApplyOrbitalSnapshot(fromId,event){
+
+    const loc=mpOrbitalLocale();
+
+    if(
+        !running ||
+        worldState!=="orbital" ||
+        event.ownerId!==loc.ownerId ||
+        event.planetId!==loc.planetId
+    ){
+
+        return;
+
+    }
+
+    mpIsOrbitalAuthority();
+
+    if(mpOrbitalAuth.authorityId===mp.myId){
+
+        /*
+         * Two devices both started running this field at once —
+         * the lower id keeps it, the other yields to it.
+         */
+        if(String(fromId)<String(mp.myId)){
+
+            mpOrbitalAuth.authorityId=fromId;
+
+        }else{
+
+            return;
+
+        }
+
+    }
+
+    if(
+        mpOrbitalAuth.authorityId &&
+        mpOrbitalAuth.authorityId!==fromId &&
+        performance.now()-mpOrbitalAuth.lastSnapshotAt<
+        MP_ORBITAL_AUTHORITY_TIMEOUT_MS
+    ){
+
+        return;
+
+    }
+
+    mpOrbitalAuth.authorityId=fromId;
+
+    mpOrbitalAuth.lastSnapshotAt=performance.now();
+
+    mpPrunePending();
+
+    const o=mpOrbitalWorldOffset();
+
+    const incoming=new Map();
+
+    (event.asteroids || []).forEach(
+        d=>{
+
+            if(!mpOrbitalPendingDestroyed.has(d.id)){
+
+                incoming.set(d.id,d);
+
+            }
+
+        }
+    );
+
+    asteroids=
+        asteroids.filter(
+            a=>
+                incoming.has(a.id) ||
+                mpOrbitalPendingAdded.has(a.id)
+        );
+
+    incoming.forEach(
+        (d,id)=>{
+
+            const existing=
+                asteroids.find(
+                    a=>a.id===id
+                );
+
+            if(existing){
+
+                mpOrbitalApplyData(existing,d,o);
+
+                return;
+
+            }
+
+            const sx=d.wx-o.x;
+
+            const sy=d.wy-o.y;
+
+            const m=200;
+
+            if(
+                sx<-m || sx>W+m ||
+                sy<-m || sy>H+m
+            ){
+
+                return;
+
+            }
+
+            asteroids.push(
+                mpOrbitalAsteroidFromData(d,o)
+            );
+
+        }
+    );
+
+    syncOrbitalActivityLocale();
+
+    orbitalActivity=
+        Number(event.activity) || 0;
+
+    orbitalActivityDecayAt=
+        performance.now();
+
+    mpOrbitalPrev=
+        new Map(
+            asteroids.map(a=>[a.id,a])
+        );
+
+}
+
+/*
+ * Run every frame on a device MIRRORING the field: anything that
+ * vanished here without simply drifting out of view was destroyed
+ * by this player (a tap, a collision, an ability); anything new
+ * here is what it split into. Both go to the device running the
+ * field.
+ */
+function mpReportOrbitalChanges(){
+
+    if(!mpIsOrbitalFollower()){
+
+        mpOrbitalPrev=
+            new Map(
+                asteroids.map(a=>[a.id,a])
+            );
+
+        return;
+
+    }
+
+    const now=performance.now();
+
+    const current=
+        new Map(
+            asteroids.map(a=>[a.id,a])
+        );
+
+    const destroyed=[];
+
+    mpOrbitalPrev.forEach(
+        (a,id)=>{
+
+            if(
+                !current.has(id) &&
+                !a.exited
+            ){
+
+                destroyed.push(id);
+
+                mpOrbitalPendingDestroyed.set(id,now);
+
+            }
+
+        }
+    );
+
+    const o=mpOrbitalWorldOffset();
+
+    const added=[];
+
+    current.forEach(
+        (a,id)=>{
+
+            if(!mpOrbitalPrev.has(id)){
+
+                added.push(
+                    mpSerializeOrbitalAsteroid(a,o)
+                );
+
+                mpOrbitalPendingAdded.set(id,now);
+
+            }
+
+        }
+    );
+
+    mpOrbitalPrev=current;
+
+    if(
+        !destroyed.length &&
+        !added.length
+    ){
+
+        return;
+
+    }
+
+    const loc=mpOrbitalLocale();
+
+    mpSend({
+        type:"fieldEvent",
+        event:{
+            kind:"orbitalChange",
+            ownerId:loc.ownerId,
+            planetId:loc.planetId,
+            destroyed,
+            added
+        }
+    });
+
+}
+
+/*
+ * For the device running the field: the screen-space offset that
+ * maps its asteroids onto a given player's view.
+ */
+function mpOrbitalViewOffset(peer){
+
+    return{
+        x:orbitalX-peer.presence.x,
+        y:orbitalY-peer.presence.y
+    };
+
+}
+
+/*
+ * The device running the field keeps an asteroid that has left ITS
+ * view while it's still in view of any other player here.
+ */
+function mpOrbitalKeepAsteroid(a){
+
+    if(
+        worldState!=="orbital" ||
+        !mpOrbitalPeers().length ||
+        !mpIsOrbitalAuthority()
+    ){
+
+        return false;
+
+    }
+
+    const margin=(a.radius || 30)+80;
+
+    return mpOrbitalPeers().some(
+        peer=>{
+
+            const off=
+                mpOrbitalViewOffset(peer);
+
+            const sx=a.x+off.x;
+
+            const sy=a.y+off.y;
+
+            return(
+                sx>=-margin && sx<=W+margin &&
+                sy>=-margin && sy<=H+margin
+            );
+
+        }
+    );
+
+}
+
 function mpDisconnectSocket(){
 
     if(mp.ws){
@@ -14011,6 +14699,304 @@ function mpDisconnectSocket(){
  * Only the Leave button clears it; closing the app never does.
  */
 const MP_SESSION_KEY="asteroidImpactMpSession";
+
+/*
+ * ---- OFFLINE EDITS: keeping the owner's copy and the room's copy
+ * in step ----
+ * While a player is offline, room-mates can still change their
+ * planet; the server's copy is the official one during that time.
+ * When the owner returns, their device merges the server's copy with
+ * anything they did locally meanwhile. The merge needs a reference
+ * point — the last version both sides definitely agreed on — which
+ * is this: a copy of the own save as of the most recent sync sent.
+ */
+const MP_SHARED_BASE_KEY="asteroidImpactMpSharedBase";
+
+function mpStoreSharedBase(save){
+
+    try{
+
+        localStorage.setItem(
+            MP_SHARED_BASE_KEY,
+            JSON.stringify(save)
+        );
+
+    }catch(error){}
+
+}
+
+function mpLoadSharedBase(){
+
+    try{
+
+        return JSON.parse(
+            localStorage.getItem(
+                MP_SHARED_BASE_KEY
+            ) || "null"
+        );
+
+    }catch(error){
+
+        return null;
+
+    }
+
+}
+
+function mpDeepEqual(a,b){
+
+    return JSON.stringify(a)===JSON.stringify(b);
+
+}
+
+function mpIsPlainObject(v){
+
+    return(
+        v!==null &&
+        typeof v==="object" &&
+        !Array.isArray(v)
+    );
+
+}
+
+/*
+ * Three-way merge of plain save data. For each piece, whichever side
+ * changed it since the shared base wins — if only one side changed
+ * it there's no conflict at all. Objects (planets, banks, structures
+ * by planet...) merge key by key, so a room-mate building on Mars and
+ * the owner earning coins on Earth both survive. Only when BOTH sides
+ * changed the very same value (or the same list) does the owner's own
+ * version win — it's their planet.
+ */
+function mpMerge3(base,local,remote){
+
+    if(mpDeepEqual(local,remote))
+        return local;
+
+    if(mpDeepEqual(base,remote))
+        return local;
+
+    if(mpDeepEqual(base,local))
+        return remote;
+
+    if(
+        mpIsPlainObject(local) &&
+        mpIsPlainObject(remote)
+    ){
+
+        const b=
+            mpIsPlainObject(base)
+            ?base
+            :{};
+
+        const out={};
+
+        new Set([
+            ...Object.keys(local),
+            ...Object.keys(remote)
+        ]).forEach(
+            key=>{
+
+                const merged=
+                    mpMerge3(
+                        b[key],
+                        local[key],
+                        remote[key]
+                    );
+
+                if(merged!==undefined){
+
+                    out[key]=merged;
+
+                }
+
+            }
+        );
+
+        return out;
+
+    }
+
+    return local;
+
+}
+
+/*
+ * The owner's own planet as the room last saw it, delivered right
+ * after reconnecting. Merged into this device's save IN PLACE (other
+ * code holds references to localPlanetSave), then shared back so
+ * everyone agrees again.
+ */
+function mpAdoptOwnServerSave(message){
+
+    const serverSave=
+        message.planetSave;
+
+    if(
+        !serverSave ||
+        typeof serverSave!=="object"
+    ){
+
+        mpBroadcastOwnSave();
+
+        return;
+
+    }
+
+    const remote=
+        Object.assign({},serverSave);
+
+    delete remote._styleDesigns;
+
+    const base=
+        mpLoadSharedBase();
+
+    const local=
+        JSON.parse(
+            JSON.stringify(localPlanetSave)
+        );
+
+    /*
+     * With no reference point at all (first reconnect ever on this
+     * device), local changes can't be told apart from room changes —
+     * keep the owner's own copy, the safe choice.
+     */
+    const merged=
+        base
+        ?mpMerge3(base,local,remote)
+        :local;
+
+    const changed=
+        !mpDeepEqual(merged,local);
+
+    Object.keys(localPlanetSave).forEach(
+        key=>{
+
+            if(!(key in merged)){
+
+                delete localPlanetSave[key];
+
+            }
+
+        }
+    );
+
+    Object.assign(
+        localPlanetSave,
+        JSON.parse(
+            JSON.stringify(merged)
+        )
+    );
+
+    savePlanetProgress(localPlanetSave);
+
+    mpBroadcastOwnSave();
+
+    if(changed){
+
+        if(
+            !running &&
+            !activePlanetOwnerId &&
+            typeof selectStartPlanet==="function"
+        ){
+
+            try{
+
+                selectStartPlanet(
+                    selectedStartPlanet
+                );
+
+            }catch(error){}
+
+        }
+
+        showShipToast(
+            "Room-mates looked after your "+
+            "planets while you were away."
+        );
+
+    }
+
+}
+
+function mpExecuteOfflinePlanetAction(target){
+
+    const ownerId=
+        activePlanetOwnerId;
+
+    const before=
+        JSON.stringify(
+            mp.remotePlanetSaves[ownerId] || {}
+        );
+
+    try{
+
+        executePlanetDetailAction(target);
+
+    }catch(error){
+
+        console.error(
+            "Offline planet action failed:",
+            error
+        );
+
+    }
+
+    /*
+     * The mirror object can be replaced by an incoming sync while the
+     * action runs; planetSave is whatever the action actually changed.
+     */
+    if(
+        activePlanetOwnerId===ownerId &&
+        planetSave &&
+        planetSave!==localPlanetSave
+    ){
+
+        mp.remotePlanetSaves[ownerId]=
+            planetSave;
+
+    }
+
+    if(
+        JSON.stringify(
+            mp.remotePlanetSaves[ownerId] || {}
+        )!==before
+    ){
+
+        mpPushOfflineEdit(ownerId);
+
+    }
+
+}
+
+function mpPushOfflineEdit(ownerId){
+
+    const save=
+        mp.remotePlanetSaves[ownerId];
+
+    if(!save)
+        return;
+
+    const baseRev=
+        mp.remoteSaveRevs[ownerId] || 0;
+
+    mpSend({
+        type:"offlineEdit",
+        ownerId,
+        baseRev,
+        planetSave:save
+    });
+
+    /*
+     * Optimistic: the server will accept this as baseRev+1, so a quick
+     * second edit builds on that rather than being refused as outdated.
+     * If it IS refused, the server sends the real copy back.
+     */
+    mp.remoteSaveRevs[ownerId]=
+        baseRev+1;
+
+}
+
 
 let mpReconnectTimer=null;
 
@@ -14178,6 +15164,8 @@ function mpResetRoomState(){
     mp.remotePlayerInfo={};
     mp.remotePresence={};
     mp.claimedShips={};
+    mp.remoteSaveRevs={};
+    mp.awaitingOwnSave=false;
 
     if(activePlanetOwnerId){
 
@@ -14475,9 +15463,47 @@ function mpHandleMessage(message){
             !!message.isHost;
         mp.lastError=null;
 
-        mpBroadcastOwnSave();
+        /*
+         * A resumed seat holds off sharing its own save until the
+         * server's copy (possibly edited by room-mates meanwhile)
+         * arrives and is merged — see the "ownSave" handler.
+         */
+        mp.awaitingOwnSave=
+            message.type==="resumed";
+
+        if(!mp.awaitingOwnSave){
+
+            mpBroadcastOwnSave();
+
+        }
 
         renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="ownSave"){
+
+        mp.awaitingOwnSave=false;
+
+        mpAdoptOwnServerSave(message);
+
+        return;
+
+    }
+
+    if(message.type==="offlineEditRejected"){
+
+        if(message.reason==="stale"){
+
+            showShipToast(
+                "Someone else just changed this "+
+                "planet — showing the latest. "+
+                "Try that again."
+            );
+
+        }
 
         return;
 
@@ -14617,6 +15643,10 @@ function mpHandleMessage(message){
         mp.remotePlanetSaves[
             message.id
         ]=message.planetSave || {};
+
+        mp.remoteSaveRevs[
+            message.id
+        ]=Number(message.rev) || 0;
 
         mp.remotePlayerInfo[
             message.id
@@ -15024,7 +16054,7 @@ function mpHandleMessage(message){
             "function"
         ){
 
-            mpEndCoPilotSession();
+            mpEndCoPilotSession(message);
 
         }
 
@@ -15248,21 +16278,21 @@ function mpInterceptPlanetAction(target){
     }
 
     /*
-     * Everything from here down — claiming a ship, crewing it, or
-     * any change to the planet — is carried out on the OWNER's
-     * device. With them offline it would silently go nowhere, so
-     * say so plainly instead. Looking around still works.
+     * With the owner OFFLINE, a change to their planet (building,
+     * feeding pets, moving coins...) can't be sent to their device —
+     * so it's carried out right here, by the exact same action code,
+     * on this device's copy of their planet, which then becomes the
+     * room's official copy (see mpPushOfflineEdit). They'll find it
+     * done when they return. Ship claims and crew seats aren't the
+     * owner's device's job at all, so those carry on below as usual.
      */
-    if(!mpIsPlayerOnline(activePlanetOwnerId)){
+    if(
+        !mpIsPlayerOnline(activePlanetOwnerId) &&
+        !MP_CLAIM_ACTIONS.has(action) &&
+        !MP_CREW_ACTIONS.has(action)
+    ){
 
-        showShipToast(
-            mpPlayerName(
-                activePlanetOwnerId
-            )+
-            " is offline — you can look "+
-            "around, but changes wait "+
-            "until they're back."
-        );
+        mpExecuteOfflinePlanetAction(target);
 
         return true;
 
@@ -15494,19 +16524,69 @@ function mpHandleRemotePlanetAction(message){
  * before pointing planetSave back at this player's own save for
  * the whole flight).
  */
+/*
+ * Where a launch / landing / loss of a CLAIMED ship actually gets
+ * applied. Owner online: their device applies it (and this device's
+ * copy is updated at once too, so the ship visibly docks right away
+ * rather than after a round trip — their next sync replaces it with
+ * the real thing). Owner offline: applied to the copy here and pushed
+ * as an offline edit, so it happens now instead of waiting for them.
+ */
+function mpRouteShipLifecycle(payload){
+
+    const ownerId=payload.ownerId;
+
+    const mirror=
+        mp.remotePlanetSaves[ownerId];
+
+    const message=
+        Object.assign(
+            {fromId:mp.myId},
+            payload
+        );
+
+    if(
+        mpIsPlayerOnline(ownerId) ||
+        !mirror
+    ){
+
+        mpSend({
+            type:"shipLifecycle",
+            payload
+        });
+
+        if(mirror){
+
+            mpHandleShipLifecycle(
+                message,
+                mirror
+            );
+
+        }
+
+        return;
+
+    }
+
+    mpHandleShipLifecycle(
+        message,
+        mirror
+    );
+
+    mpPushOfflineEdit(ownerId);
+
+}
+
 function mpBroadcastShipLaunch(
     ownerId,shipId,originPlanetId
 ){
 
-    mpSend({
-        type:"shipLifecycle",
-        payload:{
+    mpRouteShipLifecycle({
             ownerId,
             action:"launch",
             shipId,
             originPlanetId
-        }
-    });
+        });
 
 }
 
@@ -15522,38 +16602,46 @@ function mpBroadcastShipLanding(
     destinationPlanetId,shipData
 ){
 
-    mpSend({
-        type:"shipLifecycle",
-        payload:{
+    mpRouteShipLifecycle({
             ownerId,
             action:"landing",
             shipId,
             originPlanetId,
             destinationPlanetId,
             shipData
-        }
-    });
+        });
 
 }
 
 /*
- * Runs on the OWNER's client — the other half of the two functions
- * above. Always operates on localPlanetSave directly (never the
- * bare planetSave global, which could be pointed anywhere
- * depending on what this player happens to be doing right now),
- * so it's safe to run regardless of what screen the owner is
- * currently looking at.
+ * Applies a launch / landing / loss of a claimed ship to a save —
+ * the owner's own (when a room-mate flew one of their ships), or a
+ * copy of the owner's (see mpRouteShipLifecycle). Never the bare
+ * planetSave global, which could be pointed anywhere depending on
+ * what this player happens to be looking at.
  */
-function mpHandleShipLifecycle(message){
+function mpHandleShipLifecycle(message,targetSave){
 
-    if(message.ownerId!==mp.myId)
-        return;
+    /*
+     * targetSave: the save to apply this to. Omitted = this player's
+     * own (a room-mate flew one of OUR ships). Given = a copy of the
+     * owner's save, when the flyer applies it on their behalf (owner
+     * offline) or optimistically ahead of the owner's own sync.
+     */
+    if(!targetSave){
+
+        if(message.ownerId!==mp.myId)
+            return;
+
+        targetSave=localPlanetSave;
+
+    }
 
     if(message.action==="launch"){
 
         const ship=
             mpFindShipAcrossPlanets(
-                localPlanetSave,
+                targetSave,
                 message.shipId
             );
 
@@ -15563,7 +16651,7 @@ function mpHandleShipLifecycle(message){
                 message.fromId;
 
             savePlanetProgress(
-                localPlanetSave
+                targetSave
             );
 
             if(planetDetailId){
@@ -15591,7 +16679,7 @@ function mpHandleShipLifecycle(message){
 
     if(message.action==="landing"){
 
-        mpApplyShipLanding(message);
+        mpApplyShipLanding(message,targetSave);
 
         return;
 
@@ -15609,7 +16697,7 @@ function mpHandleShipLifecycle(message){
          */
         const originArray=
             (
-                localPlanetSave.ships ||
+                targetSave.ships ||
                 {}
             )[message.originPlanetId];
 
@@ -15629,7 +16717,7 @@ function mpHandleShipLifecycle(message){
             );
 
             savePlanetProgress(
-                localPlanetSave
+                targetSave
             );
 
             if(planetDetailId){
@@ -15700,7 +16788,9 @@ function mpFindShipAcrossPlanets(save,shipId){
  * syncCurrentShipFlightState already write, applied directly from
  * the message's own payload instead.
  */
-function mpApplyShipLanding(message){
+function mpApplyShipLanding(message,targetSave){
+
+    targetSave=targetSave || localPlanetSave;
 
     const data=
         message.shipData || {};
@@ -15713,8 +16803,8 @@ function mpApplyShipLanding(message){
         originId;
 
     if(
-        !localPlanetSave.ships ||
-        !localPlanetSave.ships[
+        !targetSave.ships ||
+        !targetSave.ships[
             originId
         ]
     ){
@@ -15730,7 +16820,7 @@ function mpApplyShipLanding(message){
     }
 
     const originArray=
-        localPlanetSave.ships[
+        targetSave.ships[
             originId
         ];
 
@@ -15855,30 +16945,30 @@ function mpApplyShipLanding(message){
 
         originArray.splice(index,1);
 
-        if(!localPlanetSave.ships[destId]){
+        if(!targetSave.ships[destId]){
 
-            localPlanetSave.ships[
+            targetSave.ships[
                 destId
             ]=[];
 
         }
 
-        localPlanetSave.ships[
+        targetSave.ships[
             destId
         ].push(ship);
 
     }
 
-    localPlanetSave.visitedPlanets=
-        localPlanetSave.
+    targetSave.visitedPlanets=
+        targetSave.
         visitedPlanets || {};
 
-    localPlanetSave.visitedPlanets[
+    targetSave.visitedPlanets[
         destId
     ]=true;
 
     savePlanetProgress(
-        localPlanetSave
+        targetSave
     );
 
     if(planetDetailId){
@@ -24933,31 +26023,6 @@ function launchWithAnimation(){
     if(flightTarget===1)
         return;
 
-    /*
-     * A ship claimed from a room-mate's planet can only fly while
-     * they're online — their device is what records the launch and
-     * the flight's results.
-     */
-    if(
-        activePlanetOwnerId &&
-        typeof mp!=="undefined" &&
-        mp.connected &&
-        !mpIsPlayerOnline(
-            activePlanetOwnerId
-        )
-    ){
-
-        showShipToast(
-            mpPlayerName(
-                activePlanetOwnerId
-            )+
-            " is offline — their ships "+
-            "can be flown once they're back."
-        );
-
-        return;
-
-    }
 
     /*
      * The planet menu sits in its own overlay, independent of
@@ -31359,7 +32424,7 @@ function mpShowCrewResults(board,crew){
 }
 
 function mpMaybeBroadcastCrewLanded(
-    ownerId,shipId
+    ownerId,shipId,landedPlanetId
 ){
 
     if(
@@ -31404,7 +32469,13 @@ function mpMaybeBroadcastCrewLanded(
     mpSend({
         type:"crewLanded",
         ownerId,
-        shipId
+        shipId,
+        landedOwnerId:
+            landedPlanetId
+            ?ownerId
+            :null,
+        landedPlanetId:
+            landedPlanetId || null
     });
 
 }
@@ -31433,15 +32504,12 @@ function mpMaybeBroadcastShipLost(
 
     }
 
-    mpSend({
-        type:"shipLifecycle",
-        payload:{
+    mpRouteShipLifecycle({
             ownerId,
             action:"lost",
             shipId,
             originPlanetId
-        }
-    });
+        });
 
 }
 
@@ -31594,7 +32662,7 @@ function mpStartCoPilotSession(message){
  * is the actual, deliberate design: co-piloting is real play with
  * a real (if independent) reward, not a read-only ride-along.
  */
-function mpEndCoPilotSession(){
+function mpEndCoPilotSession(message){
 
     if(
         !running ||
@@ -31634,6 +32702,49 @@ function mpEndCoPilotSession(){
     currentPlanetId="earth";
 
     landAtCurrentPlanet();
+
+    /*
+     * This player's own reward ship docks at their own Earth, but they
+     * themselves arrive where the crew actually landed — the pilot's
+     * planet, in whoever's system that is.
+     */
+    const landedOwnerId=
+        message && message.landedOwnerId;
+
+    const landedPlanetId=
+        message && message.landedPlanetId;
+
+    if(landedPlanetId){
+
+        try{
+
+            if(
+                landedOwnerId &&
+                landedOwnerId!==mp.myId &&
+                mp.remotePlanetSaves[landedOwnerId]
+            ){
+
+                mpEnterRemotePlanetView(
+                    landedOwnerId
+                );
+
+            }
+
+            selectedStartPlanet=
+                landedPlanetId;
+
+            renderPlanetMap();
+
+        }catch(error){
+
+            console.error(
+                "Co-pilot arrival view failed:",
+                error
+            );
+
+        }
+
+    }
 
 }
 
@@ -31999,25 +33110,6 @@ document
             activePlanetOwnerId ||
             mp.myId;
 
-        if(
-            mp.connected &&
-            activePlanetOwnerId &&
-            !mpIsPlayerOnline(
-                activePlanetOwnerId
-            )
-        ){
-
-            showShipToast(
-                mpPlayerName(
-                    activePlanetOwnerId
-                )+
-                " is offline — their ships "+
-                "can be flown once they're back."
-            );
-
-            return;
-
-        }
 
         if(
             mp.connected &&
@@ -34414,9 +35506,6 @@ function renderPlanetDetail(id){
                                     p.energy>0
                             );
 
-                        const canSpare=
-                            getTotalPlayerShipCount()>=2;
-
                         if(ship.pendingPilot){
 
                             const pilotFoodCost=
@@ -34483,14 +35572,14 @@ function renderPlanetDetail(id){
                             html+=
                                 '<div class="ship-bay-sub">';
 
-                            if(!canSpare){
-
-                                html+=
-                                    '<span style="font-size:10px;color:#5c7ba0;">'+
-                                    'Need at least one other ship docked '+
-                                    'somewhere else in the game first.</span>';
-
-                            }else if(!availablePilots.length){
+                            /*
+                             * A pilot can be assigned even to a player's
+                             * only ship — the "keep one ship for
+                             * yourself" rule only matters when a pet is
+                             * sent off on its own mission (Pilot
+                             * Training), and is enforced there.
+                             */
+                            if(!availablePilots.length){
 
                                 html+=
                                     '<span style="font-size:10px;color:#5c7ba0;">'+
@@ -36871,9 +37960,22 @@ function renderPlanetDetail(id){
                         )+
                         '" data-action="launch-pending-mission" data-ship="'+
                         pShip.id+'" '+
-                        (chosenDestId ? '' : 'disabled')+
+                        (
+                            chosenDestId &&
+                            getTotalPlayerShipCount()>=2
+                            ?''
+                            :'disabled'
+                        )+
                         '>Send on Mission</button>'+
                         '</div>'+
+                        (
+                            getTotalPlayerShipCount()<2
+                            ?'<div style="font-size:10px;color:#5c7ba0;'+
+                             'margin-top:6px;">A pet can only fly off on '+
+                             'its own while another ship stays docked '+
+                             'for you to fly.</div>'
+                            :''
+                        )+
                         '</div>'+
                         '</div>';
 
@@ -42382,6 +43484,21 @@ class Asteroid{
             this.y<-margin ||
             this.y>H+margin;
 
+        /*
+         * In a shared orbital field, the device running it keeps a
+         * rock that's left its own view but is still in someone
+         * else's.
+         */
+        if(
+            this.exited &&
+            typeof mpOrbitalKeepAsteroid==="function" &&
+            mpOrbitalKeepAsteroid(this)
+        ){
+
+            this.exited=false;
+
+        }
+
     }
 
 
@@ -45180,7 +46297,341 @@ function finishAsteroidSpawn(asteroid){
 
 }
 
+/* =========================================================
+   ASTEROID LOAD CAP
+   How much is on screen, weighted by size (small 1, medium 3,
+   large 9 — one large is genuinely nine smalls' worth of work),
+   with a ceiling per wave. At the ceiling, nothing new spawns
+   until something is destroyed; just under it, a new asteroid is
+   downsized to fit rather than skipped. Breaking an asteroid into
+   pieces is never blocked — that's destruction, not spawning.
+========================================================= */
+const ASTEROID_LOAD_WEIGHT={1:1,2:3,3:9};
+
+function asteroidLoadWeight(size){
+
+    return ASTEROID_LOAD_WEIGHT[size] || 1;
+
+}
+
+/*
+ * Only asteroids actually in play count: on screen, or within the
+ * same entry margin the game itself uses before removing an
+ * asteroid as gone (radius + 80px). One that drifts just outside
+ * and lingers stops counting after 4 seconds, so a slow straggler
+ * can never hold the whole field hostage.
+ */
+const ASTEROID_LOAD_OFFSCREEN_GRACE_MS=4000;
+
+function getAsteroidLoad(offX=0,offY=0){
+
+    const now=performance.now();
+
+    const ownView=!offX && !offY;
+
+    let total=0;
+
+    for(const a0 of asteroids){
+
+        /* positions as seen in the view being measured */
+        const a={
+            x:a0.x+offX,
+            y:a0.y+offY,
+            radius:a0.radius,
+            size:a0.size
+        };
+
+        const r=a.radius || 30;
+
+        const onScreen=
+            a.x>=-r && a.x<=W+r &&
+            a.y>=-r && a.y<=H+r;
+
+        if(!ownView){
+
+            if(
+                a.x>=-(r+80) && a.x<=W+r+80 &&
+                a.y>=-(r+80) && a.y<=H+r+80
+            ){
+
+                total+=asteroidLoadWeight(a.size);
+
+            }
+
+            continue;
+
+        }
+
+        if(onScreen){
+
+            a0._offscreenSince=0;
+
+        }else{
+
+            const margin=r+80;
+
+            if(
+                a.x<-margin || a.x>W+margin ||
+                a.y<-margin || a.y>H+margin
+            ){
+
+                continue;
+
+            }
+
+            if(!a0._offscreenSince){
+
+                a0._offscreenSince=now;
+
+            }
+
+            if(
+                now-a0._offscreenSince>
+                ASTEROID_LOAD_OFFSCREEN_GRACE_MS
+            ){
+
+                continue;
+
+            }
+
+        }
+
+        total+=asteroidLoadWeight(a.size);
+
+    }
+
+    return total;
+
+}
+
+function computeAsteroidLoadCap(){
+
+    const scale=
+        clamp(
+            Number(
+                aiModel &&
+                aiModel.asteroidLoadScale
+            ) || 1,
+            ASTEROID_LOAD_SCALE_MIN,
+            ASTEROID_LOAD_SCALE_MAX
+        );
+
+    if(worldState==="orbital"){
+
+        return Math.round(
+            clamp(
+                8+getOrbitalWave()*3,
+                8,32
+            )*scale
+        );
+
+    }
+
+    return Math.round(
+        clamp(
+            16+wave*2.5,
+            16,46
+        )*scale
+    );
+
+}
+
+const ASTEROID_LOAD_SCALE_MIN=.65;
+const ASTEROID_LOAD_SCALE_MAX=1.35;
+
+/*
+ * The largest size (≤ requested) that fits in what's left under
+ * the cap for `copies` asteroids at once (a twin spawns as two);
+ * 0 when not even a small one fits. Every blocked or shrunk spawn
+ * is counted for the adaptive tuning of the cap itself.
+ */
+function fitAsteroidSizeToLoad(size,copies,offX=0,offY=0){
+
+    const room=
+        computeAsteroidLoadCap()-
+        getAsteroidLoad(offX,offY);
+
+    let s=size;
+
+    while(
+        s>1 &&
+        asteroidLoadWeight(s)*copies>room
+    ){
+
+        s--;
+
+    }
+
+    const fits=
+        asteroidLoadWeight(s)*copies<=room;
+
+    if(!fits || s<size){
+
+        aiWindow.capPressure=
+            (aiWindow.capPressure || 0)+1;
+
+    }
+
+    return fits?s:0;
+
+}
+
+/* =========================================================
+   ORBITAL WAVES
+   Orbital space has its own wave level, driven by how much is
+   being destroyed there right now rather than by encounters: every
+   kill adds "activity" (weighted like the load above), and that
+   activity fades with a ~25 second half-life. Busy orbital space
+   climbs in waves; once people stop fighting — or land — it settles
+   back down. Remembered per orbital space (whose planet, which
+   planet) so returning shortly after still finds it warmed up.
+========================================================= */
+const ORBITAL_ACTIVITY_HALF_LIFE_S=25;
+const ORBITAL_ACTIVITY_PER_WAVE=20;
+const ORBITAL_WAVE_MAX=12;
+
+let orbitalActivity=0;
+
+let lastShownOrbitalWave=0;
+
+let orbitalActivityLocaleKey=null;
+
+const orbitalActivityMemory={};
+
+function getOrbitalLocaleKey(){
+
+    return(
+        (
+            orbitalLocaleOwnerId ||
+            (typeof mp!=="undefined" && mp.myId) ||
+            "local"
+        )+":"+
+        (
+            orbitalLocalePlanetId ||
+            currentPlanetId ||
+            "earth"
+        )
+    );
+
+}
+
+function getOrbitalWave(){
+
+    syncOrbitalActivityLocale();
+
+    decayOrbitalActivity();
+
+    return Math.min(
+        ORBITAL_WAVE_MAX,
+        1+Math.floor(
+            orbitalActivity/
+            ORBITAL_ACTIVITY_PER_WAVE
+        )
+    );
+
+}
+
+let orbitalActivityDecayAt=0;
+
+/*
+ * Decay by real elapsed time rather than per frame — activity keeps
+ * fading while this player is away in a field or landed, exactly as
+ * it should, instead of freezing until they're back in orbit.
+ */
+function decayOrbitalActivity(){
+
+    const now=performance.now();
+
+    if(orbitalActivityDecayAt){
+
+        orbitalActivity*=
+            Math.pow(
+                .5,
+                (now-orbitalActivityDecayAt)/1000/
+                ORBITAL_ACTIVITY_HALF_LIFE_S
+            );
+
+    }
+
+    orbitalActivityDecayAt=now;
+
+    if(orbitalActivity<.01){
+
+        orbitalActivity=0;
+
+    }
+
+}
+
+/*
+ * Swaps the live activity level when this player moves between
+ * orbital spaces: the old one is remembered with a timestamp, the
+ * new one is restored with however much it would have faded since.
+ */
+function syncOrbitalActivityLocale(){
+
+    const key=getOrbitalLocaleKey();
+
+    if(key===orbitalActivityLocaleKey)
+        return;
+
+    const now=performance.now();
+
+    decayOrbitalActivity();
+
+    if(orbitalActivityLocaleKey){
+
+        orbitalActivityMemory[
+            orbitalActivityLocaleKey
+        ]={activity:orbitalActivity,at:now};
+
+    }
+
+    const remembered=
+        orbitalActivityMemory[key];
+
+    orbitalActivity=
+        remembered
+        ?remembered.activity*
+         Math.pow(
+            .5,
+            (now-remembered.at)/1000/
+            ORBITAL_ACTIVITY_HALF_LIFE_S
+         )
+        :0;
+
+    orbitalActivityLocaleKey=key;
+
+}
+
+function addOrbitalActivity(amount){
+
+    syncOrbitalActivityLocale();
+
+    decayOrbitalActivity();
+
+    orbitalActivity+=amount;
+
+}
+
 function spawnAsteroid(){
+
+    /*
+     * Checked BEFORE anything else — in particular before the music
+     * system hands out its next composed note — so a spawn the cap
+     * blocks doesn't silently use up a note.
+     */
+    if(
+        worldState==="orbital" &&
+        mpIsOrbitalFollower()
+    ){
+
+        return;
+
+    }
+
+    if(!fitAsteroidSizeToLoad(1,1))
+        return;
 
     /*
      * spawn_mimics mode: size and position aren't rolled randomly
@@ -45260,8 +46711,21 @@ function spawnAsteroid(){
 
     }
 
-    const special=
+    size=
+        fitAsteroidSizeToLoad(size,1) || 1;
+
+    let special=
         rollSpecialKind();
+
+    /* A twin arrives as two — only allowed if both fit. */
+    if(
+        special==="twin" &&
+        fitAsteroidSizeToLoad(size,2)!==size
+    ){
+
+        special=null;
+
+    }
 
     const asteroid=
         new Asteroid(
@@ -45393,6 +46857,14 @@ function detonateAsteroid(
 
     const asteroid=
         asteroids[index];
+
+    if(worldState==="orbital"){
+
+        addOrbitalActivity(
+            asteroidLoadWeight(asteroid.size)
+        );
+
+    }
 
     /*
      * Durable/Elite absorb a hit instead of dying, unless it's
@@ -48639,6 +50111,13 @@ function defaultAIModel(){
         soundModulationStrength:.6,
 
         /*
+         * Scales the asteroid load cap (see computeAsteroidLoadCap):
+         * nudged down when this player keeps getting hit while the
+         * field is full, up when they handle a full field cleanly.
+         */
+        asteroidLoadScale:1,
+
+        /*
          * Rolling (strength,flow) sample pairs updateSoundFlowLearning
          * correlates against — lazily created there on first use
          * rather than given real arrays here, so an old save
@@ -48812,6 +50291,15 @@ function loadAIModel(){
                     parsed.chargeRateCorrection={};
 
                 }
+
+                parsed.asteroidLoadScale=
+                    clamp(
+                        Number(
+                            parsed.asteroidLoadScale
+                        ) || 1,
+                        .65,
+                        1.35
+                    );
 
                 if(
                     typeof parsed.soundModulationStrength!==
@@ -53066,6 +54554,38 @@ function updateAIDifficulty(dt){
 
     }
 
+    /*
+     * Learning the load cap: only windows where the cap actually
+     * mattered (spawns were held back or shrunk) say anything about
+     * it. Hit while the field was full → it's too much for this
+     * player right now, ease off. Full field, no hits, still
+     * clearing asteroids → they can take more.
+     */
+    if((aiWindow.capPressure || 0)>0){
+
+        if(aiWindow.deaths>0){
+
+            aiModel.asteroidLoadScale=
+                (aiModel.asteroidLoadScale || 1)*.96;
+
+        }else if(aiWindow.kills>=6){
+
+            aiModel.asteroidLoadScale=
+                (aiModel.asteroidLoadScale || 1)*1.02;
+
+        }
+
+        aiModel.asteroidLoadScale=
+            clamp(
+                aiModel.asteroidLoadScale,
+                ASTEROID_LOAD_SCALE_MIN,
+                ASTEROID_LOAD_SCALE_MAX
+            );
+
+    }
+
+    aiWindow.capPressure=0;
+
     saveAIModel();
 
     aiLastWindow={
@@ -55144,7 +56664,10 @@ function computeOrbitalSpawnInterval(){
      * Near-silent when density is ~0, down to a brisk but still
      * gentler-than-normal pace at full density.
      */
+    /* Busier orbital space (a higher orbital wave) spawns faster. */
     return(
+        1/(1+.12*(getOrbitalWave()-1))
+    )*(
         ORBITAL_SPAWN_INTERVAL_MAX-
         (
             ORBITAL_SPAWN_INTERVAL_MAX-
@@ -55164,16 +56687,68 @@ function computeOrbitalSpawnInterval(){
  */
 function spawnOrbitalAsteroid(){
 
+    if(mpIsOrbitalFollower())
+        return;
+
+    /*
+     * With other players in this orbital space, spawn around one of
+     * them (or this player) at random, capped by THAT player's view —
+     * so everyone has asteroids around them, not only the device
+     * running the field.
+     */
+    const peers=mpOrbitalPeers();
+
+    const anchor=
+        peers.length
+        ?[null,...peers][
+            Math.floor(
+                Math.random()*(peers.length+1)
+            )
+        ]
+        :null;
+
+    const off=
+        anchor
+        ?mpOrbitalViewOffset(anchor)
+        :{x:0,y:0};
+
+    const fittedSize=
+        fitAsteroidSizeToLoad(
+            rollAsteroidSize(),
+            1,
+            off.x,
+            off.y
+        );
+
+    if(!fittedSize)
+        return;
+
     const pos=
         edgeSpawn();
+
+    pos.x-=off.x;
+
+    pos.y-=off.y;
+
+    let special=
+        rollSpecialKind();
+
+    if(
+        special==="twin" &&
+        fitAsteroidSizeToLoad(fittedSize,2,off.x,off.y)!==fittedSize
+    ){
+
+        special=null;
+
+    }
 
     const asteroid=
         new Asteroid(
             pos.x,
             pos.y,
-            rollAsteroidSize(),
+            fittedSize,
             getAsteroidType(),
-            rollSpecialKind()
+            special
         );
 
     asteroid.vx*=
@@ -55327,6 +56902,8 @@ function updateOrbital(dt){
 
         mpBroadcastOrbitalPresence();
 
+        mpBroadcastOrbitalSnapshot();
+
     }
 
     /*
@@ -55348,6 +56925,17 @@ function updateOrbital(dt){
         -orbitalMoveX,
         -orbitalMoveY
     );
+
+    const shownOrbitalWave=
+        getOrbitalWave();
+
+    if(shownOrbitalWave!==lastShownOrbitalWave){
+
+        lastShownOrbitalWave=shownOrbitalWave;
+
+        updateHUD();
+
+    }
 
     const distance=
         getOrbitalDistance();
@@ -57321,7 +58909,8 @@ function landAtCurrentPlanetInner(){
 
         mpMaybeBroadcastCrewLanded(
             flyingShipOwnerId || mp.myId,
-            shipIdAtLandingStart
+            shipIdAtLandingStart,
+            currentPlanetId
         );
 
     }
@@ -57340,10 +58929,21 @@ function landAtCurrentPlanetInner(){
      * afterward, since their own save has no presence anywhere in
      * the owner's system to actually show.
      */
+    /*
+     * Landed in a room-mate's system: the ship docks at the planet it
+     * actually landed on — in THEIR save — and this player arrives
+     * there with it, still holding it (the claim is kept, so it's
+     * ready to launch again from right here). Nothing teleports home.
+     */
+    let remoteLandingOwnerId=null;
+
     if(isRemoteLanding){
 
         const landedAtPlanetId=
             currentPlanetId;
+
+        remoteLandingOwnerId=
+            flyingShipOwnerId;
 
         mpBroadcastShipLanding(
             flyingShipOwnerId,
@@ -57353,21 +58953,12 @@ function landAtCurrentPlanetInner(){
             remoteLandingShipData
         );
 
-        mpSend({
-            type:"releaseShip",
-            ownerId:flyingShipOwnerId,
-            shipId:currentShipId
-        });
-
         flyingShipOwnerId=null;
 
         flyingShipOriginPlanetId=
             null;
 
         currentShipId=null;
-
-        currentPlanetId=
-            "earth";
 
     }
 
@@ -57400,6 +58991,19 @@ function landAtCurrentPlanetInner(){
     startScreen.classList.remove(
         "hidden"
     );
+
+    if(
+        remoteLandingOwnerId &&
+        mp.remotePlanetSaves[
+            remoteLandingOwnerId
+        ]
+    ){
+
+        mpEnterRemotePlanetView(
+            remoteLandingOwnerId
+        );
+
+    }
 
     selectedStartPlanet=
         currentPlanetId;
@@ -59504,7 +61108,9 @@ function updateHUD(){
     );
 
     levelEl.textContent=
-        wave;
+        worldState==="orbital"
+        ?getOrbitalWave()
+        :wave;
 
     livesEl.textContent=
         "♥".repeat(
@@ -66418,6 +68024,15 @@ function loop(time){
     }else{
 
         update(dt);
+
+        if(
+            worldState==="orbital" &&
+            typeof mpReportOrbitalChanges==="function"
+        ){
+
+            mpReportOrbitalChanges();
+
+        }
 
     }
 
