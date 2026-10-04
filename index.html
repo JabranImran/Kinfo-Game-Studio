@@ -304,6 +304,30 @@ body{
     color:#8ef0ae;
 }
 
+.crew-score-title{
+
+    font-size:8px;
+
+    letter-spacing:1px;
+
+    text-transform:uppercase;
+
+    color:#8fb8dd;
+
+    margin-bottom:1px;
+}
+
+.crew-score-role{
+
+    font-size:8px;
+
+    letter-spacing:.5px;
+
+    color:#8fa3bf;
+
+    text-transform:uppercase;
+}
+
 .stat-value{
 
     font-size:17px;
@@ -11888,7 +11912,125 @@ function getShipStyleList(){
 
 }
 
-function getShipStyleShapes(styleId){
+/*
+ * Every one of this player's own saved style designs, keyed by
+ * styleId, as the raw stored strings — the designs live in their
+ * own localStorage keys rather than in planetSave, so the regular
+ * planet sync never carried them, and every other player saw a
+ * room-mate's styled ship as the default design. Attached to every
+ * outgoing sync instead (see savePlanetProgress), so a room-mate's
+ * mirrored save always has the designs its own ships refer to.
+ */
+function mpCollectLocalStyleDesigns(){
+
+    const designs={};
+
+    const count=
+        (
+            (
+                localPlanetSave ||
+                planetSave ||
+                {}
+            ).shipStyleUnlockCount || 1
+        )+1;
+
+    for(
+        let i=1;
+        i<=count;
+        i++
+    ){
+
+        const styleId=
+            "custom"+i;
+
+        try{
+
+            const raw=
+                localStorage.getItem(
+                    getShipStyleKey(styleId)
+                );
+
+            if(raw){
+
+                designs[styleId]=raw;
+
+            }
+
+        }catch(error){}
+
+    }
+
+    return designs;
+
+}
+
+/*
+ * The raw stored design for one style, from whichever player
+ * actually owns it. ownerId given → that player's (this player's
+ * own localStorage if it's them, else their mirrored designs);
+ * no ownerId → whichever player's planet is currently on screen,
+ * so every docked-ship preview on a room-mate's planet shows their
+ * real styles without each call site needing to know about it.
+ */
+function resolveShipStyleRaw(styleId,ownerId){
+
+    const key=
+        getShipStyleKey(styleId);
+
+    if(!key)
+        return null;
+
+    let effectiveOwner=
+        ownerId;
+
+    if(
+        !effectiveOwner &&
+        typeof activePlanetOwnerId!==
+        "undefined" &&
+        activePlanetOwnerId
+    ){
+
+        effectiveOwner=
+            activePlanetOwnerId;
+
+    }
+
+    if(
+        effectiveOwner &&
+        typeof mp!=="undefined" &&
+        effectiveOwner!==mp.myId
+    ){
+
+        const remoteSave=
+            mp.remotePlanetSaves[
+                effectiveOwner
+            ];
+
+        return(
+            (
+                remoteSave &&
+                remoteSave._styleDesigns &&
+                remoteSave._styleDesigns[
+                    styleId
+                ]
+            ) || null
+        );
+
+    }
+
+    try{
+
+        return localStorage.getItem(key);
+
+    }catch(error){
+
+        return null;
+
+    }
+
+}
+
+function getShipStyleShapes(styleId,ownerId){
 
     if(
         typeof ShapeObject===
@@ -11927,7 +12069,10 @@ function getShipStyleShapes(styleId){
     try{
 
         const saved=
-            localStorage.getItem(key);
+            resolveShipStyleRaw(
+                styleId,
+                ownerId
+            );
 
         if(saved){
 
@@ -12157,7 +12302,15 @@ function savePlanetProgress(
 
         mpSend({
             type:"sync",
-            planetSave:data
+            planetSave:
+                Object.assign(
+                    {},
+                    data,
+                    {
+                        _styleDesigns:
+                            mpCollectLocalStyleDesigns()
+                    }
+                )
         });
 
     }
@@ -12274,7 +12427,15 @@ function mpBroadcastOwnSave(){
 
         mpSend({
             type:"sync",
-            planetSave:localPlanetSave
+            planetSave:
+                Object.assign(
+                    {},
+                    localPlanetSave,
+                    {
+                        _styleDesigns:
+                            mpCollectLocalStyleDesigns()
+                    }
+                )
         });
 
     }
@@ -12454,6 +12615,341 @@ const MP_FIELD_SNAPSHOT_INTERVAL_MS=120;
  * majority of field time (no crew, or no one connected), so this
  * never touches single-player behaviour at all.
  */
+/*
+ * ---- TAP PINGS ----
+ * A small, fading ring in a player's own colour wherever they just
+ * tapped, shown to everyone else sharing that same space — purely
+ * cosmetic, never affects anything. Field pings use the shared
+ * field's own coordinates (the same space asteroids are mirrored
+ * in); orbital pings are sent in WORLD coordinates, since every
+ * player's orbital camera is centred on their own ship.
+ */
+const MP_TAP_PING_LIFE_MS=650;
+
+let mpTapPings=[];
+
+/*
+ * Which shared field this client is in right now, if any — the
+ * co-pilot session's key, or (for a pilot actually carrying a crew)
+ * their own ship's. null means "nobody else is in this field".
+ */
+function mpCurrentFieldSessionKey(){
+
+    if(coPilotSessionShipKey)
+        return coPilotSessionShipKey;
+
+    if(
+        !mp.connected ||
+        !currentShipId
+    ){
+
+        return null;
+
+    }
+
+    const ownerId=
+        flyingShipOwnerId ||
+        mp.myId;
+
+    const crew=
+        mpGetShipCrew(
+            ownerId,
+            currentShipId
+        );
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return null;
+
+    }
+
+    return mpShipKey(
+        ownerId,
+        currentShipId
+    );
+
+}
+
+function mpBroadcastTapPing(event){
+
+    if(
+        !mp.connected ||
+        !running ||
+        paused ||
+        gameOver
+    ){
+
+        return;
+
+    }
+
+    const pos=
+        pointerPosition(event);
+
+    if(worldState==="field"){
+
+        const key=
+            mpCurrentFieldSessionKey();
+
+        if(!key)
+            return;
+
+        mpSend({
+            type:"fieldEvent",
+            event:{
+                kind:"tapPing",
+                space:"field",
+                key,
+                x:pos.x,
+                y:pos.y
+            }
+        });
+
+        return;
+
+    }
+
+    if(worldState==="orbital"){
+
+        mpSend({
+            type:"fieldEvent",
+            event:{
+                kind:"tapPing",
+                space:"orbital",
+                ownerId:
+                    orbitalLocaleOwnerId ||
+                    mp.myId,
+                planetId:
+                    orbitalLocalePlanetId,
+                x:
+                    orbitalX+
+                    (pos.x-W/2),
+                y:
+                    orbitalY+
+                    (pos.y-H/2)
+            }
+        });
+
+    }
+
+}
+
+function mpReceiveTapPing(fromId,event){
+
+    if(!running)
+        return;
+
+    if(event.space==="field"){
+
+        if(
+            worldState!=="field" ||
+            !event.key ||
+            event.key!==
+            mpCurrentFieldSessionKey()
+        ){
+
+            return;
+
+        }
+
+    }else if(
+        event.space==="orbital"
+    ){
+
+        if(
+            worldState!=="orbital" ||
+            event.ownerId!==
+            (
+                orbitalLocaleOwnerId ||
+                mp.myId
+            ) ||
+            event.planetId!==
+            orbitalLocalePlanetId
+        ){
+
+            return;
+
+        }
+
+    }else{
+
+        return;
+
+    }
+
+    const info=
+        mp.remotePlayerInfo[
+            fromId
+        ] || {};
+
+    mpTapPings.push({
+        space:event.space,
+        x:event.x,
+        y:event.y,
+        colour:
+            info.colour ||
+            "#6ee7ff",
+        born:performance.now()
+    });
+
+    if(mpTapPings.length>40){
+
+        mpTapPings.splice(
+            0,
+            mpTapPings.length-40
+        );
+
+    }
+
+}
+
+function drawMpTapPings(){
+
+    if(!mpTapPings.length)
+        return;
+
+    const now=
+        performance.now();
+
+    mpTapPings=
+        mpTapPings.filter(
+            ping=>
+                now-ping.born<
+                MP_TAP_PING_LIFE_MS
+        );
+
+    if(!mpTapPings.length)
+        return;
+
+    ctx.save();
+
+    mpTapPings.forEach(
+        ping=>{
+
+            if(ping.space!==worldState)
+                return;
+
+            const x=
+                ping.space==="orbital"
+                ?W/2+
+                 (ping.x-orbitalX)
+                :ping.x;
+
+            const y=
+                ping.space==="orbital"
+                ?H/2+
+                 (ping.y-orbitalY)
+                :ping.y;
+
+            const t=
+                (now-ping.born)/
+                MP_TAP_PING_LIFE_MS;
+
+            const fade=
+                1-t;
+
+            ctx.globalAlpha=
+                .55*fade;
+
+            ctx.strokeStyle=
+                ping.colour;
+
+            ctx.lineWidth=
+                2*fade+.5;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                x,y,
+                8+t*26,
+                0,
+                Math.PI*2
+            );
+
+            ctx.stroke();
+
+            ctx.globalAlpha=
+                .7*fade;
+
+            ctx.fillStyle=
+                ping.colour;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                x,y,
+                3*fade+1,
+                0,
+                Math.PI*2
+            );
+
+            ctx.fill();
+
+        }
+    );
+
+    ctx.restore();
+
+}
+
+/*
+ * Tells any co-pilots to follow this exact transition — called
+ * from enterAsteroidField/enterOrbitalSpace, the two actual
+ * moments worldState changes between them. A silent no-op for the
+ * overwhelming majority of calls (no crew, or not connected), so
+ * ordinary single-player travel is completely unaffected.
+ */
+function mpMaybeBroadcastWorldStateChange(
+    newState
+){
+
+    if(
+        !mp.connected ||
+        !currentShipId
+    ){
+
+        return;
+
+    }
+
+    const ownerId=
+        flyingShipOwnerId ||
+        mp.myId;
+
+    const crew=
+        mpGetShipCrew(
+            ownerId,
+            currentShipId
+        );
+
+    if(
+        !crew ||
+        crew.byId!==mp.myId ||
+        !crew.coPilots ||
+        !crew.coPilots.length
+    ){
+
+        return;
+
+    }
+
+    mpSend({
+        type:"fieldEvent",
+        event:{
+            kind:"worldStateChange",
+            ownerId,
+            shipId:currentShipId,
+            newState
+        }
+    });
+
+}
+
 function mpBroadcastFieldSnapshot(){
 
     if(
@@ -12726,6 +13222,26 @@ function mpApplyFieldSnapshot(event){
     score=event.score;
     wave=event.wave;
 
+    /*
+     * The actual fix for a co-pilot's HUD never visibly updating —
+     * score/lives/wave DO change correctly above (confirmed
+     * separately), but nothing was ever telling the on-screen
+     * numbers to repaint. updateHUD is normally called from dozens
+     * of scattered spots inside the real update(dt)/handlePointer
+     * — all of which a co-pilot's session never runs at all (see
+     * updateCoPilotFieldMirror), so this is the one place that
+     * actually needs to call it for them: right where their own
+     * mirrored values just changed.
+     */
+    if(
+        typeof updateHUD===
+        "function"
+    ){
+
+        updateHUD();
+
+    }
+
 }
 
 /*
@@ -12753,6 +13269,60 @@ function mpHandleRemoteFieldEvent(message){
             message.id,
             event
         );
+
+        return;
+
+    }
+
+    if(event.kind==="tapPing"){
+
+        mpReceiveTapPing(
+            message.id,
+            event
+        );
+
+        return;
+
+    }
+
+    if(event.kind==="worldStateChange"){
+
+        /*
+         * Without this, a co-pilot's own orbital flight keeps
+         * running fully independently (each client genuinely flies
+         * its own ship through its own obstacles for the purposes
+         * of co-presence with OTHER room-mates nearby) — meaning
+         * the pilot encountering a field, triggered by their own
+         * local randomness, would never otherwise be followed by a
+         * co-pilot's client, which has no reason of its own to
+         * transition at that same moment. Forced to match here
+         * instead of left to decide independently, exactly the way
+         * launch and landing already are.
+         */
+        if(
+            coPilotSessionShipKey===
+            mpShipKey(
+                event.ownerId,
+                event.shipId
+            ) &&
+            running &&
+            !gameOver
+        ){
+
+            if(event.newState==="field"){
+
+                worldState="field";
+
+            }else if(
+                event.newState===
+                "orbital"
+            ){
+
+                worldState="orbital";
+
+            }
+
+        }
 
         return;
 
@@ -12928,20 +13498,55 @@ function mpCreditCurrentTap(scoreGained){
  */
 let mpLastScoreboardSendTime=0;
 
-function mpBroadcastScoreboard(){
+let mpScoreboardTrailingTimer=null;
+
+/*
+ * force: send now regardless of the throttle (the final update at
+ * the end of a flight). ownerId/shipId: explicit, for that same
+ * end-of-flight case, where currentShipId may already have been
+ * reassigned to the freshly docked record. A throttled update is
+ * no longer simply dropped — a trailing send goes out once the
+ * window passes, so the last hits of a burst always arrive.
+ */
+function mpBroadcastScoreboard(force,ownerId,shipId){
 
     const now=
         performance.now();
 
     if(
+        !force &&
         now-
         mpLastScoreboardSendTime<
         MP_FIELD_SNAPSHOT_INTERVAL_MS
     ){
 
+        if(!mpScoreboardTrailingTimer){
+
+            mpScoreboardTrailingTimer=
+                setTimeout(
+                    ()=>{
+
+                        mpScoreboardTrailingTimer=null;
+
+                        if(running){
+
+                            mpBroadcastScoreboard();
+
+                        }
+
+                    },
+                    MP_FIELD_SNAPSHOT_INTERVAL_MS
+                );
+
+        }
+
         return;
 
     }
+
+    clearTimeout(mpScoreboardTrailingTimer);
+
+    mpScoreboardTrailingTimer=null;
 
     mpLastScoreboardSendTime=now;
 
@@ -12950,9 +13555,12 @@ function mpBroadcastScoreboard(){
         event:{
             kind:"scoreboard",
             ownerId:
+                ownerId ||
                 flyingShipOwnerId ||
                 mp.myId,
-            shipId:currentShipId,
+            shipId:
+                shipId ||
+                currentShipId,
             scoreboard:flightScoreboard
         }
     });
@@ -12977,24 +13585,67 @@ function renderCrewScoreboard(){
     if(!el)
         return;
 
-    const entries=
-        Object.keys(
-            flightScoreboard
-        ).map(
-            id=>
+    /*
+     * The crew aboard this flight, from the claim itself — so the
+     * panel (and a co-pilot's "you're crewing X's ship" header)
+     * appears from takeoff, not only once someone scores.
+     */
+    const key=
+        typeof mpCurrentFieldSessionKey===
+        "function"
+        ?mpCurrentFieldSessionKey()
+        :null;
+
+    const crew=
+        key
+        ?mp.claimedShips[key]
+        :null;
+
+    const members={};
+
+    if(crew){
+
+        members[crew.byId]=
+            {name:crew.byName,points:0};
+
+        (crew.coPilots || []).forEach(
+            cp=>{
+
+                members[cp.id]=
+                    {name:cp.name,points:0};
+
+            }
+        );
+
+    }
+
+    Object.keys(flightScoreboard).forEach(
+        id=>{
+
+            members[id]=
                 Object.assign(
-                    {id},
-                    flightScoreboard[
-                        id
-                    ]
-                )
+                    {},
+                    members[id] || {},
+                    flightScoreboard[id]
+                );
+
+        }
+    );
+
+    const entries=
+        Object.keys(members).map(
+            id=>Object.assign(
+                {id},
+                members[id]
+            )
         );
 
-    if(!entries.length){
+    if(
+        !entries.length ||
+        (!crew && entries.length<2)
+    ){
 
-        el.classList.add(
-            "hidden"
-        );
+        el.classList.add("hidden");
 
         el.innerHTML="";
 
@@ -13004,45 +13655,84 @@ function renderCrewScoreboard(){
 
     entries.sort(
         (a,b)=>
-            b.points-a.points
+            (b.points || 0)-
+            (a.points || 0)
     );
+
+    const colourOf=
+        id=>{
+
+            const r=
+                (mp.roster || []).find(
+                    p=>p.id===id
+                );
+
+            return(
+                (r && r.colour) ||
+                (id===mp.myId ? mp.myColour : null) ||
+                (mp.remotePlayerInfo[id] || {}).colour ||
+                "#6ee7ff"
+            );
+
+        };
+
+    const pilotIsMe=
+        crew && crew.byId===mp.myId;
+
+    const title=
+        !crew
+        ?"Crew"
+        :pilotIsMe
+        ?"Your ship"
+        :"Co-piloting "+
+         (crew.byName || "a")+
+         "'s ship";
+
+    const anyPoints=
+        entries.some(
+            e=>(e.points || 0)>0
+        );
 
     el.innerHTML=
+        '<div class="crew-score-title">'+
+        escapeHTML(title)+
+        '</div>'+
         entries.map(
-            (entry,index)=>
-                '<div class="crew-'+
-                'score-row'+
-                (
-                    index===0
-                    ?' crew-score-'+
-                     'leader'
-                    :''
-                )+
-                '">'+
-                '<span class="crew-'+
-                'score-name">'+
-                '<span class="crew-'+
-                'score-dot" '+
-                'style="background:'+
-                (entry.colour || '#6ee7ff')+
-                ';"></span>'+
-                escapeHTML(
-                    entry.name ||
-                    "Player"
-                )+
-                '</span>'+
-                '<span class="crew-'+
-                'score-points">'+
-                Math.round(
-                    entry.points
-                )+
-                '</span>'+
-                '</div>'
+            (entry,index)=>{
+
+                const lead=
+                    anyPoints &&
+                    index===0;
+
+                return(
+                    '<div class="crew-score-row'+
+                    (lead ? ' crew-score-leader' : '')+
+                    '">'+
+                    '<span class="crew-score-name">'+
+                    '<span class="crew-score-dot" '+
+                    'style="background:'+
+                    colourOf(entry.id)+
+                    ';"></span>'+
+                    (lead ? '👑 ' : '')+
+                    escapeHTML(
+                        entry.name || "Player"
+                    )+
+                    (
+                        crew && entry.id===crew.byId
+                        ?' <span class="crew-score-role">pilot</span>'
+                        :''
+                    )+
+                    '</span>'+
+                    '<span class="crew-score-points">'+
+                    Math.round(entry.points || 0)+
+                    '</span>'+
+                    '</div>'
+                );
+
+            }
         ).join("");
 
-    el.classList.remove(
-        "hidden"
-    );
+    el.classList.remove("hidden");
 
 }
 
@@ -13209,7 +13899,11 @@ function mpBroadcastOrbitalPresence(){
         vy:
             Math.sin(orbitalHeading)*
             orbitalSpeed,
-        lives
+        lives,
+        styleId:currentShipStyleId,
+        styleOwnerId:
+            currentShipStyleOwnerId ||
+            mp.myId
     });
 
 }
@@ -13309,6 +14003,171 @@ function mpDisconnectSocket(){
 
 }
 
+/*
+ * ---- PERSISTENT MEMBERSHIP ----
+ * The room code, this player's seat id, and the secret token the
+ * server issued for it — kept across app restarts so reopening the
+ * game quietly reclaims the same seat (see the server's 'resume').
+ * Only the Leave button clears it; closing the app never does.
+ */
+const MP_SESSION_KEY="asteroidImpactMpSession";
+
+let mpReconnectTimer=null;
+
+let mpReconnectDelayMs=2000;
+
+let mpReconnecting=false;
+
+function mpLoadSession(){
+
+    try{
+
+        const s=JSON.parse(
+            localStorage.getItem(
+                MP_SESSION_KEY
+            ) || "null"
+        );
+
+        return(
+            s && s.code && s.id && s.token
+            ?s
+            :null
+        );
+
+    }catch(error){
+
+        return null;
+
+    }
+
+}
+
+function mpSaveSession(code,id,token){
+
+    if(!code || !id || !token)
+        return;
+
+    try{
+
+        localStorage.setItem(
+            MP_SESSION_KEY,
+            JSON.stringify({code,id,token})
+        );
+
+    }catch(error){}
+
+}
+
+function mpClearSession(){
+
+    try{
+
+        localStorage.removeItem(
+            MP_SESSION_KEY
+        );
+
+    }catch(error){}
+
+    clearTimeout(mpReconnectTimer);
+
+    mpReconnecting=false;
+
+    mpReconnectDelayMs=2000;
+
+}
+
+function mpResumeSession(){
+
+    const session=
+        mpLoadSession();
+
+    if(
+        !session ||
+        mp.connected ||
+        mp.connecting
+    ){
+
+        return;
+
+    }
+
+    mpConnectAndSend({
+        type:"resume",
+        code:session.code,
+        id:session.id,
+        token:session.token
+    });
+
+}
+
+/*
+ * After an unplanned disconnect (signal dropped, server restarted)
+ * — retries with a growing delay, capped at 30s, for as long as a
+ * session is stored. Never runs after an explicit Leave, since that
+ * clears the session first.
+ */
+function mpScheduleReconnect(){
+
+    if(!mpLoadSession())
+        return;
+
+    clearTimeout(mpReconnectTimer);
+
+    mpReconnecting=true;
+
+    mpReconnectTimer=
+        setTimeout(
+            ()=>{
+
+                mpResumeSession();
+
+                mpReconnectDelayMs=
+                    Math.min(
+                        30000,
+                        mpReconnectDelayMs*2
+                    );
+
+            },
+            mpReconnectDelayMs
+        );
+
+}
+
+/*
+ * Whether a room-mate is actually connected right now. Changes to
+ * their planet are carried out on THEIR device, so an offline
+ * player's planet can be visited and looked around, but not changed.
+ */
+function mpIsPlayerOnline(playerId){
+
+    const entry=
+        (mp.roster || []).find(
+            p=>p.id===playerId
+        );
+
+    return !!(entry && entry.online!==false);
+
+}
+
+function mpPlayerName(playerId){
+
+    const entry=
+        (mp.roster || []).find(
+            p=>p.id===playerId
+        );
+
+    return(
+        (entry && entry.name) ||
+        (
+            mp.remotePlayerInfo[
+                playerId
+            ] || {}
+        ).name ||
+        "That player"
+    );
+
+}
+
 function mpResetRoomState(){
 
     mp.connected=false;
@@ -13330,11 +14189,49 @@ function mpResetRoomState(){
 
 function mpLeaveRoom(){
 
-    mpSend({type:"leave"});
+    const session=
+        mpLoadSession();
 
-    mpDisconnectSocket();
+    const wasConnected=
+        mp.connected;
 
-    mpResetRoomState();
+    mpClearSession();
+
+    if(wasConnected){
+
+        mpSend({type:"leave"});
+
+        mpDisconnectSocket();
+
+        mpResetRoomState();
+
+    }else{
+
+        mpDisconnectSocket();
+
+        mpResetRoomState();
+
+        /*
+         * Not connected right now (still reconnecting, or the
+         * server was unreachable) — a plain "leave" would go
+         * nowhere and the seat would stay held. Connect just long
+         * enough to give it up, proven by the stored token; the
+         * server closes the connection itself afterwards. The
+         * session is already cleared above, so that close never
+         * triggers a reconnect.
+         */
+        if(session){
+
+            mpConnectAndSend({
+                type:"leaveRoom",
+                code:session.code,
+                id:session.id,
+                token:session.token
+            });
+
+        }
+
+    }
 
     if(
         typeof renderMultiplayerPanel===
@@ -13380,6 +14277,8 @@ function mpConnectAndSend(firstMessage){
             "Couldn't reach the "+
             "multiplayer server.";
 
+        mpScheduleReconnect();
+
         renderMultiplayerPanel();
 
         return;
@@ -13423,7 +14322,13 @@ function mpConnectAndSend(firstMessage){
 
         mpResetRoomState();
 
-        if(wasConnected){
+        if(mpLoadSession()){
+
+            mp.lastError=null;
+
+            mpScheduleReconnect();
+
+        }else if(wasConnected){
 
             mp.lastError=
                 "Disconnected from the "+
@@ -13533,19 +14438,91 @@ function mpHandleMessage(message){
 
     if(
         message.type==="hosted" ||
-        message.type==="joined"
+        message.type==="joined" ||
+        message.type==="resumed"
     ){
 
         mp.connected=true;
         mp.connecting=false;
         mp.roomCode=message.code;
+
+        if(message.id){
+
+            mp.myId=message.id;
+
+        }
+
+        if(message.colour){
+
+            mp.myColour=message.colour;
+
+        }
+
+        mpSaveSession(
+            message.code,
+            mp.myId,
+            message.token
+        );
+
+        clearTimeout(mpReconnectTimer);
+
+        mpReconnecting=false;
+
+        mpReconnectDelayMs=2000;
+
         mp.isHost=
-            message.type==="hosted";
+            message.type==="hosted" ||
+            !!message.isHost;
         mp.lastError=null;
 
         mpBroadcastOwnSave();
 
         renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="leftRoom"){
+
+        mp.connecting=false;
+
+        mpDisconnectSocket();
+
+        renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="resumeFailed"){
+
+        mpClearSession();
+
+        mp.connecting=false;
+
+        mp.lastError=
+            message.message ||
+            "Couldn't rejoin your room.";
+
+        mpDisconnectSocket();
+
+        renderMultiplayerPanel();
+
+        return;
+
+    }
+
+    if(message.type==="playerOffline"){
+
+        /*
+         * Their planet STAYS — that's the whole point of a
+         * persistent room. Only live things go: where they were
+         * flying or walking, since they're not there any more.
+         */
+        delete mp.remotePresence[
+            message.id
+        ];
 
         return;
 
@@ -13649,6 +14626,23 @@ function mpHandleMessage(message){
                 message.colour ||
                 "#6ee7ff"
         };
+
+        /*
+         * A game-over screen offering to return to this player's
+         * planet should show their CURRENT ship count, not the one
+         * from a moment before their latest update arrived.
+         */
+        if(
+            lastLaunchOwnerId===message.id &&
+            typeof gameOverScreen!=="undefined" &&
+            !gameOverScreen.classList.contains(
+                "hidden"
+            )
+        ){
+
+            renderGameOverReturnButtons();
+
+        }
 
         /*
          * Live means live: if this is the planet actually on
@@ -13895,6 +14889,12 @@ function mpHandleMessage(message){
             byName:message.byName,
             coPilots:message.coPilots || []
         };
+
+        if(running){
+
+            renderCrewScoreboard();
+
+        }
 
         if(planetDetailId){
 
@@ -14247,6 +15247,27 @@ function mpInterceptPlanetAction(target){
 
     }
 
+    /*
+     * Everything from here down — claiming a ship, crewing it, or
+     * any change to the planet — is carried out on the OWNER's
+     * device. With them offline it would silently go nowhere, so
+     * say so plainly instead. Looking around still works.
+     */
+    if(!mpIsPlayerOnline(activePlanetOwnerId)){
+
+        showShipToast(
+            mpPlayerName(
+                activePlanetOwnerId
+            )+
+            " is offline — you can look "+
+            "around, but changes wait "+
+            "until they're back."
+        );
+
+        return true;
+
+    }
+
     if(MP_CLAIM_ACTIONS.has(action)){
 
         const shipId=
@@ -14271,8 +15292,9 @@ function mpInterceptPlanetAction(target){
 
             showShipToast(
                 (
-                    claim && claim.byName
-                ) || "Someone"+
+                    (claim && claim.byName) ||
+                    "Someone"
+                )+
                 " already has that ship."
             );
 
@@ -14570,6 +15592,64 @@ function mpHandleShipLifecycle(message){
     if(message.action==="landing"){
 
         mpApplyShipLanding(message);
+
+        return;
+
+    }
+
+    if(message.action==="lost"){
+
+        /*
+         * The ship a room-mate was flying died, not landed — the
+         * same real rule a solo player's own ship already follows
+         * (endGame never recreates or restores a docked record at
+         * all; death is simply the end of it), applied here to a
+         * borrowed one instead of leaving it flagged in-flight
+         * forever with no way to ever become available again.
+         */
+        const originArray=
+            (
+                localPlanetSave.ships ||
+                {}
+            )[message.originPlanetId];
+
+        const index=
+            originArray
+            ?originArray.findIndex(
+                s=>
+                    s.id===
+                    message.shipId
+            )
+            :-1;
+
+        if(index!==-1){
+
+            originArray.splice(
+                index,1
+            );
+
+            savePlanetProgress(
+                localPlanetSave
+            );
+
+            if(planetDetailId){
+
+                renderPlanetDetail(
+                    planetDetailId
+                );
+
+            }
+
+            if(
+                typeof renderLaunchPreview===
+                "function"
+            ){
+
+                renderLaunchPreview();
+
+            }
+
+        }
 
         return;
 
@@ -14955,6 +16035,39 @@ function renderMultiplayerPanel(){
     if(!el)
         return;
 
+    /*
+     * Still a member of a room, just not connected this moment —
+     * the app is reconnecting on its own. Leave stays available
+     * here too, so a room that's gone for good can still be exited.
+     */
+    const storedSession=
+        !mp.connected &&
+        typeof mpLoadSession==="function"
+        ?mpLoadSession()
+        :null;
+
+    if(storedSession){
+
+        el.innerHTML=
+            '<div class="mp-room-code">'+
+            escapeHTML(storedSession.code)+
+            '</div>'+
+            '<div class="metric-note" '+
+            'style="text-align:center;margin-top:-4px;">'+
+            '📡 Reconnecting to your room…</div>'+
+            '<div class="metric-note" '+
+            'style="margin:10px 0;">'+
+            'You\'re still a member — your planets '+
+            'stay visible to the room while you\'re '+
+            'away. Only Leave Room ends that.</div>'+
+            '<button class="control-btn" '+
+            'id="mpLeaveBtn" style="margin-top:8px;'+
+            'width:100%;">Leave Room</button>';
+
+        return;
+
+    }
+
     if(!mp.connected){
 
         el.innerHTML=
@@ -15037,7 +16150,11 @@ function renderMultiplayerPanel(){
         )+
         mp.roster.length+' player'+
         (mp.roster.length===1 ? "" : "s")+
-        ' in the room</div>';
+        ' in the room · '+
+        mp.roster.filter(
+            p=>p.online!==false
+        ).length+
+        ' online</div>';
 
     html+=
         '<div style="margin:12px 0;">';
@@ -15048,15 +16165,38 @@ function renderMultiplayerPanel(){
             const isMe=
                 player.id===mp.myId;
 
+            const isOnline=
+                player.online!==false;
+
             html+=
-                '<div class="mp-roster-row">'+
+                '<div class="mp-roster-row"'+
+                (
+                    isOnline
+                    ?''
+                    :' style="opacity:.55;"'
+                )+
+                '>'+
                 '<div class="mp-roster-dot" '+
                 'style="background:'+
                 (player.colour || "#6ee7ff")+
                 ';"></div>'+
                 '<div style="flex:1;">'+
-                player.name+
+                escapeHTML(player.name || "Player")+
                 (isMe ? " (you)" : "")+
+                '</div>'+
+                '<div style="font-size:10px;'+
+                'letter-spacing:.4px;color:'+
+                (
+                    isOnline
+                    ?'#8ef0ae'
+                    :'#8fa3bf'
+                )+
+                ';">'+
+                (
+                    isOnline
+                    ?'● online'
+                    :'○ offline'
+                )+
                 '</div>'+
                 '</div>';
 
@@ -23061,7 +24201,8 @@ function drawStarMapScene(
                     for(
                         const shape of
                         getShipStyleShapes(
-                            currentShipStyleId
+                            currentShipStyleId,
+                            currentShipStyleOwnerId
                         )
                     ){
 
@@ -23791,6 +24932,32 @@ function launchWithAnimation(){
 
     if(flightTarget===1)
         return;
+
+    /*
+     * A ship claimed from a room-mate's planet can only fly while
+     * they're online — their device is what records the launch and
+     * the flight's results.
+     */
+    if(
+        activePlanetOwnerId &&
+        typeof mp!=="undefined" &&
+        mp.connected &&
+        !mpIsPlayerOnline(
+            activePlanetOwnerId
+        )
+    ){
+
+        showShipToast(
+            mpPlayerName(
+                activePlanetOwnerId
+            )+
+            " is offline — their ships "+
+            "can be flown once they're back."
+        );
+
+        return;
+
+    }
 
     /*
      * The planet menu sits in its own overlay, independent of
@@ -30074,8 +31241,14 @@ function mpMaybeBroadcastCrewLaunch(mode){
          * currentShipPendingPilot, which only ever means something
          * for the actual flying ship, not a co-pilot's own session.
          */
-        mode:mode || "field"
+        mode:mode || "field",
+        styleId:currentShipStyleId,
+        styleOwnerId:
+            currentShipStyleOwnerId ||
+            mp.myId
     });
+
+    renderCrewScoreboard();
 
 }
 
@@ -30087,6 +31260,104 @@ function mpMaybeBroadcastCrewLaunch(mode){
  * session of this flight at the same moment, rather than being
  * left stranded mid-field with the pilot already gone.
  */
+/*
+ * The "who did best" moment at the end of a crewed flight — shown
+ * on every crew member's screen, built from the same scoreboard the
+ * HUD showed live. Slightly delayed so it lands after the landing or
+ * game-over transition rather than fighting it for attention.
+ */
+function mpShowCrewResults(board,crew){
+
+    const merged={};
+
+    if(crew){
+
+        merged[crew.byId]=
+            {name:crew.byName,points:0};
+
+        (crew.coPilots || []).forEach(
+            cp=>{
+
+                merged[cp.id]=
+                    {name:cp.name,points:0};
+
+            }
+        );
+
+    }
+
+    Object.keys(board || {}).forEach(
+        id=>{
+
+            merged[id]=
+                Object.assign(
+                    {},
+                    merged[id] || {},
+                    board[id]
+                );
+
+        }
+    );
+
+    const entries=
+        Object.keys(merged).map(
+            id=>Object.assign({id},merged[id])
+        ).sort(
+            (a,b)=>
+                (b.points || 0)-
+                (a.points || 0)
+        );
+
+    if(entries.length<2)
+        return;
+
+    const medals=["🥇","🥈","🥉"];
+
+    const anyPoints=
+        entries.some(
+            e=>(e.points || 0)>0
+        );
+
+    const leader=entries[0];
+
+    const title=
+        !anyPoints
+        ?"Crew flight complete"
+        :leader.id===mp.myId
+        ?"You topped the crew!"
+        :(leader.name || "Someone")+
+         " topped the crew!";
+
+    const subtitle=
+        entries.map(
+            (e,i)=>
+                (medals[i] || "·")+" "+
+                (e.name || "Player")+" "+
+                Math.round(e.points || 0)
+        ).join("   ");
+
+    setTimeout(
+        ()=>{
+
+            if(
+                typeof showMilestoneFlourish===
+                "function"
+            ){
+
+                showMilestoneFlourish(
+                    "🏆",
+                    title,
+                    subtitle
+                );
+
+            }
+
+        },
+        700
+    );
+
+}
+
 function mpMaybeBroadcastCrewLanded(
     ownerId,shipId
 ){
@@ -30114,10 +31385,62 @@ function mpMaybeBroadcastCrewLanded(
 
     }
 
+    /*
+     * Final numbers first, then the end cue — one connection keeps
+     * them in order, so every co-pilot has the true final scoreboard
+     * in hand before their session ends.
+     */
+    mpBroadcastScoreboard(
+        true,
+        ownerId,
+        shipId
+    );
+
+    mpShowCrewResults(
+        flightScoreboard,
+        crew
+    );
+
     mpSend({
         type:"crewLanded",
         ownerId,
         shipId
+    });
+
+}
+
+/*
+ * The death-side counterpart to mpBroadcastShipLaunch — called
+ * from endGame() instead of a normal landing whenever this flight
+ * was flown with a ship claimed from a room-mate's planet. Only
+ * fires for that specific case (ownerId is this player's own id
+ * for every ordinary death, which needs no message at all — a
+ * solo player's own ship already just vanishes on death with no
+ * network involved).
+ */
+function mpMaybeBroadcastShipLost(
+    ownerId,shipId,originPlanetId
+){
+
+    if(
+        !mp.connected ||
+        !ownerId ||
+        ownerId===mp.myId ||
+        !shipId
+    ){
+
+        return;
+
+    }
+
+    mpSend({
+        type:"shipLifecycle",
+        payload:{
+            ownerId,
+            action:"lost",
+            shipId,
+            originPlanetId
+        }
     });
 
 }
@@ -30140,6 +31463,8 @@ let coPilotSessionShipKey=null;
  * cleared alongside it in mpEndCoPilotSession.
  */
 let coPilotFollowingOwnerId=null;
+
+let coPilotOwnStyleId=null;
 let coPilotFollowingShipId=null;
 
 /*
@@ -30162,6 +31487,23 @@ function mpStartCoPilotSession(message){
 
     if(running)
         return;
+
+    /*
+     * A co-pilot almost always joins from the PILOT's planet screen
+     * (that's where the +Co-pilot button lives), so planetSave is
+     * still pointed at a mirror of the pilot's save at this moment.
+     * Everything below — creating this session's own ship, and
+     * startGame() itself — must run against this player's OWN save.
+     * The crewLaunch handler's closeStarMap() call already resets
+     * the view as a side effect; this makes the guarantee explicit
+     * here, where it actually matters, rather than depending on
+     * that side effect staying in place.
+     */
+    if(activePlanetOwnerId){
+
+        mpExitRemotePlanetView();
+
+    }
 
     const freshShip=
         createShip(
@@ -30217,6 +31559,31 @@ function mpStartCoPilotSession(message){
     orbitalLocalePlanetId=
         message.destinationPlanetId;
 
+    /*
+     * Show the ship actually being crewed — the pilot's ship, in its
+     * owner's real design — rather than this session's own fresh
+     * default. This player's own style is remembered so it can be
+     * restored before landing (their own ship is what gets saved).
+     */
+    coPilotOwnStyleId=
+        currentShipStyleId;
+
+    if(message.styleId){
+
+        currentShipStyleId=
+            message.styleId;
+
+        currentShipStyleOwnerId=
+            message.styleOwnerId &&
+            message.styleOwnerId!==
+            mp.myId
+            ?message.styleOwnerId
+            :null;
+
+    }
+
+    renderCrewScoreboard();
+
 }
 
 /*
@@ -30238,11 +31605,29 @@ function mpEndCoPilotSession(){
 
     }
 
+    mpShowCrewResults(
+        flightScoreboard,
+        mp.claimedShips[
+            coPilotSessionShipKey
+        ]
+    );
+
     coPilotSessionShipKey=null;
 
     coPilotFollowingOwnerId=null;
 
     coPilotFollowingShipId=null;
+
+    if(coPilotOwnStyleId){
+
+        currentShipStyleId=
+            coPilotOwnStyleId;
+
+    }
+
+    currentShipStyleOwnerId=null;
+
+    coPilotOwnStyleId=null;
 
     worldState="planet";
 
@@ -30616,6 +32001,26 @@ document
 
         if(
             mp.connected &&
+            activePlanetOwnerId &&
+            !mpIsPlayerOnline(
+                activePlanetOwnerId
+            )
+        ){
+
+            showShipToast(
+                mpPlayerName(
+                    activePlanetOwnerId
+                )+
+                " is offline — their ships "+
+                "can be flown once they're back."
+            );
+
+            return;
+
+        }
+
+        if(
+            mp.connected &&
             claimOwnerId &&
             mpIsShipClaimedByOther(
                 claimOwnerId,
@@ -30633,8 +32038,9 @@ document
 
             showShipToast(
                 (
-                    claim && claim.byName
-                ) || "Someone"+
+                    (claim && claim.byName) ||
+                    "Someone"
+                )+
                 " already has that ship."
             );
 
@@ -45201,7 +46607,8 @@ function drawCustomShipShapes(
     for(
         const shape of
         getShipStyleShapes(
-            currentShipStyleId
+            currentShipStyleId,
+            currentShipStyleOwnerId
         )
     ){
 
@@ -53438,6 +54845,17 @@ function enterOrbitalSpace(){
 
     }
 
+    if(
+        typeof mpMaybeBroadcastWorldStateChange===
+        "function"
+    ){
+
+        mpMaybeBroadcastWorldStateChange(
+            "orbital"
+        );
+
+    }
+
     /*
      * Same transition-triggered random pick as entering a field —
      * orbital space doesn't have its own destination planet yet
@@ -54434,7 +55852,134 @@ function drawOrbitalScene(){
  * the fixed local cyan, with a name tag so it's clear whose ship
  * is whose when more than one is nearby.
  */
-function drawRemoteShipAt(x,y,heading,colour,name){
+/*
+ * Built ShapeObjects per "owner|style", reused across frames —
+ * rebuilding a design from its stored JSON 60 times a second for
+ * every visible room-mate would be needless work. Keyed on the raw
+ * design text too, so an edited style refreshes automatically.
+ */
+const mpRemoteStyleShapeCache={};
+
+function mpGetRemoteStyleShapes(styleId,ownerId){
+
+    if(!styleId)
+        return null;
+
+    const raw=
+        resolveShipStyleRaw(
+            styleId,
+            ownerId
+        ) || "";
+
+    const cacheKey=
+        ownerId+"|"+styleId;
+
+    const cached=
+        mpRemoteStyleShapeCache[
+            cacheKey
+        ];
+
+    if(
+        cached &&
+        cached.raw===raw
+    ){
+
+        return cached.shapes;
+
+    }
+
+    const shapes=
+        getShipStyleShapes(
+            styleId,
+            ownerId
+        );
+
+    mpRemoteStyleShapeCache[
+        cacheKey
+    ]={raw,shapes};
+
+    return shapes;
+
+}
+
+function drawRemoteShipAt(
+    x,y,heading,colour,name,
+    styleId,styleOwnerId
+){
+
+    const shapes=
+        styleId
+        ?mpGetRemoteStyleShapes(
+            styleId,
+            styleOwnerId
+        )
+        :null;
+
+    if(
+        shapes &&
+        shapes.length
+    ){
+
+        ctx.save();
+
+        ctx.translate(x,y);
+
+        ctx.rotate(
+            heading+Math.PI/2
+        );
+
+        ctx.scale(.45,.45);
+
+        ctx.translate(-200,-140);
+
+        ctx.shadowBlur=16;
+
+        ctx.shadowColor=colour;
+
+        shapes.forEach(
+            shape=>{
+
+                try{
+
+                    shape.draw(
+                        ctx,
+                        true,
+                        null,
+                        null
+                    );
+
+                }catch(error){}
+
+            }
+        );
+
+        ctx.restore();
+
+        ctx.save();
+
+        ctx.font=
+            "700 10px sans-serif";
+
+        ctx.textAlign="center";
+
+        ctx.fillStyle=colour;
+
+        ctx.shadowColor=
+            "rgba(0,0,0,.8)";
+
+        ctx.shadowBlur=4;
+
+        ctx.fillText(
+            name,
+            x,
+            y-34
+        );
+
+        ctx.restore();
+
+        return;
+
+    }
 
     ctx.save();
 
@@ -54506,6 +56051,102 @@ function drawRemoteShipAt(x,y,heading,colour,name){
  * screen position is simply its own world position minus this
  * ship's, added to centre.
  */
+/*
+ * playerId -> the position/heading actually DRAWN for that remote
+ * ship, as opposed to the last raw presence tick received. Ticks
+ * only arrive every ~150ms, so drawing them directly made every
+ * other player's ship visibly hop between positions. Instead each
+ * frame dead-reckons where the ship most likely is right now (last
+ * known position + its own real velocity × time since that tick —
+ * exactly how it actually moves on its owner's screen) and eases
+ * the drawn position toward that, so motion stays continuous and
+ * any correction when a new tick lands is absorbed smoothly.
+ */
+const mpRemoteOrbitalSmooth={};
+
+let mpRemoteOrbitalSmoothLastFrame=0;
+
+function mpSmoothedRemotePosition(
+    playerId,p,frameDt
+){
+
+    const elapsed=
+        Math.min(
+            .35,
+            Math.max(
+                0,
+                (
+                    performance.now()-
+                    (p.receivedAt || 0)
+                )/1000
+            )
+        );
+
+    const targetX=
+        p.x+(p.vx || 0)*elapsed;
+
+    const targetY=
+        p.y+(p.vy || 0)*elapsed;
+
+    let s=
+        mpRemoteOrbitalSmooth[
+            playerId
+        ];
+
+    /*
+     * First sighting, or a jump too large to be real motion (they
+     * re-entered orbit somewhere else entirely) — snap rather than
+     * visibly sliding across the whole sky.
+     */
+    if(
+        !s ||
+        Math.hypot(
+            targetX-s.x,
+            targetY-s.y
+        )>400
+    ){
+
+        s={
+            x:targetX,
+            y:targetY,
+            angle:p.angle || 0
+        };
+
+        mpRemoteOrbitalSmooth[
+            playerId
+        ]=s;
+
+        return s;
+
+    }
+
+    const follow=
+        1-Math.exp(
+            -frameDt*14
+        );
+
+    s.x+=
+        (targetX-s.x)*follow;
+
+    s.y+=
+        (targetY-s.y)*follow;
+
+    let angleDelta=
+        (p.angle || 0)-s.angle;
+
+    angleDelta=
+        Math.atan2(
+            Math.sin(angleDelta),
+            Math.cos(angleDelta)
+        );
+
+    s.angle+=
+        angleDelta*follow;
+
+    return s;
+
+}
+
 function drawRemoteOrbitalShips(){
 
     if(
@@ -54517,11 +56158,35 @@ function drawRemoteOrbitalShips(){
 
     }
 
+    const frameNow=
+        performance.now();
+
+    const frameDt=
+        mpRemoteOrbitalSmoothLastFrame
+        ?Math.min(
+            .1,
+            (
+                frameNow-
+                mpRemoteOrbitalSmoothLastFrame
+            )/1000
+        )
+        :.016;
+
+    mpRemoteOrbitalSmoothLastFrame=
+        frameNow;
+
     mpGetRemoteShipsHere().forEach(
         remote=>{
 
-            const p=
+            const raw=
                 remote.presence;
+
+            const p=
+                mpSmoothedRemotePosition(
+                    remote.playerId,
+                    raw,
+                    frameDt
+                );
 
             const screenX=
                 W/2+
@@ -54549,7 +56214,9 @@ function drawRemoteOrbitalShips(){
                     screenY,
                     p.angle,
                     remote.colour,
-                    remote.name
+                    remote.name,
+                    raw.styleId,
+                    raw.styleOwnerId
                 );
 
             }catch(error){
@@ -54603,6 +56270,17 @@ function enterAsteroidField(
     ){
 
         mpMaybeBroadcastCrewLaunch("field");
+
+    }
+
+    if(
+        typeof mpMaybeBroadcastWorldStateChange===
+        "function"
+    ){
+
+        mpMaybeBroadcastWorldStateChange(
+            "field"
+        );
 
     }
 
@@ -57769,6 +59447,15 @@ function draw(){
 
     ctx.restore();
 
+    if(
+        typeof drawMpTapPings===
+        "function"
+    ){
+
+        drawMpTapPings();
+
+    }
+
     /*
      * Orbital space entry/exit dissolve — drawn last, outside the
      * restore above, so it covers absolutely everything including
@@ -58077,6 +59764,58 @@ function updateHUD(){
 
 function endGame(){
 
+    /*
+     * The actual fix for co-pilots getting stuck when the pilot
+     * dies — a death was never treated as "the flight is over" for
+     * multiplayer purposes the way landing already was, so nothing
+     * ever told a co-pilot's client their own session should end
+     * too. Done BEFORE running/currentShipId/flyingShipOwnerId get
+     * touched by anything below, since both calls need them as
+     * they stood during the flight that just ended. A claimed
+     * remote ship is also genuinely lost here, exactly like a solo
+     * player's own ship already is on death — not left stuck
+     * flagged in-flight forever on the owner's side.
+     */
+    if(
+        typeof mpMaybeBroadcastShipLost===
+        "function"
+    ){
+
+        mpMaybeBroadcastShipLost(
+            flyingShipOwnerId,
+            currentShipId,
+            flyingShipOriginPlanetId
+        );
+
+    }
+
+    if(
+        typeof mpMaybeBroadcastCrewLanded===
+        "function"
+    ){
+
+        mpMaybeBroadcastCrewLanded(
+            flyingShipOwnerId || mp.myId,
+            currentShipId
+        );
+
+    }
+
+    if(flyingShipOwnerId){
+
+        mpSend({
+            type:"releaseShip",
+            ownerId:flyingShipOwnerId,
+            shipId:currentShipId
+        });
+
+        flyingShipOwnerId=null;
+
+        flyingShipOriginPlanetId=
+            null;
+
+    }
+
     running=false;
 
     gameOver=true;
@@ -58233,6 +59972,26 @@ let currentShipPerk=null;
  * owner actually picked for it, not a single shared design.
  */
 let currentShipStyleId="custom1";
+
+/*
+ * Whose design currentShipStyleId refers to — null means this
+ * player's own. Style ids ("custom2") are only meaningful within
+ * one player's own designs, so a claimed ship flown from a
+ * room-mate's planet, or a co-pilot riding along in the pilot's
+ * ship, must look the design up from the ship's real owner, not
+ * from this player's own same-numbered slot.
+ */
+let currentShipStyleOwnerId=null;
+
+/*
+ * Where this player's most recent launch actually started — the
+ * planet, and whose planet it was (null = their own). Kept
+ * separately from flyingShipOwnerId, which endGame clears before
+ * the game-over screen is built, so the screen can still offer a
+ * way straight back to that exact spot.
+ */
+let lastLaunchPlanetId=null;
+let lastLaunchOwnerId=null;
 
 /*
  * The score the launched ship actually walked in with — needed
@@ -58821,6 +60580,15 @@ function startGame(){
     }
 
     missionJustLaunched=true;
+
+    currentShipStyleOwnerId=
+        flyingShipOwnerId || null;
+
+    lastLaunchPlanetId=
+        chosen.id;
+
+    lastLaunchOwnerId=
+        flyingShipOwnerId || null;
 
     currentPlanetId=
         chosen.id;
@@ -59740,6 +61508,15 @@ canvas.addEventListener(
          */
         const scoreBeforeTap=
             score;
+
+        if(
+            typeof mpBroadcastTapPing===
+            "function"
+        ){
+
+            mpBroadcastTapPing(event);
+
+        }
 
         handlePointer(event);
 
@@ -61981,7 +63758,8 @@ function paintPauseShipPreview(){
             );
 
             getShipStyleShapes(
-                currentShipStyleId
+                currentShipStyleId,
+                currentShipStyleOwnerId
             ).forEach(
                 shape=>{
 
@@ -63856,18 +65634,158 @@ function renderGameOverReturnButtons(){
 
     container.innerHTML="";
 
-    const planetsWithShips=
-        PLANETS.filter(
-            p =>
-                p.id==="earth" ||
+    /*
+     * Leads with the planet this run actually launched from —
+     * including a room-mate's, when the run was flown with a ship
+     * claimed from them — rather than always offering Earth first
+     * with a "free ship" label that read like a promise. Earth only
+     * appears as a fallback when there's nowhere else with ships to
+     * go back to.
+     */
+    const options=[];
+
+    const remoteOwner=
+        lastLaunchOwnerId &&
+        typeof mp!=="undefined" &&
+        mp.connected &&
+        mp.remotePlanetSaves[
+            lastLaunchOwnerId
+        ]
+        ?lastLaunchOwnerId
+        :null;
+
+    const launchPlanet=
+        lastLaunchPlanetId
+        ?getPlanet(lastLaunchPlanetId)
+        :null;
+
+    const countShipsAt=
+        (ownerId,planetId)=>{
+
+            if(ownerId){
+
+                const save=
+                    mp.remotePlanetSaves[
+                        ownerId
+                    ] || {};
+
+                return(
+                    (
+                        (save.ships || {})[
+                            planetId
+                        ] || []
+                    ).length
+                );
+
+            }
+
+            if(planetId==="earth"){
+
+                return(
+                    getEarthLaunchCandidates().
+                    length
+                );
+
+            }
+
+            return(
                 (
-                    getShipCount(p.id)>0 &&
-                    isPlanetUnlocked(p.id)
+                    getShips(planetId) ||
+                    []
+                ).length
+            );
+
+        };
+
+    const shipsLabel=
+        n=>
+            n+" ship"+
+            (n===1?"":"s")+
+            " docked";
+
+    if(
+        launchPlanet &&
+        (
+            remoteOwner ||
+            !lastLaunchOwnerId
+        )
+    ){
+
+        const ownerName=
+            remoteOwner
+            ?(
+                (
+                    mp.remotePlayerInfo[
+                        remoteOwner
+                    ] || {}
+                ).name || "Room-mate"
+            )
+            :null;
+
+        options.push({
+            ownerId:remoteOwner,
+            planetId:launchPlanet.id,
+            name:
+                ownerName
+                ?ownerName+"'s "+
+                 launchPlanet.name
+                :launchPlanet.name,
+            info:
+                "Where you launched · "+
+                shipsLabel(
+                    countShipsAt(
+                        remoteOwner,
+                        launchPlanet.id
+                    )
                 )
+        });
+
+    }
+
+    const otherPlanetsWithShips=
+        PLANETS.filter(
+            p=>
+                p.id!=="earth" &&
+                isPlanetUnlocked(p.id) &&
+                (
+                    getShips(p.id) ||
+                    []
+                ).length>0
         );
 
-    planetsWithShips.forEach(
-        planet=>{
+    const alreadyHome=
+        options.some(
+            o=>
+                !o.ownerId &&
+                o.planetId==="earth"
+        );
+
+    if(
+        !alreadyHome &&
+        (
+            !options.length ||
+            !otherPlanetsWithShips.length
+        )
+    ){
+
+        options.push({
+            ownerId:null,
+            planetId:"earth",
+            name:"Earth",
+            info:
+                "Home · "+
+                shipsLabel(
+                    countShipsAt(
+                        null,
+                        "earth"
+                    )
+                )
+        });
+
+    }
+
+    options.forEach(
+        option=>{
 
             const button=
                 document.createElement(
@@ -63880,24 +65798,12 @@ function renderGameOverReturnButtons(){
                 "big-button secondary-button "+
                 "game-over-return-btn";
 
-            const shipCount=
-                getShipCount(planet.id);
-
             button.innerHTML=
                 '<span class="game-over-return-name">'+
-                planet.name+
+                escapeHTML(option.name)+
                 '</span>'+
                 '<span class="game-over-return-info">'+
-                (
-                    shipCount===Infinity
-                    ?"Free starter ship"
-                    :shipCount+" ship"+
-                     (
-                         shipCount===1
-                         ?""
-                         :"s"
-                     )+" docked"
-                )+
+                escapeHTML(option.info)+
                 '</span>';
 
             button.addEventListener(
@@ -63916,9 +65822,43 @@ function renderGameOverReturnButtons(){
                         "hidden"
                     );
 
-                    selectStartPlanet(
-                        planet.id
-                    );
+                    /*
+                     * Re-checked at tap time: the room-mate may
+                     * have left since the screen was built, in
+                     * which case this falls back to home rather
+                     * than opening a planet that no longer exists.
+                     */
+                    if(
+                        option.ownerId &&
+                        mp.connected &&
+                        mp.remotePlanetSaves[
+                            option.ownerId
+                        ]
+                    ){
+
+                        mpEnterRemotePlanetView(
+                            option.ownerId
+                        );
+
+                        selectStartPlanet(
+                            option.planetId
+                        );
+
+                    }else{
+
+                        if(activePlanetOwnerId){
+
+                            mpExitRemotePlanetView();
+
+                        }
+
+                        selectStartPlanet(
+                            option.ownerId
+                            ?"earth"
+                            :option.planetId
+                        );
+
+                    }
 
                 },
                 {passive:false}
@@ -65312,6 +67252,18 @@ const shipCustomizer = {
             holePoints: s.holePoints
         }));
         localStorage.setItem(this.targetKey, JSON.stringify(shipData));
+        // A ship style edit reaches room-mates promptly (debounced, since
+        // this runs on every small edit) instead of waiting for some
+        // unrelated save to happen to carry it along.
+        if (
+            typeof mp !== 'undefined' && mp.connected &&
+            String(this.targetKey).indexOf('customShip') === 0
+        ) {
+            clearTimeout(this._mpStyleSyncTimer);
+            this._mpStyleSyncTimer = setTimeout(() => {
+                if (typeof mpBroadcastOwnSave === 'function') mpBroadcastOwnSave();
+            }, 600);
+        }
     },
 
     loadDesign() {
@@ -66026,6 +67978,52 @@ renderRankCircle();
 
 lastTime=
     performance.now();
+
+/*
+ * Rejoin the room this player belongs to, if any — closing the app
+ * never ends membership, only the Leave button does. Deferred a beat
+ * so the rest of startup (planet save, home screen) is settled first.
+ */
+setTimeout(
+    ()=>{
+
+        if(typeof mpResumeSession==="function"){
+
+            mpResumeSession();
+
+        }
+
+    },
+    300
+);
+
+/*
+ * Phones routinely drop a backgrounded app's connection. Coming back
+ * to the game reconnects right away instead of waiting out whatever
+ * backoff delay was pending.
+ */
+document.addEventListener(
+    "visibilitychange",
+    ()=>{
+
+        if(
+            document.visibilityState==="visible" &&
+            typeof mpLoadSession==="function" &&
+            mpLoadSession() &&
+            !mp.connected &&
+            !mp.connecting
+        ){
+
+            clearTimeout(mpReconnectTimer);
+
+            mpReconnectDelayMs=2000;
+
+            mpResumeSession();
+
+        }
+
+    }
+);
 
 requestAnimationFrame(
     loop
