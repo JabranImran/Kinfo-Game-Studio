@@ -14213,8 +14213,74 @@ function mpSerializeOrbitalAsteroid(a,o){
         angle:a.angle,
         rotation:a.rotation,
         durability:a.durability,
-        cloakVisible:a.cloakVisible
+        cloakVisible:a.cloakVisible,
+        bonusWindow:a.bonusWindow || 0,
+        twinId:
+            a.twinPartner &&
+            asteroids.includes(a.twinPartner)
+            ?a.twinPartner.id
+            :null
     };
+
+}
+
+/*
+ * Twin pairs are object references locally, so they're sent as ids
+ * and re-linked here once every asteroid in the update exists.
+ */
+function mpOrbitalRelinkTwins(dataList){
+
+    const byId=new Map(
+        asteroids.map(a=>[a.id,a])
+    );
+
+    dataList.forEach(
+        d=>{
+
+            const a=byId.get(d.id);
+
+            if(!a)
+                return;
+
+            a.twinPartner=
+                d.twinId
+                ?byId.get(d.twinId) || null
+                :null;
+
+        }
+    );
+
+}
+
+function mpOrbitalExplosionPower(size){
+
+    return({1:.7,2:1,3:1.4})[size] || 1;
+
+}
+
+/*
+ * The field's runner remembers what was destroyed since its last
+ * update — its own kills and kills reported by others — so every
+ * other device can play the explosion where IT sees that rock.
+ */
+let mpOrbitalRecentDestroyed=[];
+
+function mpRecordOrbitalDestroyed(a){
+
+    if(
+        worldState!=="orbital" ||
+        !mpOrbitalPeers().length ||
+        !mpIsOrbitalAuthority()
+    ){
+
+        return;
+
+    }
+
+    mpOrbitalRecentDestroyed.push({
+        id:a.id,
+        size:a.size
+    });
 
 }
 
@@ -14248,6 +14314,27 @@ function mpOrbitalApplyData(a,d,o){
     if(d.rotation!==undefined) a.rotation=d.rotation;
     if(d.durability!==undefined) a.durability=d.durability;
     if(d.cloakVisible!==undefined) a.cloakVisible=d.cloakVisible;
+
+    if(d.bonusWindow!==undefined){
+
+        /* a twin just flared on someone else's device */
+        if(
+            !(a.bonusWindow>0) &&
+            d.bonusWindow>0
+        ){
+
+            floatingText(
+                "DOUBLE UP",
+                a.x,
+                a.y,
+                "#ff9de6"
+            );
+
+        }
+
+        a.bonusWindow=d.bonusWindow;
+
+    }
 
 }
 
@@ -14319,12 +14406,16 @@ function mpBroadcastOrbitalSnapshot(){
             ownerId:loc.ownerId,
             planetId:loc.planetId,
             activity:orbitalActivity,
+            destroyedNow:
+                mpOrbitalRecentDestroyed,
             asteroids:
                 asteroids.map(
                     a=>mpSerializeOrbitalAsteroid(a,o)
                 )
         }
     });
+
+    mpOrbitalRecentDestroyed=[];
 
 }
 
@@ -14349,6 +14440,8 @@ function mpApplyOrbitalChange(fromId,event){
 
     let weight=0;
 
+    const removed=[];
+
     asteroids=
         asteroids.filter(
             a=>{
@@ -14358,6 +14451,8 @@ function mpApplyOrbitalChange(fromId,event){
                     weight+=
                         asteroidLoadWeight(a.size);
 
+                    removed.push(a);
+
                     return false;
 
                 }
@@ -14366,6 +14461,27 @@ function mpApplyOrbitalChange(fromId,event){
 
             }
         );
+
+    removed.forEach(
+        a=>{
+
+            explosions.push(
+                new Explosion(
+                    a.x,
+                    a.y,
+                    mpOrbitalExplosionPower(a.size)
+                )
+            );
+
+            flareTwinPartner(a);
+
+            mpOrbitalRecentDestroyed.push({
+                id:a.id,
+                size:a.size
+            });
+
+        }
+    );
 
     const o=mpOrbitalWorldOffset();
 
@@ -14386,6 +14502,8 @@ function mpApplyOrbitalChange(fromId,event){
 
         }
     );
+
+    mpOrbitalRelinkTwins(event.added || []);
 
     if(weight>0){
 
@@ -14453,6 +14571,34 @@ function mpApplyOrbitalSnapshot(fromId,event){
 
     const o=mpOrbitalWorldOffset();
 
+    /*
+     * Rocks destroyed on other devices since the last update: play
+     * the explosion where this device sees them. (If THIS player
+     * destroyed it, it's already gone here — no second explosion.)
+     */
+    (event.destroyedNow || []).forEach(
+        dd=>{
+
+            const local=
+                asteroids.find(
+                    a=>a.id===dd.id
+                );
+
+            if(local){
+
+                explosions.push(
+                    new Explosion(
+                        local.x,
+                        local.y,
+                        mpOrbitalExplosionPower(local.size)
+                    )
+                );
+
+            }
+
+        }
+    );
+
     const incoming=new Map();
 
     (event.asteroids || []).forEach(
@@ -14510,6 +14656,10 @@ function mpApplyOrbitalSnapshot(fromId,event){
             );
 
         }
+    );
+
+    mpOrbitalRelinkTwins(
+        [...incoming.values()]
     );
 
     syncOrbitalActivityLocale();
@@ -46844,6 +46994,58 @@ function spawnWaveBurst(){
    DETONATION
 ========================================================= */
 
+/*
+ * Twin Rock: if its partner is still alive, it flares up — bonus
+ * window (worth double if destroyed in time) and a speed boost,
+ * both ML-tunable. Its own function so a twin destroyed on ANOTHER
+ * player's device (shared orbital field) triggers exactly the same
+ * rule, not a copy of it.
+ */
+function flareTwinPartner(asteroid){
+
+    /*
+     * Twin Rock: if its partner is still alive, it flares up —
+     * bonus window (worth double if destroyed in time) and a
+     * speed boost, both ML-tunable. Checking asteroids.includes
+     * confirms the partner hasn't already been destroyed itself
+     * (its own detonateAsteroid call would have cleared this
+     * side's reference already if so).
+     */
+    if(
+        asteroid.twinPartner &&
+        asteroids.includes(
+            asteroid.twinPartner
+        )
+    ){
+
+        const partner=
+            asteroid.twinPartner;
+
+        partner.bonusWindow=
+            computeTwinBonusWindow();
+
+        partner.twinPartner=
+            null;
+
+        const boost=
+            computeTwinSpeedBoost();
+
+        partner.vx*=boost;
+
+        partner.vy*=boost;
+
+        floatingText(
+            "DOUBLE UP",
+            partner.x,
+            partner.y,
+            "#ff9de6"
+        );
+
+    }
+
+
+}
+
 function detonateAsteroid(
     index,
     chain=false,
@@ -46863,6 +47065,8 @@ function detonateAsteroid(
         addOrbitalActivity(
             asteroidLoadWeight(asteroid.size)
         );
+
+        mpRecordOrbitalDestroyed(asteroid);
 
     }
 
@@ -46960,45 +47164,7 @@ function detonateAsteroid(
 
     }
 
-    /*
-     * Twin Rock: if its partner is still alive, it flares up —
-     * bonus window (worth double if destroyed in time) and a
-     * speed boost, both ML-tunable. Checking asteroids.includes
-     * confirms the partner hasn't already been destroyed itself
-     * (its own detonateAsteroid call would have cleared this
-     * side's reference already if so).
-     */
-    if(
-        asteroid.twinPartner &&
-        asteroids.includes(
-            asteroid.twinPartner
-        )
-    ){
-
-        const partner=
-            asteroid.twinPartner;
-
-        partner.bonusWindow=
-            computeTwinBonusWindow();
-
-        partner.twinPartner=
-            null;
-
-        const boost=
-            computeTwinSpeedBoost();
-
-        partner.vx*=boost;
-
-        partner.vy*=boost;
-
-        floatingText(
-            "DOUBLE UP",
-            partner.x,
-            partner.y,
-            "#ff9de6"
-        );
-
-    }
+    flareTwinPartner(asteroid);
 
     /*
      * Rift Rock: a one-time slow pulse to anything nearby,
