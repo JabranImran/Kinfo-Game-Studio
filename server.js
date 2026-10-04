@@ -224,6 +224,42 @@ function sendRoster(room){
  * the room for good or just going offline. A ship can't stay locked
  * to someone who isn't there to fly it.
  */
+function dropPlayerCrewSeats(room,player){
+
+    room.claimedShips.forEach(
+        (claim,shipKey)=>{
+
+            if(
+                Array.isArray(claim.coPilots) &&
+                claim.coPilots.some(
+                    c=>c.id===player.id
+                )
+            ){
+
+                claim.coPilots=
+                    claim.coPilots.filter(
+                        c=>c.id!==player.id
+                    );
+
+                broadcastToRoom(
+                    room,
+                    {
+                        type:'crewUpdated',
+                        shipKey,
+                        byId:claim.byId,
+                        byName:claim.byName,
+                        coPilots:claim.coPilots
+                    },
+                    null
+                );
+
+            }
+
+        }
+    );
+
+}
+
 function releasePlayerClaims(room,player){
 
     /*
@@ -316,44 +352,14 @@ function markPlayerOffline(player,ws){
     if(!room)
         return;
 
-    releasePlayerClaims(room,player);
+    dropPlayerCrewSeats(room,player);
 
     /*
-     * Also free claims OTHER players held on this player's ships —
-     * those can't be launched while the owner is away. (A flight
-     * already under way is unaffected: its results are queued for
-     * the owner instead, see shipLifecycle.)
+     * Ship claims (selections) deliberately SURVIVE going offline —
+     * a player always has their chosen ship waiting when they come
+     * back, and nobody else can take it meanwhile. Only crew seats
+     * go, since nobody can co-pilot while away.
      */
-    room.claimedShips.forEach(
-        (claim,shipKey)=>{
-
-            if(
-                shipKey.indexOf(
-                    player.id+':'
-                )===0
-            ){
-
-                room.claimedShips.delete(
-                    shipKey
-                );
-
-                broadcastToRoom(
-                    room,
-                    {
-                        type:'shipReleased',
-                        shipKey,
-                        coPilotIds:
-                            (claim.coPilots || []).
-                            map(cp=>cp.id)
-                    },
-                    null
-                );
-
-            }
-
-        }
-    );
-
     broadcastToRoom(
         room,
         {type:'playerOffline',id:player.id},
@@ -793,7 +799,8 @@ function handleMessage(player,message){
                             name:existing.name,
                             colour:existing.colour,
                             planetSave:
-                                existing.planetSave
+                                existing.planetSave,
+                            rev:existing.saveRev || 0
                         }
                     );
 
@@ -843,6 +850,9 @@ function handleMessage(player,message){
         player.planetSave=
             message.planetSave || null;
 
+        player.saveRev=
+            (player.saveRev || 0)+1;
+
         schedulePersist();
 
         broadcastToRoom(
@@ -852,7 +862,8 @@ function handleMessage(player,message){
                 id:player.id,
                 name:player.name,
                 colour:player.colour,
-                planetSave:player.planetSave
+                planetSave:player.planetSave,
+                rev:player.saveRev
             },
             player.id
         );
@@ -1220,7 +1231,11 @@ function handleMessage(player,message){
             room,
             {
                 type:'crewLanded',
-                shipKey
+                shipKey,
+                landedOwnerId:
+                    message.landedOwnerId || null,
+                landedPlanetId:
+                    message.landedPlanetId || null
             },
             player.id
         );
@@ -1248,6 +1263,110 @@ function handleMessage(player,message){
                 message.payload || {}
             ),
             player.id
+        );
+
+        return;
+
+    }
+
+    if(message.type==='offlineEdit'){
+
+        /*
+         * A visitor changed an OFFLINE member's planet (building,
+         * feeding pets, docking a ship there...). While the owner is
+         * away, the server's copy is the official one — this replaces
+         * it, provided the edit was made on top of the latest version
+         * (otherwise two visitors could silently overwrite each
+         * other). Rejected edits get the current copy back so the
+         * visitor's screen catches up.
+         */
+        const owner=
+            room.players.get(
+                String(message.ownerId || '')
+            );
+
+        const reject=(reason)=>{
+
+            send(
+                player.ws,
+                {
+                    type:'offlineEditRejected',
+                    ownerId:message.ownerId,
+                    reason
+                }
+            );
+
+            if(owner && owner.planetSave){
+
+                send(
+                    player.ws,
+                    {
+                        type:'sync',
+                        id:owner.id,
+                        name:owner.name,
+                        colour:owner.colour,
+                        planetSave:owner.planetSave,
+                        rev:owner.saveRev || 0
+                    }
+                );
+
+            }
+
+        };
+
+        if(!owner || owner.id===player.id){
+
+            return;
+
+        }
+
+        if(owner.online){
+
+            reject('online');
+
+            return;
+
+        }
+
+        if(
+            (Number(message.baseRev) || 0)!==
+            (owner.saveRev || 0)
+        ){
+
+            reject('stale');
+
+            return;
+
+        }
+
+        if(
+            !message.planetSave ||
+            typeof message.planetSave!=='object'
+        ){
+
+            return;
+
+        }
+
+        owner.planetSave=message.planetSave;
+
+        owner.saveRev=
+            (owner.saveRev || 0)+1;
+
+        schedulePersist();
+
+        broadcastToRoom(
+            room,
+            {
+                type:'sync',
+                id:owner.id,
+                name:owner.name,
+                colour:owner.colour,
+                planetSave:owner.planetSave,
+                rev:owner.saveRev,
+                editedBy:player.name
+            },
+            null
         );
 
         return;
@@ -1504,6 +1623,20 @@ function resumePlayer(conn,ws,message){
         }
     );
 
+    /*
+     * The server's copy of this member's own planet — it may have
+     * been changed by room-mates while they were away. Their device
+     * merges it with any local progress before syncing again.
+     */
+    send(
+        ws,
+        {
+            type:'ownSave',
+            planetSave:member.planetSave || null,
+            rev:member.saveRev || 0
+        }
+    );
+
     if(room.claimedShips.size){
 
         send(
@@ -1541,7 +1674,8 @@ function resumePlayer(conn,ws,message){
                         name:existing.name,
                         colour:existing.colour,
                         planetSave:
-                            existing.planetSave
+                            existing.planetSave,
+                        rev:existing.saveRev || 0
                     }
                 );
 
@@ -1590,6 +1724,14 @@ function persistNow(){
                 code:room.code,
                 hostId:room.hostId,
                 createdAt:room.createdAt,
+                claims:
+                    [...room.claimedShips.entries()].map(
+                        ([shipKey,cl])=>({
+                            shipKey,
+                            byId:cl.byId,
+                            byName:cl.byName
+                        })
+                    ),
                 players:
                     [...room.players.values()].map(
                         p=>({
@@ -1599,6 +1741,7 @@ function persistNow(){
                             colour:p.colour,
                             planetSave:p.planetSave,
                             lastSeen:p.lastSeen,
+                            saveRev:p.saveRev || 0,
                             pendingLifecycle:
                                 p.pendingLifecycle || []
                         })
@@ -1675,10 +1818,33 @@ function enablePersistence(file){
                                 planetSave:p.planetSave || null,
                                 presence:null,
                                 lastSeen:p.lastSeen || 0,
+                                saveRev:p.saveRev || 0,
                                 pendingLifecycle:
                                     p.pendingLifecycle || []
                             }
                         );
+
+                    }
+                );
+
+                (r.claims || []).forEach(
+                    cl=>{
+
+                        if(
+                            cl && cl.shipKey &&
+                            room.players.has(cl.byId)
+                        ){
+
+                            room.claimedShips.set(
+                                cl.shipKey,
+                                {
+                                    byId:cl.byId,
+                                    byName:cl.byName,
+                                    coPilots:[]
+                                }
+                            );
+
+                        }
 
                     }
                 );
