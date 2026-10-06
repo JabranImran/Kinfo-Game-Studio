@@ -11086,9 +11086,9 @@ function paintFactoryBuildPreview(){
             cargoPetInfo
         );
 
-        getShipStyleShapes(
-            previewShip.styleId
-        ).forEach(
+        getShipShapesForShip(
+previewShip
+).forEach(
             shape=>{
 
                 shape.draw(
@@ -11171,9 +11171,9 @@ function paintShipPreviews(planetId,ships){
                 cargoPetInfo
             );
 
-            getShipStyleShapes(
-                ship.styleId
-            ).forEach(
+            getShipShapesForShip(
+ship
+).forEach(
                 shape=>{
 
                     shape.draw(
@@ -11861,8 +11861,12 @@ const SHIP_STYLE_BASE_COST=40;
 
 function getShipStyleUnlockCount(){
 
+    /*
+     * A player's style collection is theirs everywhere — on a room-
+     * mate's planet the picker still offers THEIR OWN styles.
+     */
     return(
-        planetSave.shipStyleUnlockCount ||
+        (localPlanetSave || planetSave).shipStyleUnlockCount ||
         1
     );
 
@@ -12049,7 +12053,40 @@ function resolveShipStyleRaw(styleId,ownerId){
 
 }
 
-function getShipStyleShapes(styleId,ownerId){
+/*
+ * A ship's real look: a design copied onto the ship itself (styled
+ * by another player from THEIR collection) wins, then whoever's
+ * collection the style came from, then the owner of the save the
+ * ship sits in.
+ */
+function getShipShapesForShip(ship){
+
+    if(!ship){
+
+        return getShipStyleShapes("custom1");
+
+    }
+
+    return getShipStyleShapes(
+        ship.styleId || "custom1",
+        ship.styleOwnerId || undefined,
+        ship.styleDesign || null
+    );
+
+}
+
+/* this player's own id, for "use MY collection" lookups */
+function ownStyleOwnerId(){
+
+    return(
+        typeof mp!=="undefined" &&
+        mp.connected &&
+        mp.myId
+    ) || undefined;
+
+}
+
+function getShipStyleShapes(styleId,ownerId,rawOverride){
 
     if(
         typeof ShapeObject===
@@ -12077,7 +12114,7 @@ function getShipStyleShapes(styleId,ownerId){
     const key=
         getShipStyleKey(styleId);
 
-    if(!key){
+    if(!key && !rawOverride){
 
         return buildFrom(
             DEFAULT_SHIP_STYLE_SHAPES
@@ -12088,6 +12125,7 @@ function getShipStyleShapes(styleId,ownerId){
     try{
 
         const saved=
+            rawOverride ||
             resolveShipStyleRaw(
                 styleId,
                 ownerId
@@ -15947,6 +15985,24 @@ function mpHandleMessage(message){
     if(message.type==="shipReleased"){
 
         /*
+         * Selecting a ship anywhere in the room releases this
+         * player's previous one — if that was a ship on their OWN
+         * planet, its local selection goes with it.
+         */
+        if(
+            selectedLaunchShipId &&
+            message.shipKey===
+            mpShipKey(
+                mp.myId,
+                selectedLaunchShipId
+            )
+        ){
+
+            selectedLaunchShipId=null;
+
+        }
+
+        /*
          * A stranded co-pilot (one who'd joined this exact crew)
          * gets told plainly why their ready-up just evaporated,
          * rather than silently losing track of a flight that no
@@ -16308,7 +16364,9 @@ const MP_FORWARDED_ATTRS=
         "data-option","data-perk","data-pet","data-picker",
         "data-role","data-row","data-service","data-stat",
         "data-structure","data-structure-name","data-style",
-        "data-tab","data-upgrade","data-destination"
+        "data-tab","data-upgrade","data-destination",
+        /* whose collection a chosen ship style comes from */
+        "data-style-owner"
     ];
 
 function mpCaptureTargetAttrs(target){
@@ -16443,6 +16501,20 @@ function mpInterceptPlanetAction(target){
     ){
 
         mpExecuteOfflinePlanetAction(target);
+
+        return true;
+
+    }
+
+    /*
+     * New style slots belong to YOUR collection and cost YOUR coins —
+     * on someone else's planet this would unlock one for them.
+     */
+    if(action==="unlock-ship-style"){
+
+        showShipToast(
+            "Unlock new style slots on your own planet."
+        );
 
         return true;
 
@@ -17083,6 +17155,27 @@ function mpApplyShipLanding(message,targetSave){
         data.styleId ||
         ship.styleId ||
         "custom1";
+
+    /*
+     * Keep a design that came from someone else's collection; a
+     * style from the ship owner's own collection needs no copy.
+     */
+    if(
+        data.styleOwnerId &&
+        data.styleOwnerId!==message.ownerId
+    ){
+
+        ship.styleOwnerId=data.styleOwnerId;
+
+        ship.styleDesign=data.styleDesign || null;
+
+    }else if(data.styleOwnerId!==undefined){
+
+        delete ship.styleOwnerId;
+
+        delete ship.styleDesign;
+
+    }
 
     delete ship.inFlightBy;
 
@@ -24537,6 +24630,700 @@ function getStarMapSelectable(){
 
 }
 
+/* =========================================================
+   STAR MAP LAYOUT
+   Planet positions are worked out from the route network rather
+   than read straight from fixed coordinates, so the map stays
+   evenly spaced however many systems it holds — and a new planet
+   only needs its routes (coordinates optional) to find a sensible
+   place.
+
+   One system (solo play): the hand-made layout, tidied — springs
+   along routes pull connected planets to a common spacing, every
+   planet pushes the others away, and a gentle pull back toward the
+   authored spot keeps the familiar shape.
+
+   Several systems (a room): every player's planets form ONE network
+   — their own routes, plus links between the Earths, where systems
+   meet. Each system starts as a petal fanning out from a shared
+   centre (Earths near the middle, Zenith at the tip) and the same
+   relaxation evens everything out. The layout is identical on every
+   device; each device then just turns it so its OWN system sits
+   where it always does, with the others around it.
+========================================================= */
+let starMapLayoutCache=null;
+
+function starMapLayoutKey(ownerId,planetId){
+
+    return(ownerId || "_solo")+"|"+planetId;
+
+}
+
+function getStarMapOwners(){
+
+    if(
+        typeof mp==="undefined" ||
+        !mp.connected
+    ){
+
+        return [null];
+
+    }
+
+    return [
+        mp.myId,
+        ...Object.keys(mp.remotePlanetSaves || {})
+    ].filter(
+        (id,i,all)=>id && all.indexOf(id)===i
+    ).sort();
+
+}
+
+function computeStarMapLayout(width,mapHeight,owners){
+
+    const n=owners.length;
+
+    const byId={};
+
+    PLANETS.forEach(p=>{byId[p.id]=p;});
+
+    /* authored spot, in pixels; planets without one are placed later */
+    const authored={};
+
+    PLANETS.forEach(
+        p=>{
+
+            if(
+                Number.isFinite(p.x) &&
+                Number.isFinite(p.y)
+            ){
+
+                authored[p.id]={
+                    x:p.x/100*width,
+                    y:p.y/100*mapHeight
+                };
+
+            }
+
+        }
+    );
+
+    /* a planet with no coordinates starts among its neighbours */
+    for(let pass=0;pass<4;pass++){
+
+        PLANETS.forEach(
+            p=>{
+
+                if(authored[p.id])
+                    return;
+
+                const near=
+                    ROUTES
+                        .filter(r=>r[0]===p.id || r[1]===p.id)
+                        .map(r=>authored[r[0]===p.id?r[1]:r[0]])
+                        .filter(Boolean);
+
+                if(near.length){
+
+                    authored[p.id]={
+                        x:near.reduce((s,q)=>s+q.x,0)/near.length+
+                          (near.length===1?40:0),
+                        y:near.reduce((s,q)=>s+q.y,0)/near.length-
+                          (near.length===1?40:0)
+                    };
+
+                }
+
+            }
+        );
+
+    }
+
+    PLANETS.forEach(
+        (p,i)=>{
+
+            if(!authored[p.id]){
+
+                authored[p.id]={
+                    x:width*(.2+.6*((i*.618)%1)),
+                    y:mapHeight*.5
+                };
+
+            }
+
+        }
+    );
+
+    const routeLengths=
+        ROUTES
+            .filter(r=>authored[r[0]] && authored[r[1]])
+            .map(r=>Math.hypot(
+                authored[r[0]].x-authored[r[1]].x,
+                authored[r[0]].y-authored[r[1]].y
+            ));
+
+    const L=
+        routeLengths.length
+        ?routeLengths.reduce((s,v)=>s+v,0)/routeLengths.length
+        :Math.min(width,mapHeight)*.25;
+
+    const home=
+        authored.earth ||
+        {x:width/2,y:mapHeight*.82};
+
+    /*
+     * Petal directions: the systems fan out in an arc when there are
+     * only a few (so no link has to cross the middle of the map), a
+     * full circle when there are many.
+     */
+    const span=
+        n<=1
+        ?0
+        :Math.min(
+            Math.PI*2*(n-1)/n,
+            (80*(n-1))*Math.PI/180
+        );
+
+    let angles=
+        owners.map(
+            (o,k)=>
+                -Math.PI/2+
+                (n<=1?0:-span/2+span*k/(n-1))
+        );
+
+    const centre={
+        x:width/2,
+        y:mapHeight/2
+    };
+
+    const ringRadius=
+        n<=1?0:L*.75;
+
+    /*
+     * Rooms: each system is the tidied solo shape at ~60% scale, as a
+     * petal pointing outward from a shared centre (Earth facing in).
+     * The petals are pushed out from the centre step by step until no
+     * planet is closer than normal route spacing to a planet of
+     * another system — spacing guaranteed by construction, rather
+     * than left to a simulation that can tangle systems together.
+     */
+    const flower={};
+
+    let flowerL=L;
+
+    if(n>1){
+
+        const solo=
+            computeStarMapLayout(
+                width,
+                mapHeight,
+                [null]
+            );
+
+        const k=.62;
+
+        flowerL=solo.L*k;
+
+        const sE=
+            solo.positions[
+                starMapLayoutKey(null,"earth")
+            ] || {x:width/2,y:mapHeight*.82};
+
+        const petal={};
+
+        PLANETS.forEach(
+            p=>{
+
+                const q=
+                    solo.positions[
+                        starMapLayoutKey(null,p.id)
+                    ];
+
+                petal[p.id]={
+                    x:(q.x-sE.x)*k,
+                    y:(q.y-sE.y)*k
+                };
+
+            }
+        );
+
+        const fanAngles=
+            n===2
+            ?[-Math.PI/2-.95,-Math.PI/2+.95]
+            :owners.map((o,i)=>-Math.PI/2+Math.PI*2*i/n);
+
+        fanAngles.forEach((a,i)=>{angles[i]=a;});
+
+        const placeAt=Re=>{
+
+            const out={};
+
+            owners.forEach(
+                (owner,i)=>{
+
+                    const th=fanAngles[i];
+
+                    const turn=th+Math.PI/2;
+
+                    const cs=Math.cos(turn),sn=Math.sin(turn);
+
+                    PLANETS.forEach(
+                        p=>{
+
+                            const v=petal[p.id];
+
+                            out[starMapLayoutKey(owner,p.id)]={
+                                owner,
+                                id:p.id,
+                                x:centre.x+Re*Math.cos(th)+v.x*cs-v.y*sn,
+                                y:centre.y+Re*Math.sin(th)+v.x*sn+v.y*cs
+                            };
+
+                        }
+                    );
+
+                }
+            );
+
+            return out;
+
+        };
+
+        const gap=flowerL*.85;
+
+        let Re=flowerL*.45;
+
+        let placed=placeAt(Re);
+
+        for(let tries=0;tries<80;tries++){
+
+            const all=Object.values(placed);
+
+            let ok=true;
+
+            for(let i=0;i<all.length && ok;i++){
+
+                for(let j=i+1;j<all.length;j++){
+
+                    /* Earth is drawn larger — two Earths need more room */
+                    const need=
+                        all[i].id==="earth" && all[j].id==="earth"
+                        ?gap*1.45
+                        :gap;
+
+                    if(
+                        all[i].owner!==all[j].owner &&
+                        Math.hypot(
+                            all[i].x-all[j].x,
+                            all[i].y-all[j].y
+                        )<need
+                    ){
+
+                        ok=false;
+
+                        break;
+
+                    }
+
+                }
+
+            }
+
+            if(ok)
+                break;
+
+            Re+=flowerL*.12;
+
+            placed=placeAt(Re);
+
+        }
+
+        Object.assign(flower,placed);
+
+    }
+
+    const nodes=[];
+
+    const index={};
+
+    owners.forEach(
+        (owner,k)=>{
+
+            const turn=
+                angles[k]+Math.PI/2;
+
+            const cos=Math.cos(turn);
+
+            const sin=Math.sin(turn);
+
+            PLANETS.forEach(
+                p=>{
+
+                    const a=authored[p.id];
+
+                    let x=a.x;
+
+                    let y=a.y;
+
+                    if(n>1 && flower[starMapLayoutKey(owner,p.id)]){
+
+                        x=flower[starMapLayoutKey(owner,p.id)].x;
+
+                        y=flower[starMapLayoutKey(owner,p.id)].y;
+
+                    }else if(n>1){
+
+                        const vx=a.x-home.x;
+
+                        const vy=a.y-home.y;
+
+                        x=centre.x+
+                          ringRadius*Math.cos(angles[k])+
+                          vx*cos-vy*sin;
+
+                        y=centre.y+
+                          ringRadius*Math.sin(angles[k])+
+                          vx*sin+vy*cos;
+
+                    }
+
+                    index[starMapLayoutKey(owner,p.id)]=
+                        nodes.length;
+
+                    nodes.push({
+                        owner,
+                        id:p.id,
+                        x,y,
+                        ax:x,
+                        ay:y,
+                        dx:0,
+                        dy:0
+                    });
+
+                }
+            );
+
+        }
+    );
+
+    const springs=[];
+
+    owners.forEach(
+        owner=>{
+
+            ROUTES.forEach(
+                r=>{
+
+                    const a=index[starMapLayoutKey(owner,r[0])];
+
+                    const b=index[starMapLayoutKey(owner,r[1])];
+
+                    if(a!==undefined && b!==undefined){
+
+                        springs.push([a,b,L]);
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+    /* systems meet at their Earths */
+    for(let i=0;i<n;i++){
+
+        for(let j=i+1;j<n;j++){
+
+            const a=index[starMapLayoutKey(owners[i],"earth")];
+
+            const b=index[starMapLayoutKey(owners[j],"earth")];
+
+            if(a!==undefined && b!==undefined){
+
+                springs.push([a,b,L*.9]);
+
+            }
+
+        }
+
+    }
+
+    const anchor=
+        n<=1?.08:.03;
+
+    const minGap=L*.72;
+
+    const steps=320;
+
+    for(let step=0;n<=1 && step<steps;step++){
+
+        const temperature=
+            L*.35*(1-step/steps)+L*.005;
+
+        nodes.forEach(q=>{q.dx=0;q.dy=0;});
+
+        for(let i=0;i<nodes.length;i++){
+
+            for(let j=i+1;j<nodes.length;j++){
+
+                const a=nodes[i];
+
+                const b=nodes[j];
+
+                let ddx=a.x-b.x;
+
+                let ddy=a.y-b.y;
+
+                let d=Math.hypot(ddx,ddy);
+
+                if(d<.01){
+
+                    ddx=(i-j)*.01;
+
+                    ddy=.01;
+
+                    d=Math.hypot(ddx,ddy);
+
+                }
+
+                /* strong push when too close, gentle otherwise */
+                const f=
+                    d<minGap
+                    ?(minGap-d)*.5+L*L*.02/d
+                    :L*L*.02/d;
+
+                a.dx+=ddx/d*f;
+                a.dy+=ddy/d*f;
+                b.dx-=ddx/d*f;
+                b.dy-=ddy/d*f;
+
+            }
+
+        }
+
+        springs.forEach(
+            ([ai,bi,rest])=>{
+
+                const a=nodes[ai];
+
+                const b=nodes[bi];
+
+                const ddx=b.x-a.x;
+
+                const ddy=b.y-a.y;
+
+                const d=Math.hypot(ddx,ddy) || .01;
+
+                const f=(d-rest)*.12;
+
+                a.dx+=ddx/d*f;
+                a.dy+=ddy/d*f;
+                b.dx-=ddx/d*f;
+                b.dy-=ddy/d*f;
+
+            }
+        );
+
+        nodes.forEach(
+            q=>{
+
+                q.dx+=(q.ax-q.x)*anchor;
+
+                q.dy+=(q.ay-q.y)*anchor;
+
+                const m=Math.hypot(q.dx,q.dy);
+
+                const lim=
+                    m>temperature
+                    ?temperature/m
+                    :1;
+
+                q.x+=q.dx*lim;
+
+                q.y+=q.dy*lim;
+
+            }
+        );
+
+    }
+
+    const positions={};
+
+    if(n<=1){
+
+        /* fit the tidied solo map back inside the usual frame */
+        const xs=nodes.map(q=>q.x);
+
+        const ys=nodes.map(q=>q.y);
+
+        const minX=Math.min(...xs),maxX=Math.max(...xs);
+
+        const minY=Math.min(...ys),maxY=Math.max(...ys);
+
+        const boxW=width*.84,boxH=mapHeight*.92;
+
+        const s=Math.min(
+            1,
+            boxW/Math.max(1,maxX-minX),
+            boxH/Math.max(1,maxY-minY)
+        );
+
+        nodes.forEach(
+            q=>{
+
+                positions[starMapLayoutKey(q.owner,q.id)]={
+                    x:width/2+(q.x-(minX+maxX)/2)*s,
+                    y:mapHeight/2+(q.y-(minY+maxY)/2)*s
+                };
+
+            }
+        );
+
+        return {positions,centre,owners,L};
+
+    }
+
+    /*
+     * This device's view: turn the shared layout so its own system
+     * points up the way it always has, then put its own Earth where
+     * Earth sits on the solo map.
+     */
+    const own=
+        owners.indexOf(mp.myId);
+
+    const rot=
+        own>=0
+        ?-Math.PI/2-angles[own]
+        :0;
+
+    const rc=Math.cos(rot),rs=Math.sin(rot);
+
+    const turned=
+        q=>({
+            x:centre.x+(q.x-centre.x)*rc-(q.y-centre.y)*rs,
+            y:centre.y+(q.x-centre.x)*rs+(q.y-centre.y)*rc
+        });
+
+    const ownEarth=
+        turned(
+            nodes[index[starMapLayoutKey(mp.myId,"earth")]] ||
+            {x:centre.x,y:centre.y}
+        );
+
+    const shiftX=home.x-ownEarth.x;
+
+    const shiftY=home.y-ownEarth.y;
+
+    nodes.forEach(
+        q=>{
+
+            const t=turned(q);
+
+            positions[starMapLayoutKey(q.owner,q.id)]={
+                x:t.x+shiftX,
+                y:t.y+shiftY
+            };
+
+        }
+    );
+
+    let c2=turned(centre);
+
+    c2={x:c2.x+shiftX,y:c2.y+shiftY};
+
+    /*
+     * Shown as ONE map: shrink the whole layout to fit the screen —
+     * but no further than keeps planets comfortably apart (60%). If it
+     * fits, centre it; if not, keep this player's own system in view
+     * and pan to explore the rest.
+     */
+    const keys=Object.keys(positions);
+
+    const xs=keys.map(k=>positions[k].x);
+
+    const ys=keys.map(k=>positions[k].y);
+
+    const minX=Math.min(...xs),maxX=Math.max(...xs);
+
+    const minY=Math.min(...ys),maxY=Math.max(...ys);
+
+    const fit=Math.min(
+        width*.88/Math.max(1,maxX-minX),
+        mapHeight*.92/Math.max(1,maxY-minY)
+    );
+
+    const s=Math.max(.75,Math.min(1,fit));
+
+    const fits=s>=fit-1e-6;
+
+    /*
+     * Centre the whole map — and if it's bigger than the screen, nudge
+     * it only as far as needed to keep this player's own Earth in view.
+     */
+    let ox=
+        width/2-((minX+maxX)/2-home.x)*s-home.x;
+
+    let oy=
+        mapHeight/2-((minY+maxY)/2-home.y)*s-home.y;
+
+    if(!fits){
+
+        const ex=home.x+ox;
+
+        const ey=home.y+oy;
+
+        ox+=clamp(ex,width*.15,width*.85)-ex;
+
+        oy+=clamp(ey,mapHeight*.15,mapHeight*.88)-ey;
+
+    }
+
+    const place=q=>({
+        x:home.x+(q.x-home.x)*s+ox,
+        y:home.y+(q.y-home.y)*s+oy
+    });
+
+    keys.forEach(k=>{positions[k]=place(positions[k]);});
+
+    return{
+        positions,
+        centre:place(c2),
+        owners,
+        L:flowerL*s
+    };
+
+}
+
+function getStarMapLayout(width,mapHeight){
+
+    const owners=getStarMapOwners();
+
+    const key=
+        owners.join(",")+"|"+
+        Math.round(width)+"x"+Math.round(mapHeight)+"|"+
+        PLANETS.length+"|"+ROUTES.length;
+
+    if(
+        !starMapLayoutCache ||
+        starMapLayoutCache.key!==key
+    ){
+
+        starMapLayoutCache={
+            key,
+            layout:computeStarMapLayout(
+                width,
+                mapHeight,
+                owners
+            )
+        };
+
+    }
+
+    return starMapLayoutCache.layout;
+
+}
+
 function drawStarMapScene(
     skipCanvasSetup,translateX,translateY
 ){
@@ -24648,7 +25435,40 @@ function drawStarMapScene(
     const mapHeight=
         height*.66;
 
+    /*
+     * Positions come from the computed layout (see STAR MAP LAYOUT),
+     * for whichever player's system is being drawn.
+     */
+    const starLayout=
+        getStarMapLayout(width,mapHeight);
+
+    const starLayoutOwner=
+        typeof mp!=="undefined" && mp.connected
+        ?(
+            starMapDrawingOwnerId ||
+            activePlanetOwnerId ||
+            mp.myId
+        )
+        :null;
+
     function planetPos(p){
+
+        const laid=
+            starLayout.positions[
+                starMapLayoutKey(
+                    starLayoutOwner,
+                    p.id
+                )
+            ];
+
+        if(laid){
+
+            return{
+                x:laid.x,
+                y:mapTop+laid.y
+            };
+
+        }
 
         return{
             x:(p.x/100)*width,
@@ -25442,7 +26262,8 @@ function drawStarMapScene(
                         const shape of
                         getShipStyleShapes(
                             currentShipStyleId,
-                            currentShipStyleOwnerId
+                            currentShipStyleOwnerId,
+currentShipStyleRaw
                         )
                     ){
 
@@ -25497,6 +26318,447 @@ function drawStarMapScene(
  * looking at the right data without this needing to do anything
  * extra during a zoom).
  */
+/*
+ * Links between systems, drawn UNDER the planets like any other
+ * route: every pair of Earths (they meet in the middle of the map),
+ * and Zeniths between neighbouring systems. Brighter while choosing
+ * a destination, since that's when they matter most.
+ */
+function mpDrawStarMapLinks(c,width,height){
+
+    const mapHeight=height*.66;
+
+    const mapTop=height*.17;
+
+    const layout=
+        getStarMapLayout(width,mapHeight);
+
+    const owners=layout.owners;
+
+    const point=(owner,id)=>{
+
+        const q=
+            layout.positions[
+                starMapLayoutKey(owner,id)
+            ];
+
+        return q
+            ?{
+                x:q.x+starMapPanX,
+                y:mapTop+q.y+starMapPanY
+            }
+            :null;
+
+    };
+
+    const saveOf=owner=>
+        owner===mp.myId
+        ?localPlanetSave
+        :mp.remotePlanetSaves[owner];
+
+    const pairs=[];
+
+    for(let i=0;i<owners.length;i++){
+
+        for(let j=i+1;j<owners.length;j++){
+
+            pairs.push([owners[i],owners[j],"earth"]);
+
+        }
+
+        if(i+1<owners.length){
+
+            pairs.push([owners[i],owners[i+1],"zenith"]);
+
+        }
+
+    }
+
+    const choosing=
+        starMapMode==="destination";
+
+    c.save();
+
+    pairs.forEach(
+        ([a,b,hub])=>{
+
+            if(
+                hub!=="earth" &&
+                (
+                    !isPlanetUnlockedInSave(saveOf(a),hub) ||
+                    !isPlanetUnlockedInSave(saveOf(b),hub)
+                )
+            ){
+
+                return;
+
+            }
+
+            const p=point(a,hub);
+
+            const q=point(b,hub);
+
+            if(!p || !q)
+                return;
+
+            c.setLineDash([4,6]);
+
+            c.strokeStyle=
+                choosing
+                ?"rgba(190,160,255,.75)"
+                :"rgba(170,140,255,.38)";
+
+            c.lineWidth=
+                choosing?2:1.5;
+
+            c.beginPath();
+
+            c.moveTo(p.x,p.y);
+
+            c.lineTo(q.x,q.y);
+
+            c.stroke();
+
+        }
+    );
+
+    c.restore();
+
+}
+
+/*
+ * Where a player's name goes: just past the outer tip of their
+ * system's petal, on the side away from the middle of the map.
+ */
+function mpStarMapLabelPosition(ownerId,width,height){
+
+    const mapHeight=height*.66;
+
+    const mapTop=height*.17;
+
+    const layout=
+        getStarMapLayout(width,mapHeight);
+
+    let far=null;
+
+    let farD=-1;
+
+    PLANETS.forEach(
+        p=>{
+
+            const q=
+                layout.positions[
+                    starMapLayoutKey(ownerId,p.id)
+                ];
+
+            if(!q)
+                return;
+
+            const d=Math.hypot(
+                q.x-layout.centre.x,
+                q.y-layout.centre.y
+            );
+
+            if(d>farD){
+
+                farD=d;
+
+                far=q;
+
+            }
+
+        }
+    );
+
+    if(!far){
+
+        return{
+            x:width/2+starMapPanX,
+            y:height*.06+starMapPanY
+        };
+
+    }
+
+    const ux=(far.x-layout.centre.x)/(farD || 1);
+
+    const uy=(far.y-layout.centre.y)/(farD || 1);
+
+    return{
+        x:far.x+ux*34+starMapPanX,
+        y:mapTop+far.y+uy*34+starMapPanY
+    };
+
+}
+
+/*
+ * ---- WHERE EVERYONE IS ----
+ * A light "I'm at this planet" signal from a planet's home screen —
+ * every 1.5s, and immediately on moving to another planet — so the
+ * star map can show who's where. (Walking a pet and flying in orbit
+ * already send their own, more frequent, position updates.)
+ */
+const MP_HOME_PRESENCE_INTERVAL_MS=1500;
+
+let mpLastHomePresenceSendTime=0;
+
+let mpLastHomePresenceKey=null;
+
+function mpBroadcastHomePresence(){
+
+    if(
+        typeof mp==="undefined" ||
+        !mp.connected ||
+        running ||
+        roamingActive
+    ){
+
+        return;
+
+    }
+
+    const ownerId=
+        activePlanetOwnerId ||
+        mp.myId;
+
+    const key=
+        ownerId+"|"+selectedStartPlanet;
+
+    const now=performance.now();
+
+    if(
+        key===mpLastHomePresenceKey &&
+        now-mpLastHomePresenceSendTime<
+        MP_HOME_PRESENCE_INTERVAL_MS
+    ){
+
+        return;
+
+    }
+
+    mpLastHomePresenceKey=key;
+
+    mpLastHomePresenceSendTime=now;
+
+    mpSend({
+        type:"presence",
+        space:"home",
+        ownerId,
+        planetId:selectedStartPlanet
+    });
+
+}
+
+/*
+ * Everyone's current whereabouts that the star map can show:
+ * [{playerId, ownerId, planetId, kind:"home"|"orbit", colour, name}]
+ */
+function mpGetStarMapWhereabouts(){
+
+    const out=[];
+
+    const now=performance.now();
+
+    const staleAfter={
+        home:MP_HOME_PRESENCE_INTERVAL_MS*4,
+        roaming:MP_ROAM_PRESENCE_INTERVAL_MS*6,
+        orbital:MP_ORBITAL_PRESENCE_INTERVAL_MS*6
+    };
+
+    Object.keys(mp.remotePresence || {}).forEach(
+        playerId=>{
+
+            const pr=
+                mp.remotePresence[playerId];
+
+            if(
+                !pr ||
+                !pr.planetId ||
+                !staleAfter[pr.space] ||
+                now-(pr.receivedAt || 0)>
+                staleAfter[pr.space]
+            ){
+
+                return;
+
+            }
+
+            const info=
+                mp.remotePlayerInfo[playerId] || {};
+
+            out.push({
+                playerId,
+                ownerId:pr.ownerId,
+                planetId:pr.planetId,
+                kind:
+                    pr.space==="orbital"
+                    ?"orbit"
+                    :"home",
+                colour:info.colour || "#6ee7ff",
+                name:info.name || "Player"
+            });
+
+        }
+    );
+
+    /* this player too */
+    if(starMapMode==="destination" && running){
+
+        out.push({
+            playerId:mp.myId,
+            ownerId:orbitalLocaleOwnerId || mp.myId,
+            planetId:orbitalLocalePlanetId || currentPlanetId,
+            kind:"orbit",
+            colour:mp.myColour,
+            name:"you",
+            isMe:true
+        });
+
+    }else if(!running){
+
+        out.push({
+            playerId:mp.myId,
+            ownerId:activePlanetOwnerId || mp.myId,
+            planetId:selectedStartPlanet,
+            kind:"home",
+            colour:mp.myColour,
+            name:"you",
+            isMe:true
+        });
+
+    }
+
+    return out;
+
+}
+
+/*
+ * Drawn over the map: a dot in the player's colour beside the planet
+ * they're on (several players stack around it), or — in that
+ * planet's orbital space — their colour as a ring around the planet
+ * with a dot riding on it.
+ */
+function mpDrawStarMapWhereabouts(c,canvas){
+
+    const areas=
+        canvas._starHitAreas || [];
+
+    const groups={};
+
+    mpGetStarMapWhereabouts().forEach(
+        w=>{
+
+            const key=w.ownerId+"|"+w.planetId;
+
+            (groups[key]=groups[key] || []).push(w);
+
+        }
+    );
+
+    const t=performance.now()/1000;
+
+    c.save();
+
+    Object.keys(groups).forEach(
+        key=>{
+
+            const [ownerId,planetId]=key.split("|");
+
+            const area=
+                areas.find(
+                    a=>
+                        a.ownerId===ownerId &&
+                        a.planetId===planetId
+                );
+
+            if(!area)
+                return;
+
+            const r=Math.max(14,(area.r || 30)*.62);
+
+            groups[key].forEach(
+                (w,i)=>{
+
+                    if(w.kind==="orbit"){
+
+                        const orbitR=r+6+i*4;
+
+                        c.globalAlpha=.55;
+
+                        c.strokeStyle=w.colour;
+
+                        c.lineWidth=1.4;
+
+                        c.beginPath();
+
+                        c.arc(area.x,area.y,orbitR,0,Math.PI*2);
+
+                        c.stroke();
+
+                        const a=t*1.2+i*2.1;
+
+                        c.globalAlpha=1;
+
+                        c.fillStyle=w.colour;
+
+                        c.beginPath();
+
+                        c.arc(
+                            area.x+Math.cos(a)*orbitR,
+                            area.y+Math.sin(a)*orbitR,
+                            3.2,0,Math.PI*2
+                        );
+
+                        c.fill();
+
+                        return;
+
+                    }
+
+                    /* on the planet: dots stacked along its lower-right edge */
+                    const a=Math.PI*.25+i*.42;
+
+                    const x=area.x+Math.cos(a)*(r+4);
+
+                    const y=area.y+Math.sin(a)*(r+4);
+
+                    c.globalAlpha=1;
+
+                    c.fillStyle=w.colour;
+
+                    c.strokeStyle="rgba(0,0,0,.7)";
+
+                    c.lineWidth=1.5;
+
+                    c.beginPath();
+
+                    c.arc(x,y,4.2,0,Math.PI*2);
+
+                    c.fill();
+
+                    c.stroke();
+
+                    if(w.isMe){
+
+                        c.font="700 8px sans-serif";
+
+                        c.textAlign="left";
+
+                        c.fillStyle=w.colour;
+
+                        c.fillText("you",x+6,y+3);
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+    c.restore();
+
+}
+
 function drawMultiplayerStarMap(){
 
     /*
@@ -25511,12 +26773,55 @@ function drawMultiplayerStarMap(){
      * never render at all, silently falling back to the
      * single-system path on every single frame.
      */
-    if(
-        !mp.connected ||
-        zoomProgress>.01
-    ){
+    if(!mp.connected){
 
         drawStarMapScene();
+
+        return;
+
+    }
+
+    /*
+     * Zooming into a planet: the same shared layout and the same pan,
+     * so the map doesn't jump as the zoom begins.
+     */
+    if(zoomProgress>.01){
+
+        starMapDrawingOwnerId=null;
+
+        drawStarMapScene(
+            false,
+            starMapPanX,
+            starMapPanY
+        );
+
+        const zoomCanvas=
+            document.getElementById(
+                "starMapCanvas"
+            );
+
+        if(zoomCanvas){
+
+            (zoomCanvas._starHitAreas || []).forEach(
+                a=>{
+
+                    if(!a.ownerId){
+
+                        a.ownerId=
+                            activePlanetOwnerId ||
+                            mp.myId;
+
+                    }
+
+                }
+            );
+
+            mpDrawStarMapWhereabouts(
+                zoomCanvas.getContext("2d"),
+                zoomCanvas
+            );
+
+        }
 
         return;
 
@@ -25592,8 +26897,24 @@ function drawMultiplayerStarMap(){
 
     drawSharedStars(c,width,height);
 
+    /* still "at" the planet while browsing the map from its home screen */
+    if(!running){
+
+        mpBroadcastHomePresence();
+
+    }
+
+    /* fresh tap targets for this frame — every system adds to them */
+    canvas._starHitAreas=[];
+
+    mpDrawStarMapLinks(
+        c,
+        width,
+        height
+    );
+
     const ownerIds=
-        Object.keys(layout);
+        getStarMapOwners();
 
     const localSave=
         localPlanetSave;
@@ -25618,21 +26939,9 @@ function drawMultiplayerStarMap(){
                 layout[ownerId];
 
             const pixelDX=
-                (
-                    (
-                        slot.dx-
-                        ownOffset.dx
-                    )/100
-                )*width+
                 starMapPanX;
 
             const pixelDY=
-                (
-                    (
-                        slot.dy-
-                        ownOffset.dy
-                    )/100
-                )*mapHeight+
                 starMapPanY;
 
             const isMe=
@@ -25684,12 +26993,10 @@ function drawMultiplayerStarMap(){
              * tapped.
              */
             const hitAreaCountBefore=
-                index>0
-                ?(
+                (
                     canvas._starHitAreas ||
                     []
-                 ).length
-                :0;
+                ).length;
 
             starMapDrawingOwnerId=
                 ownerId;
@@ -25719,7 +27026,7 @@ function drawMultiplayerStarMap(){
                 c.save();
 
                 drawStarMapScene(
-                    index>0,
+                    true,
                     pixelDX,
                     pixelDY
                 );
@@ -25877,11 +27184,18 @@ function drawMultiplayerStarMap(){
                     {name:"Player",colour:"#6ee7ff"}
                 );
 
+            const labelAt=
+                mpStarMapLabelPosition(
+                    ownerId,
+                    width,
+                    height
+                );
+
             labels.push({
-                x:pixelDX+width/2,
-                y:pixelDY+height*.06,
+                x:labelAt.x,
+                y:labelAt.y,
                 text:
-                    slot.isHost
+                    (slot && slot.isHost)
                     ?info.name+" (Host)"
                     :info.name,
                 colour:info.colour
@@ -25889,108 +27203,6 @@ function drawMultiplayerStarMap(){
 
         }
     );
-
-    /*
-     * The actual bridge connections — drawn AFTER every system
-     * (so a line between two systems is never covered by a THIRD
-     * system's own backdrop/routes drawn afterward), but before
-     * labels, so names stay legible on top. Only meaningful in
-     * destination mode: one line per distinct pair of owners × per
-     * pair of hubs (earth-earth, earth-zenith, zenith-earth,
-     * zenith-zenith — all four, exactly like this was asked for),
-     * and only when BOTH ends are actually unlocked for their own
-     * owner — an unreachable hub isn't a real connection yet, same
-     * spirit as how a locked planet's own ordinary routes already
-     * don't glow either.
-     */
-    if(starMapMode==="destination"){
-
-        const hubOwnerIds=
-            Object.keys(hubPositions);
-
-        for(
-            let i=0;
-            i<hubOwnerIds.length;
-            i++
-        ){
-
-            for(
-                let j=i+1;
-                j<hubOwnerIds.length;
-                j++
-            ){
-
-                const ownerA=
-                    hubOwnerIds[i];
-
-                const ownerB=
-                    hubOwnerIds[j];
-
-                MP_BRIDGE_HUBS.forEach(
-                    hubA=>{
-
-                        MP_BRIDGE_HUBS.forEach(
-                            hubB=>{
-
-                                const pointA=
-                                    hubPositions[
-                                        ownerA
-                                    ][hubA];
-
-                                const pointB=
-                                    hubPositions[
-                                        ownerB
-                                    ][hubB];
-
-                                if(
-                                    !pointA ||
-                                    !pointB ||
-                                    !pointA.unlocked ||
-                                    !pointB.unlocked
-                                ){
-
-                                    return;
-
-                                }
-
-                                c.save();
-
-                                c.setLineDash(
-                                    [3,7]
-                                );
-
-                                c.strokeStyle=
-                                    "rgba(170,140,255,.4)";
-
-                                c.lineWidth=1.5;
-
-                                c.beginPath();
-
-                                c.moveTo(
-                                    pointA.x,
-                                    pointA.y
-                                );
-
-                                c.lineTo(
-                                    pointB.x,
-                                    pointB.y
-                                );
-
-                                c.stroke();
-
-                                c.restore();
-
-                            }
-                        );
-
-                    }
-                );
-
-            }
-
-        }
-
-    }
 
     /*
      * Labels drawn as a separate pass, after every system, so
@@ -26026,6 +27238,11 @@ function drawMultiplayerStarMap(){
     );
 
     c.restore();
+
+    mpDrawStarMapWhereabouts(
+        c,
+        canvas
+    );
 
 }
 
@@ -27706,6 +28923,16 @@ function drawPlanetFocusScene(){
      * a one-frame mismatch between where things are drawn and
      * where the player's input has already taken them.
      */
+    if(
+        !roamingActive &&
+        typeof mpBroadcastHomePresence===
+        "function"
+    ){
+
+        mpBroadcastHomePresence();
+
+    }
+
     if(roamingActive){
 
         updateRoamingMovement();
@@ -29552,11 +30779,9 @@ function drawPlanetFocusScene(){
 
             for(
                 const shape of
-                getShipStyleShapes(
-                    chosenFocusShip
-                    ?chosenFocusShip.styleId
-                    :"custom1"
-                )
+                getShipShapesForShip(
+chosenFocusShip
+)
             ){
 
                 /*
@@ -32460,7 +33685,8 @@ function mpMaybeBroadcastCrewLaunch(mode){
         styleId:currentShipStyleId,
         styleOwnerId:
             currentShipStyleOwnerId ||
-            mp.myId
+            mp.myId,
+        styleRaw:currentShipStyleRaw
     });
 
     renderCrewScoreboard();
@@ -32798,6 +34024,9 @@ function mpStartCoPilotSession(message){
             ?message.styleOwnerId
             :null;
 
+        currentShipStyleRaw=
+            message.styleRaw || null;
+
     }
 
     renderCrewScoreboard();
@@ -32844,6 +34073,8 @@ function mpEndCoPilotSession(message){
     }
 
     currentShipStyleOwnerId=null;
+
+    currentShipStyleRaw=null;
 
     coPilotOwnStyleId=null;
 
@@ -33772,9 +35003,9 @@ function paintShipPickerPreviews(planetId,ships,pickerKey){
 
                 ctx2d.translate(-200,-140);
 
-                getShipStyleShapes(
-                    ship.styleId
-                ).forEach(
+                getShipShapesForShip(
+ship
+).forEach(
                     shape=>{
 
                         shape.draw(ctx2d,false);
@@ -33847,8 +35078,9 @@ function paintShipStylePickerPreviews(shipId,styleList){
                 ctx2d.translate(-200,-140);
 
                 getShipStyleShapes(
-                    style.id
-                ).forEach(
+style.id,
+ownStyleOwnerId()
+).forEach(
                     shape=>{
 
                         shape.draw(ctx2d,false);
@@ -33921,8 +35153,9 @@ function paintGalleryStylePreviews(){
                 ctx2d.translate(-200,-140);
 
                 getShipStyleShapes(
-                    style.id
-                ).forEach(
+style.id,
+ownStyleOwnerId()
+).forEach(
                     shape=>{
 
                         shape.draw(ctx2d,false);
@@ -35432,8 +36665,24 @@ function renderPlanetDetail(id){
                     ship.styleId ||
                     "custom1";
 
+                const foreignStyleOwner=
+                    ship.styleOwnerId &&
+                    ship.styleOwnerId!==ownStyleOwnerId()
+                    ?ship.styleOwnerId
+                    :null;
+
                 const currentStyle=
-                    styleList.find(
+                    foreignStyleOwner
+                    ?{
+                        id:"foreign",
+                        name:
+                            (
+                                typeof mpPlayerName==="function"
+                                ?mpPlayerName(foreignStyleOwner)
+                                :"Room-mate"
+                            )+"'s style"
+                    }
+                    :styleList.find(
                         s => s.id===currentStyleId
                     ) ||
                     styleList[0];
@@ -35564,65 +36813,6 @@ function renderPlanetDetail(id){
                             claimedBy,
                             isSelectedForLaunch
                         );
-
-                    /*
-                     * ---- SHIP PREVIEW / STYLE ----
-                     * Tapping the ship itself is how you
-                     * customize its look — no separate text
-                     * button, since the ship is right there to
-                     * tap.
-                     */
-                    html+=
-                        '<div class="ship-interior-preview-wrap" '+
-                        'data-action="toggle-style" data-ship="'+ship.id+'">'+
-                        '<canvas id="'+interiorCanvasId+'" width="96" height="96" '+
-                        'style="display:block;"></canvas>'+
-                        '<div class="ship-interior-preview-caption">'+
-                        '<span>🎨 '+currentStyle.name+'</span>'+
-                        '<span style="opacity:.6;">'+
-                        (styleOpen ? "▲" : "▼")+
-                        '</span>'+
-                        '</div>'+
-                        '</div>';
-
-                    if(styleOpen){
-
-                        html+=
-                            '<div class="ship-bay-sub">'+
-                            styleList.map(
-                                s=>{
-
-                                    const isChosen=
-                                        s.id===
-                                        currentStyleId;
-
-                                    const canvasId=
-                                        "shipStylePicker_"+
-                                        ship.id+"_"+s.id;
-
-                                    return(
-                                        '<button class="shape-btn" '+
-                                        'data-action="assign-ship-style" '+
-                                        'data-ship="'+ship.id+'" '+
-                                        'data-style="'+s.id+'" '+
-                                        'style="width:100%;display:flex;'+
-                                        'align-items:center;gap:8px;'+
-                                        'padding:6px 10px;text-align:left;">'+
-                                        '<canvas id="'+canvasId+'" width="34" height="34" '+
-                                        'style="display:block;background:rgba(0,0,0,.3);'+
-                                        'border-radius:7px;flex-shrink:0;"></canvas>'+
-                                        '<span>'+
-                                        (isChosen ? "▶ " : "")+
-                                        s.name+
-                                        '</span>'+
-                                        '</button>'
-                                    );
-
-                                }
-                            ).join('')+
-                            '</div>';
-
-                    }
 
                     /*
                      * ---- PILOT BAY ----
@@ -36121,6 +37311,69 @@ function renderPlanetDetail(id){
 
                     html+=
                         '</div>';
+
+                    /*
+                     * ---- SHIP PREVIEW / STYLE ----
+                     * Last in the card on purpose: what the ship can
+                     * DO (launch, crew, pilot, powerups, pets, cargo)
+                     * comes first; how it looks comes after.
+                     * Tapping the ship itself is how you
+                     * customize its look — no separate text
+                     * button, since the ship is right there to
+                     * tap.
+                     */
+                    html+=
+                        '<div class="ship-interior-preview-wrap" '+
+                        'data-action="toggle-style" data-ship="'+ship.id+'">'+
+                        '<canvas id="'+interiorCanvasId+'" width="96" height="96" '+
+                        'style="display:block;"></canvas>'+
+                        '<div class="ship-interior-preview-caption">'+
+                        '<span>🎨 '+currentStyle.name+'</span>'+
+                        '<span style="opacity:.6;">'+
+                        (styleOpen ? "▲" : "▼")+
+                        '</span>'+
+                        '</div>'+
+                        '</div>';
+
+                    if(styleOpen){
+
+                        html+=
+                            '<div class="ship-bay-sub">'+
+                            styleList.map(
+                                s=>{
+
+                                    const isChosen=
+                                        s.id===
+                                        currentStyleId;
+
+                                    const canvasId=
+                                        "shipStylePicker_"+
+                                        ship.id+"_"+s.id;
+
+                                    return(
+                                        '<button class="shape-btn" '+
+                                        'data-action="assign-ship-style" '+
+                                        'data-ship="'+ship.id+'" '+
+                                        'data-style="'+s.id+'" '+
+                                        'data-style-owner="'+(ownStyleOwnerId() || "")+'" '+
+                                        'style="width:100%;display:flex;'+
+                                        'align-items:center;gap:8px;'+
+                                        'padding:6px 10px;text-align:left;">'+
+                                        '<canvas id="'+canvasId+'" width="34" height="34" '+
+                                        'style="display:block;background:rgba(0,0,0,.3);'+
+                                        'border-radius:7px;flex-shrink:0;"></canvas>'+
+                                        '<span>'+
+                                        (isChosen ? "▶ " : "")+
+                                        s.name+
+                                        '</span>'+
+                                        '</button>'
+                                    );
+
+                                }
+                            ).join('')+
+                            '</div>';
+
+                    }
 
                     html+=
                         '</div>';
@@ -38818,8 +40071,47 @@ function executePlanetDetailAction(target){
 
             if(shipRef){
 
+                /*
+                 * The style comes from the collection of whoever
+                 * chose it. On their own ship that's just the slot;
+                 * on someone else's, a copy of the design goes onto
+                 * the ship so it keeps looking right even if they
+                 * later change that design or leave the room.
+                 */
+                const styleOwner=
+                    target.getAttribute(
+                        "data-style-owner"
+                    ) || null;
+
+                const saveOwner=
+                    activePlanetOwnerId ||
+                    ownStyleOwnerId() ||
+                    null;
+
                 shipRef.styleId=
                     styleId;
+
+                if(
+                    styleOwner &&
+                    styleOwner!==saveOwner
+                ){
+
+                    shipRef.styleOwnerId=
+                        styleOwner;
+
+                    shipRef.styleDesign=
+                        resolveShipStyleRaw(
+                            styleId,
+                            styleOwner
+                        ) || null;
+
+                }else{
+
+                    delete shipRef.styleOwnerId;
+
+                    delete shipRef.styleDesign;
+
+                }
 
                 savePlanetProgress();
 
@@ -48246,7 +49538,8 @@ function drawCustomShipShapes(
         const shape of
         getShipStyleShapes(
             currentShipStyleId,
-            currentShipStyleOwnerId
+            currentShipStyleOwnerId,
+currentShipStyleRaw
         )
     ){
 
@@ -58350,6 +59643,13 @@ function createDestinationBubbles(){
                 )
         );
 
+    const currentSystemOwner=
+        getCurrentSystemOwnerId();
+
+    /*
+     * Routes within this system (up to three, as always) — each
+     * tagged with the system it's in.
+     */
     let candidates=
         [
             ...forwardCandidates,
@@ -58357,34 +59657,119 @@ function createDestinationBubbles(){
         ].slice(
             0,
             3
+        ).map(
+            p=>({
+                planet:p,
+                ownerId:currentSystemOwner
+            })
         );
 
+    /*
+     * From a hub (Earth), every other room member's matching hub is
+     * just another destination — straight there, no detour.
+     */
+    if(
+        typeof mp!=="undefined" &&
+        mp.connected &&
+        isBridgeHub(current.id)
+    ){
 
-    const positions=[
+        const members=
+            [
+                mp.myId,
+                ...(mp.roster || []).map(r=>r.id)
+            ].filter(
+                (id,i,all)=>
+                    id &&
+                    all.indexOf(id)===i &&
+                    id!==currentSystemOwner
+            );
 
-        {
-            x:22,
-            y:28
-        },
+        members.forEach(
+            ownerId=>{
 
-        {
-            x:50,
-            y:18
-        },
+                const save=
+                    ownerId===mp.myId
+                    ?localPlanetSave
+                    :mp.remotePlanetSaves[ownerId];
 
-        {
-            x:78,
-            y:30
-        }
+                if(
+                    save &&
+                    isPlanetUnlockedInSave(
+                        save,
+                        current.id
+                    )
+                ){
 
-    ];
+                    candidates.push({
+                        planet:current,
+                        ownerId
+                    });
+
+                }
+
+            }
+        );
+
+    }
+
+
+
+    const positions=
+        candidates.map(
+            (c,i)=>{
+
+                const perRow=
+                    candidates.length<=3
+                    ?candidates.length
+                    :Math.ceil(candidates.length/2);
+
+                const row=
+                    Math.floor(i/perRow);
+
+                const inRow=
+                    Math.min(
+                        perRow,
+                        candidates.length-row*perRow
+                    );
+
+                const col=i%perRow;
+
+                return{
+                    x:(col+1)*100/(inRow+1),
+                    y:(row===0?22:36)+
+                      (inRow===3 && col===1 ? -6 : 0)
+                };
+
+            }
+        );
 
 
     candidates.forEach(
         (
-            planet,
+            candidate,
             index
         )=>{
+
+            const planet=
+                candidate.planet;
+
+            const candidateOwner=
+                candidate.ownerId;
+
+            const otherSystem=
+                typeof mp!=="undefined" &&
+                mp.connected &&
+                candidateOwner!==currentSystemOwner;
+
+            const ownerLabel=
+                otherSystem
+                ?(
+                    candidateOwner===mp.myId
+                    ?"Your "
+                    :mpPlayerName(candidateOwner)+"'s "
+                )
+                :"";
 
             const bubble=
                 document.createElement(
@@ -58396,13 +59781,13 @@ function createDestinationBubbles(){
 
             bubble.style.left=
                 positions[
-                    index%3
+                    index
                 ].x+
                 "%";
 
             bubble.style.top=
                 positions[
-                    index%3
+                    index
                 ].y+
                 "%";
 
@@ -58418,7 +59803,7 @@ function createDestinationBubbles(){
                     height="92"></canvas>
 
                 <span class="name">
-                    ${planet.name}
+                    ${escapeHTML(ownerLabel)}${planet.name}
                 </span>
 
                 <span class="req">
@@ -58499,7 +59884,8 @@ function createDestinationBubbles(){
                     }
 
                     chooseDestination(
-                        planet.id
+                        planet.id,
+                        candidateOwner
                     );
 
                 },
@@ -58524,6 +59910,50 @@ function createDestinationBubbles(){
 }
 
 
+/*
+ * Whose system the ship is flying through right now.
+ */
+function getCurrentSystemOwnerId(){
+
+    return(
+        orbitalLocaleOwnerId ||
+        destinationOwnerId ||
+        flyingShipOwnerId ||
+        (typeof mp!=="undefined" && mp.myId) ||
+        null
+    );
+
+}
+
+/*
+ * Whether a planet is unlocked in a given player's save (their own
+ * rank decides, not this player's).
+ */
+function isPlanetUnlockedInSave(save,planetId){
+
+    if(!save)
+        return false;
+
+    const previous=planetSave;
+
+    planetSave=save;
+
+    try{
+
+        return isPlanetUnlocked(planetId);
+
+    }catch(error){
+
+        return false;
+
+    }finally{
+
+        planetSave=previous;
+
+    }
+
+}
+
 function chooseDestination(id,ownerId){
 
     const destination=
@@ -58547,29 +59977,56 @@ function chooseDestination(id,ownerId){
      * mean "my own system", where only the ordinary route check
      * ever applied and still does.
      */
-    const isBridgeChoice=
-        ownerId &&
-        ownerId!==mp.myId &&
-        mp.connected &&
-        isBridgeHub(currentPlanetId) &&
-        isBridgeHub(destination.id);
+    /*
+     * Every choice belongs to a system: the one asked for, or else
+     * the system the ship is in right now. (Defaulting to "no owner"
+     * meant YOUR OWN system — so mid-flight through a room-mate's
+     * system, a plain choice could route you to your own planet.)
+     * Moving between systems goes hub to hub (Earth to Earth);
+     * within a system, the usual routes apply.
+     */
+    const currentSystemOwner=
+        getCurrentSystemOwnerId();
 
-    if(
+    const targetSystemOwner=
+        ownerId ||
+        currentSystemOwner;
+
+    const crossesSystems=
+        mp.connected &&
+        targetSystemOwner!==
+        currentSystemOwner;
+
+    if(crossesSystems){
+
+        if(
+            !isBridgeHub(currentPlanetId) ||
+            !isBridgeHub(destination.id)
+        ){
+
+            return;
+
+        }
+
+    }else if(
         !isRoute(
             currentPlanetId,
             destination.id
-        ) &&
-        !isBridgeChoice
-    )
+        )
+    ){
+
         return;
+
+    }
 
     destinationPlanetId=
         id;
 
     destinationOwnerId=
-        isBridgeChoice
-        ?ownerId
-        :null;
+        targetSystemOwner===mp.myId ||
+        !mp.connected
+        ?null
+        :targetSystemOwner;
 
     if(
         typeof mpUpdateOrbitalLocale===
@@ -58798,6 +60255,19 @@ function landAtCurrentPlanetInner(){
             ship.pendingRouteStops=
                 currentShipPendingRouteStops || [];
 
+            if(
+                currentShipStyleOwnerId &&
+                currentShipStyleOwnerId!==ownStyleOwnerId()
+            ){
+
+                ship.styleOwnerId=
+                    currentShipStyleOwnerId;
+
+                ship.styleDesign=
+                    currentShipStyleRaw;
+
+            }
+
             currentShipId=
                 ship.id;
 
@@ -58927,6 +60397,10 @@ function landAtCurrentPlanetInner(){
                 currentShipCargoPets,
             styleId:
                 currentShipStyleId,
+            styleOwnerId:
+                currentShipStyleOwnerId,
+            styleDesign:
+                currentShipStyleRaw,
             wave:wave,
             lives:lives
         };
@@ -61756,6 +63230,15 @@ let currentShipStyleId="custom1";
 let currentShipStyleOwnerId=null;
 
 /*
+ * A design copied onto the flying ship itself (it was styled by
+ * another player from their collection) — wins over any lookup.
+ */
+let currentShipStyleRaw=null;
+
+/* the ship record a launch read its style from, see startGame */
+let launchStyleSource=null;
+
+/*
  * Where this player's most recent launch actually started — the
  * planet, and whose planet it was (null = their own). Kept
  * separately from flyingShipOwnerId, which endGame clears before
@@ -62134,6 +63617,8 @@ function startGame(){
             earthChoice.styleId ||
             "custom1";
 
+        launchStyleSource=earthChoice;
+
         selectedLaunchShipId=
             null;
 
@@ -62328,6 +63813,8 @@ function startGame(){
             ship.styleId ||
             "custom1";
 
+        launchStyleSource=ship;
+
         savePlanetProgress();
 
     }
@@ -62354,7 +63841,20 @@ function startGame(){
     missionJustLaunched=true;
 
     currentShipStyleOwnerId=
-        flyingShipOwnerId || null;
+        (
+            launchStyleSource &&
+            launchStyleSource.styleOwnerId
+        ) ||
+        flyingShipOwnerId ||
+        null;
+
+    currentShipStyleRaw=
+        (
+            launchStyleSource &&
+            launchStyleSource.styleDesign
+        ) || null;
+
+    launchStyleSource=null;
 
     lastLaunchPlanetId=
         chosen.id;
@@ -65531,7 +67031,8 @@ function paintPauseShipPreview(){
 
             getShipStyleShapes(
                 currentShipStyleId,
-                currentShipStyleOwnerId
+                currentShipStyleOwnerId,
+currentShipStyleRaw
             ).forEach(
                 shape=>{
 
