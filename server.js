@@ -991,6 +991,48 @@ function handleMessage(player,message){
          * otherwise list people who were never actually invited to
          * this one.
          */
+        /*
+         * One selected ship per player across the whole room —
+         * choosing a ship (on any player's planet, including their
+         * own) releases whatever they had selected before, and tells
+         * that ship's crew, if it had one.
+         */
+        room.claimedShips.forEach(
+            (cl,key)=>{
+
+                if(
+                    key!==shipKey &&
+                    cl.byId===player.id
+                ){
+
+                    room.claimedShips.delete(key);
+
+                    broadcastToRoom(
+                        room,
+                        {
+                            type:'shipReleased',
+                            shipKey:key,
+                            coPilotIds:
+                                (cl.coPilots || []).
+                                map(cp=>cp.id)
+                        },
+                        null
+                    );
+
+                }
+
+            }
+        );
+
+        /* re-selecting the same ship keeps its crew */
+        if(existing){
+
+            schedulePersist();
+
+            return;
+
+        }
+
         room.claimedShips.set(
             shipKey,
             {
@@ -999,6 +1041,8 @@ function handleMessage(player,message){
                 coPilots:[]
             }
         );
+
+        schedulePersist();
 
         broadcastToRoom(
             room,
@@ -1191,6 +1235,10 @@ function handleMessage(player,message){
                     null,
                 mode:message.mode || 'field',
                 styleId:message.styleId || null,
+                styleRaw:
+                    typeof message.styleRaw==='string'
+                    ?message.styleRaw.slice(0,200000)
+                    :null,
                 styleOwnerId:
                     message.styleOwnerId || null
             },
