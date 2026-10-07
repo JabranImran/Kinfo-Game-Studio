@@ -160,6 +160,52 @@ body{
         blur(8px);
 }
 
+.score-panel{
+    position:relative;
+}
+.score-progress{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    overflow:visible;
+    pointer-events:none;
+}
+.score-progress rect{
+    fill:none;
+}
+.score-progress-track{
+    stroke:rgba(95,243,255,.08);
+    stroke-width:1.5;
+}
+.score-progress-fill{
+    stroke:#5ff3ff;
+    stroke-width:2;
+    stroke-linecap:round;
+    stroke-dasharray:100 100;
+    stroke-dashoffset:100;
+    filter:
+        drop-shadow(0 0 3px #5ff3ff)
+        drop-shadow(0 0 6px rgba(95,243,255,.6));
+    transition:stroke-dashoffset .35s ease-out;
+}
+.score-progress-fill.complete{
+    stroke:#8ffcff;
+    animation:scoreOutlinePulse 1.2s ease-in-out infinite;
+}
+@keyframes scoreOutlinePulse{
+    0%,100%{
+        filter:
+            drop-shadow(0 0 3px #5ff3ff)
+            drop-shadow(0 0 6px rgba(95,243,255,.6));
+    }
+    50%{
+        filter:
+            drop-shadow(0 0 6px #aaffff)
+            drop-shadow(0 0 14px rgba(95,243,255,.95));
+    }
+}
+
 .stat-label{
 
     color:#7690b7;
@@ -3373,7 +3419,13 @@ and (max-height:500px){
 
     <div class="hud-row">
 
-        <div class="panel">
+        <div class="panel score-panel" id="scorePanel">
+
+            <!-- neon outline tracing progress toward this field's exit -->
+            <svg class="score-progress" aria-hidden="true">
+                <rect class="score-progress-track" x="0" y="0" width="100%" height="100%" rx="12" ry="12" pathLength="100"></rect>
+                <rect class="score-progress-fill" id="scoreProgressFill" x="0" y="0" width="100%" height="100%" rx="12" ry="12" pathLength="100"></rect>
+            </svg>
 
             <div class="stat-label">
                 Score
@@ -5597,12 +5649,12 @@ let beamEffects=[];
 const FIELD_MIN_TIME=12;
 
 /*
- * Rebalanced to 50,000 — a full round trip (reach a planet, then
- * depart it toward the next) now costs a flat 100,000 score
- * total, split evenly across both legs rather than the old
- * uneven split.
+ * Rebalanced to 25,000 — a full round trip (reach a planet, then
+ * depart it toward the next) now costs a flat 50,000 score total,
+ * split evenly across both legs. The score box's neon outline (see
+ * updateScoreProgressOutline) traces this same 25,000.
  */
-const PLANET_APPROACH_POINTS=50000;
+const PLANET_APPROACH_POINTS=25000;
 
 /*
  * The other half of that round trip — how much MORE score (past
@@ -5615,7 +5667,7 @@ const PLANET_APPROACH_POINTS=50000;
  * planet and leaving it costs 100,000 total" a consistent rule
  * rather than true only for the first hop.
  */
-const PLANET_DEPART_POINTS=50000;
+const PLANET_DEPART_POINTS=25000;
 
 /*
  * A queued transition out of the current field (either "arrive
@@ -24454,10 +24506,272 @@ function globeSpots(x,y,z,seed,freq,threshold){
 
 }
 
+/*
+ * A crater's rim as a value that crosses zero exactly along the rim,
+ * for tracing it as a neon outline. Positive everywhere else.
+ */
+function globeCraterRimField(list,x,y,z){
+
+    let best=1;
+
+    for(const cr of list){
+
+        const d=x*cr.x+y*cr.y+z*cr.z;
+
+        if(d<Math.cos(cr.r*1.3))
+            continue;
+
+        const t=Math.acos(Math.min(1,d))/cr.r;
+
+        best=Math.min(best,t-.88);
+
+    }
+
+    return best;
+
+}
+
+/*
+ * NEON OUTLINES — traced once per planet from its outline fields (see
+ * each look's `lines`) with marching squares on a latitude/longitude
+ * grid, giving smooth boundaries as short segments on the sphere
+ * (stored as pairs of unit vectors). Drawn as glowing vector lines,
+ * they stay crisp at any size — the same neon style as the ships,
+ * buildings and pets standing on the planet.
+ */
+const MS_EDGES=[
+    [],[[3,0]],[[0,1]],[[3,1]],
+    [[1,2]],[[3,0],[1,2]],[[0,2]],[[3,2]],
+    [[2,3]],[[0,2]],[[0,1],[2,3]],[[1,2]],
+    [[1,3]],[[0,1]],[[0,3]],[]
+];
+
+function globeExtractContours(field,W,H){
+
+    const out=[];
+
+    const toVec=(gi,gj)=>{
+
+        const lon=((gi+.5)/W)*Math.PI*2-Math.PI;
+
+        const lat=Math.PI/2-((gj+.5)/H)*Math.PI;
+
+        const cl=Math.cos(lat);
+
+        return[cl*Math.sin(lon),Math.sin(lat),cl*Math.cos(lon)];
+
+    };
+
+    for(let j=0;j<H-1;j++){
+
+        for(let i=0;i<W;i++){
+
+            const i1=i+1>=W?0:i+1;
+
+            const fa=field[j*W+i],fb=field[j*W+i1];
+
+            const fc=field[(j+1)*W+i1],fd=field[(j+1)*W+i];
+
+            const k=(fa>0?1:0)|(fb>0?2:0)|(fc>0?4:0)|(fd>0?8:0);
+
+            if(k===0 || k===15)
+                continue;
+
+            const edgePoint=e=>{
+
+                if(e===0)
+                    return toVec(i+fa/(fa-fb),j);
+
+                if(e===1)
+                    return toVec(i+1,j+fb/(fb-fc));
+
+                if(e===2)
+                    return toVec(i+fd/(fd-fc),j+1);
+
+                return toVec(i,j+fa/(fa-fd));
+
+            };
+
+            for(const [e1,e2] of MS_EDGES[k]){
+
+                const p=edgePoint(e1),q=edgePoint(e2);
+
+                out.push(p[0],p[1],p[2],q[0],q[1],q[2]);
+
+            }
+
+        }
+
+    }
+
+    return new Float32Array(out);
+
+}
+
+/*
+ * Draws a planet's neon outlines, turned with the same view rotation
+ * as everything else (projectSphere's maths, inlined for speed).
+ * Lines near the horizon are drawn fainter so the edge doesn't turn
+ * into a tangle.
+ */
+function drawGlobeLines(c,tex,cx,cy,R,viewLat,viewLon,opts){
+
+    if(!tex || !tex.lines)
+        return;
+
+    opts=opts || {};
+
+    const cosV=Math.cos(viewLat),sinV=Math.sin(viewLat);
+
+    const cl=Math.cos(-viewLon),sl=Math.sin(-viewLon);
+
+    const core=opts.coreWidth || 2;
+
+    const b=opts.bounds;
+
+    const pad=core*4;
+
+    c.save();
+
+    c.lineCap="round";
+
+    c.lineJoin="round";
+
+    for(const line of tex.lines){
+
+        const segs=line.segs;
+
+        const near=new Path2D();
+
+        const edge=new Path2D();
+
+        let any=false;
+
+        for(let s=0;s<segs.length;s+=6){
+
+            let px=segs[s],py=segs[s+1],pz=segs[s+2];
+
+            let rx=px*cl+pz*sl,rz=-px*sl+pz*cl;
+
+            const z1=py*sinV+rz*cosV;
+
+            if(z1<.015)
+                continue;
+
+            const x1=cx+rx*R,y1=cy-(py*cosV-rz*sinV)*R;
+
+            px=segs[s+3];py=segs[s+4];pz=segs[s+5];
+
+            rx=px*cl+pz*sl;rz=-px*sl+pz*cl;
+
+            const z2=py*sinV+rz*cosV;
+
+            if(z2<.015)
+                continue;
+
+            const x2=cx+rx*R,y2=cy-(py*cosV-rz*sinV)*R;
+
+            if(b){
+
+                if(
+                    (x1<b.x0-pad && x2<b.x0-pad) ||
+                    (x1>b.x1+pad && x2>b.x1+pad) ||
+                    (y1<b.y0-pad && y2<b.y0-pad) ||
+                    (y1>b.y1+pad && y2>b.y1+pad)
+                ){
+
+                    continue;
+
+                }
+
+            }
+
+            const path=(z1+z2)<.36?edge:near;
+
+            path.moveTo(x1,y1);
+
+            path.lineTo(x2,y2);
+
+            any=true;
+
+        }
+
+        if(!any)
+            continue;
+
+        const baseAlpha=c.globalAlpha;
+
+        c.strokeStyle=line.colour;
+
+        for(const [path,k] of [[near,1],[edge,.4]]){
+
+            c.globalAlpha=baseAlpha*.22*k;
+
+            c.lineWidth=core*3.4;
+
+            c.stroke(path);
+
+            c.globalAlpha=baseAlpha*.95*k;
+
+            c.lineWidth=core;
+
+            c.stroke(path);
+
+        }
+
+        c.globalAlpha=baseAlpha;
+
+    }
+
+    c.restore();
+
+}
+
+/*
+ * The glowing neon edge of a planet — matching the outlined look of
+ * everything else in the game.
+ */
+function drawGlobeNeonRim(c,cx,cy,R,colour,core){
+
+    c.save();
+
+    c.strokeStyle=colour;
+
+    c.globalAlpha*=.18;
+
+    c.lineWidth=core*5;
+
+    c.beginPath();
+
+    c.arc(cx,cy,R,0,Math.PI*2);
+
+    c.stroke();
+
+    c.globalAlpha/=.18;
+
+    c.globalAlpha*=.9;
+
+    c.lineWidth=core;
+
+    c.beginPath();
+
+    c.arc(cx,cy,R,0,Math.PI*2);
+
+    c.stroke();
+
+    c.restore();
+
+}
+
 const PLANET_LOOKS={
 
     earth:{
         atmosphere:"#7fd6ff",
+        /* neon outlines: the coastline, and the southern ice edge */
+        lines:[
+            {colour:"#5ff3ff",f(x,y,z){return globeFbm(x,y,z,11,5,1.55)+globeHomeland(x,y,z)*.32-.52;}},
+            {colour:"#e8fbff",f(x,y,z){return (-.9+globeFbm(x,y,z,12,3,3)*.08)-y;}}
+        ],
         moons:1,
         sample(x,y,z){
 
@@ -24514,6 +24828,10 @@ const PLANET_LOOKS={
 
     mars:{
         atmosphere:"#ffb08a",
+        lines:[
+            {colour:"#ff8a5c",f(x,y,z){return globeCraterRimField(this.craters,x,y,z);}},
+            {colour:"#ff4fd8",f(x,y,z){return (1-Math.abs(globeFbm(x,y,z,25,3,1.3)*2-1))*(1-globeHomeland(x,y,z))-.93;}}
+        ],
         moons:2,
         init(){
 
@@ -24551,6 +24869,10 @@ const PLANET_LOOKS={
 
     europa:{
         atmosphere:"#d8f6ff",
+        lines:[
+            {colour:"#a8f4ff",f(x,y,z){return (1-Math.abs(globeNoise(x*3.1,y*3.1,z*3.1,39)*2-1))-.975;}},
+            {colour:"#4fb8ff",f(x,y,z){return globeFbm(x,y,z,38,4,2.1)*(1-globeHomeland(x,y,z))-.66;}}
+        ],
         sample(x,y,z){
 
             const n=globeFbm(x,y,z,37,4,1.8);
@@ -24583,6 +24905,10 @@ const PLANET_LOOKS={
 
     titan:{
         atmosphere:"#ffc98a",
+        lines:[
+            {colour:"#ffcf6b",f(x,y,z){return Math.sin(y*16+globeFbm(x,y,z,41,4,1.6)*5);}},
+            {colour:"#c58cff",f(x,y,z){return (globeFbm(x,y,z,42,4,2.0)+Math.abs(y)*.12)*(1-globeHomeland(x,y,z))-.68;}}
+        ],
         sample(x,y,z){
 
             const warp=globeFbm(x,y,z,41,4,1.6);
@@ -24611,6 +24937,10 @@ const PLANET_LOOKS={
 
     neptune:{
         atmosphere:"#8fb6ff",
+        lines:[
+            {colour:"#6ffcff",f(x,y,z){return globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42-.66;}},
+            {colour:"#7f9dff",f(x,y,z){return Math.sin(y*10+globeFbm(x,y,z,54,4,1.4)*6)-.9;}}
+        ],
         sample(x,y,z){
 
             const land=globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42;
@@ -24643,6 +24973,10 @@ const PLANET_LOOKS={
 
     kepler:{
         atmosphere:"#f0a6ff",
+        lines:[
+            {colour:"#7dff9c",f(x,y,z){return globeFbm(x,y,z,69,4,2.3)*(1-globeHomeland(x,y,z))-.62;}},
+            {colour:"#ff8bf0",f(x,y,z){return globeFbm(x,y,z,68,3,3.4)-.62;}}
+        ],
         sample(x,y,z){
 
             const n=globeFbm(x,y,z,67,5,1.8);
@@ -24679,6 +25013,10 @@ const PLANET_LOOKS={
 
     aurora:{
         atmosphere:"#dcaeff",
+        lines:[
+            {colour:"#f39bff",f(x,y,z){return Math.sin(x*4+globeFbm(x,y,z,71,4,1.5)*7+z*2);}},
+            {colour:"#ffc6ef",f(x,y,z){return globeFbm(x,y,z,72,4,2.2)*(1-globeHomeland(x,y,z))-.69;}}
+        ],
         sample(x,y,z){
 
             const warp=globeFbm(x,y,z,71,4,1.5);
@@ -24715,6 +25053,14 @@ const PLANET_LOOKS={
 
     helios:{
         atmosphere:"#ffb060",
+        lines:[
+            {colour:"#ffb02e",f(x,y,z){
+                const away=1-globeHomeland(x,y,z);
+                const river=(1-Math.abs(globeFbm(x,y,z,84,4,1.4)*2-1))*away;
+                const pool=globeFbm(x,y,z,85,4,2.4)*away;
+                return Math.max(globeSmooth(.86,.93,river),globeSmooth(.7,.76,pool))-.35;
+            }}
+        ],
         sample(x,y,z){
 
             const n=globeFbm(x,y,z,83,5,1.9);
@@ -24747,6 +25093,11 @@ const PLANET_LOOKS={
 
     nova:{
         atmosphere:"#a8ffff",
+        lines:[
+            {colour:"#5ff3ff",f(x,y,z){return .5+.5*Math.sin(y*13+globeFbm(x,y,z,97,4,1.3)*3.5)-.33;}},
+            {colour:"#d2fffb",f(x,y,z){return .5+.5*Math.sin(y*13+globeFbm(x,y,z,97,4,1.3)*3.5)-.66;}},
+            {colour:"#ffffff",f(x,y,z){const s=this.storm;return x*s.x+y*s.y+z*s.z-.97;}}
+        ],
         ring:{inner:1.35,outer:2.05,colour:"#bffcff"},
         init(){
 
@@ -24787,6 +25138,10 @@ const PLANET_LOOKS={
 
     zenith:{
         atmosphere:"#e0ccff",
+        lines:[
+            {colour:"#c8a6ff",f(x,y,z){return globeCraterRimField(this.craters,x,y,z);}},
+            {colour:"#ffffff",f(x,y,z){return globeFbm(x,y,z,110,4,2.6)*(1-globeHomeland(x,y,z))-.68;}}
+        ],
         sparkleRing:true,
         init(){
 
@@ -24872,6 +25227,13 @@ function buildGlobeTextureRows(id,maxRows,level){
 
     const N=low?0:GLOBE_POLAR_N;
 
+    /* the coarser grid the neon outlines are traced on */
+    const LW=low?144:360;
+
+    const LH=low?72:180;
+
+    const lineDefs=look.lines || [];
+
     const key=id+"|"+level;
 
     let job=globeBuilds[key];
@@ -24885,7 +25247,8 @@ function buildGlobeTextureRows(id,maxRows,level){
             cloud:look.cloud?new Uint8Array(W*H):null,
             prgb:N?new Uint8ClampedArray(N*N*3):null,
             pinfo:N?new Uint8Array(N*N*4):null,
-            pcloud:N && look.cloud?new Uint8Array(N*N):null
+            pcloud:N && look.cloud?new Uint8Array(N*N):null,
+            fields:lineDefs.map(()=>new Float32Array(LW*LH))
         };
 
     }
@@ -24910,7 +25273,7 @@ function buildGlobeTextureRows(id,maxRows,level){
 
     };
 
-    const total=H+N;
+    const total=H+N+(lineDefs.length?LH:0);
 
     const end=Math.min(total,job.row+(maxRows || total));
 
@@ -24929,6 +25292,29 @@ function buildGlobeTextureRows(id,maxRows,level){
                 const lon=(u+.5)/W*Math.PI*2-Math.PI;
 
                 put(job.rgb,job.info,job.cloud,v*W+u,cl*Math.sin(lon),sl,cl*Math.cos(lon));
+
+            }
+
+        }else if(r>=H+N){
+
+            /* a row of the neon outline fields */
+            const j=r-H-N;
+
+            const lat=Math.PI/2-(j+.5)/LH*Math.PI;
+
+            const cl=Math.cos(lat),sl=Math.sin(lat);
+
+            for(let i=0;i<LW;i++){
+
+                const lon=(i+.5)/LW*Math.PI*2-Math.PI;
+
+                const x=cl*Math.sin(lon),z=cl*Math.cos(lon);
+
+                for(let k=0;k<lineDefs.length;k++){
+
+                    job.fields[k][j*LW+i]=lineDefs[k].f.call(look,x,sl,z);
+
+                }
 
             }
 
@@ -24972,7 +25358,13 @@ function buildGlobeTextureRows(id,maxRows,level){
             rgb:job.rgb,info:job.info,cloud:job.cloud,
             prgb:job.prgb,pinfo:job.pinfo,pcloud:job.pcloud,
             atm:globeHex(look.atmosphere || "#9fd8ff"),
-            look
+            look,
+            lines:lineDefs.map(
+                (d,k)=>({
+                    colour:d.colour,
+                    segs:globeExtractContours(job.fields[k],LW,LH)
+                })
+            )
         };
 
         if(low){
@@ -25249,6 +25641,21 @@ function renderGlobe(c,planetId,cx,cy,R,viewLat,viewLon,opts){
 
         paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,!!opts.tightSpecular);
 
+        if(opts.lines==="buffer"){
+
+            drawGlobeLines(
+                buf.ctx,
+                tex,
+                -x0*scale,
+                -y0*scale,
+                R*scale,
+                viewLat,
+                viewLon,
+                {coreWidth:Math.max(.9,R*scale*.03)}
+            );
+
+        }
+
         buf.sig=sig;
 
     }
@@ -25260,6 +25667,25 @@ function renderGlobe(c,planetId,cx,cy,R,viewLat,viewLon,opts){
     c.drawImage(buf.canvas,cx+x0,cy+y0,bw/scale,bh/scale);
 
     c.restore();
+
+    /* big views: outlines drawn straight onto the screen, crisp at any size */
+    if(opts.lines==="direct"){
+
+        drawGlobeLines(
+            c,
+            tex,
+            cx,
+            cy,
+            R,
+            viewLat,
+            viewLon,
+            {
+                coreWidth:opts.lineWidth || 2,
+                bounds:opts.bounds
+            }
+        );
+
+    }
 
 }
 
@@ -25288,6 +25714,13 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
      * would be a blown-out patch — so there it's tight and soft.
      */
     const specGain=tightSpec?120:235;
+
+    /*
+     * The soft haze toward the edge: a thin glow on a small globe, but
+     * on the huge home planet it would bleach a whole band of the
+     * screen — there the crisp neon rim line does that job instead.
+     */
+    const rimGain=tightSpec?.18:.85;
 
     const data=buf.img.data;
 
@@ -25483,7 +25916,8 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
             const dif=nx*Lx+ny*Ly+nz*Lz;
 
-            const shade=.44+.66*(dif>0?dif:0);
+            /* dark body, like the ships and buildings — the neon outlines carry the detail */
+            const shade=.17+.36*(dif>0?dif:0);
 
             let s=nx*Hx+ny*Hy+nz*Hz;
 
@@ -25498,7 +25932,7 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
             const rimBase=1-nz;
 
-            const rim=rimBase*rimBase*.62;
+            const rim=rimBase*rimBase*rimGain;
 
             let lr=r*shade+spec+atm[0]*rim;
             let lg=g*shade+spec+atm[1]*rim;
@@ -25541,9 +25975,9 @@ function drawGlobeSheen(c,cx,cy,R){
 
     const sheen=c.createRadialGradient(cx-R*.38,cy-R*.42,0,cx-R*.38,cy-R*.42,R*.75);
 
-    sheen.addColorStop(0,"rgba(255,255,255,.42)");
+    sheen.addColorStop(0,"rgba(255,255,255,.2)");
 
-    sheen.addColorStop(.35,"rgba(255,255,255,.12)");
+    sheen.addColorStop(.35,"rgba(255,255,255,.06)");
 
     sheen.addColorStop(1,"rgba(255,255,255,0)");
 
@@ -25707,11 +26141,14 @@ function drawSmallGlobe(c,planetId,cx,cy,R,time){
             scale,
             time,
             fps:6,
+            lines:"buffer",
             cacheKey:"small|"+planetId+"|"+rBucket
         }
     );
 
     drawGlobeSheen(c,cx,cy,R);
+
+    drawGlobeNeonRim(c,cx,cy,R,look.atmosphere,Math.max(.8,R*.045));
 
     if(look.ring)
         drawGlobeRing(c,cx,cy,R,look.ring,false,1);
@@ -30705,7 +31142,7 @@ function drawPlanetFocusScene(){
             roamViewLat,
             roamViewLon,
             {
-                scale:roamingActive?.5:.62,
+                scale:roamingActive?.55:.75,
                 bounds:{x0:0,y0:0,x1:width,y1:height},
                 time,
                 /*
@@ -30715,6 +31152,8 @@ function drawPlanetFocusScene(){
                  */
                 fps:4,
                 tightSpecular:true,
+                lines:"direct",
+                lineWidth:2.2,
                 cacheKey:"focus"
             }
         );
@@ -30741,28 +31180,15 @@ function drawPlanetFocusScene(){
      * A thin bright rim along the horizon line sells the
      * curvature of the world.
      */
-    c.save();
 
-    c.globalAlpha=.5;
-
-    c.strokeStyle=
-        palette.light;
-
-    c.lineWidth=2;
-
-    c.beginPath();
-
-    c.arc(
+    drawGlobeNeonRim(
+        c,
         cx,
         cy,
         radius,
-        0,
-        Math.PI*2
+        getPlanetLook(planet.id).atmosphere,
+        2.4
     );
-
-    c.stroke();
-
-    c.restore();
 
     /*
      * Rotating surface pattern — the thing that actually makes
@@ -51654,6 +52080,8 @@ function drawPlanetBackground(){
                 bounds:{x0:0,y0:0,x1:W,y1:H},
                 time:bgTime,
                 fps:6,
+                lines:"direct",
+                lineWidth:1.8,
                 cacheKey:"fieldbg"
             }
         );
@@ -64194,7 +64622,86 @@ function draw(){
    HUD
 ========================================================= */
 
+/*
+ * The score box's neon outline: traced clockwise from the top-left
+ * as this field's score climbs toward the 25,000 that ends it, closed
+ * into a pulsing loop when reached, and back to empty when the next
+ * field begins. Only measured inside a field — between fields it holds
+ * how the last one finished.
+ */
+let scoreOutlineFieldBase=null;
+
+function updateScoreProgressOutline(){
+
+    const fill=
+        document.getElementById(
+            "scoreProgressFill"
+        );
+
+    if(!fill)
+        return;
+
+    if(!running){
+
+        scoreOutlineFieldBase=null;
+
+        fill.style.strokeDashoffset="100";
+
+        fill.classList.remove("complete");
+
+        return;
+
+    }
+
+    if(worldState!=="field")
+        return;
+
+    /* a new field: start from empty without animating backwards */
+    if(scoreOutlineFieldBase!==fieldStartScore){
+
+        scoreOutlineFieldBase=fieldStartScore;
+
+        fill.style.transition="none";
+
+        fill.style.strokeDashoffset="100";
+
+        fill.classList.remove("complete");
+
+        void fill.getBoundingClientRect();
+
+        fill.style.transition="";
+
+    }
+
+    const progress=
+        clamp(
+            (score-fieldStartScore)/
+            PLANET_DEPART_POINTS,
+            0,
+            1
+        );
+
+    fill.style.strokeDashoffset=
+        String(100-progress*100);
+
+    fill.classList.toggle(
+        "complete",
+        progress>=1
+    );
+
+}
+
 function updateHUD(){
+
+    if(
+        typeof updateScoreProgressOutline===
+        "function"
+    ){
+
+        updateScoreProgressOutline();
+
+    }
+
 
     scoreEl.textContent=
         score.toLocaleString();
