@@ -4555,6 +4555,9 @@ function getPlanetIconHtml(planetId){
         const ctx2d=
             canvas.getContext("2d");
 
+        /* drawn once and cached — never from the start-up placeholder */
+        getGlobeTexture(planetId);
+
         drawSpacePlanet(
             ctx2d,
             planetId,
@@ -24182,6 +24185,1740 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatI
 }
 
 
+/* =========================================================
+   PLANET GLOBES
+   Every planet in the game is one real, continuous world: its
+   surface (oceans and continents, craters, lava rivers, ice
+   cracks, swirling bands, slime pools...) is generated once as a
+   map over the whole sphere, then painted pixel by pixel by
+   running projectSphere() IN REVERSE — so the land is locked to
+   the very same rotation every building, pet and ship uses, and
+   can never slide or contort against them. Clay-style shading
+   (soft light, glossy liquids, rim glow) gives the rounded look.
+
+   The same map answers "what's underfoot here?" (globeTerrainAt),
+   which is what lets pets wade through water, lava and cloud.
+========================================================= */
+const GLOBE_TEX_W=640;
+const GLOBE_TEX_H=320;
+
+/*
+ * A second, close-up map of each planet's north cap, seen straight
+ * down. The home view looks at exactly this region — where a world
+ * map is at its least detailed and pinches together at the pole — so
+ * the cap gets its own evenly detailed map.
+ */
+const GLOBE_POLAR_N=320;
+/*
+ * Where the cap map hands over to the world map: a straight-down map
+ * gets coarser toward its edge, so it's used only where it's the more
+ * detailed of the two.
+ */
+const GLOBE_POLAR_COLAT=1.05;
+const GLOBE_POLAR_R=Math.sin(GLOBE_POLAR_COLAT);
+const GLOBE_POLAR_MIN_Y=Math.cos(GLOBE_POLAR_COLAT-.05);
+
+const TERRAIN={
+    GROUND:0,
+    WATER:1,
+    LAVA:2,
+    ICE:3,
+    SLIME:4,
+    CLOUD:5,
+    GLOW:6,
+    CRYSTAL:7,
+    METHANE:8
+};
+
+/* ---- seeded 3D value noise ---- */
+function globeHash(ix,iy,iz,seed){
+
+    let h=
+        Math.imul(ix,374761393)^
+        Math.imul(iy,668265263)^
+        Math.imul(iz,1274126177)^
+        Math.imul(seed,144665);
+
+    h=Math.imul(h^(h>>>13),1274126177);
+
+    h^=h>>>16;
+
+    return (h>>>0)/4294967295;
+
+}
+
+function globeNoise(x,y,z,seed){
+
+    const ix=Math.floor(x),iy=Math.floor(y),iz=Math.floor(z);
+
+    const fx=x-ix,fy=y-iy,fz=z-iz;
+
+    const ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy),uz=fz*fz*(3-2*fz);
+
+    const n000=globeHash(ix,iy,iz,seed),n100=globeHash(ix+1,iy,iz,seed);
+    const n010=globeHash(ix,iy+1,iz,seed),n110=globeHash(ix+1,iy+1,iz,seed);
+    const n001=globeHash(ix,iy,iz+1,seed),n101=globeHash(ix+1,iy,iz+1,seed);
+    const n011=globeHash(ix,iy+1,iz+1,seed),n111=globeHash(ix+1,iy+1,iz+1,seed);
+
+    const nx00=n000+(n100-n000)*ux,nx10=n010+(n110-n010)*ux;
+    const nx01=n001+(n101-n001)*ux,nx11=n011+(n111-n011)*ux;
+
+    const nxy0=nx00+(nx10-nx00)*uy,nxy1=nx01+(nx11-nx01)*uy;
+
+    return nxy0+(nxy1-nxy0)*uz;
+
+}
+
+/*
+ * Value noise sits on a cubic grid, and thresholded terrain tends to
+ * snap its edges to the grid's planes — which on a sphere show up as
+ * perfectly straight circles of latitude. Each layer of detail is
+ * therefore sampled through its own fixed tilt, so no grid plane lines
+ * up with the planet's axis.
+ */
+const GLOBE_TILTS=(()=>{
+
+    const out=[];
+
+    const quats=[
+        [.31,.52,.19,.77],[.62,-.21,.44,.61],[-.18,.71,.33,.59],
+        [.47,.39,-.58,.53],[.12,-.64,.45,.61],[.55,.25,.6,-.52]
+    ];
+
+    for(const q0 of quats){
+
+        const m=Math.hypot(q0[0],q0[1],q0[2],q0[3]);
+
+        const [a,b,cq,d]=q0.map(v=>v/m);
+
+        out.push([
+            1-2*(cq*cq+d*d),2*(b*cq-a*d),2*(b*d+a*cq),
+            2*(b*cq+a*d),1-2*(b*b+d*d),2*(cq*d-a*b),
+            2*(b*d-a*cq),2*(cq*d+a*b),1-2*(b*b+cq*cq)
+        ]);
+
+    }
+
+    return out;
+
+})();
+
+function globeFbm(x,y,z,seed,octaves,freq){
+
+    let sum=0,amp=1,norm=0,f=freq;
+
+    for(let o=0;o<octaves;o++){
+
+        const m=GLOBE_TILTS[(o+seed)%GLOBE_TILTS.length];
+
+        const tx=m[0]*x+m[1]*y+m[2]*z;
+
+        const ty=m[3]*x+m[4]*y+m[5]*z;
+
+        const tz=m[6]*x+m[7]*y+m[8]*z;
+
+        sum+=amp*globeNoise(tx*f+o*17.1,ty*f-o*9.3,tz*f+o*5.7,seed+o*31);
+
+        norm+=amp;
+
+        amp*=.5;
+
+        f*=2.03;
+
+    }
+
+    return sum/norm;
+
+}
+
+function globeSmooth(a,b,t){
+
+    const k=Math.max(0,Math.min(1,(t-a)/(b-a)));
+
+    return k*k*(3-2*k);
+
+}
+
+function globeHex(hex){
+
+    const v=parseInt(hex.slice(1),16);
+
+    return[(v>>16)&255,(v>>8)&255,v&255];
+
+}
+
+function globeMix(a,b,t){
+
+    t=t<0?0:t>1?1:t;
+
+    return[
+        a[0]+(b[0]-a[0])*t,
+        a[1]+(b[1]-a[1])*t,
+        a[2]+(b[2]-a[2])*t
+    ];
+
+}
+
+function globeScale(a,k){
+
+    return[a[0]*k,a[1]*k,a[2]*k];
+
+}
+
+/*
+ * Craters as a fixed set of spots on the sphere (seeded): darker
+ * scooped floor, bright raised rim — the chunky clay craters of the
+ * references. Returns a brightness multiplier (1 = no crater).
+ */
+function globeMakeCraters(seed,count,minR,maxR){
+
+    const list=[];
+
+    for(let i=0;i<count;i++){
+
+        const u=globeHash(i,1,seed,7)*2-1;
+
+        const a=globeHash(i,2,seed,7)*Math.PI*2;
+
+        const s=Math.sqrt(1-u*u);
+
+        const r=minR+(maxR-minR)*Math.pow(globeHash(i,3,seed,7),1.6);
+
+        list.push({x:s*Math.cos(a),y:u,z:s*Math.sin(a),cos:Math.cos(r),r});
+
+    }
+
+    return list;
+
+}
+
+function globeCraterShade(list,x,y,z){
+
+    let k=1;
+
+    for(const cr of list){
+
+        const d=x*cr.x+y*cr.y+z*cr.z;
+
+        if(d<cr.cos)
+            continue;
+
+        const t=Math.acos(Math.min(1,d))/cr.r;
+
+        if(t<.72){
+
+            /* floor: darker, a touch lighter toward the far wall */
+            k=Math.min(k,.74+.12*t);
+
+        }else if(t<1.05){
+
+            /* raised rim */
+            k=Math.max(k,1.18-Math.abs(t-.88)*1.1);
+
+        }
+
+    }
+
+    return k;
+
+}
+
+/*
+ * Near the north pole is where every planet's buildings stand, so
+ * liquids (oceans, lava, slime) are kept away from there — a dry
+ * homeland — while the rest of the world is fully explorable.
+ */
+function globeHomeland(x,y,z){
+
+    /*
+     * An irregular, natural-looking edge: a plain latitude circle
+     * shows up as a dead-straight line across the land when the
+     * planet is seen from the side.
+     */
+    const wobble=
+        (globeFbm(x,y,z,999,3,2.1)-.5)*.42;
+
+    return globeSmooth(.5,.74,y+wobble);
+
+}
+
+/*
+ * Small round clay spots scattered over a surface — the dotted,
+ * hand-made look of the reference planets. Returns 0..1 strength.
+ */
+function globeSpots(x,y,z,seed,freq,threshold){
+
+    const n=globeNoise(x*freq+3.1,y*freq-1.7,z*freq+.9,seed);
+
+    return globeSmooth(threshold,threshold+.05,n);
+
+}
+
+const PLANET_LOOKS={
+
+    earth:{
+        atmosphere:"#7fd6ff",
+        moons:1,
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,11,5,1.55);
+
+            const h=n+globeHomeland(x,y,z)*.32;
+
+            const sea=.52;
+
+            if(y<-.9+globeFbm(x,y,z,12,3,3)*.08){
+
+                return[globeHex("#f4fbff"),TERRAIN.ICE,140,0];
+
+            }
+
+            if(h<sea){
+
+                const depth=(sea-h)/sea;
+
+                return[
+                    globeMix(globeHex("#4dbdf2"),globeHex("#1f5cc0"),globeSmooth(0,.2,depth)),
+                    TERRAIN.WATER,230,0
+                ];
+
+            }
+
+            /* colour by the natural terrain — the homeland boost only keeps it dry */
+            const e=Math.max(0,(n-sea)/(1-sea));
+
+            /* sand only at the real coast */
+            if(h-sea<.022){
+
+                return[globeHex("#f2dc8e"),TERRAIN.GROUND,30,0];
+
+            }
+
+            const g=globeFbm(x,y,z,13,3,4);
+
+            let col=globeMix(globeHex("#66c95a"),globeHex("#3a9c48"),g);
+
+            col=globeMix(col,globeHex("#93a66b"),globeSmooth(.28,.42,e));
+
+            col=globeMix(col,globeHex("#f6f9ff"),globeSmooth(.44,.52,e));
+
+            return[col,TERRAIN.GROUND,25,0];
+
+        },
+        cloud(x,y,z){
+
+            return globeSmooth(.58,.76,globeFbm(x,y,z,14,4,2.2))*.88;
+
+        }
+    },
+
+    mars:{
+        atmosphere:"#ffb08a",
+        moons:2,
+        init(){
+
+            this.craters=globeMakeCraters(23,30,.08,.24);
+
+        },
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,23,5,1.7);
+
+            let col=globeMix(globeHex("#e8743f"),globeHex("#b8452b"),n);
+
+            const dust=globeFbm(x,y,z,24,3,3.2);
+
+            col=globeMix(col,globeHex("#f6a06a"),globeSmooth(.6,.75,dust)*.7);
+
+            const canyon=1-Math.abs(globeFbm(x,y,z,25,3,1.3)*2-1);
+
+            col=globeMix(col,globeHex("#7a2618"),globeSmooth(.9,.97,canyon)*(1-globeHomeland(x,y,z)));
+
+            if(y<-.95){
+
+                return[globeHex("#fff2ea"),TERRAIN.ICE,140,0];
+
+            }
+
+            col=globeScale(col,globeCraterShade(this.craters,x,y,z));
+
+            col=globeMix(col,globeHex("#8a2e1c"),globeSpots(x,y,z,26,16,.87)*.6);
+
+            return[col,TERRAIN.GROUND,20,0];
+
+        }
+    },
+
+    europa:{
+        atmosphere:"#d8f6ff",
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,37,4,1.8);
+
+            let col=globeMix(globeHex("#f2fbff"),globeHex("#bfe3f3"),n);
+
+            const pool=globeFbm(x,y,z,38,4,2.1)*(1-globeHomeland(x,y,z));
+
+            if(pool>.66){
+
+                return[
+                    globeMix(globeHex("#58b4e6"),globeHex("#2b78c4"),globeSmooth(.66,.76,pool)),
+                    TERRAIN.WATER,235,0
+                ];
+
+            }
+
+            const crack=1-Math.abs(globeNoise(x*3.1,y*3.1,z*3.1,39)*2-1);
+
+            const crack2=1-Math.abs(globeNoise(x*5.3+3,y*5.3,z*5.3,40)*2-1);
+
+            const lineK=Math.max(globeSmooth(.955,.985,crack),globeSmooth(.965,.99,crack2)*.7);
+
+            col=globeMix(col,globeHex("#c99478"),lineK*.85);
+
+            return[col,TERRAIN.ICE,200,0];
+
+        }
+    },
+
+    titan:{
+        atmosphere:"#ffc98a",
+        sample(x,y,z){
+
+            const warp=globeFbm(x,y,z,41,4,1.6);
+
+            const band=.5+.5*Math.sin(y*16+warp*5);
+
+            let col=globeMix(globeHex("#eeb15a"),globeHex("#c47c33"),band*.7+warp*.3);
+
+            const lake=(globeFbm(x,y,z,42,4,2.0)+Math.abs(y)*.12)*(1-globeHomeland(x,y,z));
+
+            if(lake>.68){
+
+                return[
+                    globeMix(globeHex("#6a4f80"),globeHex("#3a2a52"),globeSmooth(.68,.78,lake)),
+                    TERRAIN.METHANE,220,0
+                ];
+
+            }
+
+            col=globeMix(col,globeHex("#fff0c0"),globeSpots(x,y,z,43,15,.87)*.55);
+
+            return[col,TERRAIN.GROUND,25,0];
+
+        }
+    },
+
+    neptune:{
+        atmosphere:"#8fb6ff",
+        sample(x,y,z){
+
+            const land=globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42;
+
+            if(land>.66){
+
+                const g=globeSmooth(.69,.78,land);
+
+                return[
+                    globeMix(globeHex("#f3e4a6"),globeHex("#5cc56c"),g),
+                    TERRAIN.GROUND,25,0
+                ];
+
+            }
+
+            const warp=globeFbm(x,y,z,54,4,1.4);
+
+            const band=.5+.5*Math.sin(y*10+warp*6);
+
+            let col=globeMix(globeHex("#2c53d2"),globeHex("#4f7ff2"),band);
+
+            col=globeMix(col,globeHex("#cfe0ff"),globeSmooth(.975,.995,band)*.45);
+
+            col=globeMix(col,globeHex("#7fb0ff"),globeSmooth(.6,.66,land));
+
+            return[col,TERRAIN.WATER,235,0];
+
+        }
+    },
+
+    kepler:{
+        atmosphere:"#f0a6ff",
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,67,5,1.8);
+
+            let col=globeMix(globeHex("#a256d6"),globeHex("#6a2da6"),n);
+
+            col=globeMix(col,globeHex("#d394f5"),globeSmooth(.55,.7,globeFbm(x,y,z,68,3,3.4))*.85);
+
+            col=globeMix(col,globeHex("#4e1b86"),globeSmooth(.6,.72,globeFbm(x,y,z,70,3,5.5))*.45);
+
+            const spore=globeSpots(x,y,z,71,13,.86);
+
+            if(spore>0){
+
+                return[globeMix(col,globeHex("#b8ffd0"),spore),TERRAIN.GROUND,90,Math.round(spore*170)];
+
+            }
+
+            const slime=globeFbm(x,y,z,69,4,2.3)*(1-globeHomeland(x,y,z));
+
+            if(slime>.62){
+
+                return[
+                    globeMix(globeHex("#8dffa8"),globeHex("#2fd36a"),globeSmooth(.62,.72,slime)),
+                    TERRAIN.SLIME,210,150
+                ];
+
+            }
+
+            return[col,TERRAIN.GROUND,30,0];
+
+        }
+    },
+
+    aurora:{
+        atmosphere:"#dcaeff",
+        sample(x,y,z){
+
+            const warp=globeFbm(x,y,z,71,4,1.5);
+
+            const swirl=.5+.5*Math.sin(x*4+warp*7+z*2);
+
+            let col=globeMix(globeHex("#7a46c8"),globeHex("#e3a9ff"),swirl);
+
+            const lake=globeFbm(x,y,z,72,4,2.2)*(1-globeHomeland(x,y,z));
+
+            if(lake>.69){
+
+                return[globeHex("#ffc6ef"),TERRAIN.ICE,220,0];
+
+            }
+
+            const cell=globeNoise(x*15,y*15,z*15,73);
+
+            if(cell>.88){
+
+                return[
+                    globeMix(globeHex("#e9c8ff"),globeHex("#fbefff"),(cell-.88)*8),
+                    TERRAIN.CRYSTAL,240,70
+                ];
+
+            }
+
+            col=globeMix(col,globeHex("#ffffff"),globeSpots(x,y,z,74,17,.88)*.5);
+
+            return[col,TERRAIN.GROUND,45,0];
+
+        }
+    },
+
+    helios:{
+        atmosphere:"#ffb060",
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,83,5,1.9);
+
+            let col=globeMix(globeHex("#5a2214"),globeHex("#2a0c07"),n);
+
+            const away=1-globeHomeland(x,y,z);
+
+            const river=(1-Math.abs(globeFbm(x,y,z,84,4,1.4)*2-1))*away;
+
+            const pool=globeFbm(x,y,z,85,4,2.4)*away;
+
+            const lava=Math.max(globeSmooth(.86,.93,river),globeSmooth(.7,.76,pool));
+
+            if(lava>.35){
+
+                return[
+                    globeMix(globeHex("#ff4a10"),globeHex("#ffe066"),lava),
+                    TERRAIN.LAVA,120,255
+                ];
+
+            }
+
+            col=globeMix(col,globeHex("#a8361a"),lava*1.6);
+
+            return[col,TERRAIN.GROUND,20,Math.round(lava*200)];
+
+        }
+    },
+
+    nova:{
+        atmosphere:"#a8ffff",
+        ring:{inner:1.35,outer:2.05,colour:"#bffcff"},
+        init(){
+
+            const lat=.32,lon=1.1;
+
+            this.storm={x:Math.cos(lat)*Math.sin(lon),y:Math.sin(lat),z:Math.cos(lat)*Math.cos(lon)};
+
+        },
+        sample(x,y,z){
+
+            const warp=globeFbm(x,y,z,97,4,1.3);
+
+            const band=.5+.5*Math.sin(y*13+warp*3.5);
+
+            let col=
+                band<.33
+                ?globeMix(globeHex("#0c6f7d"),globeHex("#2bbcb8"),band*3)
+                :band<.66
+                ?globeMix(globeHex("#2bbcb8"),globeHex("#9ff3ef"),(band-.33)*3)
+                :globeMix(globeHex("#9ff3ef"),globeHex("#c9f6f2"),(band-.66)*3);
+
+            const s=this.storm;
+
+            const d=x*s.x+y*s.y+z*s.z;
+
+            if(d>.955){
+
+                const k=globeSmooth(.955,.99,d);
+
+                col=globeMix(col,globeMix(globeHex("#ffffff"),globeHex("#4fd2cf"),Math.sin(k*9)*.5+.5),k);
+
+            }
+
+            return[col,TERRAIN.CLOUD,70,0];
+
+        }
+    },
+
+    zenith:{
+        atmosphere:"#e0ccff",
+        sparkleRing:true,
+        init(){
+
+            this.craters=globeMakeCraters(109,22,.08,.2);
+
+        },
+        sample(x,y,z){
+
+            const n=globeFbm(x,y,z,109,4,1.7);
+
+            let col=globeMix(globeHex("#9a76db"),globeHex("#5f3ea6"),n);
+
+            col=globeScale(col,globeCraterShade(this.craters,x,y,z));
+
+            const glow=globeFbm(x,y,z,110,4,2.6)*(1-globeHomeland(x,y,z));
+
+            if(glow>.68){
+
+                return[
+                    globeMix(globeHex("#c9f6ff"),globeHex("#ffffff"),globeSmooth(.68,.76,glow)),
+                    TERRAIN.GLOW,180,220
+                ];
+
+            }
+
+            const speck=globeSpots(x,y,z,111,18,.89);
+
+            col=globeMix(col,globeHex("#efe6ff"),speck*.7);
+
+            return[col,TERRAIN.GROUND,35,Math.round(speck*120)];
+
+        }
+    }
+
+};
+
+const globeTextures={};
+
+function getPlanetLook(planetId){
+
+    return PLANET_LOOKS[planetId] || PLANET_LOOKS.earth;
+
+}
+
+/*
+ * The surface map for one planet: colour, plus per spot its terrain
+ * type, gloss and glow. Built once (≈ tens of ms), then reused by
+ * every view of that planet anywhere in the game.
+ */
+const globeBuilds={};
+
+/* quick maps, enough for every small view of a planet */
+const globeTexturesLow={};
+
+const GLOBE_LOW_W=192;
+const GLOBE_LOW_H=96;
+
+/*
+ * Builds (part of) a planet's surface map at one detail level:
+ * "high" (world map + close-up cap map, for the planet you stand on)
+ * or "low" (world map only, for small views). maxRows limits the work
+ * done now, so building can be spread over idle moments.
+ */
+function buildGlobeTextureRows(id,maxRows,level){
+
+    level=level || "high";
+
+    const look=PLANET_LOOKS[id];
+
+    if(look.init && !look._ready){
+
+        look.init();
+
+        look._ready=true;
+
+    }
+
+    const low=level==="low";
+
+    const W=low?GLOBE_LOW_W:GLOBE_TEX_W;
+
+    const H=low?GLOBE_LOW_H:GLOBE_TEX_H;
+
+    const N=low?0:GLOBE_POLAR_N;
+
+    const key=id+"|"+level;
+
+    let job=globeBuilds[key];
+
+    if(!job){
+
+        job=globeBuilds[key]={
+            row:0,
+            rgb:new Uint8ClampedArray(W*H*3),
+            info:new Uint8Array(W*H*4),
+            cloud:look.cloud?new Uint8Array(W*H):null,
+            prgb:N?new Uint8ClampedArray(N*N*3):null,
+            pinfo:N?new Uint8Array(N*N*4):null,
+            pcloud:N && look.cloud?new Uint8Array(N*N):null
+        };
+
+    }
+
+    const put=(rgbA,infoA,cloudA,i,x,y,z)=>{
+
+        const s=look.sample(x,y,z);
+
+        rgbA[i*3]=s[0][0];
+        rgbA[i*3+1]=s[0][1];
+        rgbA[i*3+2]=s[0][2];
+
+        infoA[i*4]=s[1];
+        infoA[i*4+1]=s[2];
+        infoA[i*4+2]=s[3];
+
+        if(cloudA){
+
+            cloudA[i]=Math.round(look.cloud(x,y,z)*255);
+
+        }
+
+    };
+
+    const total=H+N;
+
+    const end=Math.min(total,job.row+(maxRows || total));
+
+    for(let r=job.row;r<end;r++){
+
+        if(r<H){
+
+            const v=r;
+
+            const lat=Math.PI/2-(v+.5)/H*Math.PI;
+
+            const cl=Math.cos(lat),sl=Math.sin(lat);
+
+            for(let u=0;u<W;u++){
+
+                const lon=(u+.5)/W*Math.PI*2-Math.PI;
+
+                put(job.rgb,job.info,job.cloud,v*W+u,cl*Math.sin(lon),sl,cl*Math.cos(lon));
+
+            }
+
+        }else{
+
+            const j=r-H;
+
+            const z=((j+.5)/N*2-1)*GLOBE_POLAR_R;
+
+            for(let i=0;i<N;i++){
+
+                const x=((i+.5)/N*2-1)*GLOBE_POLAR_R;
+
+                const q=1-x*x-z*z;
+
+                const y=Math.sqrt(q>0?q:0);
+
+                put(job.prgb,job.pinfo,job.pcloud,j*N+i,x,y,z);
+
+            }
+
+        }
+
+    }
+
+    job.row=end;
+
+    if(job.row>=total){
+
+        /*
+         * Soften colour boundaries by one map pixel, so a coastline or
+         * a pool's edge stays smooth when the home planet magnifies it.
+         */
+        globeSoften(job.rgb,W,H,true);
+
+        if(N)
+            globeSoften(job.prgb,N,N,false);
+
+        const done={
+            W,H,N,level,
+            rgb:job.rgb,info:job.info,cloud:job.cloud,
+            prgb:job.prgb,pinfo:job.pinfo,pcloud:job.pcloud,
+            atm:globeHex(look.atmosphere || "#9fd8ff"),
+            look
+        };
+
+        if(low){
+
+            globeTexturesLow[id]=done;
+
+        }else{
+
+            globeTextures[id]=done;
+
+        }
+
+        delete globeBuilds[key];
+
+    }
+
+}
+
+function globeSoften(rgb,W,H,wrap){
+
+    const src=new Uint8ClampedArray(rgb);
+
+    for(let y=0;y<H;y++){
+
+        const ya=y>0?y-1:0,yb=y<H-1?y+1:H-1;
+
+        for(let x=0;x<W;x++){
+
+            const xa=x>0?x-1:(wrap?W-1:0);
+
+            const xb=x<W-1?x+1:(wrap?0:W-1);
+
+            const i=(y*W+x)*3;
+
+            for(let ch=0;ch<3;ch++){
+
+                rgb[i+ch]=(
+                    src[i+ch]*4+
+                    src[(y*W+xa)*3+ch]+src[(y*W+xb)*3+ch]+
+                    src[(ya*W+x)*3+ch]+src[(yb*W+x)*3+ch]
+                )/8;
+
+            }
+
+        }
+
+    }
+
+}
+
+/*
+ * The best surface map available for a planet: full detail if built,
+ * otherwise the quick map (built now if needed — it's cheap). needHigh
+ * forces full detail right now (used only by checks, never per frame).
+ */
+function getGlobeTexture(planetId,needHigh){
+
+    const id=PLANET_LOOKS[planetId]?planetId:"earth";
+
+    if(globeTextures[id])
+        return globeTextures[id];
+
+    if(needHigh){
+
+        buildGlobeTextureRows(id,0,"high");
+
+        return globeTextures[id];
+
+    }
+
+    if(!globeTexturesLow[id]){
+
+        buildGlobeTextureRows(id,0,"low");
+
+    }
+
+    return globeTexturesLow[id];
+
+}
+
+/*
+ * Surface maps are built in the background shortly after start-up,
+ * one planet at a time, so the first look at the star map doesn't
+ * have to build all ten at once.
+ */
+function warmGlobeTextures(){
+
+    const ids=Object.keys(PLANET_LOOKS);
+
+    /*
+     * Built only in the browser's idle moments, a row at a time,
+     * stopping well before a frame would be delayed.
+     */
+    const schedule=
+        typeof requestIdleCallback==="function"
+        ?fn=>requestIdleCallback(fn,{timeout:120})
+        :fn=>setTimeout(()=>fn(null),40);
+
+    const step=deadline=>{
+
+        const started=performance.now();
+
+        /*
+         * Up to 8ms of real idle time; even when the browser is never
+         * idle (a busy device), a small 3ms slice still gets done.
+         */
+        const budget=
+            deadline && deadline.timeRemaining
+            ?Math.max(3,Math.min(8,deadline.timeRemaining()-1))
+            :4;
+
+        while(performance.now()-started<budget){
+
+            /* the planet on screen first, then the rest */
+            const current=
+                typeof selectedStartPlanet!=="undefined" &&
+                PLANET_LOOKS[selectedStartPlanet] &&
+                !globeTextures[selectedStartPlanet]
+                ?selectedStartPlanet
+                :null;
+
+            /* quick maps for every planet first, then full detail */
+            const lowId=ids.find(k=>!globeTexturesLow[k]);
+
+            const id=lowId || current || ids.find(k=>!globeTextures[k]);
+
+            if(!id)
+                return;
+
+            try{
+
+                buildGlobeTextureRows(id,lowId?4:1,lowId?"low":"high");
+
+            }catch(error){
+
+                console.error("Planet surface build failed:",error);
+
+                ids.splice(ids.indexOf(id),1);
+
+            }
+
+        }
+
+        schedule(step);
+
+    };
+
+    setTimeout(()=>schedule(step),300);
+
+}
+
+function globeTexIndex(tex,lat,lon){
+
+    let u=Math.floor((lon/(Math.PI*2)+.5)*tex.W)%tex.W;
+
+    if(u<0)
+        u+=tex.W;
+
+    let v=Math.floor((.5-lat/Math.PI)*tex.H);
+
+    v=v<0?0:v>=tex.H?tex.H-1:v;
+
+    return v*tex.W+u;
+
+}
+
+/* What's underfoot at a spot on a planet (see TERRAIN). */
+function globeTerrainAt(planetId,lat,lon){
+
+    const tex=getGlobeTexture(planetId);
+
+    const y=Math.sin(lat);
+
+    if(tex.prgb && y>GLOBE_POLAR_MIN_Y){
+
+        const cl=Math.cos(lat);
+
+        const x=cl*Math.sin(lon),z=cl*Math.cos(lon);
+
+        const N=tex.N;
+
+        const i=Math.max(0,Math.min(N-1,Math.floor((x/GLOBE_POLAR_R+1)/2*N)));
+
+        const j=Math.max(0,Math.min(N-1,Math.floor((z/GLOBE_POLAR_R+1)/2*N)));
+
+        return tex.pinfo[(j*N+i)*4];
+
+    }
+
+    return tex.info[globeTexIndex(tex,lat,lon)*4];
+
+}
+
+const globeBuffers=new Map();
+
+/*
+ * Paints planetId as a globe of radius R centred at cx,cy, seen
+ * with the same view rotation projectSphere() uses. Every pixel is
+ * run back through that rotation to find which spot of the surface
+ * map it shows. opts.scale: buffer resolution relative to the
+ * target (lower = faster, softer). opts.bounds limits work to what's
+ * on screen. Re-paints only when something actually changed.
+ */
+function renderGlobe(c,planetId,cx,cy,R,viewLat,viewLon,opts){
+
+    opts=opts || {};
+
+    if(!(R>0))
+        return;
+
+    const tex=getGlobeTexture(planetId);
+
+    const scale=opts.scale || 1;
+
+    let x0=-R,x1=R,y0=-R,y1=R;
+
+    if(opts.bounds){
+
+        x0=Math.max(x0,opts.bounds.x0-cx);
+        x1=Math.min(x1,opts.bounds.x1-cx);
+        y0=Math.max(y0,opts.bounds.y0-cy);
+        y1=Math.min(y1,opts.bounds.y1-cy);
+
+    }
+
+    if(x1<=x0 || y1<=y0)
+        return;
+
+    const bw=Math.max(1,Math.ceil((x1-x0)*scale));
+
+    const bh=Math.max(1,Math.ceil((y1-y0)*scale));
+
+    const key=opts.cacheKey || ("g|"+planetId);
+
+    let buf=globeBuffers.get(key);
+
+    if(!buf || buf.w!==bw || buf.h!==bh){
+
+        const canvas=document.createElement("canvas");
+
+        canvas.width=bw;
+
+        canvas.height=bh;
+
+        const bctx=canvas.getContext("2d");
+
+        buf={canvas,ctx:bctx,img:bctx.createImageData(bw,bh),w:bw,h:bh,sig:null};
+
+        globeBuffers.set(key,buf);
+
+        if(globeBuffers.size>80){
+
+            globeBuffers.delete(globeBuffers.keys().next().value);
+
+        }
+
+    }
+
+    const time=opts.time || 0;
+
+    const animated=
+        tex.cloud ||
+        planetId==="helios" ||
+        planetId==="kepler" ||
+        planetId==="zenith";
+
+    const sig=
+        planetId+"|"+tex.level+"|"+Math.round(R*scale*4)+"|"+
+        Math.round(viewLat*3000)+"|"+Math.round(viewLon*3000)+"|"+
+        Math.round(x0*scale)+"|"+Math.round(y0*scale)+"|"+bw+"|"+bh+"|"+
+        (animated?Math.floor(time*(opts.fps || 12)):0);
+
+    if(buf.sig!==sig){
+
+        paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,!!opts.tightSpecular);
+
+        buf.sig=sig;
+
+    }
+
+    c.save();
+
+    c.imageSmoothingEnabled=true;
+
+    c.drawImage(buf.canvas,cx+x0,cy+y0,bw/scale,bh/scale);
+
+    c.restore();
+
+}
+
+/* light from upper-left, toward the viewer */
+const GLOBE_LIGHT=(()=>{
+
+    const l=[-.5,.62,.6];
+
+    const m=Math.hypot(l[0],l[1],l[2]);
+
+    const L=[l[0]/m,l[1]/m,l[2]/m];
+
+    const h=[L[0],L[1],L[2]+1];
+
+    const hm=Math.hypot(h[0],h[1],h[2]);
+
+    return{L,H:[h[0]/hm,h[1]/hm,h[2]/hm]};
+
+})();
+
+function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,tightSpec){
+
+    /*
+     * The glossy highlight on liquids and ice: a broad sparkle suits a
+     * small globe, but on the huge home planet the same highlight
+     * would be a blown-out patch — so there it's tight and soft.
+     */
+    const specGain=tightSpec?120:235;
+
+    const data=buf.img.data;
+
+    const bw=buf.w,bh=buf.h;
+
+    const W=tex.W,H=tex.H,rgb=tex.rgb,info=tex.info,cloud=tex.cloud,atm=tex.atm;
+
+    const cosV=Math.cos(viewLat),sinV=Math.sin(viewLat);
+
+    const c0=Math.cos(-viewLon),s0=Math.sin(-viewLon);
+
+    const invR=1/R;
+
+    const Lx=GLOBE_LIGHT.L[0],Ly=GLOBE_LIGHT.L[1],Lz=GLOBE_LIGHT.L[2];
+
+    const Hx=GLOBE_LIGHT.H[0],Hy=GLOBE_LIGHT.H[1],Hz=GLOBE_LIGHT.H[2];
+
+    const pulse=.86+.14*Math.sin(time*2.4);
+
+    const cloudShift=cloud?Math.floor((time*.018/(Math.PI*2))*W)%W:0;
+
+    const INV2PI=1/(Math.PI*2),INVPI=1/Math.PI;
+
+    const N=tex.N,prgb=tex.prgb,pinfo=tex.pinfo,pcloud=tex.pcloud;
+
+    const polarMinY=prgb?GLOBE_POLAR_MIN_Y:2,invPolarR=1/GLOBE_POLAR_R;
+
+    const cloudAngle=time*.018;
+
+    const cosCloud=Math.cos(cloudAngle),sinCloud=Math.sin(cloudAngle);
+
+    const edgePx=R*scale;
+
+    for(let j=0;j<bh;j++){
+
+        const ny=-(y0+(j+.5)/scale)*invR;
+
+        const ny2=ny*ny;
+
+        let idx=j*bw*4;
+
+        if(ny2>=1){
+
+            for(let i=0;i<bw;i++,idx+=4)
+                data[idx+3]=0;
+
+            continue;
+
+        }
+
+        for(let i=0;i<bw;i++,idx+=4){
+
+            const nx=(x0+(i+.5)/scale)*invR;
+
+            const d2=nx*nx+ny2;
+
+            if(d2>=1){
+
+                data[idx+3]=0;
+
+                continue;
+
+            }
+
+            const nz=Math.sqrt(1-d2);
+
+            /* undo projectSphere's rotations: latitude, then longitude */
+            const py0=ny*cosV+nz*sinV;
+
+            const pz0=-ny*sinV+nz*cosV;
+
+            const px=nx*c0-pz0*s0;
+
+            const pz=nx*s0+pz0*c0;
+
+            let r,g,b,gloss,emit,ca=0;
+
+            if(py0>polarMinY){
+
+                /* north cap: the close-up map, sampled the same smooth way */
+                let fi=(px*invPolarR+1)*.5*N-.5;
+
+                let fj=(pz*invPolarR+1)*.5*N-.5;
+
+                fi=fi<0?0:fi>N-1.001?N-1.001:fi;
+
+                fj=fj<0?0:fj>N-1.001?N-1.001:fj;
+
+                const i0=fi|0,j0=fj|0;
+
+                const di=fi-i0,dj=fj-j0;
+
+                const a00=j0*N+i0,a10=a00+1,a01=a00+N,a11=a01+1;
+
+                const q00=(1-di)*(1-dj),q10=di*(1-dj),q01=(1-di)*dj,q11=di*dj;
+
+                r=prgb[a00*3]*q00+prgb[a10*3]*q10+prgb[a01*3]*q01+prgb[a11*3]*q11;
+                g=prgb[a00*3+1]*q00+prgb[a10*3+1]*q10+prgb[a01*3+1]*q01+prgb[a11*3+1]*q11;
+                b=prgb[a00*3+2]*q00+prgb[a10*3+2]*q10+prgb[a01*3+2]*q01+prgb[a11*3+2]*q11;
+
+                gloss=(pinfo[a00*4+1]*q00+pinfo[a10*4+1]*q10+pinfo[a01*4+1]*q01+pinfo[a11*4+1]*q11)*(1/255);
+
+                emit=(pinfo[a00*4+2]*q00+pinfo[a10*4+2]*q10+pinfo[a01*4+2]*q01+pinfo[a11*4+2]*q11)*(1/255);
+
+                if(pcloud){
+
+                    /* clouds drift by turning the cap around the pole */
+                    /* same direction as the world map's drift (longitude + angle) */
+                    const cx2=px*cosCloud+pz*sinCloud;
+
+                    const cz2=-px*sinCloud+pz*cosCloud;
+
+                    let ci=((cx2*invPolarR+1)*.5*N)|0;
+
+                    let cj=((cz2*invPolarR+1)*.5*N)|0;
+
+                    ci=ci<0?0:ci>=N?N-1:ci;
+
+                    cj=cj<0?0:cj>=N?N-1:cj;
+
+                    ca=pcloud[cj*N+ci]*(1/255);
+
+                }
+
+            }else{
+
+            /*
+             * Smoothly blended between the four nearest spots of the
+             * surface map — the home planet is so close that each spot
+             * spans several pixels, and picking just one shows steps.
+             */
+            const fu=((Math.atan2(px,pz)*INV2PI)+.5)*W-.5;
+
+            let fv=(.5-Math.asin(py0>1?1:py0<-1?-1:py0)*INVPI)*H-.5;
+
+            if(fv<0)
+                fv=0;
+
+            else if(fv>H-1)
+                fv=H-1;
+
+            let u0=Math.floor(fu);
+
+            const du=fu-u0;
+
+            if(u0<0)
+                u0+=W;
+
+            const u1=u0+1>=W?0:u0+1;
+
+            const v0=fv|0;
+
+            const dv=fv-v0;
+
+            const v1=v0+1>=H?H-1:v0+1;
+
+            const t00=v0*W+u0,t10=v0*W+u1,t01=v1*W+u0,t11=v1*W+u1;
+
+            const w00=(1-du)*(1-dv),w10=du*(1-dv),w01=(1-du)*dv,w11=du*dv;
+
+            r=rgb[t00*3]*w00+rgb[t10*3]*w10+rgb[t01*3]*w01+rgb[t11*3]*w11;
+            g=rgb[t00*3+1]*w00+rgb[t10*3+1]*w10+rgb[t01*3+1]*w01+rgb[t11*3+1]*w11;
+            b=rgb[t00*3+2]*w00+rgb[t10*3+2]*w10+rgb[t01*3+2]*w01+rgb[t11*3+2]*w11;
+
+            const ti=(dv<.5?v0:v1)*W+(du<.5?u0:u1);
+
+            const u=ti%W,v=(ti/W)|0;
+
+            gloss=(info[t00*4+1]*w00+info[t10*4+1]*w10+info[t01*4+1]*w01+info[t11*4+1]*w11)*(1/255);
+
+            emit=(info[t00*4+2]*w00+info[t10*4+2]*w10+info[t01*4+2]*w01+info[t11*4+2]*w11)*(1/255);
+
+            if(cloud){
+
+                let cu=u+cloudShift;
+
+                if(cu>=W)
+                    cu-=W;
+
+                ca=cloud[v*W+cu]*(1/255);
+
+            }
+
+            }
+
+            if(ca>0){
+
+                r+=(255-r)*ca;
+                g+=(255-g)*ca;
+                b+=(255-b)*ca;
+
+            }
+
+            const dif=nx*Lx+ny*Ly+nz*Lz;
+
+            const shade=.44+.66*(dif>0?dif:0);
+
+            let s=nx*Hx+ny*Hy+nz*Hz;
+
+            s=s>0?s:0;
+
+            const s2=s*s,s4=s2*s2,s8=s4*s4,s16=s8*s8;
+
+            const spec=
+                tightSpec
+                ?s16*s16*s16*s16*s16*gloss*specGain
+                :s16*s8*gloss*specGain;
+
+            const rimBase=1-nz;
+
+            const rim=rimBase*rimBase*.62;
+
+            let lr=r*shade+spec+atm[0]*rim;
+            let lg=g*shade+spec+atm[1]*rim;
+            let lb=b*shade+spec+atm[2]*rim;
+
+            if(emit>0){
+
+                const e=emit*pulse;
+
+                lr=lr*(1-e)+r*e*1.08;
+                lg=lg*(1-e)+g*e*1.08;
+                lb=lb*(1-e)+b*e*1.08;
+
+            }
+
+            data[idx]=lr>255?255:lr;
+            data[idx+1]=lg>255?255:lg;
+            data[idx+2]=lb>255?255:lb;
+
+            const edge=(1-Math.sqrt(d2))*edgePx;
+
+            data[idx+3]=edge<1?(edge*255)|0:255;
+
+        }
+
+    }
+
+    buf.ctx.putImageData(buf.img,0,0);
+
+}
+
+/*
+ * The finishing touches every small globe gets: a soft clay sheen on
+ * the lit side and a gentle inner shadow on the far side, so it reads
+ * as a solid ball.
+ */
+function drawGlobeSheen(c,cx,cy,R){
+
+    c.save();
+
+    const sheen=c.createRadialGradient(cx-R*.38,cy-R*.42,0,cx-R*.38,cy-R*.42,R*.75);
+
+    sheen.addColorStop(0,"rgba(255,255,255,.42)");
+
+    sheen.addColorStop(.35,"rgba(255,255,255,.12)");
+
+    sheen.addColorStop(1,"rgba(255,255,255,0)");
+
+    c.fillStyle=sheen;
+
+    c.beginPath();
+
+    c.arc(cx,cy,R,0,Math.PI*2);
+
+    c.fill();
+
+    const shadow=c.createRadialGradient(cx-R*.25,cy-R*.3,R*.55,cx,cy,R*1.02);
+
+    shadow.addColorStop(0,"rgba(0,0,20,0)");
+
+    shadow.addColorStop(1,"rgba(0,0,20,.38)");
+
+    c.fillStyle=shadow;
+
+    c.beginPath();
+
+    c.arc(cx,cy,R,0,Math.PI*2);
+
+    c.fill();
+
+    c.restore();
+
+}
+
+function drawGlobeRing(c,cx,cy,R,ring,behind,alpha){
+
+    const tilt=-.32;
+
+    c.save();
+
+    c.translate(cx,cy);
+
+    c.rotate(tilt);
+
+    c.scale(1,.3);
+
+    c.beginPath();
+
+    if(behind){
+
+        c.rect(-R*3,-R*3,R*6,R*3);
+
+    }else{
+
+        c.rect(-R*3,0,R*6,R*3);
+
+    }
+
+    c.clip();
+
+    const g=c.createRadialGradient(0,0,R*ring.inner,0,0,R*ring.outer);
+
+    const col=globeHex(ring.colour);
+
+    const rgba=a=>"rgba("+col[0]+","+col[1]+","+col[2]+","+a+")";
+
+    g.addColorStop(0,rgba(0));
+
+    g.addColorStop(.12,rgba(.55*alpha));
+
+    g.addColorStop(.45,rgba(.25*alpha));
+
+    g.addColorStop(.62,rgba(.6*alpha));
+
+    g.addColorStop(1,rgba(0));
+
+    c.fillStyle=g;
+
+    c.beginPath();
+
+    c.arc(0,0,R*ring.outer,0,Math.PI*2);
+
+    c.arc(0,0,R*ring.inner,0,Math.PI*2,true);
+
+    c.fill("evenodd");
+
+    c.restore();
+
+}
+
+/*
+ * Small globe as used on the star map, in menus and in the sky:
+ * slowly spinning, seen a little from above, with its moons or ring.
+ */
+function drawSmallGlobe(c,planetId,cx,cy,R,time){
+
+    const look=getPlanetLook(planetId);
+
+    let seed=0;
+
+    for(let i=0;i<planetId.length;i++)
+        seed+=planetId.charCodeAt(i);
+
+    const spin=time*.12+seed*.7;
+
+    const lonStep=.025;
+
+    const viewLon=Math.round(spin/lonStep)*lonStep;
+
+    const scale=Math.min(2,Math.max(.6,110/R));
+
+    const rBucket=Math.max(4,Math.round(R));
+
+    const moons=look.moons || 0;
+
+    const moonAt=k=>{
+
+        const a=time*(.6-k*.18)+seed+k*2.4;
+
+        return{
+            x:cx+Math.cos(a)*R*(1.55+k*.35),
+            y:cy+Math.sin(a)*R*(.5+k*.12),
+            behind:Math.sin(a)<0,
+            r:Math.max(1.2,R*(.13-k*.03))
+        };
+
+    };
+
+    const drawMoon=m=>{
+
+        c.save();
+
+        const g=c.createRadialGradient(m.x-m.r*.35,m.y-m.r*.35,0,m.x,m.y,m.r);
+
+        g.addColorStop(0,"#ffffff");
+
+        g.addColorStop(1,"#9aa3b8");
+
+        c.fillStyle=g;
+
+        c.beginPath();
+
+        c.arc(m.x,m.y,m.r,0,Math.PI*2);
+
+        c.fill();
+
+        c.restore();
+
+    };
+
+    for(let k=0;k<moons;k++){
+
+        const m=moonAt(k);
+
+        if(m.behind)
+            drawMoon(m);
+
+    }
+
+    if(look.ring)
+        drawGlobeRing(c,cx,cy,R,look.ring,true,1);
+
+    renderGlobe(
+        c,planetId,cx,cy,R,.38,viewLon,
+        {
+            scale,
+            time,
+            fps:6,
+            cacheKey:"small|"+planetId+"|"+rBucket
+        }
+    );
+
+    drawGlobeSheen(c,cx,cy,R);
+
+    if(look.ring)
+        drawGlobeRing(c,cx,cy,R,look.ring,false,1);
+
+    for(let k=0;k<moons;k++){
+
+        const m=moonAt(k);
+
+        if(!m.behind)
+            drawMoon(m);
+
+    }
+
+}
+
+/*
+ * What a pet looks like standing on each kind of ground: how deep it
+ * sinks (as a fraction of its size below its centre), the ripple
+ * colour at the surface line, and any glow.
+ */
+const PET_TERRAIN_FX={
+    [TERRAIN.WATER]:{line:.06,ripple:"rgba(220,245,255,.85)",tint:"rgba(60,140,230,.35)"},
+    [TERRAIN.METHANE]:{line:.08,ripple:"rgba(230,200,255,.75)",tint:"rgba(80,50,120,.4)"},
+    [TERRAIN.SLIME]:{line:.14,ripple:"rgba(170,255,190,.9)",tint:"rgba(60,220,110,.4)",glow:"#7dff9c"},
+    [TERRAIN.LAVA]:{line:.2,ripple:"rgba(255,230,120,.95)",tint:"rgba(255,90,20,.45)",glow:"#ff7a20"},
+    [TERRAIN.CLOUD]:{line:.22,ripple:"rgba(255,255,255,.75)",tint:"rgba(230,255,255,.55)",fluffy:true},
+    [TERRAIN.GLOW]:{line:.3,ripple:"rgba(255,255,255,.9)",tint:"rgba(210,245,255,.45)",glow:"#d8f6ff"},
+    [TERRAIN.ICE]:{reflect:true},
+    [TERRAIN.CRYSTAL]:{reflect:true,sparkle:true}
+};
+
+/*
+ * Draws a pet (via draw()) as it stands on the ground beneath it:
+ * half under water, wading in lava or slime, sunk into cloud,
+ * reflected in ice. draw() must paint the pet centred at x,y.
+ */
+function drawPetOnTerrain(c,terrain,x,y,size,time,draw){
+
+    const fx=PET_TERRAIN_FX[terrain];
+
+    if(!fx){
+
+        draw();
+
+        return;
+
+    }
+
+    if(fx.reflect){
+
+        const feet=y+size*.45;
+
+        c.save();
+
+        c.globalAlpha*=.4;
+
+        c.translate(0,feet*2);
+
+        c.scale(1,-1);
+
+        c.beginPath();
+
+        c.rect(x-size*2,feet,size*4,size*.9);
+
+        c.clip();
+
+        draw();
+
+        c.restore();
+
+        draw();
+
+        if(fx.sparkle){
+
+            const a=(Math.sin(time*5+x*.1)+1)/2;
+
+            c.save();
+
+            c.globalAlpha*=.6*a;
+
+            c.fillStyle="#ffffff";
+
+            c.beginPath();
+
+            c.arc(x+size*.42,feet-size*.08,size*.05,0,Math.PI*2);
+
+            c.fill();
+
+            c.restore();
+
+        }
+
+        return;
+
+    }
+
+    const line=y+size*fx.line;
+
+    const bob=Math.sin(time*2.6+x*.05)*size*.03;
+
+    const waterline=line+bob;
+
+    if(fx.glow){
+
+        c.save();
+
+        const g=c.createRadialGradient(x,waterline,0,x,waterline,size*.9);
+
+        g.addColorStop(0,fx.glow+"88");
+
+        g.addColorStop(1,fx.glow+"00");
+
+        c.fillStyle=g;
+
+        c.beginPath();
+
+        c.ellipse(x,waterline,size*.9,size*.32,0,0,Math.PI*2);
+
+        c.fill();
+
+        c.restore();
+
+    }
+
+    /* the part above the surface */
+    c.save();
+
+    c.beginPath();
+
+    c.rect(x-size*3,y-size*4,size*6,waterline-(y-size*4));
+
+    c.clip();
+
+    draw();
+
+    c.restore();
+
+    /* the part below, faintly seen through the surface */
+    c.save();
+
+    c.beginPath();
+
+    c.rect(x-size*3,waterline,size*6,size*3);
+
+    c.clip();
+
+    c.globalAlpha*=fx.fluffy?.08:.2;
+
+    draw();
+
+    c.restore();
+
+    /* surface tint over the submerged part, then the ripples */
+    c.save();
+
+    c.fillStyle=fx.tint;
+
+    c.beginPath();
+
+    c.ellipse(x,waterline+size*.12,size*.62,size*.2,0,0,Math.PI);
+
+    c.fill();
+
+    const w=(time*1.4)%1;
+
+    c.strokeStyle=fx.ripple;
+
+    c.lineWidth=Math.max(1,size*.045);
+
+    c.beginPath();
+
+    c.ellipse(x,waterline,size*.55,size*.12,0,0,Math.PI*2);
+
+    c.stroke();
+
+    c.globalAlpha*=1-w;
+
+    c.beginPath();
+
+    c.ellipse(x,waterline,size*(.55+w*.5),size*(.12+w*.1),0,0,Math.PI*2);
+
+    c.stroke();
+
+    if(fx.fluffy){
+
+        c.globalAlpha=1;
+
+        c.fillStyle="rgba(255,255,255,.85)";
+
+        for(let k=0;k<5;k++){
+
+            const a=k/5*Math.PI*2+time*.6;
+
+            c.beginPath();
+
+            c.arc(x+Math.cos(a)*size*.42,waterline+Math.sin(a)*size*.07,size*.13,0,Math.PI*2);
+
+            c.fill();
+
+        }
+
+    }
+
+    c.restore();
+
+}
+
 function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
     options=options || {};
@@ -24303,80 +26040,58 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
      * Asteroid ring — drawn in two passes so the half behind
      * the planet is occluded by the body, selling the orbit.
      */
+    /*
+     * The planet itself: a real spinning globe (see PLANET GLOBES),
+     * the same world everywhere it appears in the game.
+     */
+    const look=
+        getPlanetLook(planetId);
+
     let seed=0;
 
-    for(
-        let i=0;
-        i<planetId.length;
-        i++
-    ){
+    for(let i=0;i<planetId.length;i++){
 
         seed+=planetId.charCodeAt(i);
 
     }
 
-    const ringX=
-        radius*1.85;
+    /* Zenith keeps its signature ring of sparkling motes */
+    const drawSparkles=behind=>{
 
-    const ringY=
-        radius*.6;
+        if(!look.sparkleRing)
+            return;
 
-    const speckCount=18;
-
-    function drawRing(behind){
-
-        for(
-            let i=0;
-            i<speckCount;
-            i++
-        ){
+        for(let i=0;i<18;i++){
 
             const angle=
-                (i/speckCount)*
-                Math.PI*2+
+                (i/18)*Math.PI*2+
                 seed*.35+
                 time*.06;
 
-            const isBehind=
-                Math.sin(angle)<0;
-
-            if(isBehind!==behind)
+            if((Math.sin(angle)<0)!==behind)
                 continue;
 
             const wobble=
-                .85+
-                ((seed+i*7)%5)*.06;
-
-            const px=
-                cx+
-                Math.cos(angle)*
-                ringX*wobble;
-
-            const py=
-                cy+
-                Math.sin(angle)*
-                ringY*wobble;
+                .85+((seed+i*7)%5)*.06;
 
             c.save();
 
             c.globalAlpha=
-                baseAlpha*
-                (behind ? .35 : .9);
+                baseAlpha*(behind?.35:.9)*(dim?.34:1);
 
             c.shadowBlur=6;
 
-            c.shadowColor="#bcecff";
+            c.shadowColor="#e9dcff";
 
-            c.fillStyle="#dcefff";
+            c.fillStyle="#f4eeff";
 
             c.beginPath();
 
             c.arc(
-                px,
-                py,
+                cx+Math.cos(angle)*radius*1.85*wobble,
+                cy+Math.sin(angle)*radius*.6*wobble,
                 .9+((seed+i*3)%3)*.4,
-                0,
-                Math.PI*2
+                0,Math.PI*2
             );
 
             c.fill();
@@ -24385,148 +26100,76 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
         }
 
-    }
+    };
 
-    drawRing(true);
+    drawSparkles(true);
 
-    /*
-     * Lit from the same direction as the gameplay planet
-     * (lightAngle -0.75), so a world's highlight stays on the
-     * same side wherever it's drawn.
-     */
-    const spaceLightAngle=
-        -0.75;
+    try{
 
-    const body=
-        c.createRadialGradient(
-            cx+
-            Math.cos(spaceLightAngle)*
-            radius*.45,
-            cy+
-            Math.sin(spaceLightAngle)*
-            radius*.45,
-            radius*.05,
-            cx,
-            cy,
-            radius*1.05
-        );
+        /*
+         * A surface map not built yet (start-up): a simple shaded ball
+         * in the planet's colours for a moment, rather than building
+         * the whole map right now and stalling the frame. The
+         * background builder fills it in shortly.
+         */
+        if(
+            PLANET_LOOKS[planetId] &&
+            !globeTextures[planetId] &&
+            !globeTexturesLow[planetId]
+        ){
 
-    body.addColorStop(
-        0,
-        palette.light
-    );
+            const ball=c.createRadialGradient(
+                cx-radius*.35,cy-radius*.4,radius*.05,
+                cx,cy,radius
+            );
 
-    body.addColorStop(
-        .32,
-        palette.mid
-    );
+            ball.addColorStop(0,palette.light);
 
-    body.addColorStop(
-        .72,
-        palette.dark
-    );
+            ball.addColorStop(.55,palette.mid);
 
-    body.addColorStop(
-        1,
-        "#01030a"
-    );
+            ball.addColorStop(1,palette.dark);
 
-    c.fillStyle=body;
+            c.fillStyle=ball;
 
-    c.beginPath();
+            c.beginPath();
 
-    c.arc(
-        cx,
-        cy,
-        radius,
-        0,
-        Math.PI*2
-    );
+            c.arc(cx,cy,radius,0,Math.PI*2);
 
-    c.fill();
+            c.fill();
 
-    /*
-     * The planet's own hand-authored surface — continents,
-     * storms, ice, whatever that world has — drawn through the
-     * exact same function the land/depart screens use, clipped
-     * to the body so it wraps the sphere. This is what makes
-     * every planet in the game genuinely the same planet
-     * wherever it appears, instead of a bland sphere out here
-     * and a detailed one up close.
-     */
-    const planetForSurface=
-        getPlanet(planetId);
+            drawGlobeSheen(c,cx,cy,radius);
 
-    if(planetForSurface){
+        }else{
 
-        c.save();
-
-        c.beginPath();
-
-        c.arc(
-            cx,
-            cy,
-            radius,
-            0,
-            Math.PI*2
-        );
-
-        c.clip();
-
-        try{
-
-            drawPlanetSurface(
-                planetForSurface,
+            drawSmallGlobe(
+                c,
+                planetId,
                 cx,
                 cy,
                 radius,
-                time,
-                c
-            );
-
-        }catch(error){
-
-            console.error(
-                "Planet surface draw failed:",
-                error
+                time
             );
 
         }
 
-        c.restore();
+    }catch(error){
+
+        console.error(
+            "Planet globe draw failed:",
+            error
+        );
+
+        c.fillStyle=palette.mid;
+
+        c.beginPath();
+
+        c.arc(cx,cy,radius,0,Math.PI*2);
+
+        c.fill();
 
     }
 
-    /*
-     * Neon rim light.
-     */
-    c.save();
-
-    c.globalAlpha*=.7;
-
-    c.shadowBlur=14;
-
-    c.shadowColor=palette.light;
-
-    c.strokeStyle=palette.light;
-
-    c.lineWidth=1.4;
-
-    c.beginPath();
-
-    c.arc(
-        cx,
-        cy,
-        radius,
-        0,
-        Math.PI*2
-    );
-
-    c.stroke();
-
-    c.restore();
-
-    drawRing(false);
+    drawSparkles(false);
 
     c.restore();
 
@@ -27876,9 +29519,6 @@ function drawMapPlanet(canvas,planetId,locked){
     const size=
         canvas.width;
 
-    const center=
-        size/2;
-
     context.clearRect(
         0,
         0,
@@ -27887,215 +29527,19 @@ function drawMapPlanet(canvas,planetId,locked){
     );
 
     /*
-     * The body is deliberately smaller than the canvas so the
-     * asteroid ring has somewhere to orbit without clipping.
+     * Drawn once, so make sure the quick surface map exists first —
+     * a thumbnail must never catch the start-up placeholder.
      */
-    const radius=
-        size*.3;
+    getGlobeTexture(planetId);
 
-    const palette=
-        getPlanetPalette(
-            planetId
-        );
-
-    context.save();
-
-    if(locked){
-
-        context.globalAlpha=.32;
-
-    }
-
-    /*
-     * Atmospheric glow.
-     */
-    const glow=
-        context.createRadialGradient(
-            center,
-            center,
-            radius*.8,
-            center,
-            center,
-            radius*1.6
-        );
-
-    glow.addColorStop(
-        0,
-        palette.mid
+    drawSpacePlanet(
+        context,
+        planetId,
+        size/2,
+        size/2,
+        size*.3,
+        {dim:!!locked}
     );
-
-    glow.addColorStop(
-        1,
-        "rgba(0,0,0,0)"
-    );
-
-    context.globalAlpha*=.5;
-
-    context.fillStyle=glow;
-
-    context.beginPath();
-
-    context.arc(
-        center,
-        center,
-        radius*1.6,
-        0,
-        Math.PI*2
-    );
-
-    context.fill();
-
-    context.globalAlpha=
-        locked ? .32 : 1;
-
-    /*
-     * The body itself, lit from the upper-left exactly like the
-     * full-size version.
-     */
-    const lightX=
-        center-radius*.35;
-
-    const lightY=
-        center-radius*.35;
-
-    const bodyGradient=
-        context.createRadialGradient(
-            lightX,
-            lightY,
-            radius*.05,
-            center,
-            center,
-            radius*1.05
-        );
-
-    bodyGradient.addColorStop(
-        0,
-        palette.light
-    );
-
-    bodyGradient.addColorStop(
-        .32,
-        palette.mid
-    );
-
-    bodyGradient.addColorStop(
-        .72,
-        palette.dark
-    );
-
-    bodyGradient.addColorStop(
-        1,
-        "#01030a"
-    );
-
-    context.fillStyle=
-        bodyGradient;
-
-    context.beginPath();
-
-    context.arc(
-        center,
-        center,
-        radius,
-        0,
-        Math.PI*2
-    );
-
-    context.fill();
-
-    /*
-     * Asteroid field ring — a scatter of specks on a squashed
-     * ellipse so it reads as an orbit in perspective rather than
-     * a flat circle. Seeded off the planet id's characters so
-     * each world's ring is consistent between renders rather
-     * than jittering every repaint.
-     */
-    let seed=0;
-
-    for(
-        let i=0;
-        i<planetId.length;
-        i++
-    ){
-
-        seed+=
-            planetId.charCodeAt(i);
-
-    }
-
-    const ringRadiusX=
-        radius*1.75;
-
-    const ringRadiusY=
-        radius*.62;
-
-    const speckCount=14;
-
-    context.fillStyle=
-        locked
-        ?"#5c7ba0"
-        :"#cfe6ff";
-
-    for(
-        let i=0;
-        i<speckCount;
-        i++
-    ){
-
-        const angle=
-            (i/speckCount)*
-            Math.PI*2+
-            seed*.35;
-
-        const wobble=
-            .82+
-            (
-                (seed+i*7)%5
-            )*.07;
-
-        const px=
-            center+
-            Math.cos(angle)*
-            ringRadiusX*wobble;
-
-        const py=
-            center+
-            Math.sin(angle)*
-            ringRadiusY*wobble;
-
-        /*
-         * Specks behind the planet are drawn dimmer, which is
-         * what sells the ring as passing around the body rather
-         * than sitting flat in front of it.
-         */
-        const behind=
-            Math.sin(angle)<0;
-
-        context.globalAlpha=
-            (locked ? .3 : 1)*
-            (behind ? .4 : .95);
-
-        const speckSize=
-            .9+
-            (
-                (seed+i*3)%3
-            )*.45;
-
-        context.beginPath();
-
-        context.arc(
-            px,
-            py,
-            speckSize,
-            0,
-            Math.PI*2
-        );
-
-        context.fill();
-
-    }
-
-    context.restore();
 
 }
 
@@ -29212,128 +30656,85 @@ function drawPlanetFocusScene(){
      * mirrored before, so the highlight visibly flipped from
      * one side to the other during a launch.
      */
-    const focusLightAngle=
-        -0.75;
-
-    const focusLightX=
-        cx+
-        Math.cos(focusLightAngle)*
-        radius*.45;
-
-    const focusLightY=
-        cy+
-        Math.sin(focusLightAngle)*
-        radius*.45;
-
-    const body=
-        c.createRadialGradient(
-            focusLightX,
-            focusLightY,
-            radius*.04,
-            cx,
-            cy,
-            radius*1.05
-        );
-
-    body.addColorStop(
-        0,
-        palette.light
-    );
-
-    body.addColorStop(
-        .3,
-        palette.mid
-    );
-
-    body.addColorStop(
-        .7,
-        palette.dark
-    );
-
-    body.addColorStop(
-        1,
-        "#01030a"
-    );
-
-    c.fillStyle=body;
-
-    c.beginPath();
-
-    c.arc(
-        cx,
-        cy,
-        radius,
-        0,
-        Math.PI*2
-    );
-
-    c.fill();
-
     /*
-     * Same hand-authored surface as everywhere else, clipped to
-     * the body — so the world you're hovering over up close is
-     * visibly the same one you saw on the star map.
+     * The planet body: the real globe, turned by exactly the same
+     * view rotation every building and pet is placed with (see
+     * PLANET GLOBES), so the land moves as one solid world beneath
+     * them. Painted a little softer while moving (motion hides it),
+     * sharper when still.
      */
-    c.save();
+    /*
+     * The planet underfoot gets a guaranteed few milliseconds a frame
+     * toward its full-detail map (shown soft until then), so it
+     * sharpens within about a second even on a busy device.
+     */
+    if(
+        PLANET_LOOKS[planet.id] &&
+        !globeTextures[planet.id]
+    ){
 
-    c.beginPath();
+        const buildStarted=performance.now();
 
-    c.arc(
-        cx,
-        cy,
-        radius,
-        0,
-        Math.PI*2
-    );
+        try{
 
-    c.clip();
+            while(
+                !globeTextures[planet.id] &&
+                performance.now()-buildStarted<5
+            ){
+
+                buildGlobeTextureRows(planet.id,1,"high");
+
+            }
+
+        }catch(error){
+
+            console.error("Planet surface build failed:",error);
+
+        }
+
+    }
 
     try{
 
-        /*
-         * Earth specifically gets the rotating 3D surface — real
-         * continents and clouds on the sphere, turning in lockstep
-         * with the structures standing on it, rather than a flat
-         * texture painted underneath them. Every other planet
-         * keeps its existing flat drawPlanetSurface rendering for
-         * now; the request was to start with Earth and move on to
-         * the rest afterward.
-         */
-        if(planet.id==="earth"){
-
-            drawEarthContinents3D(
-                c,
-                cx,
-                cy,
-                radius,
-                roamViewLat,
-                roamViewLon,
-                time
-            );
-
-        }else{
-
-            drawPlanetSurface(
-                planet,
-                cx,
-                cy,
-                radius,
+        renderGlobe(
+            c,
+            planet.id,
+            cx,
+            cy,
+            radius,
+            roamViewLat,
+            roamViewLon,
+            {
+                scale:roamingActive?.5:.62,
+                bounds:{x0:0,y0:0,x1:width,y1:height},
                 time,
-                c
-            );
-
-        }
+                /*
+                 * Standing still, the only motion is slow cloud drift
+                 * and gentle glows — a few repaints a second look the
+                 * same and cost a fraction.
+                 */
+                fps:4,
+                tightSpecular:true,
+                cacheKey:"focus"
+            }
+        );
 
     }catch(error){
 
         console.error(
-            "Focus planet surface draw failed:",
+            "Focus planet globe draw failed:",
             error
         );
 
-    }
+        c.fillStyle=palette.mid;
 
-    c.restore();
+        c.beginPath();
+
+        c.arc(cx,cy,radius,0,Math.PI*2);
+
+        c.fill();
+
+    }
 
 
     /*
@@ -29375,84 +30776,7 @@ function drawPlanetFocusScene(){
      * they appear to curve away over the surface instead of
      * sliding flatly across it.
      */
-    c.save();
 
-    try{
-
-        c.beginPath();
-
-        c.arc(
-            cx,
-            cy,
-            radius,
-            0,
-            Math.PI*2
-        );
-
-        c.clip();
-
-        for(
-            let i=0;
-            i<PLANET_SURFACE_BLOTCHES.length;
-            i++
-        ){
-
-            const blotch=
-                PLANET_SURFACE_BLOTCHES[i];
-
-            const bp=
-                projectSphere(
-                    blotch.lat,
-                    blotch.lon,
-                    roamViewLat,
-                    roamViewLon,
-                    cx,
-                    cy,
-                    radius
-                );
-
-            if(!bp.visible)
-                continue;
-
-            c.globalAlpha=
-                .16*
-                Math.min(
-                    1,
-                    bp.z*2.2
-                );
-
-            c.fillStyle=
-                i%3===0
-                ?palette.light
-                :palette.dark;
-
-            c.beginPath();
-
-            c.ellipse(
-                bp.x,
-                bp.y,
-                blotch.r*radius*bp.scale,
-                blotch.r*radius*bp.scale*
-                Math.max(.25,bp.z),
-                0,
-                0,
-                Math.PI*2
-            );
-
-            c.fill();
-
-        }
-
-    }catch(blotchError){
-
-        console.error(
-            "Surface blotch draw failed:",
-            blotchError
-        );
-
-    }
-
-    c.restore();
 
     /*
      * Moved up from further below — needed here now so the
@@ -29816,9 +31140,45 @@ function drawPlanetFocusScene(){
                         radius
                     );
 
+                /*
+                 * Just past the horizon: still drawn, at the very back,
+                 * and only where it rises above the planet's edge — so
+                 * a building sinks out of sight as the world turns
+                 * instead of popping away. Well round the back, the
+                 * planet hides it completely anyway.
+                 */
                 if(!proj.visible){
 
-                    return;
+                    if(proj.z<=HORIZON_SINK_Z)
+                        return;
+
+                    if(mode==="measure"){
+
+                        surfaceDepths[index]=-10+proj.z;
+
+                        return;
+
+                    }
+
+                    if(mode==="draw"){
+
+                        c.save();
+
+                        clipOutsidePlanet(c,cx,cy,radius);
+
+                        try{
+
+                            drawSurfaceItem(item,index,"draw-sinking");
+
+                        }finally{
+
+                            c.restore();
+
+                        }
+
+                        return;
+
+                    }
 
                 }
 
@@ -30432,9 +31792,39 @@ function drawPlanetFocusScene(){
                             radius
                         );
 
+                    /* the same horizon rule as buildings */
                     if(!petProj.visible){
 
-                        return;
+                        if(petProj.z<=HORIZON_SINK_Z)
+                            return;
+
+                        if(mode==="measure"){
+
+                            petDepths[petIndex]=-10+petProj.z;
+
+                            return;
+
+                        }
+
+                        if(mode==="draw"){
+
+                            c.save();
+
+                            clipOutsidePlanet(c,cx,cy,radius);
+
+                            try{
+
+                                drawFocusPet(pet,petIndex,"draw-sinking");
+
+                            }finally{
+
+                                c.restore();
+
+                            }
+
+                            return;
+
+                        }
 
                     }
 
@@ -31025,18 +32415,35 @@ chosenFocusShip
 
                 }
 
-                drawSpacePet(
+                /*
+                 * Whatever's underfoot shapes how the pet is seen:
+                 * half under water, wading in lava or slime, sunk
+                 * into cloud, reflected on ice.
+                 */
+                drawPetOnTerrain(
                     c,
-                    selectedStartPlanet,
+                    globeTerrainAt(
+                        selectedStartPlanet,
+                        roamingLat,
+                        roamingLon
+                    ),
                     roamPetProj.x,
                     roamPetProj.y,
                     roamPetSize,
-                    pet.energy,
-                    roamAnimSeed,
-                    pet.species,
-                    false,
-                    "builder",
-                    roamingFacingScale
+                    performance.now()/1000,
+                    ()=>drawSpacePet(
+                        c,
+                        selectedStartPlanet,
+                        roamPetProj.x,
+                        roamPetProj.y,
+                        roamPetSize,
+                        pet.energy,
+                        roamAnimSeed,
+                        pet.species,
+                        false,
+                        "builder",
+                        roamingFacingScale
+                    )
                 );
 
             }catch(roamPetDrawError){
@@ -31254,23 +32661,38 @@ chosenFocusShip
 
                         }
 
-                        drawSpacePet(
+                        drawPetOnTerrain(
                             c,
-                            selectedStartPlanet,
+                            globeTerrainAt(
+                                selectedStartPlanet,
+                                roamer.presence.lat,
+                                roamer.presence.lon
+                            ),
                             remoteProj.x,
                             remoteProj.y,
                             Math.max(
                                 26,
                                 width*.075
                             ),
-                            100,
-                            remoteSeed,
-                            roamer.presence.
-                            petSpecies ||
-                            "procedural",
-                            false,
-                            "builder",
-                            1
+                            performance.now()/1000,
+                            ()=>drawSpacePet(
+                                c,
+                                selectedStartPlanet,
+                                remoteProj.x,
+                                remoteProj.y,
+                                Math.max(
+                                    26,
+                                    width*.075
+                                ),
+                                100,
+                                remoteSeed,
+                                roamer.presence.
+                                petSpecies ||
+                                "procedural",
+                                false,
+                                "builder",
+                                1
+                            )
                         );
 
                         /*
@@ -47119,6 +48541,26 @@ function projectSphere(
 const SPHERE_VISIBILITY_Z=.04;
 
 /*
+ * How far round the back something can be and still peek above the
+ * horizon (z is -1 directly behind the planet). Tall things standing
+ * just past the edge stay partly visible until about here.
+ */
+const HORIZON_SINK_Z=-.35;
+
+/* restricts drawing to everywhere EXCEPT the planet disc */
+function clipOutsidePlanet(c,cx,cy,radius){
+
+    c.beginPath();
+
+    c.rect(-1e5,-1e5,2e5,2e5);
+
+    c.arc(cx,cy,radius,0,Math.PI*2);
+
+    c.clip("evenodd");
+
+}
+
+/*
  * Earth's surface, drawn as real features on the sphere rather
  * than a flat texture — continents and cloud bands both go
  * through projectSphere, exactly like structures and the base
@@ -50189,18 +51631,41 @@ function drawPlanetBackground(){
         radius*2+10
     );
 
-
     /*
-     * Planet-specific surface.
+     * The same globe as everywhere else, slowly turning, seen a little
+     * from above — the world you just left (or are heading to) looks
+     * like itself here too.
      */
+    try{
 
-    drawPlanetSurface(
-        planet,
-        x,
-        y,
-        radius,
-        t
-    );
+        const bgTime=
+            performance.now()/1000;
+
+        renderGlobe(
+            ctx,
+            planet.id,
+            x,
+            y,
+            radius,
+            .38,
+            bgTime*.035,
+            {
+                scale:Math.max(.35,Math.min(1,170/radius)),
+                bounds:{x0:0,y0:0,x1:W,y1:H},
+                time:bgTime,
+                fps:6,
+                cacheKey:"fieldbg"
+            }
+        );
+
+    }catch(error){
+
+        console.error(
+            "Background planet globe failed:",
+            error
+        );
+
+    }
 
 
     /*
@@ -71306,6 +72771,8 @@ document.addEventListener(
 
     }
 );
+
+warmGlobeTextures();
 
 requestAnimationFrame(
     loop
