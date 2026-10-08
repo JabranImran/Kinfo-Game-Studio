@@ -24546,11 +24546,87 @@ const MS_EDGES=[
     [[1,3]],[[0,1]],[[0,3]],[]
 ];
 
-function globeExtractContours(field,W,H){
+/* How far (in crater radii) a spot is from the nearest crater's centre; 9 = none. */
+function globeCraterT(list,x,y,z){
+
+    let best=9;
+
+    for(const cr of list){
+
+        const d=x*cr.x+y*cr.y+z*cr.z;
+
+        if(d<Math.cos(cr.r*1.3))
+            continue;
+
+        best=Math.min(best,Math.acos(Math.min(1,d))/cr.r);
+
+    }
+
+    return best;
+
+}
+
+/* A brighter, more vivid version of a colour — its neon outline. */
+function globeNeonOf(hex){
+
+    const c=globeHex(hex).map(v=>v/255);
+
+    const max=Math.max(c[0],c[1],c[2]),min=Math.min(c[0],c[1],c[2]);
+
+    const d=max-min;
+
+    let h=0;
+
+    if(d>0){
+
+        if(max===c[0])
+            h=((c[1]-c[2])/d+6)%6;
+
+        else if(max===c[1])
+            h=(c[2]-c[0])/d+2;
+
+        else
+            h=(c[0]-c[1])/d+4;
+
+    }
+
+    const l=(max+min)/2;
+
+    const s=d===0?0:d/(1-Math.abs(2*l-1));
+
+    const L=Math.max(.66,Math.min(.84,l+.22));
+
+    const S=s<.08?s:Math.min(1,s*1.25+.15);
+
+    const q=L<.5?L*(1+S):L+S-L*S,p=2*L-q;
+
+    const ch=t=>{
+
+        t=(t+6)%6;
+
+        const v=t<1?p+(q-p)*t:t<3?q:t<4?p+(q-p)*(4-t):p;
+
+        return Math.round(v*255);
+
+    };
+
+    const out=[ch(h+2),ch(h),ch(h-2)];
+
+    return"#"+out.map(v=>v.toString(16).padStart(2,"0")).join("");
+
+}
+
+/*
+ * mask (optional): a second field on the same grid — wherever it is
+ * positive, a higher region covers this one, so that stretch of edge
+ * isn't really visible (the covering region draws its own outline
+ * there instead). Every boundary is drawn exactly once.
+ */
+function globeExtractContours(field,W,H,mask){
 
     const out=[];
 
-    const toVec=(gi,gj)=>{
+    const toVec=(gi,gj,o)=>{
 
         const lon=((gi+.5)/W)*Math.PI*2-Math.PI;
 
@@ -24558,7 +24634,7 @@ function globeExtractContours(field,W,H){
 
         const cl=Math.cos(lat);
 
-        return[cl*Math.sin(lon),Math.sin(lat),cl*Math.cos(lon)];
+        out.push(cl*Math.sin(lon),Math.sin(lat),cl*Math.cos(lon));
 
     };
 
@@ -24568,27 +24644,30 @@ function globeExtractContours(field,W,H){
 
             const i1=i+1>=W?0:i+1;
 
-            const fa=field[j*W+i],fb=field[j*W+i1];
+            const a=j*W+i,b=j*W+i1,cc=(j+1)*W+i1,d=(j+1)*W+i;
 
-            const fc=field[(j+1)*W+i1],fd=field[(j+1)*W+i];
+            const fa=field[a],fb=field[b];
+
+            const fc=field[cc],fd=field[d];
 
             const k=(fa>0?1:0)|(fb>0?2:0)|(fc>0?4:0)|(fd>0?8:0);
 
             if(k===0 || k===15)
                 continue;
 
+            /* edge points in cell-local coordinates (0..1, 0..1) */
             const edgePoint=e=>{
 
                 if(e===0)
-                    return toVec(i+fa/(fa-fb),j);
+                    return[fa/(fa-fb),0];
 
                 if(e===1)
-                    return toVec(i+1,j+fb/(fb-fc));
+                    return[1,fb/(fb-fc)];
 
                 if(e===2)
-                    return toVec(i+fd/(fd-fc),j+1);
+                    return[fd/(fd-fc),1];
 
-                return toVec(i,j+fa/(fa-fd));
+                return[0,fa/(fa-fd)];
 
             };
 
@@ -24596,7 +24675,24 @@ function globeExtractContours(field,W,H){
 
                 const p=edgePoint(e1),q=edgePoint(e2);
 
-                out.push(p[0],p[1],p[2],q[0],q[1],q[2]);
+                if(mask){
+
+                    const mx=(p[0]+q[0])*.5,my=(p[1]+q[1])*.5;
+
+                    const m=
+                        mask[a]*(1-mx)*(1-my)+
+                        mask[b]*mx*(1-my)+
+                        mask[cc]*mx*my+
+                        mask[d]*(1-mx)*my;
+
+                    if(m>0)
+                        continue;
+
+                }
+
+                toVec(i+p[0],j+p[1]);
+
+                toVec(i+q[0],j+q[1]);
 
             }
 
@@ -24631,6 +24727,15 @@ function drawGlobeLines(c,tex,cx,cy,R,viewLat,viewLon,opts){
 
     const pad=core*4;
 
+    /*
+     * opts.fade (clouds): how strongly each stretch shows, by where it
+     * sits on screen — see globeCloudFade. Otherwise lines just fade
+     * a little toward the horizon.
+     */
+    const fade=opts.fade;
+
+    const BINS=fade?5:2;
+
     c.save();
 
     c.lineCap="round";
@@ -24641,11 +24746,12 @@ function drawGlobeLines(c,tex,cx,cy,R,viewLat,viewLon,opts){
 
         const segs=line.segs;
 
-        const near=new Path2D();
+        const paths=[];
 
-        const edge=new Path2D();
+        for(let k=0;k<BINS;k++)
+            paths.push(new Path2D());
 
-        let any=false;
+        const used=new Uint8Array(BINS);
 
         for(let s=0;s<segs.length;s+=6){
 
@@ -24686,36 +24792,55 @@ function drawGlobeLines(c,tex,cx,cy,R,viewLat,viewLon,opts){
 
             }
 
-            const path=(z1+z2)<.36?edge:near;
+            let bin;
+
+            if(fade){
+
+                const f=globeCloudFade(fade,(x1+x2)*.5-cx,(y1+y2)*.5-cy);
+
+                bin=Math.min(BINS-1,Math.floor(f*(BINS-1)+.15));
+
+                if(bin===0)
+                    continue;
+
+            }else{
+
+                bin=(z1+z2)<.36?0:1;
+
+            }
+
+            const path=paths[bin];
 
             path.moveTo(x1,y1);
 
             path.lineTo(x2,y2);
 
-            any=true;
+            used[bin]=1;
 
         }
-
-        if(!any)
-            continue;
 
         const baseAlpha=c.globalAlpha;
 
         c.strokeStyle=line.colour;
 
-        for(const [path,k] of [[near,1],[edge,.4]]){
+        for(let k=0;k<BINS;k++){
 
-            c.globalAlpha=baseAlpha*.22*k;
+            if(!used[k])
+                continue;
+
+            const a=fade?k/(BINS-1):(k===0?.4:1);
+
+            c.globalAlpha=baseAlpha*.22*a;
 
             c.lineWidth=core*3.4;
 
-            c.stroke(path);
+            c.stroke(paths[k]);
 
-            c.globalAlpha=baseAlpha*.95*k;
+            c.globalAlpha=baseAlpha*.95*a;
 
             c.lineWidth=core;
 
-            c.stroke(path);
+            c.stroke(paths[k]);
 
         }
 
@@ -24724,6 +24849,29 @@ function drawGlobeLines(c,tex,cx,cy,R,viewLat,viewLon,opts){
     }
 
     c.restore();
+
+}
+
+/*
+ * How visible a cloud is at a screen offset (dx,dy) from the planet's
+ * centre: full strength in the sky beyond the horizon, where clouds
+ * plainly float above the world, easing down to `centre` over the
+ * land, so they never hide what you're looking at or tapping.
+ * fade = {R (ground radius on screen), band (fraction of R), centre, limb}.
+ */
+function globeCloudFade(fade,dx,dy){
+
+    const t=1-Math.sqrt(dx*dx+dy*dy)/fade.R;
+
+    if(t<=0)
+        return fade.limb;
+
+    if(t>=fade.band)
+        return fade.centre;
+
+    const k=t/fade.band;
+
+    return fade.limb+(fade.centre-fade.limb)*k*k*(3-2*k);
 
 }
 
@@ -24763,341 +24911,249 @@ function drawGlobeNeonRim(c,cx,cy,R,colour,core){
 
 }
 
+/*
+ * PLANET LOOKS — every planet is a set of flat-coloured REGIONS, in
+ * priority order (the first whose rule is positive wins; the last is
+ * the ground everything else sits on). Each region's rule is a smooth
+ * value that crosses zero exactly at its edge, so the same rule both
+ * paints the colour and traces that edge as a neon outline — colours
+ * and lines always agree, and no boundary is a soft blur.
+ *
+ * fields(x,y,z) works out the values the rules share, once per spot.
+ * clouds (optional) float on their own shell above the surface — see
+ * drawGlobeClouds.
+ */
 const PLANET_LOOKS={
 
     earth:{
         atmosphere:"#7fd6ff",
-        /* neon outlines: the coastline, and the southern ice edge */
-        lines:[
-            {colour:"#5ff3ff",f(x,y,z){return globeFbm(x,y,z,11,5,1.55)+globeHomeland(x,y,z)*.32-.52;}},
-            {colour:"#e8fbff",f(x,y,z){return (-.9+globeFbm(x,y,z,12,3,3)*.08)-y;}}
-        ],
         moons:1,
-        sample(x,y,z){
+        fields(x,y,z){
 
             const n=globeFbm(x,y,z,11,5,1.55);
 
-            const h=n+globeHomeland(x,y,z)*.32;
-
-            const sea=.52;
-
-            if(y<-.9+globeFbm(x,y,z,12,3,3)*.08){
-
-                return[globeHex("#f4fbff"),TERRAIN.ICE,140,0];
-
-            }
-
-            if(h<sea){
-
-                const depth=(sea-h)/sea;
-
-                return[
-                    globeMix(globeHex("#4dbdf2"),globeHex("#1f5cc0"),globeSmooth(0,.2,depth)),
-                    TERRAIN.WATER,230,0
-                ];
-
-            }
-
-            /* colour by the natural terrain — the homeland boost only keeps it dry */
-            const e=Math.max(0,(n-sea)/(1-sea));
-
-            /* sand only at the real coast */
-            if(h-sea<.022){
-
-                return[globeHex("#f2dc8e"),TERRAIN.GROUND,30,0];
-
-            }
-
-            const g=globeFbm(x,y,z,13,3,4);
-
-            let col=globeMix(globeHex("#66c95a"),globeHex("#3a9c48"),g);
-
-            col=globeMix(col,globeHex("#93a66b"),globeSmooth(.28,.42,e));
-
-            col=globeMix(col,globeHex("#f6f9ff"),globeSmooth(.44,.52,e));
-
-            return[col,TERRAIN.GROUND,25,0];
+            return{
+                n,
+                h:n+globeHomeland(x,y,z)*.32,
+                e:Math.max(0,(n-.52)/.48),
+                g:globeFbm(x,y,z,13,3,4),
+                ice:(-.9+globeFbm(x,y,z,12,3,3)*.08)-y
+            };
 
         },
-        cloud(x,y,z){
-
-            return globeSmooth(.58,.76,globeFbm(x,y,z,14,4,2.2))*.88;
-
+        regions:[
+            {colour:"#f4fbff",terrain:TERRAIN.ICE,gloss:140,f:v=>v.ice},
+            {colour:"#1f5cc0",terrain:TERRAIN.WATER,gloss:230,line:"#4f9dff",f:v=>.42-v.h},
+            {colour:"#4dbdf2",terrain:TERRAIN.WATER,gloss:230,line:"#5ff3ff",f:v=>.52-v.h},
+            {colour:"#f2dc8e",gloss:30,f:v=>.55-v.h},
+            {colour:"#f6f9ff",gloss:25,f:v=>v.e-.47},
+            {colour:"#93a66b",gloss:25,line:"#d6ef9a",f:v=>v.e-.33},
+            {colour:"#3a9c48",gloss:25,line:"#7dff8c",f:v=>v.g-.56},
+            {colour:"#66c95a",gloss:25}
+        ],
+        clouds:{
+            colour:"#ffffff",
+            line:"#e8fbff",
+            f(x,y,z){return globeFbm(x,y,z,14,3,2.2)-.63;}
         }
     },
 
     mars:{
         atmosphere:"#ffb08a",
-        lines:[
-            {colour:"#ff8a5c",f(x,y,z){return globeCraterRimField(this.craters,x,y,z);}},
-            {colour:"#ff4fd8",f(x,y,z){return (1-Math.abs(globeFbm(x,y,z,25,3,1.3)*2-1))*(1-globeHomeland(x,y,z))-.93;}}
-        ],
         moons:2,
         init(){
 
             this.craters=globeMakeCraters(23,30,.08,.24);
 
         },
-        sample(x,y,z){
+        fields(x,y,z){
 
-            const n=globeFbm(x,y,z,23,5,1.7);
+            return{
+                n:globeFbm(x,y,z,23,5,1.7),
+                dust:globeFbm(x,y,z,24,3,3.2),
+                canyon:(1-Math.abs(globeFbm(x,y,z,25,3,1.3)*2-1))*(1-globeHomeland(x,y,z)),
+                t:globeCraterT(this.craters,x,y,z),
+                pit:globeNoise(x*16+3.1,y*16-1.7,z*16+.9,26),
+                y
+            };
 
-            let col=globeMix(globeHex("#e8743f"),globeHex("#b8452b"),n);
-
-            const dust=globeFbm(x,y,z,24,3,3.2);
-
-            col=globeMix(col,globeHex("#f6a06a"),globeSmooth(.6,.75,dust)*.7);
-
-            const canyon=1-Math.abs(globeFbm(x,y,z,25,3,1.3)*2-1);
-
-            col=globeMix(col,globeHex("#7a2618"),globeSmooth(.9,.97,canyon)*(1-globeHomeland(x,y,z)));
-
-            if(y<-.95){
-
-                return[globeHex("#fff2ea"),TERRAIN.ICE,140,0];
-
-            }
-
-            col=globeScale(col,globeCraterShade(this.craters,x,y,z));
-
-            col=globeMix(col,globeHex("#8a2e1c"),globeSpots(x,y,z,26,16,.87)*.6);
-
-            return[col,TERRAIN.GROUND,20,0];
-
-        }
+        },
+        regions:[
+            {colour:"#fff2ea",terrain:TERRAIN.ICE,gloss:140,f:v=>-.95-v.y},
+            {colour:"#92331f",gloss:20,line:"#ff7a4a",f:v=>.7-v.t},
+            {colour:"#f59a62",gloss:20,line:"#ffc08a",f:v=>1-v.t},
+            {colour:"#7a2618",gloss:20,line:"#ff4fd8",f:v=>v.canyon-.93},
+            {colour:"#9a3420",gloss:20,line:"#ff6a3a",f:v=>v.pit-.885},
+            {colour:"#f6a06a",gloss:20,f:v=>v.dust-.64},
+            {colour:"#b8452b",gloss:20,line:"#ff7a50",f:v=>v.n-.56},
+            {colour:"#e8743f",gloss:20}
+        ]
     },
 
     europa:{
         atmosphere:"#d8f6ff",
-        lines:[
-            {colour:"#a8f4ff",f(x,y,z){return (1-Math.abs(globeNoise(x*3.1,y*3.1,z*3.1,39)*2-1))-.975;}},
-            {colour:"#4fb8ff",f(x,y,z){return globeFbm(x,y,z,38,4,2.1)*(1-globeHomeland(x,y,z))-.66;}}
-        ],
-        sample(x,y,z){
+        fields(x,y,z){
 
-            const n=globeFbm(x,y,z,37,4,1.8);
+            return{
+                n:globeFbm(x,y,z,37,4,1.8),
+                pool:globeFbm(x,y,z,38,4,2.1)*(1-globeHomeland(x,y,z)),
+                crack:1-Math.abs(globeNoise(x*3.1,y*3.1,z*3.1,39)*2-1),
+                crack2:1-Math.abs(globeNoise(x*5.3+3,y*5.3,z*5.3,40)*2-1)
+            };
 
-            let col=globeMix(globeHex("#f2fbff"),globeHex("#bfe3f3"),n);
-
-            const pool=globeFbm(x,y,z,38,4,2.1)*(1-globeHomeland(x,y,z));
-
-            if(pool>.66){
-
-                return[
-                    globeMix(globeHex("#58b4e6"),globeHex("#2b78c4"),globeSmooth(.66,.76,pool)),
-                    TERRAIN.WATER,235,0
-                ];
-
-            }
-
-            const crack=1-Math.abs(globeNoise(x*3.1,y*3.1,z*3.1,39)*2-1);
-
-            const crack2=1-Math.abs(globeNoise(x*5.3+3,y*5.3,z*5.3,40)*2-1);
-
-            const lineK=Math.max(globeSmooth(.955,.985,crack),globeSmooth(.965,.99,crack2)*.7);
-
-            col=globeMix(col,globeHex("#c99478"),lineK*.85);
-
-            return[col,TERRAIN.ICE,200,0];
-
-        }
+        },
+        regions:[
+            {colour:"#2b78c4",terrain:TERRAIN.WATER,gloss:235,line:"#4fb8ff",f:v=>v.pool-.72},
+            {colour:"#58b4e6",terrain:TERRAIN.WATER,gloss:235,line:"#6fe0ff",f:v=>v.pool-.66},
+            {colour:"#c99478",terrain:TERRAIN.ICE,gloss:200,line:"#ffb48a",f:v=>v.crack-.94},
+            {colour:"#d6a68a",terrain:TERRAIN.ICE,gloss:200,line:"#ffc6a0",f:v=>v.crack2-.95},
+            {colour:"#bfe3f3",terrain:TERRAIN.ICE,gloss:200,line:"#a8f4ff",f:v=>v.n-.56},
+            {colour:"#f2fbff",terrain:TERRAIN.ICE,gloss:200}
+        ]
     },
 
     titan:{
         atmosphere:"#ffc98a",
-        lines:[
-            {colour:"#ffcf6b",f(x,y,z){return Math.sin(y*16+globeFbm(x,y,z,41,4,1.6)*5);}},
-            {colour:"#c58cff",f(x,y,z){return (globeFbm(x,y,z,42,4,2.0)+Math.abs(y)*.12)*(1-globeHomeland(x,y,z))-.68;}}
-        ],
-        sample(x,y,z){
+        fields(x,y,z){
 
             const warp=globeFbm(x,y,z,41,4,1.6);
 
-            const band=.5+.5*Math.sin(y*16+warp*5);
+            return{
+                band:.5+.5*Math.sin(y*16+warp*5),
+                lake:(globeFbm(x,y,z,42,4,2.0)+Math.abs(y)*.12)*(1-globeHomeland(x,y,z)),
+                spot:globeNoise(x*15+3.1,y*15-1.7,z*15+.9,43)
+            };
 
-            let col=globeMix(globeHex("#eeb15a"),globeHex("#c47c33"),band*.7+warp*.3);
-
-            const lake=(globeFbm(x,y,z,42,4,2.0)+Math.abs(y)*.12)*(1-globeHomeland(x,y,z));
-
-            if(lake>.68){
-
-                return[
-                    globeMix(globeHex("#6a4f80"),globeHex("#3a2a52"),globeSmooth(.68,.78,lake)),
-                    TERRAIN.METHANE,220,0
-                ];
-
-            }
-
-            col=globeMix(col,globeHex("#fff0c0"),globeSpots(x,y,z,43,15,.87)*.55);
-
-            return[col,TERRAIN.GROUND,25,0];
-
+        },
+        regions:[
+            {colour:"#3a2a52",terrain:TERRAIN.METHANE,gloss:220,line:"#a070ff",f:v=>v.lake-.75},
+            {colour:"#6a4f80",terrain:TERRAIN.METHANE,gloss:220,line:"#c58cff",f:v=>v.lake-.68},
+            {colour:"#fff0c0",gloss:25,f:v=>v.spot-.89},
+            {colour:"#c47c33",gloss:25,line:"#ffb050",f:v=>v.band-.62},
+            {colour:"#f7cd84",gloss:25,line:"#ffe2a0",f:v=>.18-v.band},
+            {colour:"#eeb15a",gloss:25}
+        ],
+        clouds:{
+            colour:"#ffe2b0",
+            line:"#ffd27a",
+            f(x,y,z){return globeFbm(x,y*2.2,z,44,3,1.8)-.67;}
         }
     },
 
     neptune:{
         atmosphere:"#8fb6ff",
-        lines:[
-            {colour:"#6ffcff",f(x,y,z){return globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42-.66;}},
-            {colour:"#7f9dff",f(x,y,z){return Math.sin(y*10+globeFbm(x,y,z,54,4,1.4)*6)-.9;}}
-        ],
-        sample(x,y,z){
-
-            const land=globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42;
-
-            if(land>.66){
-
-                const g=globeSmooth(.69,.78,land);
-
-                return[
-                    globeMix(globeHex("#f3e4a6"),globeHex("#5cc56c"),g),
-                    TERRAIN.GROUND,25,0
-                ];
-
-            }
+        fields(x,y,z){
 
             const warp=globeFbm(x,y,z,54,4,1.4);
 
-            const band=.5+.5*Math.sin(y*10+warp*6);
+            return{
+                land:globeFbm(x,y,z,53,4,2.2)+globeHomeland(x,y,z)*.42,
+                band:.5+.5*Math.sin(y*10+warp*6)
+            };
 
-            let col=globeMix(globeHex("#2c53d2"),globeHex("#4f7ff2"),band);
-
-            col=globeMix(col,globeHex("#cfe0ff"),globeSmooth(.975,.995,band)*.45);
-
-            col=globeMix(col,globeHex("#7fb0ff"),globeSmooth(.6,.66,land));
-
-            return[col,TERRAIN.WATER,235,0];
-
+        },
+        regions:[
+            {colour:"#5cc56c",gloss:25,line:"#7dff9c",f:v=>v.land-.72},
+            {colour:"#f3e4a6",gloss:25,f:v=>v.land-.66},
+            {colour:"#7fb0ff",terrain:TERRAIN.WATER,gloss:235,line:"#8fe0ff",f:v=>v.land-.6},
+            {colour:"#cfe0ff",terrain:TERRAIN.WATER,gloss:235,f:v=>v.band-.97},
+            {colour:"#4f7ff2",terrain:TERRAIN.WATER,gloss:235,line:"#6fb0ff",f:v=>v.band-.55},
+            {colour:"#2c53d2",terrain:TERRAIN.WATER,gloss:235}
+        ],
+        clouds:{
+            colour:"#f2f6ff",
+            line:"#d6ecff",
+            f(x,y,z){return globeFbm(x*.8,y*3.2,z*.8,56,3,1.7)-.66;}
         }
     },
 
     kepler:{
         atmosphere:"#f0a6ff",
-        lines:[
-            {colour:"#7dff9c",f(x,y,z){return globeFbm(x,y,z,69,4,2.3)*(1-globeHomeland(x,y,z))-.62;}},
-            {colour:"#ff8bf0",f(x,y,z){return globeFbm(x,y,z,68,3,3.4)-.62;}}
+        fields(x,y,z){
+
+            return{
+                n:globeFbm(x,y,z,67,5,1.8),
+                m:globeFbm(x,y,z,68,3,3.4),
+                dk:globeFbm(x,y,z,70,3,5.5),
+                spore:globeNoise(x*13+3.1,y*13-1.7,z*13+.9,71),
+                slime:globeFbm(x,y,z,69,4,2.3)*(1-globeHomeland(x,y,z))
+            };
+
+        },
+        regions:[
+            {colour:"#b8ffd0",gloss:90,emit:170,line:"#e0fff0",f:v=>v.spore-.875},
+            {colour:"#2fd36a",terrain:TERRAIN.SLIME,gloss:210,emit:150,line:"#5dff8e",f:v=>v.slime-.69},
+            {colour:"#8dffa8",terrain:TERRAIN.SLIME,gloss:210,emit:150,line:"#b8ffc8",f:v=>v.slime-.62},
+            {colour:"#d394f5",gloss:30,line:"#ff8bf0",f:v=>v.m-.63},
+            {colour:"#4e1b86",gloss:30,line:"#9a5cff",f:v=>v.dk-.66},
+            {colour:"#6a2da6",gloss:30,line:"#c070ff",f:v=>v.n-.55},
+            {colour:"#a256d6",gloss:30}
         ],
-        sample(x,y,z){
-
-            const n=globeFbm(x,y,z,67,5,1.8);
-
-            let col=globeMix(globeHex("#a256d6"),globeHex("#6a2da6"),n);
-
-            col=globeMix(col,globeHex("#d394f5"),globeSmooth(.55,.7,globeFbm(x,y,z,68,3,3.4))*.85);
-
-            col=globeMix(col,globeHex("#4e1b86"),globeSmooth(.6,.72,globeFbm(x,y,z,70,3,5.5))*.45);
-
-            const spore=globeSpots(x,y,z,71,13,.86);
-
-            if(spore>0){
-
-                return[globeMix(col,globeHex("#b8ffd0"),spore),TERRAIN.GROUND,90,Math.round(spore*170)];
-
-            }
-
-            const slime=globeFbm(x,y,z,69,4,2.3)*(1-globeHomeland(x,y,z));
-
-            if(slime>.62){
-
-                return[
-                    globeMix(globeHex("#8dffa8"),globeHex("#2fd36a"),globeSmooth(.62,.72,slime)),
-                    TERRAIN.SLIME,210,150
-                ];
-
-            }
-
-            return[col,TERRAIN.GROUND,30,0];
-
+        clouds:{
+            colour:"#ffd6f6",
+            line:"#ffb0f0",
+            f(x,y,z){return globeFbm(x,y,z,75,3,2.4)-.66;}
         }
     },
 
     aurora:{
         atmosphere:"#dcaeff",
-        lines:[
-            {colour:"#f39bff",f(x,y,z){return Math.sin(x*4+globeFbm(x,y,z,71,4,1.5)*7+z*2);}},
-            {colour:"#ffc6ef",f(x,y,z){return globeFbm(x,y,z,72,4,2.2)*(1-globeHomeland(x,y,z))-.69;}}
-        ],
-        sample(x,y,z){
+        fields(x,y,z){
 
             const warp=globeFbm(x,y,z,71,4,1.5);
 
-            const swirl=.5+.5*Math.sin(x*4+warp*7+z*2);
+            return{
+                swirl:.5+.5*Math.sin(x*4+warp*7+z*2),
+                lake:globeFbm(x,y,z,72,4,2.2)*(1-globeHomeland(x,y,z)),
+                cell:globeNoise(x*15,y*15,z*15,73),
+                spark:globeNoise(x*17+3.1,y*17-1.7,z*17+.9,74)
+            };
 
-            let col=globeMix(globeHex("#7a46c8"),globeHex("#e3a9ff"),swirl);
-
-            const lake=globeFbm(x,y,z,72,4,2.2)*(1-globeHomeland(x,y,z));
-
-            if(lake>.69){
-
-                return[globeHex("#ffc6ef"),TERRAIN.ICE,220,0];
-
-            }
-
-            const cell=globeNoise(x*15,y*15,z*15,73);
-
-            if(cell>.88){
-
-                return[
-                    globeMix(globeHex("#e9c8ff"),globeHex("#fbefff"),(cell-.88)*8),
-                    TERRAIN.CRYSTAL,240,70
-                ];
-
-            }
-
-            col=globeMix(col,globeHex("#ffffff"),globeSpots(x,y,z,74,17,.88)*.5);
-
-            return[col,TERRAIN.GROUND,45,0];
-
+        },
+        regions:[
+            {colour:"#ffc6ef",terrain:TERRAIN.ICE,gloss:220,line:"#ff9be8",f:v=>v.lake-.69},
+            {colour:"#f3e0ff",terrain:TERRAIN.CRYSTAL,gloss:240,emit:70,line:"#ffffff",f:v=>v.cell-.88},
+            {colour:"#ffffff",gloss:45,line:"#f6e6ff",f:v=>v.spark-.9},
+            {colour:"#e3a9ff",gloss:45,line:"#f39bff",f:v=>v.swirl-.68},
+            {colour:"#ad78e6",gloss:45,line:"#d08cff",f:v=>v.swirl-.34},
+            {colour:"#7a46c8",gloss:45}
+        ],
+        clouds:{
+            colour:"#fff0ff",
+            line:"#ffc6ef",
+            f(x,y,z){return globeFbm(x*1.6,y*.7,z*1.6,76,3,1.9)-.67;}
         }
     },
 
     helios:{
         atmosphere:"#ffb060",
-        lines:[
-            {colour:"#ffb02e",f(x,y,z){
-                const away=1-globeHomeland(x,y,z);
-                const river=(1-Math.abs(globeFbm(x,y,z,84,4,1.4)*2-1))*away;
-                const pool=globeFbm(x,y,z,85,4,2.4)*away;
-                return Math.max(globeSmooth(.86,.93,river),globeSmooth(.7,.76,pool))-.35;
-            }}
-        ],
-        sample(x,y,z){
-
-            const n=globeFbm(x,y,z,83,5,1.9);
-
-            let col=globeMix(globeHex("#5a2214"),globeHex("#2a0c07"),n);
+        fields(x,y,z){
 
             const away=1-globeHomeland(x,y,z);
 
-            const river=(1-Math.abs(globeFbm(x,y,z,84,4,1.4)*2-1))*away;
+            return{
+                n:globeFbm(x,y,z,83,5,1.9),
+                river:(1-Math.abs(globeFbm(x,y,z,84,4,1.4)*2-1))*away,
+                pool:globeFbm(x,y,z,85,4,2.4)*away
+            };
 
-            const pool=globeFbm(x,y,z,85,4,2.4)*away;
-
-            const lava=Math.max(globeSmooth(.86,.93,river),globeSmooth(.7,.76,pool));
-
-            if(lava>.35){
-
-                return[
-                    globeMix(globeHex("#ff4a10"),globeHex("#ffe066"),lava),
-                    TERRAIN.LAVA,120,255
-                ];
-
-            }
-
-            col=globeMix(col,globeHex("#a8361a"),lava*1.6);
-
-            return[col,TERRAIN.GROUND,20,Math.round(lava*200)];
-
+        },
+        regions:[
+            {colour:"#ffe066",terrain:TERRAIN.LAVA,gloss:120,emit:255,line:"#fff4a0",f:v=>Math.max(v.river-.95,v.pool-.78)},
+            {colour:"#ff5a14",terrain:TERRAIN.LAVA,gloss:120,emit:255,line:"#ffb02e",f:v=>Math.max(v.river-.89,v.pool-.73)},
+            {colour:"#a8361a",gloss:20,emit:110,line:"#ff6a2a",f:v=>Math.max(v.river-.84,v.pool-.68)},
+            {colour:"#2a0c07",gloss:20,line:"#c2401c",f:v=>v.n-.55},
+            {colour:"#5a2214",gloss:20}
+        ],
+        clouds:{
+            colour:"#5a3a34",
+            line:"#ff8a4a",
+            f(x,y,z){return globeFbm(x,y,z,86,3,2.6)-.69;}
         }
     },
 
     nova:{
         atmosphere:"#a8ffff",
-        lines:[
-            {colour:"#5ff3ff",f(x,y,z){return .5+.5*Math.sin(y*13+globeFbm(x,y,z,97,4,1.3)*3.5)-.33;}},
-            {colour:"#d2fffb",f(x,y,z){return .5+.5*Math.sin(y*13+globeFbm(x,y,z,97,4,1.3)*3.5)-.66;}},
-            {colour:"#ffffff",f(x,y,z){const s=this.storm;return x*s.x+y*s.y+z*s.z-.97;}}
-        ],
         ring:{inner:1.35,outer:2.05,colour:"#bffcff"},
         init(){
 
@@ -25106,77 +25162,100 @@ const PLANET_LOOKS={
             this.storm={x:Math.cos(lat)*Math.sin(lon),y:Math.sin(lat),z:Math.cos(lat)*Math.cos(lon)};
 
         },
-        sample(x,y,z){
-
-            const warp=globeFbm(x,y,z,97,4,1.3);
-
-            const band=.5+.5*Math.sin(y*13+warp*3.5);
-
-            let col=
-                band<.33
-                ?globeMix(globeHex("#0c6f7d"),globeHex("#2bbcb8"),band*3)
-                :band<.66
-                ?globeMix(globeHex("#2bbcb8"),globeHex("#9ff3ef"),(band-.33)*3)
-                :globeMix(globeHex("#9ff3ef"),globeHex("#c9f6f2"),(band-.66)*3);
+        fields(x,y,z){
 
             const s=this.storm;
 
-            const d=x*s.x+y*s.y+z*s.z;
+            return{
+                band:.5+.5*Math.sin(y*13+globeFbm(x,y,z,97,4,1.3)*3.5),
+                d:x*s.x+y*s.y+z*s.z
+            };
 
-            if(d>.955){
-
-                const k=globeSmooth(.955,.99,d);
-
-                col=globeMix(col,globeMix(globeHex("#ffffff"),globeHex("#4fd2cf"),Math.sin(k*9)*.5+.5),k);
-
-            }
-
-            return[col,TERRAIN.CLOUD,70,0];
-
-        }
+        },
+        regions:[
+            {colour:"#ffffff",terrain:TERRAIN.CLOUD,gloss:70,f:v=>v.d-.988},
+            {colour:"#c9fffd",terrain:TERRAIN.CLOUD,gloss:70,line:"#ffffff",f:v=>v.d-.972},
+            {colour:"#4fd2cf",terrain:TERRAIN.CLOUD,gloss:70,line:"#8ffff6",f:v=>v.d-.955},
+            {colour:"#d6fbf8",terrain:TERRAIN.CLOUD,gloss:70,line:"#ffffff",f:v=>v.band-.86},
+            {colour:"#9ff3ef",terrain:TERRAIN.CLOUD,gloss:70,line:"#d2fffb",f:v=>v.band-.66},
+            {colour:"#2bbcb8",terrain:TERRAIN.CLOUD,gloss:70,line:"#5ff3ff",f:v=>v.band-.33},
+            {colour:"#0c6f7d",terrain:TERRAIN.CLOUD,gloss:70}
+        ]
     },
 
     zenith:{
         atmosphere:"#e0ccff",
-        lines:[
-            {colour:"#c8a6ff",f(x,y,z){return globeCraterRimField(this.craters,x,y,z);}},
-            {colour:"#ffffff",f(x,y,z){return globeFbm(x,y,z,110,4,2.6)*(1-globeHomeland(x,y,z))-.68;}}
-        ],
         sparkleRing:true,
         init(){
 
             this.craters=globeMakeCraters(109,22,.08,.2);
 
         },
-        sample(x,y,z){
+        fields(x,y,z){
 
-            const n=globeFbm(x,y,z,109,4,1.7);
+            return{
+                n:globeFbm(x,y,z,109,4,1.7),
+                t:globeCraterT(this.craters,x,y,z),
+                glow:globeFbm(x,y,z,110,4,2.6)*(1-globeHomeland(x,y,z)),
+                speck:globeNoise(x*18+3.1,y*18-1.7,z*18+.9,111)
+            };
 
-            let col=globeMix(globeHex("#9a76db"),globeHex("#5f3ea6"),n);
-
-            col=globeScale(col,globeCraterShade(this.craters,x,y,z));
-
-            const glow=globeFbm(x,y,z,110,4,2.6)*(1-globeHomeland(x,y,z));
-
-            if(glow>.68){
-
-                return[
-                    globeMix(globeHex("#c9f6ff"),globeHex("#ffffff"),globeSmooth(.68,.76,glow)),
-                    TERRAIN.GLOW,180,220
-                ];
-
-            }
-
-            const speck=globeSpots(x,y,z,111,18,.89);
-
-            col=globeMix(col,globeHex("#efe6ff"),speck*.7);
-
-            return[col,TERRAIN.GROUND,35,Math.round(speck*120)];
-
-        }
+        },
+        regions:[
+            {colour:"#ffffff",terrain:TERRAIN.GLOW,gloss:180,emit:220,f:v=>v.glow-.74},
+            {colour:"#c9f6ff",terrain:TERRAIN.GLOW,gloss:180,emit:220,line:"#e8fdff",f:v=>v.glow-.68},
+            {colour:"#4a2f86",gloss:35,line:"#a47cff",f:v=>.7-v.t},
+            {colour:"#b597f0",gloss:35,line:"#d6c0ff",f:v=>1-v.t},
+            {colour:"#efe6ff",gloss:35,emit:120,line:"#ffffff",f:v=>v.speck-.9},
+            {colour:"#5f3ea6",gloss:35,line:"#b58cff",f:v=>v.n-.55},
+            {colour:"#9a76db",gloss:35}
+        ]
     }
 
 };
+
+/* Fill in each region's map values and its outline colour. */
+for(const look of Object.values(PLANET_LOOKS)){
+
+    for(const r of look.regions){
+
+        r.rgb=globeHex(r.colour);
+
+        r.terrain=r.terrain || TERRAIN.GROUND;
+
+        r.gloss=r.gloss || 0;
+
+        r.emit=r.emit || 0;
+
+        r.lineColour=r.line || globeNeonOf(r.colour);
+
+    }
+
+    if(look.clouds){
+
+        look.clouds.rgb=globeHex(look.clouds.colour);
+
+        look.clouds.lineColour=look.clouds.line || globeNeonOf(look.clouds.colour);
+
+    }
+
+}
+
+/* Which region a spot belongs to, given its fields. */
+function globeRegionOf(look,v){
+
+    const R=look.regions;
+
+    for(let k=0;k<R.length-1;k++){
+
+        if(R[k].f(v)>0)
+            return k;
+
+    }
+
+    return R.length-1;
+
+}
 
 const globeTextures={};
 
@@ -25227,12 +25306,17 @@ function buildGlobeTextureRows(id,maxRows,level){
 
     const N=low?0:GLOBE_POLAR_N;
 
-    /* the coarser grid the neon outlines are traced on */
-    const LW=low?144:360;
+    /* the grid the neon outlines (and the cloud shell) are traced on */
+    const LW=low?160:480;
 
-    const LH=low?72:180;
+    const LH=low?80:240;
 
-    const lineDefs=look.lines || [];
+    const regions=look.regions;
+
+    /* every region but the ground has an edge to trace */
+    const RL=regions.length-1;
+
+    const clouds=look.clouds || null;
 
     const key=id+"|"+level;
 
@@ -25244,36 +25328,38 @@ function buildGlobeTextureRows(id,maxRows,level){
             row:0,
             rgb:new Uint8ClampedArray(W*H*3),
             info:new Uint8Array(W*H*4),
-            cloud:look.cloud?new Uint8Array(W*H):null,
             prgb:N?new Uint8ClampedArray(N*N*3):null,
             pinfo:N?new Uint8Array(N*N*4):null,
-            pcloud:N && look.cloud?new Uint8Array(N*N):null,
-            fields:lineDefs.map(()=>new Float32Array(LW*LH))
+            fields:[],
+            masks:[],
+            cloudField:clouds?new Float32Array(LW*LH):null
         };
 
-    }
+        for(let k=0;k<RL;k++){
 
-    const put=(rgbA,infoA,cloudA,i,x,y,z)=>{
+            job.fields.push(new Float32Array(LW*LH));
 
-        const s=look.sample(x,y,z);
-
-        rgbA[i*3]=s[0][0];
-        rgbA[i*3+1]=s[0][1];
-        rgbA[i*3+2]=s[0][2];
-
-        infoA[i*4]=s[1];
-        infoA[i*4+1]=s[2];
-        infoA[i*4+2]=s[3];
-
-        if(cloudA){
-
-            cloudA[i]=Math.round(look.cloud(x,y,z)*255);
+            job.masks.push(k?new Float32Array(LW*LH):null);
 
         }
 
+    }
+
+    const put=(rgbA,infoA,i,x,y,z)=>{
+
+        const r=regions[globeRegionOf(look,look.fields(x,y,z))];
+
+        rgbA[i*3]=r.rgb[0];
+        rgbA[i*3+1]=r.rgb[1];
+        rgbA[i*3+2]=r.rgb[2];
+
+        infoA[i*4]=r.terrain;
+        infoA[i*4+1]=r.gloss;
+        infoA[i*4+2]=r.emit;
+
     };
 
-    const total=H+N+(lineDefs.length?LH:0);
+    const total=H+N+LH;
 
     const end=Math.min(total,job.row+(maxRows || total));
 
@@ -25291,13 +25377,13 @@ function buildGlobeTextureRows(id,maxRows,level){
 
                 const lon=(u+.5)/W*Math.PI*2-Math.PI;
 
-                put(job.rgb,job.info,job.cloud,v*W+u,cl*Math.sin(lon),sl,cl*Math.cos(lon));
+                put(job.rgb,job.info,v*W+u,cl*Math.sin(lon),sl,cl*Math.cos(lon));
 
             }
 
         }else if(r>=H+N){
 
-            /* a row of the neon outline fields */
+            /* a row of the outline grid: every region's edge value, and what covers it */
             const j=r-H-N;
 
             const lat=Math.PI/2-(j+.5)/LH*Math.PI;
@@ -25310,11 +25396,28 @@ function buildGlobeTextureRows(id,maxRows,level){
 
                 const x=cl*Math.sin(lon),z=cl*Math.cos(lon);
 
-                for(let k=0;k<lineDefs.length;k++){
+                const v=look.fields(x,sl,z);
 
-                    job.fields[k][j*LW+i]=lineDefs[k].f.call(look,x,sl,z);
+                const at=j*LW+i;
+
+                let cover=-1;
+
+                for(let k=0;k<RL;k++){
+
+                    const f=regions[k].f(v);
+
+                    job.fields[k][at]=f;
+
+                    if(k)
+                        job.masks[k][at]=cover;
+
+                    if(f>cover)
+                        cover=f;
 
                 }
+
+                if(clouds)
+                    job.cloudField[at]=clouds.f(x,sl,z);
 
             }
 
@@ -25332,7 +25435,7 @@ function buildGlobeTextureRows(id,maxRows,level){
 
                 const y=Math.sqrt(q>0?q:0);
 
-                put(job.prgb,job.pinfo,job.pcloud,j*N+i,x,y,z);
+                put(job.prgb,job.pinfo,j*N+i,x,y,z);
 
             }
 
@@ -25346,25 +25449,59 @@ function buildGlobeTextureRows(id,maxRows,level){
 
         /*
          * Soften colour boundaries by one map pixel, so a coastline or
-         * a pool's edge stays smooth when the home planet magnifies it.
+         * a pool's edge stays smooth when the home planet magnifies it
+         * (the neon outline then sits right on top of it).
          */
         globeSoften(job.rgb,W,H,true);
 
         if(N)
             globeSoften(job.prgb,N,N,false);
 
+        const lines=[];
+
+        for(let k=0;k<RL;k++){
+
+            const segs=globeExtractContours(job.fields[k],LW,LH,job.masks[k]);
+
+            if(segs.length)
+                lines.push({colour:regions[k].lineColour,segs});
+
+        }
+
+        let cloudTex=null;
+
+        if(clouds){
+
+            /* the cloud shell's cover, with a soft one-cell edge under its outline */
+            const alpha=new Uint8Array(LW*LH);
+
+            for(let i=0;i<alpha.length;i++){
+
+                const t=globeSmooth(-.004,.004,job.cloudField[i]);
+
+                alpha[i]=Math.round(t*255);
+
+            }
+
+            cloudTex={
+                W:LW,H:LH,alpha,
+                rgb:clouds.rgb,
+                lines:[{
+                    colour:clouds.lineColour,
+                    segs:globeExtractContours(job.cloudField,LW,LH,null)
+                }]
+            };
+
+        }
+
         const done={
             W,H,N,level,
-            rgb:job.rgb,info:job.info,cloud:job.cloud,
-            prgb:job.prgb,pinfo:job.pinfo,pcloud:job.pcloud,
+            rgb:job.rgb,info:job.info,
+            prgb:job.prgb,pinfo:job.pinfo,
             atm:globeHex(look.atmosphere || "#9fd8ff"),
             look,
-            lines:lineDefs.map(
-                (d,k)=>({
-                    colour:d.colour,
-                    segs:globeExtractContours(job.fields[k],LW,LH)
-                })
-            )
+            lines,
+            clouds:cloudTex
         };
 
         if(low){
@@ -25626,7 +25763,6 @@ function renderGlobe(c,planetId,cx,cy,R,viewLat,viewLon,opts){
     const time=opts.time || 0;
 
     const animated=
-        tex.cloud ||
         planetId==="helios" ||
         planetId==="kepler" ||
         planetId==="zenith";
@@ -25713,7 +25849,7 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
      * small globe, but on the huge home planet the same highlight
      * would be a blown-out patch — so there it's tight and soft.
      */
-    const specGain=tightSpec?120:235;
+    const specGain=tightSpec?55:235;
 
     /*
      * The soft haze toward the edge: a thin glow on a small globe, but
@@ -25726,7 +25862,7 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
     const bw=buf.w,bh=buf.h;
 
-    const W=tex.W,H=tex.H,rgb=tex.rgb,info=tex.info,cloud=tex.cloud,atm=tex.atm;
+    const W=tex.W,H=tex.H,rgb=tex.rgb,info=tex.info,atm=tex.atm;
 
     const cosV=Math.cos(viewLat),sinV=Math.sin(viewLat);
 
@@ -25740,17 +25876,11 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
     const pulse=.86+.14*Math.sin(time*2.4);
 
-    const cloudShift=cloud?Math.floor((time*.018/(Math.PI*2))*W)%W:0;
-
     const INV2PI=1/(Math.PI*2),INVPI=1/Math.PI;
 
-    const N=tex.N,prgb=tex.prgb,pinfo=tex.pinfo,pcloud=tex.pcloud;
+    const N=tex.N,prgb=tex.prgb,pinfo=tex.pinfo;
 
     const polarMinY=prgb?GLOBE_POLAR_MIN_Y:2,invPolarR=1/GLOBE_POLAR_R;
-
-    const cloudAngle=time*.018;
-
-    const cosCloud=Math.cos(cloudAngle),sinCloud=Math.sin(cloudAngle);
 
     const edgePx=R*scale;
 
@@ -25796,7 +25926,7 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
             const pz=nx*s0+pz0*c0;
 
-            let r,g,b,gloss,emit,ca=0;
+            let r,g,b,gloss,emit;
 
             if(py0>polarMinY){
 
@@ -25824,26 +25954,6 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
                 gloss=(pinfo[a00*4+1]*q00+pinfo[a10*4+1]*q10+pinfo[a01*4+1]*q01+pinfo[a11*4+1]*q11)*(1/255);
 
                 emit=(pinfo[a00*4+2]*q00+pinfo[a10*4+2]*q10+pinfo[a01*4+2]*q01+pinfo[a11*4+2]*q11)*(1/255);
-
-                if(pcloud){
-
-                    /* clouds drift by turning the cap around the pole */
-                    /* same direction as the world map's drift (longitude + angle) */
-                    const cx2=px*cosCloud+pz*sinCloud;
-
-                    const cz2=-px*sinCloud+pz*cosCloud;
-
-                    let ci=((cx2*invPolarR+1)*.5*N)|0;
-
-                    let cj=((cz2*invPolarR+1)*.5*N)|0;
-
-                    ci=ci<0?0:ci>=N?N-1:ci;
-
-                    cj=cj<0?0:cj>=N?N-1:cj;
-
-                    ca=pcloud[cj*N+ci]*(1/255);
-
-                }
 
             }else{
 
@@ -25893,25 +26003,6 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
 
             emit=(info[t00*4+2]*w00+info[t10*4+2]*w10+info[t01*4+2]*w01+info[t11*4+2]*w11)*(1/255);
 
-            if(cloud){
-
-                let cu=u+cloudShift;
-
-                if(cu>=W)
-                    cu-=W;
-
-                ca=cloud[v*W+cu]*(1/255);
-
-            }
-
-            }
-
-            if(ca>0){
-
-                r+=(255-r)*ca;
-                g+=(255-g)*ca;
-                b+=(255-b)*ca;
-
             }
 
             const dif=nx*Lx+ny*Ly+nz*Lz;
@@ -25955,6 +26046,349 @@ function paintGlobeBuffer(buf,tex,R,x0,y0,scale,viewLat,viewLon,time,planetId,ti
             const edge=(1-Math.sqrt(d2))*edgePx;
 
             data[idx+3]=edge<1?(edge*255)|0:255;
+
+        }
+
+    }
+
+    buf.ctx.putImageData(buf.img,0,0);
+
+}
+
+
+/*
+ * CLOUDS — a separate shell floating a little above the ground,
+ * slowly drifting. Because it's a real larger sphere seen through the
+ * same view rotation, it slides against the land as you roam and
+ * pokes out past the horizon into the sky — which is what makes it
+ * read as floating. Each cloud casts a soft shadow on the ground
+ * below it (traced along the sunlight), and over the land the clouds
+ * themselves fade right down so they never hide the buildings, ships,
+ * pets or anything you might tap; draw this before those.
+ *
+ * opts: time, scale, bounds, cacheKey, fps, lift (shell radius / R),
+ *       fade {band, centre, limb} (see globeCloudFade),
+ *       lines "direct" | "buffer", lineWidth, shadow (0..1).
+ */
+const GLOBE_CLOUD_DRIFT=.022;
+
+function drawGlobeClouds(c,planetId,cx,cy,R,viewLat,viewLon,opts){
+
+    opts=opts || {};
+
+    if(!(R>0))
+        return;
+
+    const tex=getGlobeTexture(planetId);
+
+    const cl=tex && tex.clouds;
+
+    if(!cl)
+        return;
+
+    const lift=opts.lift || 1.05;
+
+    const Rc=R*lift;
+
+    const time=opts.time || 0;
+
+    const fps=opts.fps || 8;
+
+    /* the shell turns at its own pace — stepped with the repaints so outline and fill agree */
+    const drift=Math.floor(time*fps)/fps*GLOBE_CLOUD_DRIFT;
+
+    /*
+     * Repainted only once the view has turned by about a pixel — a
+     * slowly spinning globe then repaints a few times a second, not
+     * every frame (outline and fill use the same stepped view).
+     */
+    const step=1/Math.max(8,R*lift);
+
+    viewLat=Math.round(viewLat/step)*step;
+
+    const vLon=Math.round((viewLon-drift)/step)*step;
+
+    const fadeSpec=opts.fade || {band:.5,centre:.75,limb:.9};
+
+    const fade={R,band:fadeSpec.band,centre:fadeSpec.centre,limb:fadeSpec.limb};
+
+    const scale=opts.scale || 1;
+
+    let x0=-Rc,x1=Rc,y0=-Rc,y1=Rc;
+
+    if(opts.bounds){
+
+        x0=Math.max(x0,opts.bounds.x0-cx);
+        x1=Math.min(x1,opts.bounds.x1-cx);
+        y0=Math.max(y0,opts.bounds.y0-cy);
+        y1=Math.min(y1,opts.bounds.y1-cy);
+
+    }
+
+    if(x1<=x0 || y1<=y0)
+        return;
+
+    const bw=Math.max(1,Math.ceil((x1-x0)*scale));
+
+    const bh=Math.max(1,Math.ceil((y1-y0)*scale));
+
+    const key=(opts.cacheKey || ("g|"+planetId))+"|clouds";
+
+    let buf=globeBuffers.get(key);
+
+    if(!buf || buf.w!==bw || buf.h!==bh){
+
+        const canvas=document.createElement("canvas");
+
+        canvas.width=bw;
+
+        canvas.height=bh;
+
+        const bctx=canvas.getContext("2d");
+
+        buf={canvas,ctx:bctx,img:bctx.createImageData(bw,bh),w:bw,h:bh,sig:null};
+
+        globeBuffers.set(key,buf);
+
+        if(globeBuffers.size>80){
+
+            globeBuffers.delete(globeBuffers.keys().next().value);
+
+        }
+
+    }
+
+    const sig=
+        planetId+"|"+tex.level+"|"+Math.round(R*scale*4)+"|"+
+        Math.round(viewLat*3000)+"|"+Math.round(vLon*3000)+"|"+
+        Math.round(x0*scale)+"|"+Math.round(y0*scale)+"|"+bw+"|"+bh+"|"+
+        fade.band+"|"+fade.centre;
+
+    if(buf.sig!==sig){
+
+        paintGlobeClouds(buf,cl,R,lift,x0,y0,scale,viewLat,vLon,fade,opts.shadow==null?.3:opts.shadow);
+
+        if(opts.lines==="buffer"){
+
+            drawGlobeLines(
+                buf.ctx,cl,-x0*scale,-y0*scale,Rc*scale,viewLat,vLon,
+                {
+                    coreWidth:Math.max(.7,R*scale*.022),
+                    fade:{R:R*scale,band:fade.band,centre:fade.centre,limb:fade.limb}
+                }
+            );
+
+        }
+
+        buf.sig=sig;
+
+    }
+
+    c.save();
+
+    c.imageSmoothingEnabled=true;
+
+    c.drawImage(buf.canvas,cx+x0,cy+y0,bw/scale,bh/scale);
+
+    c.restore();
+
+    if(opts.lines==="direct"){
+
+        drawGlobeLines(
+            c,cl,cx,cy,Rc,viewLat,vLon,
+            {
+                coreWidth:opts.lineWidth || 1.8,
+                bounds:opts.bounds,
+                fade
+            }
+        );
+
+    }
+
+}
+
+function paintGlobeClouds(buf,cl,R,lift,x0,y0,scale,viewLat,viewLon,fade,shadowK){
+
+    const data=buf.img.data;
+
+    const bw=buf.w,bh=buf.h;
+
+    const W=cl.W,H=cl.H,alpha=cl.alpha;
+
+    const cr=cl.rgb[0],cg=cl.rgb[1],cb=cl.rgb[2];
+
+    const cosV=Math.cos(viewLat),sinV=Math.sin(viewLat);
+
+    const c0=Math.cos(-viewLon),s0=Math.sin(-viewLon);
+
+    const Lx=GLOBE_LIGHT.L[0],Ly=GLOBE_LIGHT.L[1],Lz=GLOBE_LIGHT.L[2];
+
+    const INV2PI=1/(Math.PI*2),INVPI=1/Math.PI;
+
+    const Rc=R*lift,invRc=1/Rc,invR=1/R;
+
+    const lift2=lift*lift-1;
+
+    /* cloud cover at a direction (view coordinates, unit length) on the shell */
+    const cover=(nx,ny,nz,soft)=>{
+
+        const py=ny*cosV+nz*sinV;
+
+        const pz0=-ny*sinV+nz*cosV;
+
+        const px=nx*c0-pz0*s0;
+
+        const pz=nx*s0+pz0*c0;
+
+        const fu=((Math.atan2(px,pz)*INV2PI)+.5)*W-.5;
+
+        let fv=(.5-Math.asin(py>1?1:py<-1?-1:py)*INVPI)*H-.5;
+
+        fv=fv<0?0:fv>H-1.001?H-1.001:fv;
+
+        let u0=Math.floor(fu);
+
+        const du=fu-u0;
+
+        if(u0<0)
+            u0+=W;
+
+        const u1=u0+1>=W?0:u0+1;
+
+        const v0=fv|0,dv=fv-v0,v1=v0+1;
+
+        const a=(
+            alpha[v0*W+u0]*(1-du)*(1-dv)+
+            alpha[v0*W+u1]*du*(1-dv)+
+            alpha[v1*W+u0]*(1-du)*dv+
+            alpha[v1*W+u1]*du*dv
+        )*(1/255);
+
+        /*
+         * Clouds re-sharpened, so their edges stay crisp under the
+         * outline when magnified; shadows keep a soft penumbra.
+         */
+        if(soft)
+            return a;
+
+        if(a<=.3)
+            return 0;
+
+        if(a>=.7)
+            return 1;
+
+        const k=(a-.3)*2.5;
+
+        return k*k*(3-2*k);
+
+    };
+
+    for(let j=0;j<bh;j++){
+
+        const sy=y0+(j+.5)/scale;
+
+        let idx=j*bw*4;
+
+        for(let i=0;i<bw;i++,idx+=4){
+
+            const sx=x0+(i+.5)/scale;
+
+            const ex=sx*invRc,ey=-sy*invRc;
+
+            const e2=ex*ex+ey*ey;
+
+            if(e2>=1){
+
+                data[idx+3]=0;
+
+                continue;
+
+            }
+
+            /* the cloud on the shell at this pixel */
+            const ez=Math.sqrt(1-e2);
+
+            let a=cover(ex,ey,ez);
+
+            if(a>0){
+
+                const dist=Math.sqrt(sx*sx+sy*sy);
+
+                const t=1-dist*invR;
+
+                let f;
+
+                if(t<=0){
+
+                    f=fade.limb;
+
+                }else if(t>=fade.band){
+
+                    f=fade.centre;
+
+                }else{
+
+                    const k=t/fade.band;
+
+                    f=fade.limb+(fade.centre-fade.limb)*k*k*(3-2*k);
+
+                }
+
+                /* soften the very edge of the shell against space */
+                const rim=(1-Math.sqrt(e2))*Rc*scale;
+
+                a*=f*.62*(rim<1.5?rim/1.5:1);
+
+            }
+
+            /* its shadow on the ground below, traced back along the sunlight */
+            let sh=0;
+
+            const gx=sx*invR,gy=-sy*invR;
+
+            const g2=gx*gx+gy*gy;
+
+            if(shadowK>0 && g2<1){
+
+                const gz=Math.sqrt(1-g2);
+
+                const gl=gx*Lx+gy*Ly+gz*Lz;
+
+                const s=-gl+Math.sqrt(gl*gl+lift2);
+
+                const qx=(gx+Lx*s)/lift,qy=(gy+Ly*s)/lift,qz=(gz+Lz*s)/lift;
+
+                sh=cover(qx,qy,qz,true)*shadowK;
+
+                const edge=(1-Math.sqrt(g2))*R*scale;
+
+                if(edge<1)
+                    sh*=edge;
+
+            }
+
+            if(a<=0 && sh<=0){
+
+                data[idx+3]=0;
+
+                continue;
+
+            }
+
+            /* lit from the same sun as the planet */
+            const dif=ex*Lx+ey*Ly+ez*Lz;
+
+            const lit=.62+.45*(dif>0?dif:0);
+
+            /* cloud over shadow (shadow colour is black) */
+            const out=a+sh*(1-a);
+
+            const k=a/out*lit;
+
+            data[idx]=cr*k>255?255:cr*k;
+            data[idx+1]=cg*k>255?255:cg*k;
+            data[idx+2]=cb*k>255?255:cb*k;
+            data[idx+3]=(out*255)|0;
 
         }
 
@@ -26149,6 +26583,20 @@ function drawSmallGlobe(c,planetId,cx,cy,R,time){
     drawGlobeSheen(c,cx,cy,R);
 
     drawGlobeNeonRim(c,cx,cy,R,look.atmosphere,Math.max(.8,R*.045));
+
+    drawGlobeClouds(
+        c,planetId,cx,cy,R,.38,viewLon,
+        {
+            scale,
+            time,
+            fps:6,
+            lift:1.06,
+            lines:"buffer",
+            fade:{band:.5,centre:.45,limb:.95},
+            shadow:.3,
+            cacheKey:"small|"+planetId+"|"+rBucket
+        }
+    );
 
     if(look.ring)
         drawGlobeRing(c,cx,cy,R,look.ring,false,1);
@@ -31189,6 +31637,42 @@ function drawPlanetFocusScene(){
         getPlanetLook(planet.id).atmosphere,
         2.4
     );
+
+    /*
+     * Clouds float on their own shell above the ground: drifting
+     * shadows over the land, the clouds themselves standing out in
+     * the sky along the horizon — faded right down over the land so
+     * they never cover what you're looking at or tapping.
+     */
+    try{
+
+        drawGlobeClouds(
+            c,
+            planet.id,
+            cx,
+            cy,
+            radius,
+            roamViewLat,
+            roamViewLon,
+            {
+                scale:.28,
+                bounds:{x0:0,y0:0,x1:width,y1:height},
+                time,
+                fps:10,
+                lift:1.045,
+                lines:"direct",
+                lineWidth:1.8,
+                fade:{band:.08,centre:0,limb:.92},
+                shadow:.22,
+                cacheKey:"focus"
+            }
+        );
+
+    }catch(error){
+
+        console.error("Focus planet clouds failed:",error);
+
+    }
 
     /*
      * Rotating surface pattern — the thing that actually makes
@@ -52082,6 +52566,28 @@ function drawPlanetBackground(){
                 fps:6,
                 lines:"direct",
                 lineWidth:1.8,
+                cacheKey:"fieldbg"
+            }
+        );
+
+        drawGlobeClouds(
+            ctx,
+            planet.id,
+            x,
+            y,
+            radius,
+            .38,
+            bgTime*.035,
+            {
+                scale:Math.max(.25,Math.min(.5,90/radius)),
+                bounds:{x0:0,y0:0,x1:W,y1:H},
+                time:bgTime,
+                fps:6,
+                lift:1.05,
+                lines:"direct",
+                lineWidth:1.4,
+                fade:{band:.4,centre:.7,limb:.9},
+                shadow:.28,
                 cacheKey:"fieldbg"
             }
         );
