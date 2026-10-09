@@ -800,6 +800,17 @@ body{
     display:block;
 }
 
+/* the previous planet, fading away when the view switches to another */
+#planetFocusFade{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    pointer-events:none;
+    opacity:0;
+}
+
 .focus-logo{
     position:absolute;
     top:8%;
@@ -830,6 +841,52 @@ body{
     opacity:0 !important;
     pointer-events:none !important;
     transition:opacity .35s ease;
+}
+
+/* while roaming: a clear way back, and a reminder of how to walk */
+.roam-bar{
+    position:absolute;
+    left:50%;
+    bottom:calc(22px + env(safe-area-inset-bottom,0px));
+    transform:translateX(-50%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:8px;
+    z-index:6;
+    transition:opacity .35s ease;
+}
+
+.roam-bar.hidden{
+    opacity:0;
+    pointer-events:none;
+}
+
+.roam-hint{
+    text-align:center;
+    max-width:86vw;
+    line-height:1.5;
+    font-size:11px;
+    letter-spacing:.08em;
+    color:#bfefff;
+    text-shadow:0 0 8px rgba(110,231,255,.7);
+    opacity:.85;
+}
+
+.roam-exit-btn{
+    font:800 13px system-ui,sans-serif;
+    letter-spacing:.06em;
+    color:#eaffff;
+    background:rgba(8,14,34,.78);
+    border:1.5px solid #6ee7ff;
+    border-radius:999px;
+    padding:11px 22px;
+    box-shadow:0 0 14px rgba(110,231,255,.45),inset 0 0 10px rgba(110,231,255,.15);
+    cursor:pointer;
+}
+
+.roam-exit-btn:active{
+    transform:scale(.96);
 }
 
 /*
@@ -3400,6 +3457,500 @@ and (max-height:500px){
     font-weight:700;
 }
 
+
+/* =========================================================
+   NEON MENUS — one consistent look for every menu and card:
+   dark glass panels with glowing neon edges (the same style as
+   the ships, buildings and planets), bigger readable text, a
+   single scrollable row of tabs that stays put while you scroll,
+   and one family of buttons. Layered last so it restyles the
+   existing markup without changing what any menu does.
+========================================================= */
+
+:root{
+    --neon-cyan:#5ff3ff;
+    --neon-blue:#4f9dff;
+    --neon-pink:#ff5ec4;
+    --neon-violet:#b98cff;
+    --neon-green:#7dffb0;
+    --neon-amber:#ffd76b;
+    --panel-0:rgba(4,8,22,.96);
+    --panel-1:rgba(10,18,44,.72);
+    --panel-2:rgba(16,28,64,.66);
+    --ink:#eafcff;
+    --ink-dim:#9fb6d6;
+    --ink-faint:#6f87ad;
+    --edge:rgba(95,243,255,.5);
+    --edge-soft:rgba(95,243,255,.16);
+}
+
+/* ---- panels ---- */
+
+.card{
+    background:
+        radial-gradient(120% 60% at 50% 0%,rgba(95,243,255,.07),transparent 60%),
+        var(--panel-0);
+    border:1.5px solid var(--edge);
+    box-shadow:
+        0 0 0 1px rgba(95,243,255,.08),
+        0 0 26px rgba(95,243,255,.22),
+        inset 0 0 34px rgba(95,243,255,.05),
+        0 30px 90px rgba(0,0,0,.65);
+    color:var(--ink);
+    scrollbar-width:thin;
+    scrollbar-color:rgba(95,243,255,.35) transparent;
+}
+
+.card::-webkit-scrollbar{width:6px;}
+.card::-webkit-scrollbar-thumb{background:rgba(95,243,255,.35);border-radius:6px;}
+
+/* the planet menu: fully opaque so the home title doesn't show through */
+#planetDetail .card{
+    background:
+        radial-gradient(120% 50% at 50% 0%,rgba(95,243,255,.08),transparent 60%),
+        #050a1c;
+    padding-top:18px;
+}
+
+.customizer-title{
+    font-size:22px;
+    letter-spacing:.06em;
+    color:var(--ink);
+    text-shadow:0 0 6px rgba(95,243,255,.9),0 0 22px rgba(95,243,255,.45);
+    cursor:pointer;
+}
+
+.customizer-close,
+.star-map-close{
+    border:1.5px solid var(--edge) !important;
+    background:rgba(5,10,28,.85) !important;
+    color:var(--ink) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.3) !important;
+}
+
+/* ---- tabs: one row, swipe sideways, stays at the top while scrolling ---- */
+
+#planetDetail .planet-tabs{
+    position:sticky;
+    top:-18px;
+    z-index:3;
+    display:flex;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    scrollbar-width:none;
+    gap:6px;
+    margin:10px -20px 14px;
+    padding:10px 20px;
+    background:linear-gradient(180deg,#050a1c 75%,rgba(5,10,28,0));
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+            mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+}
+
+#planetDetail .planet-tabs::-webkit-scrollbar{display:none;}
+
+.planet-tab{
+    flex:0 0 auto;
+    white-space:nowrap;
+    min-height:36px;
+    padding:8px 14px !important;
+    border-radius:999px !important;
+    border:1.5px solid var(--edge-soft) !important;
+    background:rgba(10,18,44,.6) !important;
+    color:var(--ink-dim) !important;
+    font:700 12px system-ui,sans-serif !important;
+    letter-spacing:.02em;
+    transition:color .15s,border-color .15s,box-shadow .15s,background .15s;
+}
+
+.planet-tab.active{
+    color:#03121c !important;
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 14px rgba(95,243,255,.55) !important;
+}
+
+/* ---- sections ---- */
+
+#planetDetail .customizer-section,
+#shipCustomizer .customizer-section{
+    margin:0 0 14px;
+    padding:14px;
+    border-radius:16px;
+    background:var(--panel-1);
+    border:1px solid var(--edge-soft);
+    text-align:left;
+}
+
+.customizer-section-title{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:var(--neon-cyan);
+    font-size:11px;
+    letter-spacing:.18em;
+    text-shadow:0 0 8px rgba(95,243,255,.55);
+    margin-bottom:12px;
+}
+
+.customizer-section-title::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:linear-gradient(90deg,rgba(95,243,255,.45),transparent);
+}
+
+/* ---- text: readable sizes over the old tiny inline ones ---- */
+
+#planetDetail .card{font-size:13px;}
+
+#planetDetail [style*="font-size:8px"],
+#planetDetail [style*="font-size:9px"]{font-size:11px !important;}
+
+#planetDetail [style*="font-size:10px"]{font-size:12px !important;}
+
+#planetDetail [style*="color:#8fa7c7"],
+#planetDetail [style*="color:#5c7ba0"]{color:var(--ink-dim) !important;}
+
+.metric-note{
+    font-size:12.5px !important;
+    line-height:1.45;
+    color:var(--ink-dim);
+    padding:10px 12px;
+    border-radius:12px;
+    background:rgba(95,243,255,.04);
+    border:1px solid rgba(95,243,255,.1);
+}
+
+.selected-shape-info{
+    padding:12px 14px !important;
+    border-radius:12px !important;
+    background:var(--panel-2) !important;
+    border:1px solid var(--edge-soft) !important;
+    font-size:13px !important;
+}
+
+/* ---- buttons: one family ---- */
+
+.control-btn,
+.shape-btn,
+.neon-btn{
+    min-height:38px;
+    border-radius:12px !important;
+    border:1.5px solid rgba(95,243,255,.38) !important;
+    background:rgba(10,20,48,.82) !important;
+    color:var(--ink) !important;
+    font-weight:700;
+    box-shadow:inset 0 0 10px rgba(95,243,255,.06);
+    transition:transform .12s ease,border-color .15s,box-shadow .15s,background .15s;
+}
+
+#planetDetail .control-btn,
+#planetDetail .shape-btn{font-size:12.5px !important;}
+
+.control-btn:hover,
+.shape-btn:hover,
+.neon-btn:hover{
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.35),inset 0 0 10px rgba(95,243,255,.1);
+}
+
+.control-btn:active,
+.shape-btn:active,
+.neon-btn:active{transform:scale(.96);}
+
+.shape-btn.selected{
+    color:#03121c !important;
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.5);
+}
+
+.control-btn:disabled,
+.shape-btn:disabled,
+.neon-btn:disabled,
+.big-button:disabled{
+    opacity:.38 !important;
+    box-shadow:none !important;
+    filter:saturate(.4);
+}
+
+.big-button{
+    min-height:46px;
+    border-radius:14px;
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue));
+    color:#03121c;
+    letter-spacing:.06em;
+    box-shadow:0 0 18px rgba(95,243,255,.38),0 8px 26px rgba(40,140,255,.18);
+}
+
+.big-button.secondary-button,
+.secondary-button{
+    background:rgba(10,20,48,.85) !important;
+    color:var(--ink) !important;
+    border:1.5px solid var(--edge) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.18) !important;
+}
+
+.neon-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    width:100%;
+    padding:10px 14px;
+    margin-top:10px;
+    font:700 13px system-ui,sans-serif;
+    cursor:pointer;
+}
+
+.neon-btn.primary{
+    color:#03121c !important;
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 14px rgba(95,243,255,.45);
+}
+
+.neon-btn.roam{
+    margin:4px 0 12px;
+    border-color:rgba(255,94,196,.7) !important;
+    color:#ffe6f6 !important;
+    background:linear-gradient(135deg,rgba(255,94,196,.18),rgba(185,140,255,.14)) !important;
+    box-shadow:0 0 14px rgba(255,94,196,.3),inset 0 0 12px rgba(255,94,196,.1);
+}
+
+/* ---- cards (shop items, ships, pets) ---- */
+
+.item-shop-card,
+.pet-card{
+    border-radius:16px !important;
+    background:var(--panel-2) !important;
+    border:1.5px solid rgba(95,243,255,.3) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.1),inset 0 0 16px rgba(95,243,255,.04) !important;
+}
+
+.pet-card{
+    border-color:rgba(185,140,255,.45) !important;
+    box-shadow:0 0 14px rgba(185,140,255,.16),inset 0 0 16px rgba(185,140,255,.05) !important;
+}
+
+.item-shop-card-name{
+    font-size:13.5px !important;
+    color:var(--ink) !important;
+}
+
+.item-shop-card-meta{
+    font-size:11.5px !important;
+    color:var(--ink-dim) !important;
+    line-height:1.45 !important;
+}
+
+.item-shop-card-icon,
+.pet-card-canvas{
+    border:1px solid rgba(95,243,255,.25) !important;
+    box-shadow:inset 0 0 14px rgba(95,243,255,.08);
+}
+
+.pet-card-detail{
+    text-align:left;
+    padding:12px !important;
+}
+
+/* ---- pet roles ---- */
+
+.pet-roles-title{
+    font:800 11px system-ui,sans-serif;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--neon-violet);
+    text-shadow:0 0 8px rgba(185,140,255,.55);
+    margin:4px 0 8px;
+}
+
+.pet-roles{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:8px;
+}
+
+.pet-role-tile{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+    padding:10px 6px 9px;
+    border-radius:14px;
+    border:1.5px solid rgba(95,243,255,.3);
+    background:rgba(10,20,48,.8);
+    color:var(--ink);
+    font:700 13px system-ui,sans-serif;
+    cursor:pointer;
+    transition:transform .12s ease,box-shadow .15s,border-color .15s;
+}
+
+.pet-role-tile:active{transform:scale(.96);}
+
+.pet-role-icon{font-size:22px;line-height:1;}
+
+.pet-role-badge{
+    font-size:10px;
+    letter-spacing:.12em;
+    padding:2px 8px;
+    border-radius:999px;
+    background:rgba(95,243,255,.12);
+    color:var(--neon-cyan);
+}
+
+.pet-role-tile.state-active{
+    border-color:var(--neon-green);
+    box-shadow:0 0 12px rgba(125,255,176,.35);
+}
+
+.pet-role-tile.state-active .pet-role-badge{background:rgba(125,255,176,.16);color:var(--neon-green);}
+
+.pet-role-tile.state-needs-licence{border-color:rgba(255,215,107,.55);}
+
+.pet-role-tile.state-needs-licence .pet-role-badge{background:rgba(255,215,107,.14);color:var(--neon-amber);}
+
+.pet-role-tile.state-needs-structure{
+    border-style:dashed;
+    border-color:rgba(159,182,214,.4);
+    color:var(--ink-dim);
+}
+
+.pet-role-tile.state-needs-structure .pet-role-icon{filter:grayscale(.7);opacity:.7;}
+
+.pet-role-tile.state-needs-structure .pet-role-badge{background:rgba(159,182,214,.12);color:var(--ink-dim);}
+
+.pet-role-tile.open{
+    transform:translateY(-1px);
+    box-shadow:0 0 0 2px rgba(95,243,255,.25),0 0 16px rgba(95,243,255,.4);
+}
+
+.pet-role-panel{
+    margin-top:10px;
+    padding:12px;
+    border-radius:14px;
+    border:1px solid rgba(95,243,255,.22);
+    background:rgba(4,10,28,.7);
+}
+
+.pet-role-panel-title{
+    font:800 14px system-ui,sans-serif;
+    color:var(--ink);
+    margin-bottom:4px;
+}
+
+.pet-role-on{font-weight:600;font-size:12px;color:var(--neon-green);}
+
+.pet-role-panel-text{
+    font-size:12.5px;
+    line-height:1.45;
+    color:var(--ink-dim);
+    margin-top:4px;
+}
+
+.pet-role-panel-text b{color:var(--ink);}
+
+.pet-role-panel-note{
+    font-size:11.5px;
+    color:var(--ink-faint);
+    margin-top:6px;
+    text-align:center;
+}
+
+/* ---- inputs ---- */
+
+.card input[type="text"],
+.card input[type="number"]{
+    border:1.5px solid rgba(95,243,255,.35) !important;
+    background:rgba(4,10,28,.85) !important;
+    color:var(--ink) !important;
+    border-radius:12px !important;
+}
+
+.card input[type="text"]:focus,
+.card input[type="number"]:focus{
+    outline:none;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 12px rgba(95,243,255,.35);
+}
+
+/* ---- other menus' tab switches look like the planet menu's ---- */
+
+.pause-tab,
+.mp-tab-btn{
+    min-height:36px;
+    border-radius:999px !important;
+    border:1.5px solid var(--edge-soft) !important;
+    background:rgba(10,18,44,.6) !important;
+    color:var(--ink-dim) !important;
+    font:700 12px system-ui,sans-serif !important;
+}
+
+.pause-tab.active,
+.mp-tab-btn.active{
+    color:#03121c !important;
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 14px rgba(95,243,255,.5) !important;
+}
+
+/* ---- home screen buttons ---- */
+
+.focus-btn{
+    border:1.5px solid var(--edge) !important;
+    box-shadow:0 0 14px rgba(95,243,255,.3),inset 0 0 12px rgba(95,243,255,.08) !important;
+}
+
+.focus-btn.primary{
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    color:#03121c !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 22px rgba(95,243,255,.5) !important;
+}
+
+/* ---- land / depart panel ---- */
+
+#phaseUI{
+    background:rgba(4,8,22,.9) !important;
+    border:1.5px solid var(--edge) !important;
+    box-shadow:0 0 22px rgba(95,243,255,.25),inset 0 0 24px rgba(95,243,255,.05) !important;
+}
+
+.phase-title{
+    text-shadow:0 0 8px rgba(95,243,255,.7);
+}
+
+.phase-button{
+    min-height:42px;
+    border-radius:12px !important;
+    border:1.5px solid var(--edge) !important;
+    background:rgba(10,20,48,.85) !important;
+    color:var(--ink) !important;
+    font-weight:800 !important;
+    letter-spacing:.08em;
+}
+
+.phase-button.land{
+    background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)) !important;
+    color:#03121c !important;
+    border-color:var(--neon-cyan) !important;
+    box-shadow:0 0 16px rgba(95,243,255,.45);
+}
+
+.phase-button.depart{
+    border-color:rgba(255,94,196,.7) !important;
+    box-shadow:0 0 14px rgba(255,94,196,.3);
+}
+
+/* ---- the planet menu's idle tip ---- */
+
+.planet-menu-tip{
+    border:1px solid rgba(255,94,196,.45) !important;
+    box-shadow:0 0 14px rgba(255,94,196,.2) !important;
+}
+
 </style>
 
 </head>
@@ -3563,7 +4114,7 @@ and (max-height:500px){
         </button>
 
         <button
-            class="phase-button"
+            class="phase-button depart"
             id="departButton">
 
             DEPART
@@ -3636,6 +4187,8 @@ and (max-height:500px){
 
         <canvas id="planetFocusCanvas"></canvas>
 
+        <canvas id="planetFocusFade"></canvas>
+
         <div class="focus-logo" id="focusLogo">
             ASTEROID<br>IMPACT
         </div>
@@ -3688,6 +4241,11 @@ and (max-height:500px){
         -->
         <div class="focus-tip hidden" id="focusTip">
             <div class="focus-tip-text" id="focusTipText"></div>
+        </div>
+
+        <div class="roam-bar hidden" id="roamBar">
+            <div class="roam-hint" id="roamHint">DRAG ANYWHERE TO WALK</div>
+            <button class="roam-exit-btn" id="roamExitBtn">✕ Exit roaming</button>
         </div>
 
         <div class="focus-bottom" id="focusBottom">
@@ -4968,6 +5526,120 @@ let roamingActive=false;
 let roamingShipId=null;
 
 /*
+ * Or: a pet from the planet's own roster, sent out from the Pets
+ * menu's Roam button (any pet, pilot or not). Exiting takes you
+ * back to the Pets menu; walking it into the ship loads it into
+ * that ship's cargo hold if there's room.
+ */
+let roamingPetId=null;
+
+/* walking up the screen (away from you) — the pet shows its back */
+let roamingHeadingUp=false;
+
+/* eased walking pace for what's underfoot, so a shore isn't a wall */
+let roamingTerrainPace=1;
+
+/*
+ * Walking pace. Every species has its own (a cat darts, a koala
+ * ambles), and what's underfoot slows or speeds it: wading through
+ * water, slime or lava is hard going, ice is slippery-quick — and a
+ * penguin is in its element in water and on ice.
+ */
+const ROAM_BASE_PACE=.42;
+
+const PET_SPECIES_PACE={
+    penguin:.8,
+    cat:1.25,
+    gorilla:.95,
+    koala:.68,
+    rex:1.1
+};
+
+const ROAM_TERRAIN_PACE={};
+
+ROAM_TERRAIN_PACE[0]=1;      /* ground */
+ROAM_TERRAIN_PACE[1]=.5;     /* water */
+ROAM_TERRAIN_PACE[2]=.42;    /* lava */
+ROAM_TERRAIN_PACE[3]=1.15;   /* ice */
+ROAM_TERRAIN_PACE[4]=.48;    /* slime */
+ROAM_TERRAIN_PACE[5]=.7;     /* cloud */
+ROAM_TERRAIN_PACE[6]=.9;     /* glow */
+ROAM_TERRAIN_PACE[7]=.85;    /* crystal */
+ROAM_TERRAIN_PACE[8]=.55;    /* methane */
+
+function getRoamingPet(){
+
+    if(!roamingActive)
+        return null;
+
+    if(roamingShipId){
+
+        const ship=
+            (getShips(selectedStartPlanet) || []).find(
+                s => s.id===roamingShipId
+            );
+
+        return ship && ship.pendingPilot || null;
+
+    }
+
+    if(roamingPetId){
+
+        return getPets(selectedStartPlanet).find(
+            p => p.id===roamingPetId
+        ) || null;
+
+    }
+
+    return null;
+
+}
+
+function roamTerrainPaceFor(species,terrain){
+
+    if(species==="penguin" && (terrain===1 || terrain===3))
+        return terrain===1?1.25:1.45;
+
+    const k=ROAM_TERRAIN_PACE[terrain];
+
+    return k===undefined?1:k;
+
+}
+
+/* angular walking speed right now (radians of the planet per second) */
+function roamingPaceNow(){
+
+    const pet=getRoamingPet();
+
+    const species=pet && pet.species;
+
+    const speciesPace=PET_SPECIES_PACE[species] || 1;
+
+    return ROAM_BASE_PACE*speciesPace*roamingTerrainPace;
+
+}
+
+/* called once a frame: ease the terrain pace toward what's underfoot now */
+function updateRoamingTerrainPace(dt){
+
+    const pet=getRoamingPet();
+
+    let target=1;
+
+    try{
+
+        target=roamTerrainPaceFor(
+            pet && pet.species,
+            globeTerrainAt(selectedStartPlanet,roamingLat,roamingLon)
+        );
+
+    }catch(error){}
+
+    roamingTerrainPace+=(target-roamingTerrainPace)*Math.min(1,dt*4);
+
+}
+
+/*
  * The pet's position on the planet as TRUE SPHERICAL
  * COORDINATES — latitude (up/down, -PI/2 at the south pole to
  * +PI/2 at the north) and longitude (around the equator,
@@ -5322,7 +5994,7 @@ const ROAM_MAX_ANGULAR_SPEED=1.1;
  * joystick's raw current reading — bigger means a gentler ramp
  * up (and down), smaller means closer to instant response.
  */
-const ROAM_SPEED_EASE_SECONDS=.22;
+const ROAM_SPEED_EASE_SECONDS=.55;
 
 /*
  * Facing: how much SMOOTHED horizontal offset counts as a real
@@ -12624,17 +13296,8 @@ function mpBroadcastRoamPresence(){
 
     mpLastRoamPresenceSendTime=now;
 
-    const ship=
-        (
-            getShips(
-                selectedStartPlanet
-            ) || []
-        ).find(
-            s => s.id===roamingShipId
-        );
-
     const pet=
-        ship && ship.pendingPilot;
+        getRoamingPet();
 
     if(!pet)
         return;
@@ -12642,6 +13305,9 @@ function mpBroadcastRoamPresence(){
     mpSend({
         type:"presence",
         space:"roaming",
+        facing:Math.round(roamingFacingScale*100)/100,
+        back:roamingHeadingUp,
+        moving:roamingIsMoving,
         ownerId:
             activePlanetOwnerId ||
             mp.myId,
@@ -16401,7 +17067,10 @@ const MP_LOCAL_ONLY_ACTIONS=
         "select-gallery-style",
         "toggle-pet-card",
         "toggle-pet-perk",
-        "toggle-ship-pilot"
+        "toggle-ship-pilot",
+        "open-pet-role",
+        "goto-structure-shop",
+        "roam-pet"
     ]);
 
 /*
@@ -21165,6 +21834,152 @@ function getPetSpeciesForPlanet(planetId){
  * rather than flat cartoon flat colour, to stay in the same
  * aesthetic as everything else in the game.
  */
+/*
+ * Set while drawing a pet seen from behind (walking up the screen,
+ * away from the viewer): each species skips its face, belly and
+ * other front-only details, leaving its back — hood, ears, spikes,
+ * tail — so turning to walk away reads clearly.
+ */
+/*
+ * A few touches that only show from behind, drawn in the pet's own
+ * body space (so they bob and waddle with it): a penguin's tail
+ * feathers, a cat's tail curling up over its back and its stripes,
+ * a gorilla's silver saddle, a koala's fluffy tail.
+ */
+function petBackDetails(species,c,size){
+
+    c.save();
+
+    c.shadowBlur=0;
+
+    if(species==="penguin"){
+
+        c.fillStyle="#2c3754";
+
+        c.strokeStyle="#7fd8ff";
+
+        c.lineWidth=Math.max(1,size*.035);
+
+        c.beginPath();
+
+        c.moveTo(-size*.13,size*.46);
+
+        c.lineTo(0,size*.66);
+
+        c.lineTo(size*.13,size*.46);
+
+        c.closePath();
+
+        c.fill();
+
+        c.stroke();
+
+        c.strokeStyle="rgba(190,235,255,.45)";
+
+        c.lineWidth=Math.max(1,size*.04);
+
+        c.beginPath();
+
+        c.arc(0,-size*.05,size*.36,Math.PI*1.18,Math.PI*1.82);
+
+        c.stroke();
+
+    }else if(species==="cat"){
+
+        c.strokeStyle="rgba(214,92,150,.55)";
+
+        c.lineWidth=Math.max(1,size*.05);
+
+        c.lineCap="round";
+
+        for(let i=-1;i<=1;i++){
+
+            c.beginPath();
+
+            c.arc(0,-size*.02+i*size*.16,size*.22,Math.PI*1.2,Math.PI*1.8);
+
+            c.stroke();
+
+        }
+
+        c.strokeStyle="#ffd0e6";
+
+        c.lineWidth=Math.max(2,size*.11);
+
+        c.beginPath();
+
+        c.moveTo(0,size*.4);
+
+        c.quadraticCurveTo(size*.42,size*.32,size*.3,-size*.12);
+
+        c.stroke();
+
+        c.strokeStyle="#ff7ac8";
+
+        c.lineWidth=Math.max(1,size*.03);
+
+        c.stroke();
+
+    }else if(species==="gorilla"){
+
+        c.fillStyle="rgba(220,226,240,.38)";
+
+        c.beginPath();
+
+        c.ellipse(0,size*.24,size*.32,size*.2,0,0,Math.PI*2);
+
+        c.fill();
+
+    }else if(species==="koala"){
+
+        c.fillStyle="rgba(255,255,255,.18)";
+
+        c.beginPath();
+
+        c.ellipse(0,-size*.08,size*.3,size*.32,0,0,Math.PI*2);
+
+        c.fill();
+
+        c.fillStyle="#eef3f6";
+
+        c.strokeStyle="#9fe0d6";
+
+        c.lineWidth=Math.max(1,size*.03);
+
+        c.beginPath();
+
+        c.arc(0,size*.42,size*.1,0,Math.PI*2);
+
+        c.fill();
+
+        c.stroke();
+
+    }
+
+    c.restore();
+
+}
+
+let petDrawBack=false;
+
+function withPetBack(back,draw){
+
+    const was=petDrawBack;
+
+    petDrawBack=!!back;
+
+    try{
+
+        return draw();
+
+    }finally{
+
+        petDrawBack=was;
+
+    }
+
+}
+
 function drawPenguinPet(c,x,y,size,energy,walkSeed){
 
     const time=
@@ -21338,6 +22153,9 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
     c.fill();
 
     c.stroke();
+
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
 
     /*
      * Belly — pale panel sitting lower and slightly forward on
@@ -21623,6 +22441,11 @@ function drawPenguinPet(c,x,y,size,energy,walkSeed){
     c.globalAlpha/=sparkleAlpha;
 
     c.restore();
+    }else{
+
+        petBackDetails("penguin",c,size);
+
+    } /* end of front-only details */
 
     c.restore();
 
@@ -21886,6 +22709,9 @@ function drawCatPet(c,x,y,size,energy,walkSeed){
 
     drawCatEar(1);
 
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
+
     /*
      * Raised paw — a small pale oval near the face, gently
      * patting, echoing the reference pose.
@@ -22119,6 +22945,11 @@ function drawCatPet(c,x,y,size,energy,walkSeed){
     c.shadowBlur=0;
 
     c.restore();
+    }else{
+
+        petBackDetails("cat",c,size);
+
+    } /* end of front-only details */
 
     c.restore();
 
@@ -22252,6 +23083,9 @@ function drawKoalaPet(c,x,y,size,energy,walkSeed){
 
     c.stroke();
 
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
+
     /*
      * Cream chest patch — a soft pale oval low on the body,
      * under where the face sits.
@@ -22272,6 +23106,8 @@ function drawKoalaPet(c,x,y,size,energy,walkSeed){
     );
 
     c.fill();
+
+    } /* end of front-only chest */
 
     /*
      * Ears — the defining koala feature: big, round, fluffy,
@@ -22338,6 +23174,8 @@ function drawKoalaPet(c,x,y,size,energy,walkSeed){
     drawKoalaEar(-1);
 
     drawKoalaEar(1);
+
+    if(!petDrawBack){
 
     /*
      * Face group — same slow "attention" cycle as the other
@@ -22489,6 +23327,11 @@ function drawKoalaPet(c,x,y,size,energy,walkSeed){
     c.shadowBlur=0;
 
     c.restore();
+    }else{
+
+        petBackDetails("koala",c,size);
+
+    } /* end of front-only details */
 
     c.restore();
 
@@ -22678,6 +23521,9 @@ function drawGorillaPet(c,x,y,size,energy,walkSeed){
 
     c.stroke();
 
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
+
     /*
      * Belly patch and chest line.
      */
@@ -22725,6 +23571,7 @@ function drawGorillaPet(c,x,y,size,energy,walkSeed){
 
     c.globalAlpha/=.5;
 
+    } /* end of front-only details */
     /*
      * Head — a genuinely separate round shape overlapping the
      * top of the body.
@@ -22801,6 +23648,9 @@ function drawGorillaPet(c,x,y,size,energy,walkSeed){
 
         }
     );
+
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
 
     /*
      * Face shield — the pale rounded face sitting on the lower
@@ -23037,6 +23887,11 @@ function drawGorillaPet(c,x,y,size,energy,walkSeed){
     );
 
     c.restore();
+    }else{
+
+        petBackDetails("gorilla",c,size);
+
+    } /* end of front-only details */
 
     c.restore();
 
@@ -23335,6 +24190,9 @@ function drawRexPet(c,x,y,size,energy,walkSeed){
         }
     );
 
+    /* front-only details: hidden when the pet walks away from you, showing its back */
+    if(!petDrawBack){
+
     /*
      * Belly patch.
      */
@@ -23592,6 +24450,7 @@ function drawRexPet(c,x,y,size,energy,walkSeed){
     c.shadowBlur=0;
 
     c.restore();
+    } /* end of front-only details */
 
     c.restore();
 
@@ -24220,6 +25079,8 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatI
 
     }
 
+    if(!petDrawBack){
+
     c.shadowBlur=
         glow*.6;
 
@@ -24243,6 +25104,8 @@ function drawSpacePet(c,planetId,x,y,size,energy,walkSeed,species,isWorking,hatI
     );
 
     c.fill();
+
+    }
 
     c.restore();
 
@@ -29924,6 +30787,9 @@ function starMapLoop(){
             "starMapView"
         );
 
+    if(el && !el.classList.contains("hidden"))
+        starMapLastVisibleAt=performance.now();
+
     if(
         !el ||
         el.classList.contains("hidden")
@@ -30650,6 +31516,8 @@ function updateRoamingMovement(){
 
     roamingLastFrameTime=now;
 
+    updateRoamingTerrainPace(dt);
+
     if(!roamingDragging){
 
         roamingIsMoving=false;
@@ -30797,11 +31665,27 @@ function updateRoamingMovement(){
      * stay bounded over a long session; sin/cos are periodic, so
      * this has no visual effect at all.
      */
+    /*
+     * Screen-right is east only while the pet is on the near side of
+     * the pole: once it has walked over a pole the world is seen
+     * upside-down, east points LEFT on screen, and a plain
+     * "longitude + right" turned every swipe backwards. The sign of
+     * cos(latitude) is exactly which way east projects on screen.
+     * Dividing by it also keeps the walking pace the same at any
+     * latitude (a degree of longitude is shorter near a pole) —
+     * capped so the pole itself doesn't spin the world round.
+     */
+    const cosLat=Math.cos(roamingLat);
+
+    const eastScreen=
+        (cosLat<0?-1:1)/
+        Math.max(.3,Math.abs(cosLat));
+
     roamingLon=
         wrapAngle(
             roamingLon+
-            dirX*roamingSpeedFraction*
-            ROAM_MAX_ANGULAR_SPEED*dt
+            dirX*eastScreen*roamingSpeedFraction*
+            roamingPaceNow()*dt
         );
 
     /*
@@ -30816,8 +31700,14 @@ function updateRoamingMovement(){
         wrapAngle(
             roamingLat-
             dirY*roamingSpeedFraction*
-            ROAM_MAX_ANGULAR_SPEED*dt
+            roamingPaceNow()*dt
         );
+
+    /* which way it's heading on screen — up shows the pet's back */
+    roamingHeadingUp=dirY<-.35;
+
+    if(dirY>.35)
+        roamingHeadingUp=false;
 
 }
 
@@ -30832,6 +31722,12 @@ function startRoaming(ship){
     roamingActive=true;
 
     roamingShipId=ship.id;
+
+    roamingPetId=null;
+
+    roamingHeadingUp=false;
+
+    roamingTerrainPace=1;
 
     /*
      * The ship sits at SHIP_LAT, just shy of the true pole. The
@@ -30888,6 +31784,170 @@ function startRoaming(ship){
  * already says it is, since that was never touched. Nothing to
  * restore, only the visual/input state to clear.
  */
+/*
+ * Roam with any pet on this planet, straight from the Pets menu —
+ * it steps out beside the ship. Exit (the button, or walking it into
+ * the ship) brings you back.
+ */
+function startRoamingPet(petId){
+
+    const planetId=selectedStartPlanet;
+
+    const pet=getPets(planetId).find(p => p.id===petId);
+
+    if(!pet || roamingActive)
+        return;
+
+    if(planetDetailId)
+        closePlanetDetail();
+
+    roamingActive=true;
+
+    roamingShipId=null;
+
+    roamingPetId=petId;
+
+    roamingReturnToPets={planetId,ownerId:activePlanetOwnerId || null,petId};
+
+    roamingHeadingUp=false;
+
+    roamingTerrainPace=1;
+
+    /* a little to the side of the ship rather than right under it */
+    roamingLat=SHIP_LAT-ROAM_START_LAT_OFFSET*1.6;
+
+    roamingLon=.12;
+
+    roamingDragging=false;
+
+    roamingIsMoving=false;
+
+    roamingLastFrameTime=0;
+
+    roamingFacingTarget=1;
+
+    roamingFacingScale=1;
+
+    roamingSmoothedJoyDx=0;
+
+    roamingSpeedFraction=0;
+
+    roamingStartTime=performance.now();
+
+    roamingLookupMissSince=0;
+
+    roamPetTransitionKind="enter";
+
+    roamPetTransitionStart=performance.now();
+
+    toggleRoamingUI(true);
+
+    renderPlanetFocus();
+
+}
+
+/* where to go back to when a roam started from the Pets menu ends */
+let roamingReturnToPets=null;
+
+function isPetOutRoaming(petId){
+
+    if(roamingActive && roamingPetId===petId)
+        return true;
+
+    if(typeof mpGetRemoteRoamersHere==="function"){
+
+        try{
+
+            return mpGetRemoteRoamersHere().some(
+                r => r.presence && r.presence.petId===petId
+            );
+
+        }catch(error){}
+
+    }
+
+    return false;
+
+}
+
+/* the Exit button: walk back the way you came */
+function exitRoamingByButton(){
+
+    if(!roamingActive)
+        return;
+
+    sound("click");
+
+    startExitingRoaming();
+
+}
+
+/*
+ * A roster pet walked into the ship: aboard as cargo if the hold has
+ * room (the roam ends, the pet now rides along) — otherwise nothing
+ * happens and it simply can't walk in.
+ */
+function tryBoardRoamingPet(){
+
+    if(!roamingPetId || roamPetTransitionKind==="exit")
+        return;
+
+    const planetId=selectedStartPlanet;
+
+    const ship=
+        planetId==="earth"
+        ?resolveEarthLaunchChoice()
+        :resolveLaunchShip(getShips(planetId) || []);
+
+    if(!ship)
+        return;
+
+    const capacity=ship.cargoPetCapacity || 1;
+
+    const aboard=Array.isArray(ship.cargoPets)?ship.cargoPets.length:0;
+
+    if(aboard>=capacity)
+        return;
+
+    const petId=roamingPetId;
+
+    /* board after the step-inside animation, keeping the planet the same */
+    roamingBoardOnExit={planetId,shipId:ship.id,petId};
+
+    roamingReturnToPets=null;
+
+    startExitingRoaming();
+
+}
+
+let roamingBoardOnExit=null;
+
+/* run a planet-menu action without the menu open (routed for multiplayer like a tap) */
+function runPlanetActionOn(planetId,attrs){
+
+    const target=mpSyntheticTarget(attrs);
+
+    const previous=planetDetailId;
+
+    planetDetailId=planetId;
+
+    try{
+
+        const handled=
+            typeof mpInterceptPlanetAction==="function" &&
+            mpInterceptPlanetAction(target);
+
+        if(!handled)
+            executePlanetDetailAction(target);
+
+    }finally{
+
+        planetDetailId=previous;
+
+    }
+
+}
+
 function endRoaming(){
 
     if(!roamingActive)
@@ -30896,6 +31956,80 @@ function endRoaming(){
     roamingActive=false;
 
     roamingShipId=null;
+
+    const boarding=roamingBoardOnExit;
+
+    const backToPets=roamingReturnToPets;
+
+    roamingBoardOnExit=null;
+
+    roamingReturnToPets=null;
+
+    roamingPetId=null;
+
+    if(boarding && boarding.planetId===selectedStartPlanet){
+
+        try{
+
+            const pet=getPets(boarding.planetId).find(p => p.id===boarding.petId);
+
+            /*
+             * Through the same action the Ships menu uses, so on a
+             * room-mate's planet it reaches their device (or their
+             * offline copy) exactly like any other change.
+             */
+            runPlanetActionOn(
+                boarding.planetId,
+                {
+                    "data-action":"load-pet",
+                    "data-ship":boarding.shipId,
+                    "data-pet":boarding.petId
+                }
+            );
+
+            if(pet){
+
+                showShipToast(
+                    (SPECIES_DISPLAY_NAMES[pet.species] || "Your pet")+
+                    " hopped aboard — riding in the cargo hold."
+                );
+
+            }
+
+        }catch(error){
+
+            console.error("Boarding failed:",error);
+
+        }
+
+    }
+
+    /*
+     * Back to the Pets menu it was sent out from — on the SAME planet
+     * (and the same room-mate's world, if it was theirs).
+     */
+    if(
+        backToPets &&
+        backToPets.planetId===selectedStartPlanet &&
+        (backToPets.ownerId || null)===(activePlanetOwnerId || null)
+    ){
+
+        setTimeout(
+            ()=>{
+
+                if(!roamingActive && !running)
+                    openPlanetDetail(backToPets.planetId,"pets");
+
+                expandedPetCardId=backToPets.petId;
+
+                if(planetDetailId)
+                    renderPlanetDetail(planetDetailId);
+
+            },
+            60
+        );
+
+    }
 
     roamingDragging=false;
 
@@ -30959,6 +32093,27 @@ function startExitingRoaming(){
  */
 function toggleRoamingUI(hidden){
 
+    const bar=document.getElementById("roamBar");
+
+    if(bar){
+
+        bar.classList.toggle("hidden",!hidden);
+
+        const hint=document.getElementById("roamHint");
+
+        if(hint){
+
+            const pet=getRoamingPet();
+
+            hint.textContent=
+                roamingPetId
+                ?"DRAG TO WALK · WALK INTO THE SHIP TO BOARD"
+                :"DRAG TO WALK · WALK BACK TO THE SHIP TO RETURN";
+
+        }
+
+    }
+
     [
         "focusLogo",
         "focusLeaderboardBtn",
@@ -30984,6 +32139,60 @@ function toggleRoamingUI(hidden){
 
 }
 
+/*
+ * Switching which planet the home screen shows without the star map
+ * zoom (a room-mate's planet, back to your own, a menu shortcut):
+ * the old view fades out over the new one instead of cutting.
+ */
+let focusShownKey=null;
+
+let starMapLastVisibleAt=0;
+
+function focusCrossfadeIfSwitched(canvas){
+
+    const key=selectedStartPlanet+"|"+(activePlanetOwnerId || "");
+
+    if(focusShownKey===null || key===focusShownKey){
+
+        focusShownKey=key;
+
+        return;
+
+    }
+
+    focusShownKey=key;
+
+    /* arriving from the star map: the zoom already carried us there */
+    if(performance.now()-starMapLastVisibleAt<250)
+        return;
+
+    const fade=document.getElementById("planetFocusFade");
+
+    if(!fade || !canvas.width || !canvas.height)
+        return;
+
+    fade.width=canvas.width;
+
+    fade.height=canvas.height;
+
+    const fc=fade.getContext("2d");
+
+    fc.clearRect(0,0,fade.width,fade.height);
+
+    fc.drawImage(canvas,0,0);
+
+    fade.style.transition="none";
+
+    fade.style.opacity="1";
+
+    void fade.getBoundingClientRect();
+
+    fade.style.transition="opacity .45s ease";
+
+    fade.style.opacity="0";
+
+}
+
 function drawPlanetFocusScene(){
 
     const canvas=
@@ -30993,6 +32202,9 @@ function drawPlanetFocusScene(){
 
     if(!canvas)
         return;
+
+    if(canvas.clientWidth)
+        focusCrossfadeIfSwitched(canvas);
 
     const width=
         canvas.clientWidth;
@@ -31610,7 +32822,15 @@ function drawPlanetFocusScene(){
              * startExitingRoaming guards against restarting an
              * already-playing exit itself.
              */
-            startExitingRoaming();
+            if(roamingShipId){
+
+                startExitingRoaming();
+
+            }else{
+
+                tryBoardRoamingPet();
+
+            }
 
         }
 
@@ -31722,6 +32942,60 @@ function drawPlanetFocusScene(){
 
     }
 
+    /*
+     * Launching (and landing), the globe turns between the home view
+     * and exactly the view the land/depart screen shows it from, so
+     * the hand-over between the two screens is seamless. It starts
+     * turning once the buildings standing on it have faded away.
+     */
+    const flightTurnRaw=
+        Math.max(0,Math.min(1,(flight-.45)/.55));
+
+    const flightTurn=
+        flightTurnRaw*flightTurnRaw*(3-2*flightTurnRaw);
+
+    const spaceLon=
+        performance.now()/1000*.035;
+
+    const globeViewLat=
+        roamViewLat+(.38-roamViewLat)*flightTurn;
+
+    const globeViewLon=
+        roamViewLon+
+        Math.atan2(
+            Math.sin(spaceLon-roamViewLon),
+            Math.cos(spaceLon-roamViewLon)
+        )*flightTurn;
+
+    if(flightTurn>0){
+
+        /* the same soft halo the land/depart screen gives the planet */
+        const atmo=getPlanetAtmosphere(planet.id);
+
+        const halo=c.createRadialGradient(cx,cy,radius*.72,cx,cy,radius*1.45);
+
+        halo.addColorStop(0,atmo+"00");
+
+        halo.addColorStop(.72,atmo+"22");
+
+        halo.addColorStop(1,atmo+"00");
+
+        c.save();
+
+        c.globalAlpha*=flightTurn;
+
+        c.fillStyle=halo;
+
+        c.beginPath();
+
+        c.arc(cx,cy,radius*1.45,0,Math.PI*2);
+
+        c.fill();
+
+        c.restore();
+
+    }
+
     try{
 
         renderGlobe(
@@ -31730,8 +33004,8 @@ function drawPlanetFocusScene(){
             cx,
             cy,
             radius,
-            roamViewLat,
-            roamViewLon,
+            globeViewLat,
+            globeViewLon,
             {
                 scale:roamingActive?.55:.75,
                 bounds:{x0:0,y0:0,x1:width,y1:height},
@@ -31795,17 +33069,21 @@ function drawPlanetFocusScene(){
             cx,
             cy,
             radius,
-            roamViewLat,
-            roamViewLon,
+            globeViewLat,
+            globeViewLon,
             {
                 scale:.28,
                 bounds:{x0:0,y0:0,x1:width,y1:height},
                 time,
                 fps:10,
-                lift:1.045,
+                lift:1.045+.005*flightTurn,
                 lines:"direct",
                 lineWidth:1.8,
-                fade:{band:.08,centre:0,limb:.92},
+                fade:{
+                    band:.08+(.4-.08)*flightTurn,
+                    centre:.7*flightTurn,
+                    limb:.92-.02*flightTurn
+                },
                 shadow:.22,
                 cacheKey:"focus"
             }
@@ -32578,6 +33856,10 @@ function drawPlanetFocusScene(){
 
         const drawFocusPet=(pet,petIndex,mode)=>{
 
+                    /* out walking (here, or by a room-mate): drawn as the roaming pet instead */
+                    if(isPetOutRoaming(pet.id))
+                        return;
+
                     let seed=0;
 
                     for(
@@ -33305,18 +34587,8 @@ chosenFocusShip
 
       try{
 
-        const ship=
-            (
-                getShips(
-                    selectedStartPlanet
-                ) || []
-            ).find(
-                s => s.id===roamingShipId
-            );
-
         const pet=
-            ship &&
-            ship.pendingPilot;
+            getRoamingPet();
 
         /*
          * Where the pet's own position projects to on screen —
@@ -33368,11 +34640,13 @@ chosenFocusShip
              * joystick is held out, and the calm idle cycle the
              * instant it's released.
              */
+            /* quicker pets (and easier ground) step faster */
             const roamAnimSeed=
                 roamingIsMoving
                 ?roamSeed+
                  performance.now()/1000*
-                 ROAM_WALK_ANIM_BOOST
+                 ROAM_WALK_ANIM_BOOST*
+                 Math.max(.6,Math.min(1.4,roamingPaceNow()/ROAM_BASE_PACE))
                 :roamSeed;
 
             const roamPetSize=
@@ -33484,18 +34758,21 @@ chosenFocusShip
                     roamPetProj.y,
                     roamPetSize,
                     performance.now()/1000,
-                    ()=>drawSpacePet(
-                        c,
-                        selectedStartPlanet,
-                        roamPetProj.x,
-                        roamPetProj.y,
-                        roamPetSize,
-                        pet.energy,
-                        roamAnimSeed,
-                        pet.species,
-                        false,
-                        "builder",
-                        roamingFacingScale
+                    ()=>withPetBack(
+                        roamingHeadingUp,
+                        ()=>drawSpacePet(
+                            c,
+                            selectedStartPlanet,
+                            roamPetProj.x,
+                            roamPetProj.y,
+                            roamPetSize,
+                            pet.energy,
+                            roamAnimSeed,
+                            pet.species,
+                            false,
+                            "builder",
+                            roamingFacingScale
+                        )
                     )
                 );
 
@@ -33728,23 +35005,33 @@ chosenFocusShip
                                 width*.075
                             ),
                             performance.now()/1000,
-                            ()=>drawSpacePet(
-                                c,
-                                selectedStartPlanet,
-                                remoteProj.x,
-                                remoteProj.y,
-                                Math.max(
-                                    26,
-                                    width*.075
-                                ),
-                                100,
-                                remoteSeed,
-                                roamer.presence.
-                                petSpecies ||
-                                "procedural",
-                                false,
-                                "builder",
-                                1
+                            ()=>withPetBack(
+                                !!roamer.presence.back,
+                                ()=>drawSpacePet(
+                                    c,
+                                    selectedStartPlanet,
+                                    remoteProj.x,
+                                    remoteProj.y,
+                                    Math.max(
+                                        26,
+                                        width*.075
+                                    ),
+                                    100,
+                                    remoteSeed+
+                                    (
+                                        roamer.presence.moving
+                                        ?performance.now()/1000*ROAM_WALK_ANIM_BOOST
+                                        :0
+                                    ),
+                                    roamer.presence.
+                                    petSpecies ||
+                                    "procedural",
+                                    false,
+                                    "builder",
+                                    Number.isFinite(roamer.presence.facing)
+                                    ?roamer.presence.facing
+                                    :1
+                                )
                             )
                         );
 
@@ -34068,16 +35355,22 @@ function planetFocusLoop(){
      * away with the motion instead of popping out of existence
      * the instant the transition ends.
      */
+    /* ...and fades in gently on arriving from the star map */
+    const sinceMap=
+        Math.max(0,Math.min(1,(performance.now()-starMapLastVisibleAt)/400));
+
     const chromeAlpha=
         Math.max(
             0,
             1-easeZoom(flightProgress)*1.8
-        );
+        )*sinceMap;
 
     [
         "focusLogo",
         "focusPlanetName",
-        "focusBottom"
+        "focusBottom",
+        "focusLeaderboardBtn",
+        "rankCircleWrap"
     ].forEach(
         elementId=>{
 
@@ -37023,6 +38316,24 @@ document
 
 function selectStartPlanet(id){
 
+    selectStartPlanetInner(id);
+
+    /*
+     * Paint the newly chosen world straight away — otherwise the
+     * home canvas still shows the previous planet until its next
+     * frame, a visible flash when arriving from the star map.
+     */
+    try{
+
+        if(typeof drawPlanetFocusScene==="function")
+            drawPlanetFocusScene();
+
+    }catch(error){}
+
+}
+
+function selectStartPlanetInner(id){
+
     const planet=
         getPlanet(id);
 
@@ -37211,6 +38522,9 @@ let expandedPetPerkId=null;
 
 /* Which pet card is expanded to show full details. */
 let expandedPetCardId=null;
+
+/* which role's panel is open on each pet's expanded card (default: its own role) */
+const expandedPetRoleByPet={};
 
 /*
  * Which ship's card is expanded into the full "ship interior"
@@ -40309,50 +41623,141 @@ function renderPlanetDetail(id){
                  * and a label squeezed into a third of a row. The
                  * collapsed card just states the current role.
                  */
-                const roleRowHtml=
-                    '<div style="display:flex;gap:6px;align-items:center;'+
-                    'flex-wrap:wrap;margin-bottom:8px;">'+
-                    '<span style="font-size:10px;color:#8fa7c7;">Role:</span>'+
+                /*
+                 * ROLES — every role is listed, even before it's
+                 * unlocked. Tapping one opens it: its own menu if the
+                 * pet already has it, otherwise exactly what unlocking
+                 * it takes (a licence to buy, or a structure to build
+                 * — with a button straight to it in the Shop).
+                 */
+                const openRole=
+                    expandedPetRoleByPet[pet.id] || role;
 
-                    '<button class="shape-btn'+
-                    (
-                        role==="builder"
-                        ?' selected'
-                        :''
-                    )+
-                    '" style="width:auto;padding:6px 10px;font-size:10px;" '+
-                    'data-action="set-pet-role" data-pet="'+pet.id+'" '+
-                    'data-role="builder">🔧 Builder</button>'+
-                    (
-                        hasPilotTraining
-                        ?'<button class="shape-btn'+
+                const petRoles=[
+                    {
+                        id:"builder",
+                        icon:"🔧",
+                        name:"Builder",
+                        blurb:"Works on this planet — needed to build structures and ships here."
+                    },
+                    {
+                        id:"pilot",
+                        icon:"✈",
+                        name:"Pilot",
+                        blurb:"Flies spare ships out on missions from Pilot Training, bringing back materials.",
+                        structure:"pilot-training"
+                    }
+                ];
+
+                const roleState=r=>{
+
+                    if(role===r.id)
+                        return "active";
+
+                    if(r.structure && !hasStructure(id,r.structure))
+                        return "needs-structure";
+
+                    if(r.id==="pilot" && !pet.pilotLicensed)
+                        return "needs-licence";
+
+                    return "available";
+
+                };
+
+                const roleBadge={
+                    "active":"ACTIVE",
+                    "available":"READY",
+                    "needs-licence":PET_PILOT_ASSIGNMENT_FEE+" "+COIN_ICON_HTML,
+                    "needs-structure":"🔒"
+                };
+
+                let roleRowHtml=
+                    '<div class="pet-roles-title">Roles</div>'+
+                    '<div class="pet-roles">';
+
+                petRoles.forEach(
+                    r=>{
+
+                        const st=roleState(r);
+
+                        roleRowHtml+=
+                            '<button class="pet-role-tile state-'+st+
+                            (openRole===r.id?' open':'')+'" '+
+                            'data-action="open-pet-role" data-pet="'+pet.id+'" '+
+                            'data-role="'+r.id+'">'+
+                            '<span class="pet-role-icon">'+r.icon+'</span>'+
+                            '<span class="pet-role-name">'+r.name+'</span>'+
+                            '<span class="pet-role-badge">'+roleBadge[st]+'</span>'+
+                            '</button>';
+
+                    }
+                );
+
+                roleRowHtml+='</div>';
+
+                const shownRole=
+                    petRoles.find(r => r.id===openRole) || petRoles[0];
+
+                const shownState=roleState(shownRole);
+
+                roleRowHtml+=
+                    '<div class="pet-role-panel">'+
+                    '<div class="pet-role-panel-title">'+
+                    shownRole.icon+' '+shownRole.name+
+                    (shownState==="active"?' <span class="pet-role-on">· this pet\'s role</span>':'')+
+                    '</div>'+
+                    '<div class="pet-role-panel-text">'+shownRole.blurb+'</div>';
+
+                if(shownState==="needs-structure"){
+
+                    const st=STRUCTURES[shownRole.structure];
+
+                    roleRowHtml+=
+                        '<div class="pet-role-panel-text">Unlock it by building '+
+                        st.icon+' <b>'+st.name+'</b> on this planet.</div>'+
+                        '<button class="neon-btn" data-action="goto-structure-shop" '+
+                        'data-structure="'+shownRole.structure+'">'+
+                        '🛒 Build '+st.name+' in the Shop</button>';
+
+                }else if(shownState==="needs-licence"){
+
+                    const canPay=
+                        getTotalAvailableCoins(id)>=PET_PILOT_ASSIGNMENT_FEE;
+
+                    roleRowHtml+=
+                        '<button class="neon-btn primary" data-action="set-pet-role" '+
+                        'data-pet="'+pet.id+'" data-role="pilot" '+
+                        (canPay?'':'disabled')+'>'+
+                        'Buy pilot licence · '+PET_PILOT_ASSIGNMENT_FEE+' '+COIN_ICON_HTML+
+                        '</button>'+
                         (
-                            role==="pilot"
-                            ?' selected'
-                            :''
-                        )+
-                        '" style="width:auto;padding:6px 10px;font-size:10px;" '+
-                        'data-action="set-pet-role" data-pet="'+pet.id+'" '+
-                        'data-role="pilot" '+
-                        (
-                            role!=="pilot" &&
-                            !pet.pilotLicensed &&
-                            getTotalAvailableCoins(id)<
-                            PET_PILOT_ASSIGNMENT_FEE
-                            ?'disabled'
-                            :''
-                        )+
-                        '>✈ Pilot'+
-                        (
-                            role!=="pilot" &&
-                            !pet.pilotLicensed
-                            ?' ('+PET_PILOT_ASSIGNMENT_FEE+' '+COIN_ICON_HTML+')'
-                            :''
-                        )+
-                        '</button>'
-                        :''
-                    )+
-                    '</div>';
+                            canPay
+                            ?'<div class="pet-role-panel-note">One-off — it keeps the licence if you switch roles later.</div>'
+                            :'<div class="pet-role-panel-note">Not enough coins here yet.</div>'
+                        );
+
+                }else if(shownState==="available"){
+
+                    roleRowHtml+=
+                        '<button class="neon-btn primary" data-action="set-pet-role" '+
+                        'data-pet="'+pet.id+'" data-role="'+shownRole.id+'">'+
+                        'Make '+shownRole.name+'</button>';
+
+                }else if(shownRole.id==="builder"){
+
+                    roleRowHtml+=
+                        '<button class="neon-btn" data-action="planet-tab" data-tab="shop">'+
+                        '🛒 Open the Shop to build</button>';
+
+                }
+
+                roleRowHtml+='</div>';
+
+                /* walk the planet with this pet */
+                roleRowHtml=
+                    '<button class="neon-btn roam" data-action="roam-pet" '+
+                    'data-pet="'+pet.id+'">🐾 Roam the planet</button>'+
+                    roleRowHtml;
 
                 /*
                  * A card, like the shop's: the pet itself big on top
@@ -40500,7 +41905,8 @@ function renderPlanetDetail(id){
                 if(
                     petExpanded &&
                     role==="pilot" &&
-                    hasPilotTraining
+                    hasPilotTraining &&
+                    (expandedPetRoleByPet[pet.id] || role)==="pilot"
                 ){
 
                     const rangeLevel=
@@ -42142,6 +43548,25 @@ function renderPlanetDetail(id){
     container.innerHTML=
         html;
 
+    /* keep the open tab in view in the sideways-scrolling tab row */
+    {
+
+        const tabRow=container.querySelector(".planet-tabs");
+
+        const activeTab=tabRow && tabRow.querySelector(".planet-tab.active");
+
+        if(tabRow && activeTab){
+
+            const want=
+                activeTab.offsetLeft-
+                (tabRow.clientWidth-activeTab.offsetWidth)/2;
+
+            tabRow.scrollLeft=Math.max(0,want);
+
+        }
+
+    }
+
     paintStructureDesignPreviews();
 
     paintPetPreviews(
@@ -43052,6 +44477,62 @@ function executePlanetDetailAction(target){
                 petId,
                 role
             );
+
+        }else if(
+            action==="open-pet-role"
+        ){
+
+            expandedPetRoleByPet[
+                target.getAttribute("data-pet")
+            ]=target.getAttribute("data-role");
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+        }else if(
+            action==="goto-structure-shop"
+        ){
+
+            const structureId=
+                target.getAttribute("data-structure");
+
+            planetDetailTab="shop";
+
+            expandedShopRowId="structure-"+structureId;
+
+            renderPlanetDetail(
+                planetDetailId
+            );
+
+            /* bring the structure into view */
+            requestAnimationFrame(
+                ()=>{
+
+                    const row=
+                        document.querySelector(
+                            '#planetDetailContent [data-row="structure-'+structureId+'"]'
+                        );
+
+                    if(row && row.scrollIntoView)
+                        row.scrollIntoView({block:"center",behavior:"smooth"});
+
+                }
+            );
+
+        }else if(
+            action==="roam-pet"
+        ){
+
+            const roamPetId=
+                target.getAttribute("data-pet");
+
+            const roamPlanetId=planetDetailId;
+
+            if(roamPlanetId!==selectedStartPlanet)
+                selectStartPlanet(roamPlanetId);
+
+            startRoamingPet(roamPetId);
 
         }else if(
             action==="toggle-pet-card"
@@ -73927,6 +75408,30 @@ document.addEventListener(
 
     }
 );
+
+(function(){
+
+    const btn=document.getElementById("roamExitBtn");
+
+    if(!btn)
+        return;
+
+    ["pointerdown","touchstart","mousedown"].forEach(
+        t=>btn.addEventListener(t,e=>e.stopPropagation(),{passive:true})
+    );
+
+    btn.addEventListener(
+        "click",
+        e=>{
+
+            e.stopPropagation();
+
+            exitRoamingByButton();
+
+        }
+    );
+
+})();
 
 warmGlobeTextures();
 
