@@ -905,6 +905,13 @@ function handleMessage(player,message){
             petSpecies:
                 message.petSpecies || null,
             petId:message.petId || null,
+            /* roaming pet pose: facing (-1 left .. 1 right), seen from behind, walking */
+            facing:
+                Number.isFinite(message.facing)
+                ?Math.max(-1,Math.min(1,message.facing))
+                :null,
+            back:message.back===true,
+            moving:message.moving===true,
             lives:
                 Number.isFinite(message.lives)
                 ?message.lives
