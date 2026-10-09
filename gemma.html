@@ -4,332 +4,160 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#090b10">
-<title>Local Gemma 4 - V0.1.2</title>
+<title>Local Gemma 4 — V0.1.3</title>
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif}
-*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f4f5f7;min-height:100vh}
-.app{max-width:900px;margin:auto;min-height:100vh;display:flex;flex-direction:column}
-header{padding:18px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222630}
-h1{font-size:20px;margin:0}.sub{font-size:12px;color:#9da3af;margin-top:3px}
-.badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.badge{font-size:11px;padding:5px 8px;border-radius:999px;background:#171a22;color:#aeb5c2}.ok{color:#75e3a2}.bad{color:#ff8f8f}
-main{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}
-#messages{flex:1;min-height:48vh;display:flex;flex-direction:column;gap:12px}
-.msg{max-width:88%;padding:12px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
-.user{align-self:flex-end;background:#245eea}.assistant{align-self:flex-start;background:#171a22;border:1px solid #252a35}
-.meta{font-size:10px;color:#8e96a4;margin-top:6px}
-.composer{position:sticky;bottom:0;background:linear-gradient(transparent,#090b10 18%);padding-top:18px}
-.tools{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
-button,.fileLabel{border:1px solid #303644;background:#151821;color:#fff;border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer}
-button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#245eea;border-color:#245eea}
-input[type=file]{display:none}
-#preview{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.chip{font-size:12px;background:#171a22;border:1px solid #2b303b;border-radius:10px;padding:7px 9px}
-textarea{width:100%;resize:none;min-height:54px;max-height:180px;border:1px solid #303644;border-radius:16px;background:#11141b;color:#fff;padding:13px;font:inherit;outline:none}
-.row{display:flex;gap:8px;margin-top:8px}.row textarea{flex:1}
-.panel{display:none;background:#11141a;border:1px solid #292e39;border-radius:15px;padding:13px;font-size:13px;color:#c8cdd6}
-.panel.show{display:block}.statusline{margin:5px 0}.bar{height:6px;background:#242934;border-radius:8px;overflow:hidden;margin:8px 0}.bar>i{display:block;height:100%;width:0;background:#4d8dff}
-.small{font-size:11px;color:#9098a6}
+*{box-sizing:border-box}body{margin:0;background:#090b10;color:#f4f5f7}.app{max-width:920px;margin:auto;min-height:100vh;display:flex;flex-direction:column}
+header{padding:18px 16px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid #222630}h1{font-size:20px;margin:0}.sub,.small{font-size:11px;color:#9098a6;margin-top:4px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.badge{font-size:10px;padding:5px 8px;border-radius:999px;background:#171a22}.ok{color:#75e3a2}.bad{color:#ff8f8f}
+main{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}#messages{flex:1;min-height:35vh;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:92%;padding:12px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.user{align-self:flex-end;background:#245eea}.assistant{align-self:flex-start;background:#171a22;border:1px solid #252a35}
+.composer{position:sticky;bottom:0;background:linear-gradient(transparent,#090b10 18%);padding-top:18px}.tools{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+button,.fileLabel{border:1px solid #303644;background:#151821;color:#fff;border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#245eea;border-color:#245eea}
+input[type=file]{display:none}textarea{width:100%;min-height:54px;max-height:180px;resize:vertical;border:1px solid #303644;border-radius:16px;background:#11141b;color:#fff;padding:13px;font:inherit}.row{display:flex;gap:8px}.row textarea{flex:1}
+.panel{background:#11141a;border:1px solid #292e39;border-radius:15px;padding:14px}.check{display:flex;gap:8px;padding:5px 0;font-size:12px}.check b{margin-left:auto;font-weight:500}.pass{color:#75e3a2}.fail{color:#ff8f8f}.warn{color:#ffd27a}
+.bar{height:7px;background:#242934;border-radius:8px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;width:0;background:#4d8dff}.log{background:#080a0f;border:1px solid #242934;border-radius:10px;padding:10px;max-height:200px;overflow:auto;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}a{color:#8fb7ff}.chip{font-size:12px;background:#171a22;border:1px solid #2b303b;border-radius:10px;padding:7px 9px}
 </style>
 </head>
-<body>
-<div class="app">
-<header>
-  <div><h1>Local Gemma 4</h1><div class="sub">E2B | browser-local | WebGPU</div></div>
-  <div class="badges">
-    <span id="deviceBadge" class="badge">DEVICE...</span>
-    <span id="gpuBadge" class="badge">WebGPU...</span>
-    <span id="netBadge" class="badge">NETWORK...</span>
-  </div>
-</header>
+<body><div class="app">
+<header><div><h1>Local Gemma 4</h1><div class="sub">E2B · local-file loader · V0.1.3</div></div><div class="badges"><span id="deviceBadge" class="badge">DEVICE…</span><span id="gpuBadge" class="badge">WebGPU…</span><span id="netBadge" class="badge">NETWORK…</span></div></header>
 <main>
-  <div id="messages">
-    <div class="msg assistant">Hi! This is your local Gemma 4 E2B workspace.
+<div id="messages"><div class="msg assistant">Welcome to Local Gemma 4 V0.1.3.
 
-V0.1.2 uses the direct Gemma 4 Transformers.js API. WebGPU is used for local inference on supported browsers.
-
-Load the model from Setup to begin.<div class="meta">Gemma 4 E2B | Transformers.js 4.3.0 | WebGPU</div></div>
-  </div>
-
-  <div id="setup" class="panel">
-    <b>Gemma 4 E2B</b>
-    <div class="statusline">First load needs internet. The browser downloads the required model files and caches them locally.</div>
-    <div class="statusline">Model: <b>onnx-community/gemma-4-E2B-it-ONNX</b></div>
-    <div class="statusline">Runtime: <b>Transformers.js 4.3.0 + WebGPU + q4f16</b></div>
-    <div class="bar"><i id="progress"></i></div>
-    <div id="loadText" class="small">Model is not loaded.</div>
-    <div style="margin-top:10px"><button id="loadBtn" class="primary">Load Gemma 4 E2B</button></div>
-    <div class="small" style="margin-top:10px">After successful caching, the same browser/origin may be usable offline. iOS storage policies can affect persistence.</div>
-  </div>
-
-  <div class="composer">
-    <div id="preview"></div>
-    <div class="tools">
-      <label class="fileLabel">Image<input id="imageInput" type="file" accept="image/*"></label>
-      <label class="fileLabel">Audio<input id="audioInput" type="file" accept="audio/*"></label>
-      <label class="fileLabel">Video<input id="videoInput" type="file" accept="video/*"></label>
-      <button id="micBtn">Record</button>
-      <button id="setupBtn">Setup</button>
-      <button id="clearBtn">Clear</button>
-    </div>
-    <div class="row">
-      <textarea id="prompt" placeholder="Ask Gemma anything..." enterkeyhint="send"></textarea>
-      <button id="sendBtn" class="primary">Send</button>
-    </div>
-    <div id="runtimeStatus" class="small" style="margin-top:7px">Starting device check...</div>
-  </div>
-</main>
-</div>
-
+This version adds local file selection, a model-file checklist, and persistent diagnostics. The model runtime itself still needs to support loading every selected ONNX file from browser-managed file handles; this build tests that path and reports errors instead of silently closing the panel.</div></div>
+<section class="panel" id="setup">
+<b>1. Download Gemma 4 E2B</b>
+<div class="small">Open the official repository. For this app, use the Q4F16 ONNX variant and download the required config, tokenizer/processor, decoder, and embedding files. Do not download every quantisation variant.</div>
+<div class="tools"><a href="https://huggingface.co/onnx-community/gemma-4-E2B-it-ONNX/tree/main" target="_blank" rel="noopener">Open Gemma 4 E2B model repository ↗</a></div>
+<div class="small">Important: this repository contains many large files. Check each file's size and available iPhone storage before downloading.</div>
+<hr style="border:0;border-top:1px solid #292e39;margin:14px 0">
+<b>2. Select your local files</b>
+<div class="small">On desktop, try the folder picker. On iPhone, use Select Files and select the downloaded files from Files. Some iOS browser versions do not offer folder selection.</div>
+<div class="tools"><button id="folderBtn" class="primary">Select Model Folder</button><label class="fileLabel">Select Model Files<input id="modelFiles" type="file" multiple></label><button id="clearModelBtn">Clear Selection</button></div>
+<div id="folderStatus" class="small">No model files selected.</div>
+<hr style="border:0;border-top:1px solid #292e39;margin:14px 0">
+<b>3. File checklist</b>
+<div class="check">config.json <b id="c1">WAITING</b></div>
+<div class="check">tokenizer / processor config <b id="c2">WAITING</b></div>
+<div class="check">decoder_model_merged_q4f16.onnx <b id="c3">WAITING</b></div>
+<div class="check">decoder external data file <b id="c4">WAITING</b></div>
+<div class="check">embed_tokens_q4f16.onnx <b id="c5">WAITING</b></div>
+<div class="check">embedding external data file <b id="c6">WAITING</b></div>
+<div class="check">Vision/audio files (multimodal) <b id="c7">OPTIONAL</b></div>
+<hr style="border:0;border-top:1px solid #292e39;margin:14px 0">
+<b>4. Load model</b><div class="bar"><i id="progress"></i></div><div id="loadText" class="small">Select files to validate them.</div>
+<div class="tools"><button id="loadBtn" class="primary" disabled>Load Local Gemma 4</button><button id="copyLogBtn">Copy Diagnostics</button></div>
+<details style="margin-top:10px"><summary>Diagnostic log</summary><div id="log" class="log" style="margin-top:8px">App started.</div></details>
+</section>
+<div class="composer"><div id="preview"></div><div class="tools">
+<label class="fileLabel">Image<input id="imageInput" type="file" accept="image/*"></label><label class="fileLabel">Audio<input id="audioInput" type="file" accept="audio/*"></label><label class="fileLabel">Video<input id="videoInput" type="file" accept="video/*"></label>
+<button id="micBtn">Record audio</button><button id="setupBtn">Model setup</button><button id="clearChatBtn">Clear chat</button></div>
+<div class="row"><textarea id="prompt" placeholder="Ask Gemma anything…" enterkeyhint="send"></textarea><button id="sendBtn" class="primary">Send</button></div><div id="runtimeStatus" class="small">Checking device…</div></div>
+</main></div>
 <script type="module">
-const MODEL = "onnx-community/gemma-4-E2B-it-ONNX";
-const HF = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
-
-let runtime = null;
-let attachments = [];
-let recorder = null;
-let chunks = [];
-
-const $ = id => document.getElementById(id);
-
-function setBadge(id,text,state=""){
-  const el=$(id);
-  el.textContent=text;
-  el.classList.remove("ok","bad");
-  if(state) el.classList.add(state);
+const MODEL="onnx-community/gemma-4-E2B-it-ONNX";
+const TRANSFORMERS="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
+const $=id=>document.getElementById(id);
+let selectedFiles=new Map(),runtime=null,attachments=[],recorder=null,chunks=[];
+function log(message){const line=`[${new Date().toLocaleTimeString()}] ${message}`;$("log").textContent+="\n"+line;$("log").scrollTop=$("log").scrollHeight;console.log("[Gemma V0.1.3]",message)}
+function badge(id,text,cls=""){const e=$(id);e.textContent=text;e.className="badge "+cls}
+function checkDevice(){badge("deviceBadge",/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)?"MOBILE":"DESKTOP","ok");badge("gpuBadge",navigator.gpu?"WebGPU OK":"WebGPU unavailable",navigator.gpu?"ok":"bad");badge("netBadge",navigator.onLine?"ONLINE":"OFFLINE",navigator.onLine?"ok":"bad");$("runtimeStatus").textContent=navigator.gpu?"WebGPU detected.":"This browser does not expose WebGPU; model inference cannot start."}
+checkDevice();addEventListener("online",checkDevice);addEventListener("offline",checkDevice);
+function addMessage(role,text){const e=document.createElement("div");e.className="msg "+role;e.textContent=text;$("messages").appendChild(e);e.scrollIntoView({behavior:"smooth",block:"end"});return e}
+function hasFile(name){return [...selectedFiles.keys()].some(p=>p===name||p.endsWith("/"+name))}
+function mark(id,found,optional=false){$(id).textContent=found?"FOUND":optional?"OPTIONAL":"MISSING";$(id).className=found?"pass":optional?"warn":"fail"}
+function validate(){
+ const config=hasFile("config.json");
+ const tokenizer=["tokenizer.json","tokenizer_config.json","processor_config.json","preprocessor_config.json"].some(hasFile);
+ const decoder=hasFile("decoder_model_merged_q4f16.onnx");
+ const decoderData=hasFile("decoder_model_merged_q4f16.onnx_data");
+ const embed=hasFile("embed_tokens_q4f16.onnx");
+ const embedData=hasFile("embed_tokens_q4f16.onnx_data");
+ const multimodal=[...selectedFiles.keys()].some(n=>/vision|audio|image|processor/i.test(n));
+ mark("c1",config);mark("c2",tokenizer);mark("c3",decoder);mark("c4",decoderData);mark("c5",embed);mark("c6",embedData);mark("c7",multimodal,true);
+ const ok=config&&tokenizer&&decoder&&decoderData&&embed&&embedData;
+ $("loadBtn").disabled=!ok;
+ $("folderStatus").textContent=`${selectedFiles.size} file(s) selected · ${( [...selectedFiles.values()].reduce((n,f)=>n+f.size,0)/1024/1024).toFixed(1)} MiB`;
+ return ok;
 }
+async function selectFolder(){
+ if(!("showDirectoryPicker" in window))throw new Error("This browser does not support folder selection. Use Select Model Files instead.");
+ const root=await window.showDirectoryPicker();selectedFiles=new Map();
+ async function walk(dir,prefix=""){for await(const [name,h] of dir.entries()){if(h.kind==="file")selectedFiles.set(prefix+name,await h.getFile());else await walk(h,prefix+name+"/")}}
+ await walk(root);validate();log(`Folder selected: ${root.name}; ${selectedFiles.size} files`);
+}
+$("folderBtn").onclick=async()=>{try{await selectFolder()}catch(e){log("Folder picker: "+e.message);$("loadText").textContent=e.message}};
+$("modelFiles").onchange=e=>{selectedFiles=new Map([...e.target.files].map(f=>[f.webkitRelativePath||f.name,f]));validate();log(`Selected ${selectedFiles.size} file(s)`);$("loadText").textContent="Files selected. Review the checklist before loading."};
+$("clearModelBtn").onclick=()=>{selectedFiles.clear();runtime=null;$("modelFiles").value="";for(let id of ["c1","c2","c3","c4","c5","c6","c7"]){$(id).textContent="WAITING";$(id).className=""}$("loadBtn").disabled=true;$("progress").style.width="0%";$("folderStatus").textContent="No model files selected.";$("loadText").textContent="Select files to validate them.";log("Selection cleared")};
 
-function addMessage(role,text,meta=""){
-  const d=document.createElement("div");
-  d.className="msg "+role;
-  d.textContent=text;
-  if(meta){
-    const m=document.createElement("div");
-    m.className="meta";
-    m.textContent=meta;
-    d.appendChild(m);
+/*
+ * Browser file-picker selections are File objects, not a mounted filesystem.
+ * This adapter maps requested model filenames to selected Files. It deliberately
+ * fails closed for unknown model files rather than silently downloading weights.
+ * Transformers.js may still request repository paths/configs not covered by this
+ * simple filename bridge; those failures are logged for the next compatibility pass.
+ */
+function makeLocalFetch(originalFetch){
+ const byName=new Map();
+ for(const [path,file] of selectedFiles){byName.set(path,file);byName.set(path.split("/").pop(),file)}
+ return async(input,options)=>{
+  const raw=typeof input==="string"?input:input?.url||String(input);
+  let path=raw;
+  try{path=decodeURIComponent(new URL(raw,location.href).pathname)}catch{}
+  const name=path.split("/").filter(Boolean).pop();
+  const file=byName.get(path.replace(/^\/+/,""))||byName.get(name);
+  if(file)return new Response(file,{status:200,headers:{"Content-Type":file.type||"application/octet-stream"}});
+  if(/huggingface\.co|hf\.co|cdn\.jsdelivr\.net/.test(raw) && !/transformers/.test(raw)){
+    throw new Error("Local-only mode: blocked remote model-file request for "+name);
   }
-  $("messages").appendChild(d);
-  d.scrollIntoView({behavior:"smooth",block:"end"});
-  return d;
+  return originalFetch(input,options);
+ };
 }
-
-function checkDevice(){
-  const ua=navigator.userAgent||"";
-  const mobile=/iPhone|iPad|iPod|Android/i.test(ua);
-  setBadge("deviceBadge",mobile?"MOBILE":"DESKTOP","ok");
-  if(navigator.gpu) setBadge("gpuBadge","WebGPU OK","ok");
-  else setBadge("gpuBadge","WebGPU NO","bad");
-  setBadge("netBadge",navigator.onLine?"ONLINE":"OFFLINE",navigator.onLine?"ok":"bad");
-  $("runtimeStatus").textContent=navigator.gpu
-    ?"Device check complete. WebGPU is available."
-    :"Device check complete. WebGPU is not available in this browser.";
-}
-checkDevice();
-addEventListener("online",checkDevice);
-addEventListener("offline",checkDevice);
-
-$("setupBtn").onclick=()=>$("setup").classList.toggle("show");
-$("clearBtn").onclick=()=>{attachments=[];renderAttachments();$("prompt").value=""};
-
-function addFile(file,type){
-  if(!file)return;
-  attachments.push({file,type});
-  renderAttachments();
-}
-function renderAttachments(){
-  $("preview").innerHTML="";
-  attachments.forEach((a,i)=>{
-    const c=document.createElement("span");
-    c.className="chip";
-    c.textContent=a.type.toUpperCase()+": "+a.file.name+" Ã";
-    c.onclick=()=>{attachments.splice(i,1);renderAttachments()};
-    $("preview").appendChild(c);
-  });
-}
-$("imageInput").onchange=e=>addFile(e.target.files[0],"image");
-$("audioInput").onchange=e=>addFile(e.target.files[0],"audio");
-$("videoInput").onchange=e=>addFile(e.target.files[0],"video");
-
-$("micBtn").onclick=async()=>{
-  if(recorder?.state==="recording"){
-    recorder.stop();
-    $("micBtn").textContent="Record";
-    return;
-  }
-  if(!navigator.mediaDevices?.getUserMedia){
-    alert("Microphone recording is not available here.");
-    return;
-  }
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    chunks=[];
-    recorder=new MediaRecorder(stream);
-    recorder.ondataavailable=e=>chunks.push(e.data);
-    recorder.onstop=()=>{
-      stream.getTracks().forEach(t=>t.stop());
-      const blob=new Blob(chunks,{type:"audio/webm"});
-      addFile(new File([blob],"microphone.webm",{type:"audio/webm"}),"audio");
-    };
-    recorder.start();
-    $("micBtn").textContent="Stop";
-  }catch(e){alert("Microphone permission failed: "+e.message)}
-};
-
-async function loadModel(){
-  if(!navigator.gpu) throw new Error("WebGPU is not available in this browser. Try current Safari on a supported iPhone/iPad or current desktop Chrome/Edge.");
-
-  $("loadBtn").disabled=true;
-  $("loadText").textContent="Loading Transformers.js 4.3.0...";
-
-  const {
-    AutoProcessor,
-    Gemma4ForConditionalGeneration,
-    TextStreamer,
-    load_image,
-    read_audio
-  }=await import(HF);
-
-  $("loadText").textContent="Loading Gemma 4 processor...";
-  const processor=await AutoProcessor.from_pretrained(MODEL);
-
-  $("loadText").textContent="Loading Gemma 4 E2B with WebGPU...";
-
-  const model=await Gemma4ForConditionalGeneration.from_pretrained(MODEL,{
-    dtype:"q4f16",
-    device:"webgpu",
-    progress_callback:info=>{
-      if(info&&typeof info.progress==="number"){
-        const p=Math.max(0,Math.min(100,info.progress));
-        $("progress").style.width=p+"%";
-        $("loadText").textContent="Loading model... "+Math.round(p)+"%";
-      }else if(info?.status){
-        $("loadText").textContent=String(info.status);
-      }
-    }
-  });
-
-  runtime={processor,model,TextStreamer,load_image,read_audio};
-
-  $("progress").style.width="100%";
-  $("loadText").textContent="Gemma 4 E2B loaded successfully.";
-  $("runtimeStatus").textContent="LOCAL MODEL READY | WebGPU";
-  $("loadBtn").textContent="Model loaded";
-  $("loadBtn").disabled=false;
-}
-
 $("loadBtn").onclick=async()=>{
-  try{
-    await loadModel();
-    addMessage("assistant","Gemma 4 E2B is loaded. Try a text question.");
-  }catch(e){
-    console.error(e);
-    $("loadText").textContent="Load failed: "+(e?.message||e);
-    $("runtimeStatus").textContent="Model load failed. See the Setup panel for the error.";
-    $("loadBtn").disabled=false;
-  }
+ if(!validate()){ $("loadText").textContent="Required files are missing.";return}
+ if(!navigator.gpu){$("loadText").textContent="WebGPU is unavailable in this browser.";return}
+ $("loadBtn").disabled=true;$("loadText").textContent="Importing Transformers.js runtime…";$("progress").style.width="3%";log("Starting local load attempt.");
+ let originalFetch=globalThis.fetch;
+ try{
+  const lib=await import(TRANSFORMERS);
+  if(lib.env){lib.env.allowRemoteModels=false;lib.env.allowLocalModels=true;lib.env.fetch=makeLocalFetch(originalFetch)}
+  $("loadText").textContent="Loading processor and tokenizer from selected files…";$("progress").style.width="8%";
+  const processor=await lib.AutoProcessor.from_pretrained(MODEL,{local_files_only:true,progress_callback:i=>{if(i?.progress!=null){$("progress").style.width=Math.max(8,Math.min(95,i.progress))+"%";$("loadText").textContent="Loading processor… "+Math.round(i.progress)+"%"}}});
+  $("loadText").textContent="Loading Q4F16 weights from selected files…";$("progress").style.width="15%";
+  const model=await lib.Gemma4ForConditionalGeneration.from_pretrained(MODEL,{dtype:"q4f16",device:"webgpu",local_files_only:true,progress_callback:i=>{if(i?.progress!=null){$("progress").style.width=Math.max(15,Math.min(98,i.progress))+"%";$("loadText").textContent="Loading model… "+Math.round(i.progress)+"%"}if(i?.status)log(i.status)}});
+  runtime={lib,processor,model};$("progress").style.width="100%";$("loadText").textContent="Model loaded."; $("runtimeStatus").textContent="LOCAL MODEL READY";addMessage("assistant","Gemma 4 model loaded. You can now try a prompt.");log("Model load reported success.");
+ }catch(e){console.error(e);log("LOAD ERROR: "+(e?.stack||e));$("loadText").textContent="LOAD FAILED — see diagnostic log. "+(e?.message||e);$("runtimeStatus").textContent="Load failed. Setup panel remains open."}
+ finally{$("loadBtn").disabled=!validate()}
 };
-
-async function send(){
-  const text=$("prompt").value.trim();
-  if(!text&&!attachments.length){
-    addMessage("assistant","Type a message or attach an image, audio file, or video.");
-    return;
+$("copyLogBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("log").textContent);$("loadText").textContent="Diagnostic log copied."}catch{$("loadText").textContent="Clipboard access unavailable; long-press the diagnostic log to copy."}};
+$("setupBtn").onclick=()=>$("setup").hidden=!$("setup").hidden;
+$("clearChatBtn").onclick=()=>{$("messages").innerHTML="";attachments=[];renderAttachments()};
+function addAttachment(file,type){if(!file)return;attachments.push({file,type});renderAttachments()}
+function renderAttachments(){$("preview").innerHTML="";attachments.forEach((a,i)=>{const e=document.createElement("span");e.className="chip";e.textContent=`${a.type.toUpperCase()}: ${a.file.name} ×`;e.onclick=()=>{attachments.splice(i,1);renderAttachments()};$("preview").appendChild(e)})}
+$("imageInput").onchange=e=>addAttachment(e.target.files[0],"image");$("audioInput").onchange=e=>addAttachment(e.target.files[0],"audio");$("videoInput").onchange=e=>addAttachment(e.target.files[0],"video");
+$("micBtn").onclick=async()=>{if(recorder?.state==="recording"){recorder.stop();$("micBtn").textContent="Record audio";return}try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>chunks.push(e.data);recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());addAttachment(new File(chunks,"microphone.webm",{type:"audio/webm"}),"audio")};recorder.start();$("micBtn").textContent="Stop recording"}catch(e){$("runtimeStatus").textContent="Microphone error: "+e.message}};
+$("sendBtn").onclick=async()=>{
+ const prompt=$("prompt").value.trim();if(!prompt&&!attachments.length)return;
+ if(!runtime){$("setup").hidden=false;addMessage("assistant","Load the local model first. If loading fails, copy the diagnostic log.");return}
+ const current=attachments.splice(0);renderAttachments();$("prompt").value="";
+ addMessage("user",prompt+(current.length?"\nAttachments: "+current.map(x=>x.file.name).join(", "):""));
+ const response=addMessage("assistant","Preparing input…");
+ try{
+  const content=[],images=[],audios=[];
+  for(const a of current){
+   if(a.type==="video")throw new Error("Video frame extraction is not implemented in V0.1.3.");
+   const url=URL.createObjectURL(a.file);
+   if(a.type==="image"){content.push({type:"image"});images.push(await runtime.lib.load_image(url))}
+   else if(a.type==="audio"){content.push({type:"audio"});audios.push(await runtime.lib.read_audio(url))}
   }
-  if(!runtime){
-    $("setup").classList.add("show");
-    addMessage("assistant","Gemma 4 is not loaded yet. Open Setup and press Load Gemma 4 E2B.");
-    return;
-  }
-
-  const current=attachments.splice(0);
-  renderAttachments();
-  $("prompt").value="";
-  addMessage("user",(text||"Analyse the attached media.")+
-    (current.length?"\n\nAttachments: "+current.map(x=>x.file.name).join(", "):""));
-
-  const reply=addMessage("assistant","Thinking...");
-  const {processor,model,TextStreamer,load_image,read_audio}=runtime;
-
-  const content=[];
-  const images=[];
-  const audios=[];
-  const urls=[];
-
-  try{
-    for(const a of current){
-      if(a.type==="video"){
-        throw new Error("Video input is detected, but video-frame preprocessing is the next step. Text, image and audio use Gemma 4's native browser path in V0.1.2.");
-      }
-
-      const url=URL.createObjectURL(a.file);
-      urls.push(url);
-
-      if(a.type==="image"){
-        content.push({type:"image"});
-        images.push(await load_image(url));
-      }else if(a.type==="audio"){
-        content.push({type:"audio"});
-        audios.push(await read_audio(url));
-      }
-    }
-
-    content.push({
-      type:"text",
-      text:text||"Describe and analyse the attached media."
-    });
-
-    const messages=[{role:"user",content}];
-
-    const prompt=processor.apply_chat_template(messages,{
-      enable_thinking:false,
-      add_generation_prompt:true
-    });
-
-    const inputs=await processor(
-      prompt,
-      images.length?images[0]:null,
-      audios.length?audios[0]:null,
-      {add_special_tokens:false}
-    );
-
-    let streamed="";
-    const streamer=new TextStreamer(processor.tokenizer,{
-      skip_prompt:true,
-      skip_special_tokens:true,
-      callback_function:chunk=>{
-        streamed+=chunk;
-        reply.textContent=streamed||"Thinking...";
-        reply.scrollIntoView({behavior:"smooth",block:"end"});
-      }
-    });
-
-    const outputs=await model.generate({
-      ...inputs,
-      max_new_tokens:512,
-      do_sample:false,
-      streamer
-    });
-
-    const decoded=processor.batch_decode(
-      outputs.slice(null,[inputs.input_ids.dims.at(-1),null]),
-      {skip_special_tokens:true}
-    );
-
-    reply.textContent=decoded[0]||streamed||"Gemma returned an empty response.";
-  }catch(e){
-    console.error(e);
-    reply.textContent="Inference error: "+(e?.message||e);
-  }finally{
-    urls.forEach(u=>URL.revokeObjectURL(u));
-  }
-}
-
-$("sendBtn").onclick=send;
-$("prompt").addEventListener("keydown",e=>{
-  if(e.key==="Enter"&&!e.shiftKey){
-    e.preventDefault();
-    send();
-  }
-});
-</script>
-</body>
-</html>
+  content.push({type:"text",text:prompt||"Describe the attached media."});
+  const templ=runtime.processor.apply_chat_template([{role:"user",content}],{enable_thinking:false,add_generation_prompt:true});
+  const inputs=await runtime.processor(templ,images[0]||null,audios[0]||null,{add_special_tokens:false});
+  let output="";
+  const streamer=new runtime.lib.TextStreamer(runtime.processor.tokenizer,{skip_prompt:true,skip_special_tokens:true,callback_function:t=>{output+=t;response.textContent=output}});
+  const generated=await runtime.model.generate({...inputs,max_new_tokens:512,do_sample:false,streamer});
+  response.textContent=runtime.processor.batch_decode(generated.slice(null,[inputs.input_ids.dims.at(-1),null]),{skip_special_tokens:true})[0]||output||"No response returned.";
+ }catch(e){response.textContent="Inference error: "+e.message;log("INFERENCE ERROR: "+(e.stack||e))}
+};
+$("prompt").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("sendBtn").click()}});
+</script></body></html>
