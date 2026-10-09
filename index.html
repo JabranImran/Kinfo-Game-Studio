@@ -5670,6 +5670,31 @@ const PLANET_APPROACH_POINTS=25000;
 const PLANET_DEPART_POINTS=25000;
 
 /*
+ * The first worlds (rank 1: Earth — yours or a room-mate's — Mars and
+ * Titan) are quicker hops: 10,000 points a leg instead of 25,000.
+ */
+const RANK1_LEG_POINTS=10000;
+
+function fieldLegPointsFor(planetId,full){
+
+    const planet=getPlanet(planetId);
+
+    return planet && (planet.unlockRank || 0)===0
+        ?RANK1_LEG_POINTS
+        :full;
+
+}
+
+/* points this field takes to finish: approaching a world, or leaving the one you're at */
+function currentFieldLegPoints(){
+
+    return planetPhasePending
+        ?fieldLegPointsFor(destinationPlanetId || currentPlanetId,PLANET_APPROACH_POINTS)
+        :fieldLegPointsFor(currentPlanetId,PLANET_DEPART_POINTS);
+
+}
+
+/*
  * A queued transition out of the current field (either "arrive
  * at the planet" or "head to interplanetary space"). Rather
  * than cutting the field the instant a score threshold is
@@ -26501,7 +26526,13 @@ function drawGlobeRing(c,cx,cy,R,ring,behind,alpha){
  * Small globe as used on the star map, in menus and in the sky:
  * slowly spinning, seen a little from above, with its moons or ring.
  */
-function drawSmallGlobe(c,planetId,cx,cy,R,time){
+/*
+ * homeBlend (0..1): how far this globe has turned toward the home
+ * planet's own view — used while the star map zooms into or out of
+ * the planet you're standing on, so the close-up matches the home
+ * screen exactly instead of a different-looking giant globe.
+ */
+function drawSmallGlobe(c,planetId,cx,cy,R,time,homeBlend){
 
     const look=getPlanetLook(planetId);
 
@@ -26514,9 +26545,20 @@ function drawSmallGlobe(c,planetId,cx,cy,R,time){
 
     const lonStep=.025;
 
-    const viewLon=Math.round(spin/lonStep)*lonStep;
+    const hb=Math.max(0,Math.min(1,homeBlend || 0));
 
-    const scale=Math.min(2,Math.max(.6,110/R));
+    let viewLon=Math.round(spin/lonStep)*lonStep;
+
+    /* turn the shortest way round to the home view (longitude 0) */
+    const toHome=Math.atan2(Math.sin(-viewLon),Math.cos(-viewLon));
+
+    viewLon+=toHome*hb;
+
+    const viewLat=.38+(PLANET_VIEW_LAT-.38)*hb;
+
+    const big=R>140;
+
+    const scale=big?Math.max(.4,Math.min(.75,300/R)):Math.min(2,Math.max(.6,110/R));
 
     const rBucket=Math.max(4,Math.round(R));
 
@@ -26569,32 +26611,70 @@ function drawSmallGlobe(c,planetId,cx,cy,R,time){
     if(look.ring)
         drawGlobeRing(c,cx,cy,R,look.ring,true,1);
 
+    /* large (zooming) globes: crisp outlines drawn straight to the screen, like the home planet */
+    let bounds;
+
+    if(big && c.canvas && c.getTransform){
+
+        /* the visible screen, in this drawing's own coordinates */
+        const m=c.getTransform();
+
+        if(m.a>0 && m.d>0 && !m.b && !m.c){
+
+            bounds={
+                x0:-m.e/m.a,
+                y0:-m.f/m.d,
+                x1:(c.canvas.width-m.e)/m.a,
+                y1:(c.canvas.height-m.f)/m.d
+            };
+
+        }
+
+    }
+
     renderGlobe(
-        c,planetId,cx,cy,R,.38,viewLon,
+        c,planetId,cx,cy,R,viewLat,viewLon,
         {
             scale,
             time,
             fps:6,
-            lines:"buffer",
-            cacheKey:"small|"+planetId+"|"+rBucket
+            bounds,
+            tightSpecular:big,
+            lines:big?"direct":"buffer",
+            lineWidth:2.2,
+            cacheKey:big?"smallbig|"+planetId:"small|"+planetId+"|"+rBucket
         }
     );
 
-    drawGlobeSheen(c,cx,cy,R);
+    if(hb<1){
 
-    drawGlobeNeonRim(c,cx,cy,R,look.atmosphere,Math.max(.8,R*.045));
+        c.save();
+
+        c.globalAlpha*=1-hb;
+
+        drawGlobeSheen(c,cx,cy,R);
+
+        c.restore();
+
+    }
+
+    drawGlobeNeonRim(c,cx,cy,R,look.atmosphere,big?2.4:Math.max(.8,R*.045));
 
     drawGlobeClouds(
-        c,planetId,cx,cy,R,.38,viewLon,
+        c,planetId,cx,cy,R,viewLat,viewLon,
         {
-            scale,
+            scale:big?.3:scale,
             time,
-            fps:6,
-            lift:1.06,
-            lines:"buffer",
-            fade:{band:.5,centre:.45,limb:.95},
-            shadow:.3,
-            cacheKey:"small|"+planetId+"|"+rBucket
+            fps:big?10:6,
+            bounds,
+            lift:big?1.045:1.06,
+            lines:big?"direct":"buffer",
+            lineWidth:1.8,
+            fade:big
+                ?{band:.5+(.08-.5)*hb,centre:.45*(1-hb),limb:.92}
+                :{band:.5,centre:.45,limb:.95},
+            shadow:big?.22+.08*(1-hb):.3,
+            cacheKey:big?"smallbig|"+planetId:"small|"+planetId+"|"+rBucket
         }
     );
 
@@ -26854,7 +26934,7 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
         c.globalAlpha=
             baseAlpha*pulse;
 
-        c.shadowBlur=28;
+        c.shadowBlur=16;
 
         c.shadowColor=palette.light;
 
@@ -26867,7 +26947,7 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
         c.arc(
             cx,
             cy,
-            radius*1.95,
+            radius*STAR_MAP_RING,
             0,
             Math.PI*2
         );
@@ -26903,7 +26983,7 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
 
     c.save();
 
-    c.globalAlpha*=.45;
+    c.globalAlpha*=.45*(1-(options.homeBlend || 0));
 
     c.fillStyle=glow;
 
@@ -27032,7 +27112,8 @@ function drawSpacePlanet(c,planetId,cx,cy,radius,options){
                 cx,
                 cy,
                 radius,
-                time
+                time,
+                options.homeBlend
             );
 
         }
@@ -27207,9 +27288,48 @@ function getStarMapOwners(){
 
 }
 
+/* the "ship ready" / "in range" ring, in planet radii (see drawSpacePlanet) */
+const STAR_MAP_RING=1.6;
+
+/*
+ * How far apart two planets' centres must be on the star map so their
+ * rings (and glow) never touch: the planet size here must match
+ * drawStarMapScene's mapRadius.
+ */
+function starMapMinSpacing(width,mapHeight){
+
+    const planetR=Math.max(16,Math.min(width,mapHeight/.66)*.045);
+
+    return planetR*(2*STAR_MAP_RING+.9);
+
+}
+
+function starMapMinPairDistance(points){
+
+    let best=Infinity;
+
+    for(let i=0;i<points.length;i++){
+
+        for(let j=i+1;j<points.length;j++){
+
+            best=Math.min(
+                best,
+                Math.hypot(points[i].x-points[j].x,points[i].y-points[j].y)
+            );
+
+        }
+
+    }
+
+    return best;
+
+}
+
 function computeStarMapLayout(width,mapHeight,owners){
 
     const n=owners.length;
+
+    const minSpacing=starMapMinSpacing(width,mapHeight);
 
     const byId={};
 
@@ -27348,7 +27468,19 @@ function computeStarMapLayout(width,mapHeight,owners){
                 [null]
             );
 
-        const k=.62;
+        /* shrunk to fit more systems — but never so far that rings would touch */
+        const soloMin=
+            starMapMinPairDistance(
+                Object.values(solo.positions)
+            );
+
+        const k=Math.min(
+            1.5,
+            Math.max(
+                .62,
+                minSpacing/(.75*Math.max(1,soloMin))
+            )
+        );
 
         flowerL=solo.L*k;
 
@@ -27417,7 +27549,7 @@ function computeStarMapLayout(width,mapHeight,owners){
 
         };
 
-        const gap=flowerL*.85;
+        const gap=Math.max(flowerL*.85,minSpacing/.75);
 
         let Re=flowerL*.45;
 
@@ -27691,11 +27823,17 @@ function computeStarMapLayout(width,mapHeight,owners){
 
         const boxW=width*.84,boxH=mapHeight*.92;
 
-        const s=Math.min(
+        let s=Math.min(
             1,
             boxW/Math.max(1,maxX-minX),
             boxH/Math.max(1,maxY-minY)
         );
+
+        /* never squeezed so tight that two planets' rings overlap */
+        const rawMin=starMapMinPairDistance(nodes);
+
+        if(rawMin*s<minSpacing)
+            s=Math.min(1.6,minSpacing/Math.max(1,rawMin));
 
         nodes.forEach(
             q=>{
@@ -28603,6 +28741,11 @@ function drawStarMapScene(
                     dim:
                         !selectable &&
                         zoom<.15,
+                    /* the world being zoomed into turns to match the home screen's view of it */
+                    homeBlend:
+                        isZoomTarget && !destinationAnchor
+                        ?zoom
+                        :0,
                     /*
                      * The pulsing ring means "there's a ship here
                      * to launch". While choosing a destination
@@ -64108,7 +64251,7 @@ function update(dt){
 
             const approachTarget=
                 fieldStartScore+
-                PLANET_APPROACH_POINTS;
+                currentFieldLegPoints();
 
             if(
                 score>=
@@ -64152,7 +64295,7 @@ function update(dt){
              */
             const departTarget=
                 fieldStartScore+
-                PLANET_DEPART_POINTS;
+                currentFieldLegPoints();
 
             if(
                 score>=
@@ -65130,7 +65273,7 @@ function draw(){
 
 /*
  * The score box's neon outline: traced clockwise from the top-left
- * as this field's score climbs toward the 25,000 that ends it, closed
+ * as this field's score climbs toward the 25,000 (10,000 around rank 1 worlds) that ends it, closed
  * into a pulsing loop when reached, and back to empty when the next
  * field begins. Only measured inside a field — between fields it holds
  * how the last one finished.
@@ -65182,7 +65325,7 @@ function updateScoreProgressOutline(){
     const progress=
         clamp(
             (score-fieldStartScore)/
-            PLANET_DEPART_POINTS,
+            currentFieldLegPoints(),
             0,
             1
         );
