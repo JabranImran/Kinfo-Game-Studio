@@ -857,6 +857,24 @@ body{
     transition:opacity .35s ease;
 }
 
+.roam-pause-btn{
+    position:absolute;
+    top:max(16px,env(safe-area-inset-top));
+    right:14px;
+    z-index:7;
+    width:42px;
+    height:42px;
+    border-radius:12px;
+    border:1.5px solid rgba(95,243,255,.55);
+    background:rgba(8,15,35,.82);
+    color:#dff8ff;
+    font-size:16px;
+    box-shadow:0 0 12px rgba(95,243,255,.3);
+    cursor:pointer;
+}
+
+.roam-pause-btn.hidden{display:none;}
+
 .roam-bar.hidden{
     opacity:0;
     pointer-events:none;
@@ -4426,6 +4444,8 @@ and (max-height:500px){
         <div class="focus-tip hidden" id="focusTip">
             <div class="focus-tip-text" id="focusTipText"></div>
         </div>
+
+        <button class="roam-pause-btn hidden" id="roamPauseBtn" aria-label="Pause">⏸</button>
 
         <div class="roam-bar hidden" id="roamBar">
             <div class="roam-hint" id="roamHint">DRAG ANYWHERE TO WALK</div>
@@ -9118,6 +9138,97 @@ const PET_FOOD_COST=1;
 const PET_ENERGY_PER_FOOD=40;
 
 /*
+ * GLOW BERRIES — the everyday pet food. Every planet's shop sells
+ * a bundle for a coin, bushes out on the planets grow them for
+ * free, and any pet eats them (restoring energy). Feeding a pet
+ * takes one berry instead of a coin.
+ */
+const SNACK_ICON="🫐";
+
+const SNACK_NAME="Glow Berries";
+
+const SNACK_BUNDLE=3;
+
+const SNACK_BUNDLE_COST=1;
+
+/* selling berries back: one coin for every few, so buying and reselling never pays */
+const SNACK_SELL_PER_COIN=4;
+
+function getSnackStock(planetId){
+
+    return ((planetSave.snackStock || {})[planetId]) || 0;
+
+}
+
+function addSnackStock(planetId,amount){
+
+    if(!planetSave.snackStock)
+        planetSave.snackStock={};
+
+    planetSave.snackStock[planetId]=Math.max(0,getSnackStock(planetId)+amount);
+
+}
+
+function buySnacks(planetId){
+
+    if(!spendCoins(planetId,SNACK_BUNDLE_COST))
+        return;
+
+    addSnackStock(planetId,SNACK_BUNDLE);
+
+    savePlanetProgress();
+
+    showShipToast(SNACK_BUNDLE+" "+SNACK_NAME+" "+SNACK_ICON+" bought");
+
+    renderPlanetDetail(planetId);
+
+}
+
+function sellSnack(planetId){
+
+    if(getSnackStock(planetId)<1)
+        return;
+
+    addSnackStock(planetId,-1);
+
+    if(!planetSave.snackSold)
+        planetSave.snackSold={};
+
+    const sold=(planetSave.snackSold[planetId] || 0)+1;
+
+    planetSave.snackSold[planetId]=sold;
+
+    if(sold%SNACK_SELL_PER_COIN===0){
+
+        addToBank(planetId,1);
+
+        showShipToast("Sold "+SNACK_SELL_PER_COIN+" berries for 1 "+COIN_ICON_HTML);
+
+    }else{
+
+        showShipToast("Sold — "+(sold%SNACK_SELL_PER_COIN)+"/"+SNACK_SELL_PER_COIN+" berries towards a coin");
+
+    }
+
+    savePlanetProgress();
+
+    renderPlanetDetail(planetId);
+
+}
+
+/* Earth's shop sells the EMP (every ship already carries one for free, but spares can be carried and used) */
+const EARTH_SHOP_EMP=Object.assign({},
+    {id:"emp",name:"EMP",icon:"⚡",description:"The reliable field clear — every ship fits one for free, but spares can be carried about and fired off on the planet."},
+    {planetId:"earth",cost:1}
+);
+
+function getShopSaleItemForPlanet(planetId){
+
+    return getShopItemForPlanet(planetId) || (planetId==="earth"?EARTH_SHOP_EMP:null);
+
+}
+
+/*
  * Passive energy drain, resolved against real elapsed time the
  * same way build queues are — a pet left unfed for a while
  * will genuinely have run down by the next time it's checked,
@@ -9357,13 +9468,15 @@ function feedPet(planetId,petId){
     )
         return;
 
-    if(
-        !spendCoins(
-            planetId,
-            PET_FOOD_COST
-        )
-    )
+    if(getSnackStock(planetId)<1){
+
+        showShipToast("No "+SNACK_NAME+" "+SNACK_ICON+" here — the shop sells "+SNACK_BUNDLE+" for "+SNACK_BUNDLE_COST+" "+COIN_ICON_HTML+", or pick them from bushes");
+
         return;
+
+    }
+
+    addSnackStock(planetId,-1);
 
     pet.energy=
         Math.min(
@@ -20460,7 +20573,7 @@ function buyShopItem(planetId,itemId){
      * actually selling one first.
      */
     const localItem=
-        getShopItemForPlanet(
+        getShopSaleItemForPlanet(
             planetId
         );
 
@@ -32351,6 +32464,11 @@ function toggleRoamingUI(hidden){
 
     const bar=document.getElementById("roamBar");
 
+    const pauseBtn=document.getElementById("roamPauseBtn");
+
+    if(pauseBtn)
+        pauseBtn.classList.toggle("hidden",!hidden);
+
     if(bar){
 
         bar.classList.toggle("hidden",!hidden);
@@ -32482,6 +32600,17 @@ function worldItemInfo(d){
             colour:"#ffb3c6",
             text:(p.description || "Pet food.")+
                 (p.species?" Tap a "+(SPECIES_DISPLAY_NAMES[p.species] || p.species)+" carrying it — or drop it on one — to feed it.":"")
+        };
+
+    }
+
+    if(d.k==="snack"){
+
+        return{
+            name:SNACK_NAME,
+            iconHtml:SNACK_ICON,
+            colour:"#9fb4ff",
+            text:"Everyday pet food — any pet eats it, restoring "+PET_ENERGY_PER_FOOD+"% energy. Tap a pet carrying it, or drop it on a hungry pet."
         };
 
     }
@@ -32715,6 +32844,9 @@ function worldVaultContents(planetId){
 
     });
 
+    if(getSnackStock(planetId)>0)
+        out.push({k:"snack",r:"berry",n:getSnackStock(planetId)});
+
     const foods=(planetSave.perkStock || {})[planetId] || {};
 
     Object.keys(foods).forEach(id=>{
@@ -32820,6 +32952,17 @@ function worldPlaceTake(planetId,place,d){
 
         }
 
+        if(d.k==="snack"){
+
+            if(getSnackStock(planetId)<1)
+                return null;
+
+            addSnackStock(planetId,-1);
+
+            return{k:"snack",r:"berry",n:1};
+
+        }
+
         return null;
 
     }
@@ -32911,6 +33054,8 @@ function worldPlacePut(planetId,place,d){
             addPerkStock(planetId,d.r,d.n);
         else if(d.k==="item")
             addItemStock(planetId,d.r,d.n);
+        else if(d.k==="snack")
+            addSnackStock(planetId,d.n);
         else
             return false;
 
@@ -33089,6 +33234,8 @@ function worldSellCarried(planetId,petId){
 
     if(d.k==="mat")
         sellMaterialStock(planetId,d.r);
+    else if(d.k==="snack")
+        sellSnack(planetId);
     else if(d.k==="food")
         sellPerkStock(planetId,d.r);
     else if(d.k==="item")
@@ -33105,7 +33252,33 @@ function worldFeedCarried(planetId,carrierId,eaterId){
 
     const eater=getPetByIdAtPlanet(planetId,eaterId);
 
-    if(!carrier || !eater || !carrier.carry || carrier.carry.k!=="food")
+    if(!carrier || !eater || !carrier.carry)
+        return;
+
+    /* berries: any pet, if it's hungry */
+    if(carrier.carry.k==="snack"){
+
+        if(eater.energy>=100){
+
+            showShipToast((SPECIES_DISPLAY_NAMES[eater.species] || "This pet")+" isn't hungry");
+
+            return;
+
+        }
+
+        carrier.carry=null;
+
+        eater.energy=Math.min(100,eater.energy+PET_ENERGY_PER_FOOD);
+
+        savePlanetProgress();
+
+        showShipToast((SPECIES_DISPLAY_NAMES[eater.species] || "Your pet")+" munched a berry "+SNACK_ICON+" — energy "+Math.round(eater.energy)+"%");
+
+        return;
+
+    }
+
+    if(carrier.carry.k!=="food")
         return;
 
     const perk=PERKS[carrier.carry.r];
@@ -33305,9 +33478,26 @@ function worldDrawCarried(c,pet,x,y,size,isRoamer){
         isRoamer,
         accept:(d,src) => !(src && src.t==="pet" && src.p===pet.id) && (
             !pet.carry ||
-            (d.k==="food" && PERKS[d.r] && PERKS[d.r].species===pet.species)
+            (d.k==="food" && PERKS[d.r] && PERKS[d.r].species===pet.species) ||
+            (d.k==="snack" && pet.energy<100 && src && (src.t==="pet" || src.t==="vault"))
         ),
         drop:(d,src)=>{
+
+            if(d.k==="snack" && pet.energy<100 && src && src.t==="pet"){
+
+                worldRunAction({"data-action":"carry-feed","data-pet":src.p,"data-target":pet.id});
+
+                return;
+
+            }
+
+            if(d.k==="snack" && pet.energy<100 && src && src.t==="vault"){
+
+                worldRunAction({"data-action":"feed-pet","data-pet":pet.id});
+
+                return;
+
+            }
 
             if(d.k==="food" && PERKS[d.r] && PERKS[d.r].species===pet.species && src && src.t==="pet"){
 
@@ -33363,13 +33553,14 @@ function worldUseCarried(pet,origin){
 
     if(!d){
 
-        worldOpenPetHolo(pet);
+        /* nothing to use: just a happy little bounce, no menu in the way */
+        world.effects.push({type:"hop",x:origin.x,y:origin.y,t0:performance.now(),petId:pet.id});
 
         return;
 
     }
 
-    if(d.k==="food"){
+    if(d.k==="food" || d.k==="snack"){
 
         worldRunAction({"data-action":"carry-feed","data-pet":pet.id,"data-target":pet.id});
 
@@ -33440,8 +33631,16 @@ function worldFirePowerup(pet,itemId,origin){
 
     world.cooldown[pet.id]=now+POWERUP_COOLDOWN_MS;
 
-    if(itemId==="emp")
+    if(itemId==="emp"){
+
         sound("emp");
+
+        exploreBlastRocks(()=>true);
+
+    }
+
+    if(itemId==="nova-burst")
+        exploreBlastRocks(r => Math.hypot(r.x-origin.x,r.y-origin.y)<230);
 
 }
 
@@ -33462,6 +33661,30 @@ function worldFireAimed(px,py){
 
     world.cooldown[a.pet.id]=now+POWERUP_COOLDOWN_MS;
 
+    if(a.itemId==="singularity"){
+
+        exploreBlastRocks(r => Math.hypot(r.x-px,r.y-py)<140);
+
+    }else{
+
+        /* beam and orb: anything along the line they fly */
+        const dx=px-head.x,dy=py-head.y,len=Math.hypot(dx,dy) || 1;
+
+        exploreBlastRocks(r=>{
+
+            const t=((r.x-head.x)*dx+(r.y-head.y)*dy)/len;
+
+            if(t<0)
+                return false;
+
+            const off=Math.abs((r.x-head.x)*dy-(r.y-head.y)*dx)/len;
+
+            return off<r.r+18;
+
+        });
+
+    }
+
     sound("click");
 
 }
@@ -33478,6 +33701,64 @@ function worldDrawEffects(c,W,H){
         const done=(dur)=>t>dur;
 
         c.save();
+
+        if(e.type==="repair"){
+
+            const k=t/1.2;
+
+            c.fillStyle="#ffe6a0";
+
+            c.shadowColor="#ffd76b";
+
+            c.shadowBlur=12;
+
+            for(let i=0;i<10;i++){
+
+                const a=i/10*Math.PI*2+t*3;
+
+                c.globalAlpha=Math.max(0,1-k);
+
+                c.beginPath();
+
+                c.arc(e.x+Math.cos(a)*(20+k*40),e.y+Math.sin(a)*(14+k*24),3,0,Math.PI*2);
+
+                c.fill();
+
+            }
+
+            c.globalAlpha=Math.max(0,1-k);
+
+            c.font="22px system-ui,'Apple Color Emoji',sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText("🔧",e.x,e.y-k*30);
+
+            c.restore();
+
+            return !done(1.2);
+
+        }
+
+        if(e.type==="hop"){
+
+            const k=t/.5;
+
+            c.globalAlpha=Math.max(0,1-k);
+
+            c.fillStyle="#ffd1ec";
+
+            c.font="18px system-ui,'Apple Color Emoji',sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText("♥",e.x,e.y-10-k*30);
+
+            c.restore();
+
+            return !done(.5);
+
+        }
 
         if(e.type==="emp"){
 
@@ -34129,7 +34410,7 @@ function worldPlanetStructures(p){
             world.drops.push({
                 x:proj.x,y:proj.y-r*.8,r,
                 kind:"structure",
-                accept:(d,src) => d.k!=="item" && !(src && src.t==="ship"),
+                accept:(d,src) => d.k!=="item" && d.k!=="snack" && !(src && src.t==="ship"),
                 drop:(d,src)=>worldMove(src,{t:"ship",s:e.id},d)
             });
 
@@ -34268,8 +34549,13 @@ function worldPointerMove(event){
 
     if(world.drag.blade){
 
-        if(world.blade)
+        if(world.blade){
+
             world.blade.trail.push({x:p.x,y:p.y,t:performance.now()});
+
+            exploreBlastRocks(r => Math.hypot(r.x-p.x,r.y-p.y)<r.r+14);
+
+        }
 
         return;
 
@@ -34421,6 +34707,8 @@ function worldDrawOverlay(c,W,H){
     });
 
     worldDrawEffects(c,W,H);
+
+    exploreDrawChips(c);
 
 }
 
@@ -34663,6 +34951,25 @@ function worldCloseHolo(){
 
 }
 
+/* a quick look at another pet: who it is, how it's doing, a feed button */
+function worldPetBubble(pet,x,y){
+
+    const planetId=selectedStartPlanet;
+
+    worldShowBubble({
+        x,y,
+        iconHtml:"🐾",
+        title:(SPECIES_DISPLAY_NAMES[pet.species] || "Native pet"),
+        meta:"Energy "+Math.round(pet.energy)+"% · "+((pet.role || "builder")==="pilot"?"✈ Pilot":"🔧 Builder"),
+        text:pet.carry?"Carrying "+worldItemInfo(pet.carry).name+".":"Drop things on it to hand them over — or berries to feed it.",
+        buttons:[
+            {label:"Feed "+SNACK_ICON+" ("+getSnackStock(planetId)+" in the vault)",primary:true,disabled:pet.energy>=100 || getSnackStock(planetId)<1,action:()=>worldRunAction({"data-action":"feed-pet","data-pet":pet.id})},
+            {label:"Pet details",action:()=>worldOpenPetHolo(pet)}
+        ]
+    });
+
+}
+
 function worldOpenPetHolo(pet){
 
     if(!pet)
@@ -34697,6 +35004,16 @@ function roomStyle(){
     if(!roomState)
         return ROOM_STYLE.ship;
 
+    if(roomState.kind==="ruin"){
+
+        const ruin=exploreLayout(selectedStartPlanet).ruins.find(r => r.id===roomState.id);
+
+        const info=ruin && EXPLORE_RUIN_INFO[ruin.type];
+
+        return info?{name:info.name,colour:info.colour,accent:info.colour}:ROOM_STYLE.ship;
+
+    }
+
     return ROOM_STYLE[roomState.kind==="ship"?"ship":roomState.id] || ROOM_STYLE.ship;
 
 }
@@ -34707,7 +35024,7 @@ function enterRoom(kind,id){
         return;
 
     roomState={
-        key:(kind==="ship"?"ship:":"s:")+id,
+        key:(kind==="ship"?"ship:":kind==="ruin"?"r:":"s:")+id,
         kind,id,
         planetId:selectedStartPlanet,
         ownerId:activePlanetOwnerId || null,
@@ -35039,6 +35356,9 @@ function roomTitle(){
     if(roomState.kind==="ship")
         return "Inside the ship";
 
+    if(roomState.kind==="ruin")
+        return roomStyle().name;
+
     return (ROOM_STYLE[roomState.id] || {}).name || ((STRUCTURES[roomState.id] || {}).name) || "Room";
 
 }
@@ -35105,6 +35425,10 @@ function roomFixtures(c,time){
     if(roomState.kind==="ship"){
 
         roomShipFixtures(c,list,planetId,st,time);
+
+    }else if(roomState.kind==="ruin"){
+
+        roomRuinFixtures(c,list,planetId,st,time);
 
     }else if(roomState.id==="stock"){
 
@@ -35278,9 +35602,12 @@ function worldStockBubble(d,src,p){
         if(d.k==="food")
             buttons.push({label:"Sell one",action:()=>worldRunAction({"data-action":"sell-perk-stock","data-perk":d.r})});
 
+        if(d.k==="snack")
+            buttons.push({label:"Sell one ("+SNACK_SELL_PER_COIN+" = 1 "+COIN_ICON_HTML+")",action:()=>worldRunAction({"data-action":"sell-snack"})});
+
         const ship=worldShip(planetId,world.shownShipId);
 
-        if(ship && d.k!=="item"){
+        if(ship && d.k!=="item" && d.k!=="snack"){
 
             buttons.push({
                 label:"Load onto the ship",
@@ -35389,6 +35716,8 @@ function roomVaultFixtures(c,list,planetId,st,time){
 
                     else if(d.k==="food")worldRunAction({"data-action":"sell-perk-stock","data-perk":d.r});
 
+                    else if(d.k==="snack")worldRunAction({"data-action":"sell-snack"});
+
                     else showShipToast("Those coins are already banked");
 
                 }else{
@@ -35401,6 +35730,8 @@ function roomVaultFixtures(c,list,planetId,st,time){
                     else if(d.k==="item")setTimeout(()=>worldRunAction({"data-action":"sell-item","data-item":d.r}),30);
 
                     else if(d.k==="food")setTimeout(()=>worldRunAction({"data-action":"sell-perk-stock","data-perk":d.r}),30);
+
+                    else if(d.k==="snack")setTimeout(()=>worldRunAction({"data-action":"sell-snack"}),30);
 
                 }
 
@@ -35422,9 +35753,9 @@ function roomVaultFixtures(c,list,planetId,st,time){
 /* ---- the Shop: things to buy on stands, a tray of what you own, blueprints, a pet pen ---- */
 function roomShopFixtures(c,list,planetId,st,time){
 
-    const forSale=[];
+    const forSale=[{k:"snack",r:"berry",n:SNACK_BUNDLE,price:SNACK_BUNDLE_COST,buy:{"data-action":"buy-snacks"}}];
 
-    const local=getShopItemForPlanet(planetId);
+    const local=getShopSaleItemForPlanet(planetId);
 
     if(local)
         forSale.push({k:"item",r:local.id,n:1,price:local.cost,buy:{"data-action":"buy","data-item":local.id}});
@@ -35518,7 +35849,7 @@ function roomShopFixtures(c,list,planetId,st,time){
     /* the pick-up tray: what you own of the things sold here — take it from here */
     const owned=forSale.map(d=>{
 
-        const n=d.k==="item"?getItemStock(planetId,d.r):getPerkStock(planetId,d.r);
+        const n=d.k==="item"?getItemStock(planetId,d.r):d.k==="snack"?getSnackStock(planetId):getPerkStock(planetId,d.r);
 
         return n>0?{k:d.k,r:d.r,n}:null;
 
@@ -35806,7 +36137,7 @@ function roomDrawWorkers(c,list,planetId,role,time){
 
             worldDrawCarried(c,pet,p.x,p.y-size*.5,size,false);
 
-            world.hits.push({x:p.x,y:p.y-size*.5,r:size*.6,z:6,onTap:()=>worldOpenPetHolo(pet)});
+            world.hits.push({x:p.x,y:p.y-size*.5,r:size*.6,z:6,onTap:()=>worldPetBubble(pet,p.x,p.y-size)});
 
         }});
 
@@ -36188,7 +36519,7 @@ function roomShipFixtures(c,list,planetId,st,time){
         world.drops.push({
             x:box.x,y:box.y,r:Math.max(box.w,box.h)*.7,
             kind:"cargo",
-            accept:(d,src) => d.k!=="item" && !(src && src.t==="ship" && src.s===ship.id),
+            accept:(d,src) => d.k!=="item" && d.k!=="snack" && !(src && src.t==="ship" && src.s===ship.id),
             drop:(d,src)=>worldMove(src,{t:"ship",s:ship.id},d)
         });
 
@@ -36622,6 +36953,1646 @@ function drawRoomScene(c,W,H,time){
     }
 
     worldDrawOverlay(c,W,H);
+
+}
+
+
+/* =========================================================
+   EXPLORING THE PLANETS
+
+   Out beyond the home settlement each planet has a little to
+   find: foliage and features in its own style (trees and
+   flowers on Earth, ice crystals on Europa, glowing mushrooms
+   on Kepler...), berry bushes that regrow Glow Berries, the odd
+   small asteroid that's crashed into the ground (tap it many
+   times with a pet nearby, or blast it with a powerup, for a
+   chance at its material), and a couple of old buildings —
+   built or in ruins — that can be walked into, and that a
+   builder pet can repair for a reward.
+
+   The layout is fixed per planet (seeded), so everyone sees the
+   same world; what changes (berries picked, asteroids, repairs)
+   lives in the planet's save under planetSave.explore.
+========================================================= */
+
+function exploreRng(seedText){
+
+    let h=1779033703^seedText.length;
+
+    for(let i=0;i<seedText.length;i++){
+
+        h=Math.imul(h^seedText.charCodeAt(i),3432918353);
+
+        h=(h<<13)|(h>>>19);
+
+    }
+
+    return()=>{
+
+        h=Math.imul(h^(h>>>16),2246822507);
+
+        h=Math.imul(h^(h>>>13),3266489909);
+
+        h^=h>>>16;
+
+        return(h>>>0)/4294967296;
+
+    };
+
+}
+
+/* each planet's own kinds of decoration (the last is its berry bush) */
+const EXPLORE_DECOR={
+    earth:["tree","pine","flower","rock"],
+    mars:["spire","cactus","rock"],
+    europa:["icecrystal","icicle","rock"],
+    titan:["mushroom","rock","spire"],
+    neptune:["coral","kelp","flower"],
+    kepler:["glowshroom","sporepod","mushroom"],
+    aurora:["crystal","flower","icecrystal"],
+    helios:["spire","emberflower","rock"],
+    nova:["cloudpuff","crystal","flower"],
+    zenith:["crystal","monolith","icecrystal"]
+};
+
+const EXPLORE_RUIN_TYPES=["observatory","outpost","shrine","beacon"];
+
+const EXPLORE_RUIN_INFO={
+    observatory:{name:"Old Observatory",icon:"🔭",colour:"#7fd8ff"},
+    outpost:{name:"Supply Outpost",icon:"📦",colour:"#ffb347"},
+    shrine:{name:"Crystal Shrine",icon:"🔮",colour:"#d08cff"},
+    beacon:{name:"Lone Beacon",icon:"🗼",colour:"#7dffb0"}
+};
+
+/* the home settlement: kept clear so the planet's main view stays uncluttered */
+const EXPLORE_HOME={lat:1.0,lon:0,clear:.58};
+
+function exploreAngle(aLat,aLon,bLat,bLon){
+
+    return Math.acos(Math.max(-1,Math.min(1,
+        Math.sin(aLat)*Math.sin(bLat)+Math.cos(aLat)*Math.cos(bLat)*Math.cos(aLon-bLon)
+    )));
+
+}
+
+const exploreLayouts={};
+
+/* where everything stands on a planet — the same on every device */
+function exploreLayout(planetId){
+
+    if(exploreLayouts[planetId])
+        return exploreLayouts[planetId];
+
+    const rng=exploreRng("explore|"+planetId);
+
+    const kinds=EXPLORE_DECOR[planetId] || EXPLORE_DECOR.earth;
+
+    const placed=[];
+
+    const groundLike=t => t===TERRAIN.GROUND || t===TERRAIN.ICE || t===TERRAIN.CRYSTAL || t===TERRAIN.GLOW || t===TERRAIN.CLOUD;
+
+    const pick=(minLat,maxLat,minGap,allowWater)=>{
+
+        for(let tries=0;tries<60;tries++){
+
+            const lat=Math.asin(Math.sin(minLat)+(Math.sin(maxLat)-Math.sin(minLat))*rng());
+
+            const lon=rng()*Math.PI*2-Math.PI;
+
+            if(exploreAngle(lat,lon,EXPLORE_HOME.lat,EXPLORE_HOME.lon)<EXPLORE_HOME.clear)
+                continue;
+
+            let terrain=TERRAIN.GROUND;
+
+            /* straight from the planet's own look (not a texture), so it's identical everywhere */
+            try{
+
+                const look=PLANET_LOOKS[planetId] || PLANET_LOOKS.earth;
+
+                if(look.init && !look._ready){
+
+                    look.init();
+
+                    look._ready=true;
+
+                }
+
+                const cl=Math.cos(lat);
+
+                terrain=look.regions[globeRegionOf(look,look.fields(cl*Math.sin(lon),Math.sin(lat),cl*Math.cos(lon)))].terrain;
+
+            }catch(error){}
+
+            if(!groundLike(terrain) && !(allowWater && terrain===TERRAIN.WATER))
+                continue;
+
+            if(placed.some(p => exploreAngle(lat,lon,p.lat,p.lon)<minGap))
+                continue;
+
+            return{lat,lon,terrain};
+
+        }
+
+        return null;
+
+    };
+
+    const ruins=[];
+
+    const ruinTypes=EXPLORE_RUIN_TYPES.slice().sort(()=>rng()-.5).slice(0,2);
+
+    ruinTypes.forEach((type,i)=>{
+
+        const at=pick(i===0?.05:-.95,i===0?.6:-.1,.5,false);
+
+        if(!at)
+            return;
+
+        const r={id:"ruin-"+type,type,lat:at.lat,lon:at.lon};
+
+        ruins.push(r);
+
+        placed.push(r);
+
+    });
+
+    const decor=[];
+
+    for(let i=0;i<14;i++){
+
+        const bush=i<3;
+
+        const at=pick(-1.3,.82,.22,planetId==="neptune");
+
+        if(!at)
+            continue;
+
+        let type=bush?"bush":kinds[Math.floor(rng()*kinds.length)];
+
+        if(planetId==="neptune" && at.terrain===TERRAIN.WATER && !bush)
+            type=rng()<.5?"kelp":"coral";
+
+        const d={id:"d"+i,type,lat:at.lat,lon:at.lon,scale:.8+rng()*.5,flip:rng()<.5?-1:1,seed:rng()*100};
+
+        decor.push(d);
+
+        placed.push(d);
+
+    }
+
+    exploreLayouts[planetId]={decor,ruins};
+
+    return exploreLayouts[planetId];
+
+}
+
+/* the changing part, in the planet's save */
+function exploreState(planetId){
+
+    if(!planetSave.explore)
+        planetSave.explore={};
+
+    if(!planetSave.explore[planetId])
+        planetSave.explore[planetId]={picked:{},rocks:[],ruins:{},cache:{},beacon:{},lastCheck:0};
+
+    const st=planetSave.explore[planetId];
+
+    st.picked=st.picked || {};
+
+    st.rocks=Array.isArray(st.rocks)?st.rocks:[];
+
+    st.ruins=st.ruins || {};
+
+    st.cache=st.cache || {};
+
+    st.beacon=st.beacon || {};
+
+    return st;
+
+}
+
+/* the first ruin on each planet starts out in ruins — a job for a builder */
+function exploreRuinBroken(planetId,ruin){
+
+    const st=exploreState(planetId);
+
+    const r=st.ruins[ruin.id];
+
+    if(r)
+        return !!r.broken;
+
+    const layout=exploreLayout(planetId);
+
+    return layout.ruins[0] && layout.ruins[0].id===ruin.id;
+
+}
+
+const BUSH_REGROW_MS=8*60*1000;
+
+function exploreBushRipe(planetId,bush){
+
+    const t=exploreState(planetId).picked[bush.id] || 0;
+
+    return Date.now()-t>=BUSH_REGROW_MS;
+
+}
+
+/* ---------- the actions (multiplayer-routed like every planet change) ---------- */
+
+function explorePickBush(planetId,bushId){
+
+    const bush=exploreLayout(planetId).decor.find(d => d.id===bushId);
+
+    if(!bush || !exploreBushRipe(planetId,bush))
+        return;
+
+    exploreState(planetId).picked[bushId]=Date.now();
+
+    worldPlacePut(planetId,{t:"ground",at:{t:"planet",lat:bush.lat-.035,lon:bush.lon+.02}},{k:"snack",r:"berry",n:2});
+
+    savePlanetProgress();
+
+}
+
+function exploreHitRock(planetId,rockId,amount){
+
+    const st=exploreState(planetId);
+
+    const i=st.rocks.findIndex(r => r.id===rockId);
+
+    if(i<0)
+        return;
+
+    const rock=st.rocks[i];
+
+    rock.hp-=Math.max(1,amount || 1);
+
+    if(rock.hp<=0){
+
+        st.rocks.splice(i,1);
+
+        /* a decent chance it leaves its material behind */
+        if(Math.random()<.6){
+
+            worldPlacePut(planetId,{t:"ground",at:{t:"planet",lat:rock.lat,lon:rock.lon}},{k:"mat",r:rock.mat,n:1});
+
+            showShipToast("The asteroid cracked open — "+((MATERIALS[rock.mat] || {}).name || "a material")+" inside!");
+
+        }else{
+
+            showShipToast("The asteroid crumbled to dust");
+
+        }
+
+    }
+
+    savePlanetProgress();
+
+}
+
+function exploreRepairRuin(planetId,ruinId,petId){
+
+    const ruin=exploreLayout(planetId).ruins.find(r => r.id===ruinId);
+
+    const pet=getPetByIdAtPlanet(planetId,petId);
+
+    if(!ruin || !exploreRuinBroken(planetId,ruin) || !pet || (pet.role || "builder")!=="builder")
+        return;
+
+    const reward=3+2*((getPlanet(planetId) || {tier:0}).tier || 0);
+
+    exploreState(planetId).ruins[ruinId]={broken:false,since:Date.now()};
+
+    addToBank(planetId,reward);
+
+    addRankPoints(6,"Repaired a ruin");
+
+    savePlanetProgress();
+
+    showShipToast((SPECIES_DISPLAY_NAMES[pet.species] || "Your pet")+" repaired the "+EXPLORE_RUIN_INFO[ruin.type].name+" — earned "+reward+" "+COIN_ICON_HTML);
+
+}
+
+const CACHE_RESTOCK_MS=20*60*1000;
+
+function exploreOpenCache(planetId,ruinId){
+
+    const st=exploreState(planetId);
+
+    if(Date.now()-(st.cache[ruinId] || 0)<CACHE_RESTOCK_MS)
+        return;
+
+    st.cache[ruinId]=Date.now();
+
+    const roll=Math.random();
+
+    let d;
+
+    if(roll<.45)
+        d={k:"snack",r:"berry",n:3};
+    else if(roll<.85)
+        d={k:"coin",r:"coin",n:3+Math.floor(Math.random()*4)};
+    else{
+
+        const mats=Object.values(MATERIALS).filter(m => m.planetId===planetId);
+
+        d=mats.length?{k:"mat",r:mats[0].id,n:1}:{k:"coin",r:"coin",n:6};
+
+    }
+
+    worldPlacePut(planetId,{t:"ground",at:{t:"room",room:"r:"+ruinId,u:.5,v:.55}},d);
+
+    savePlanetProgress();
+
+    showShipToast("Found "+worldItemInfo(d).name+" in the supply crate!");
+
+}
+
+function exploreShrineReward(planetId,ruinId){
+
+    const st=exploreState(planetId);
+
+    const key="shrine:"+ruinId;
+
+    if(Date.now()-(st.cache[key] || 0)<6*60*60*1000){
+
+        showShipToast("The shrine hums along with you");
+
+        return;
+
+    }
+
+    st.cache[key]=Date.now();
+
+    worldPlacePut(planetId,{t:"ground",at:{t:"room",room:"r:"+ruinId,u:.5,v:.6}},{k:"snack",r:"berry",n:5});
+
+    addRankPoints(4,"Played the shrine's song");
+
+    savePlanetProgress();
+
+    showShipToast("The shrine sings back — a gift appears ✨");
+
+}
+
+function exploreToggleBeacon(planetId,ruinId){
+
+    const st=exploreState(planetId);
+
+    st.beacon[ruinId]=!st.beacon[ruinId];
+
+    savePlanetProgress();
+
+}
+
+/* the owner's device decides when nature happens: asteroids landing, buildings getting hit */
+function exploreNatureTick(planetId){
+
+    if(activePlanetOwnerId)
+        return;
+
+    const st=exploreState(planetId);
+
+    const now=Date.now();
+
+    if(!st.lastCheck){
+
+        st.lastCheck=now;
+
+        return;
+
+    }
+
+    const minutes=(now-st.lastCheck)/60000;
+
+    if(minutes<.33)
+        return;
+
+    st.lastCheck=now;
+
+    let changed=false;
+
+    /* small asteroids: rare, and more likely from nearby worlds */
+    if(st.rocks.length<3 && Math.random()<1-Math.exp(-minutes/14)){
+
+        exploreSpawnRock(planetId,null);
+
+        changed=true;
+
+    }
+
+    /* now and then something comes down on a building */
+    exploreLayout(planetId).ruins.forEach(ruin=>{
+
+        if(exploreRuinBroken(planetId,ruin))
+            return;
+
+        const since=(st.ruins[ruin.id] && st.ruins[ruin.id].since) || 0;
+
+        if(now-since<20*60*1000)
+            return;
+
+        if(Math.random()<1-Math.exp(-minutes/240)){
+
+            st.ruins[ruin.id]={broken:true,since:now};
+
+            exploreSpawnRock(planetId,ruin);
+
+            changed=true;
+
+        }
+
+    });
+
+    if(changed)
+        savePlanetProgress();
+
+}
+
+function exploreSpawnRock(planetId,nearRuin){
+
+    const st=exploreState(planetId);
+
+    const here=(getPlanet(planetId) || {tier:0}).tier || 0;
+
+    const mats=Object.values(MATERIALS).filter(m => getPlanet(m.planetId));
+
+    if(!mats.length)
+        return;
+
+    const weights=mats.map(m=>{
+
+        const gap=Math.abs(((getPlanet(m.planetId) || {}).tier || 0)-here)+(m.planetId===planetId?0:.5);
+
+        return 1/Math.pow(1+gap*1.4,2);
+
+    });
+
+    let roll=Math.random()*weights.reduce((a,b)=>a+b,0);
+
+    let mat=mats[0];
+
+    for(let i=0;i<mats.length;i++){
+
+        roll-=weights[i];
+
+        if(roll<=0){
+
+            mat=mats[i];
+
+            break;
+
+        }
+
+    }
+
+    let lat,lon;
+
+    if(nearRuin){
+
+        lat=nearRuin.lat-.06;
+
+        lon=nearRuin.lon+.07;
+
+    }else{
+
+        const rng=Math.random;
+
+        for(let tries=0;tries<30;tries++){
+
+            lat=Math.asin(rng()*1.6-.8);
+
+            lon=rng()*Math.PI*2-Math.PI;
+
+            if(exploreAngle(lat,lon,EXPLORE_HOME.lat,EXPLORE_HOME.lon)>.35)
+                break;
+
+        }
+
+    }
+
+    const tierGap=Math.abs(((getPlanet(mat.planetId) || {}).tier || 0)-here);
+
+    const hp=12+tierGap*3;
+
+    st.rocks.push({id:"rock"+Date.now().toString(36),lat,lon,mat:mat.id,hp,max:hp});
+
+}
+
+const EXPLORE_ACTIONS=new Set(["bush-pick","rock-hit","ruin-repair","cache-open","shrine-reward","beacon-toggle"]);
+
+function exploreExecuteAction(action,target,planetId){
+
+    if(action==="bush-pick")
+        explorePickBush(planetId,target.getAttribute("data-target"));
+    else if(action==="rock-hit")
+        exploreHitRock(planetId,target.getAttribute("data-target"),Number(target.getAttribute("data-stat")) || 1);
+    else if(action==="ruin-repair")
+        exploreRepairRuin(planetId,target.getAttribute("data-target"),target.getAttribute("data-pet"));
+    else if(action==="cache-open")
+        exploreOpenCache(planetId,target.getAttribute("data-target"));
+    else if(action==="shrine-reward")
+        exploreShrineReward(planetId,target.getAttribute("data-target"));
+    else if(action==="beacon-toggle")
+        exploreToggleBeacon(planetId,target.getAttribute("data-target"));
+
+}
+
+/* ---------- drawing on the planet ---------- */
+
+function exploreColourFor(planetId){
+
+    return getPlanetLook(planetId).atmosphere || "#7fd6ff";
+
+}
+
+/* one decoration, drawn standing up at the origin (size = its height) */
+function exploreDrawDecor(c,d,size,colour,time,planetId){
+
+    const glow=(col,w)=>{
+
+        c.strokeStyle=col;
+
+        c.lineWidth=w;
+
+        c.shadowColor=col;
+
+        c.shadowBlur=8;
+
+    };
+
+    const fill=col=>{c.fillStyle=col;};
+
+    const sway=Math.sin(time*1.2+d.seed)*.06;
+
+    c.save();
+
+    c.scale(d.flip,1);
+
+    c.lineJoin="round";
+
+    c.lineCap="round";
+
+    const s=size;
+
+    switch(d.type){
+
+    case "tree":
+
+        glow("#c8915a",s*.06);
+        c.beginPath();c.moveTo(0,0);c.lineTo(0,-s*.45);c.stroke();
+        c.rotate(sway);
+        fill("rgba(14,40,24,.9)");glow("#7dff8c",s*.05);
+        c.beginPath();c.arc(0,-s*.62,s*.3,0,Math.PI*2);c.arc(-s*.2,-s*.48,s*.2,0,Math.PI*2);c.arc(s*.2,-s*.5,s*.2,0,Math.PI*2);c.fill();
+        c.beginPath();c.arc(0,-s*.62,s*.3,0,Math.PI*2);c.stroke();
+        break;
+
+    case "pine":
+
+        glow("#c8915a",s*.05);
+        c.beginPath();c.moveTo(0,0);c.lineTo(0,-s*.2);c.stroke();
+        c.rotate(sway*.5);
+        fill("rgba(10,34,30,.92)");glow("#5dffc8",s*.045);
+        c.beginPath();c.moveTo(0,-s);c.lineTo(s*.3,-s*.45);c.lineTo(s*.16,-s*.45);c.lineTo(s*.36,-s*.18);c.lineTo(-s*.36,-s*.18);c.lineTo(-s*.16,-s*.45);c.lineTo(-s*.3,-s*.45);c.closePath();c.fill();c.stroke();
+        break;
+
+    case "flower":
+    case "emberflower":{
+
+        const col=d.type==="emberflower"?"#ff8a3a":(["#ff7ac8","#ffd76b","#b98cff"][Math.floor(d.seed)%3]);
+        glow("#7dff8c",s*.04);
+        c.rotate(sway);
+        c.beginPath();c.moveTo(0,0);c.quadraticCurveTo(s*.08,-s*.3,0,-s*.55);c.stroke();
+        glow(col,s*.04);fill("rgba(30,10,30,.85)");
+        for(let i=0;i<5;i++){const a=i/5*Math.PI*2+time*.2;c.beginPath();c.ellipse(Math.cos(a)*s*.11,-s*.6+Math.sin(a)*s*.11,s*.09,s*.05,a,0,Math.PI*2);c.fill();c.stroke();}
+        fill(col);c.beginPath();c.arc(0,-s*.6,s*.05,0,Math.PI*2);c.fill();
+        break;
+
+    }
+
+    case "rock":
+
+        fill("rgba(20,24,40,.95)");glow(colour,s*.04);
+        c.beginPath();c.moveTo(-s*.36,0);c.lineTo(-s*.28,-s*.24);c.lineTo(-s*.06,-s*.34);c.lineTo(s*.18,-s*.28);c.lineTo(s*.34,-s*.08);c.lineTo(s*.3,0);c.closePath();c.fill();c.stroke();
+        break;
+
+    case "spire":
+
+        fill("rgba(30,12,14,.95)");glow(planetId==="helios"?"#ff6a2a":"#ff8a5c",s*.04);
+        c.beginPath();c.moveTo(-s*.16,0);c.lineTo(-s*.05,-s*.9);c.lineTo(s*.04,-s*.7);c.lineTo(s*.16,0);c.closePath();c.fill();c.stroke();
+        break;
+
+    case "cactus":
+
+        fill("rgba(16,30,22,.92)");glow("#7dffb0",s*.045);
+        c.beginPath();c.moveTo(-s*.07,0);c.lineTo(-s*.07,-s*.7);c.arc(0,-s*.7,s*.07,Math.PI,0);c.lineTo(s*.07,0);c.closePath();c.fill();c.stroke();
+        c.beginPath();c.moveTo(-s*.07,-s*.35);c.lineTo(-s*.22,-s*.35);c.lineTo(-s*.22,-s*.55);c.moveTo(s*.07,-s*.45);c.lineTo(s*.2,-s*.45);c.lineTo(s*.2,-s*.62);c.stroke();
+        break;
+
+    case "icecrystal":
+    case "crystal":{
+
+        const col=d.type==="icecrystal"?"#bff6ff":(planetId==="zenith"?"#d6c0ff":"#f39bff");
+        fill("rgba(20,28,60,.8)");glow(col,s*.04);
+        [[-s*.16,s*.55,-.25],[0,s*.85,0],[s*.16,s*.6,.25]].forEach(([x,h,a])=>{
+            c.save();c.translate(x,0);c.rotate(a);
+            c.beginPath();c.moveTo(-s*.07,0);c.lineTo(-s*.07,-h*.75);c.lineTo(0,-h);c.lineTo(s*.07,-h*.75);c.lineTo(s*.07,0);c.closePath();c.fill();c.stroke();
+            c.restore();
+        });
+        break;
+
+    }
+
+    case "icicle":
+
+        fill("rgba(20,40,70,.8)");glow("#a8f4ff",s*.04);
+        c.beginPath();c.moveTo(-s*.3,0);c.lineTo(-s*.18,-s*.5);c.lineTo(-s*.05,-s*.15);c.lineTo(s*.06,-s*.7);c.lineTo(s*.18,-s*.2);c.lineTo(s*.3,0);c.closePath();c.fill();c.stroke();
+        break;
+
+    case "mushroom":
+    case "glowshroom":{
+
+        const col=d.type==="glowshroom"?"#7dffb0":"#ffb050";
+        const pulse=d.type==="glowshroom"?.6+.4*Math.sin(time*2+d.seed):1;
+        glow("#e8d8c0",s*.05);
+        c.beginPath();c.moveTo(0,0);c.lineTo(0,-s*.4);c.stroke();
+        fill("rgba(30,16,10,.92)");glow(col,s*.05);
+        c.shadowBlur=8+8*pulse;
+        c.beginPath();c.ellipse(0,-s*.45,s*.3,s*.18,0,Math.PI,Math.PI*2);c.closePath();c.fill();c.stroke();
+        fill(col);c.globalAlpha*=pulse;
+        [-.15,.05,.17].forEach(x=>{c.beginPath();c.arc(x*s,-s*.53,s*.03,0,Math.PI*2);c.fill();});
+        break;
+
+    }
+
+    case "sporepod":
+
+        fill("rgba(30,10,40,.9)");glow("#ff8bf0",s*.04);
+        c.beginPath();c.ellipse(0,-s*.3,s*.18,s*.3,sway,0,Math.PI*2);c.fill();c.stroke();
+        fill("#ffd6f6");
+        for(let i=0;i<3;i++){const k=(time*.4+i/3+d.seed)%1;c.globalAlpha=1-k;c.beginPath();c.arc(Math.sin(i*2+time)*s*.12,-s*.6-k*s*.5,s*.03,0,Math.PI*2);c.fill();}
+        break;
+
+    case "coral":
+
+        glow("#ff7ac8",s*.05);
+        c.beginPath();c.moveTo(0,0);c.lineTo(0,-s*.4);c.lineTo(-s*.2,-s*.65);c.moveTo(0,-s*.4);c.lineTo(s*.15,-s*.7);c.moveTo(0,-s*.25);c.lineTo(s*.22,-s*.4);c.stroke();
+        break;
+
+    case "kelp":
+
+        glow("#5dffc8",s*.05);
+        c.beginPath();c.moveTo(0,0);
+        for(let i=1;i<=6;i++)c.lineTo(Math.sin(time*1.5+i+d.seed)*s*.08,-s*.15*i);
+        c.stroke();
+        break;
+
+    case "cloudpuff":{
+
+        const bob=Math.sin(time+d.seed)*s*.06;
+        fill("rgba(220,250,255,.3)");glow("#d2fffb",s*.04);
+        c.beginPath();c.arc(-s*.15,-s*.55+bob,s*.16,0,Math.PI*2);c.arc(s*.1,-s*.6+bob,s*.2,0,Math.PI*2);c.arc(s*.3,-s*.52+bob,s*.12,0,Math.PI*2);c.fill();
+        c.beginPath();c.arc(s*.1,-s*.6+bob,s*.2,0,Math.PI*2);c.stroke();
+        break;
+
+    }
+
+    case "monolith":
+
+        fill("rgba(10,8,24,.95)");glow("#b98cff",s*.04);
+        c.beginPath();c.rect(-s*.12,-s*.8,s*.24,s*.8);c.fill();c.stroke();
+        fill("rgba(214,192,255,"+(.4+.4*Math.sin(time*1.5+d.seed))+")");
+        c.fillRect(-s*.04,-s*.6,s*.08,s*.08);
+        break;
+
+    case "bush":{
+
+        const ripe=exploreBushRipe(planetId,d);
+        fill("rgba(12,36,26,.92)");glow("#7dff8c",s*.045);
+        c.beginPath();c.arc(-s*.16,-s*.2,s*.2,0,Math.PI*2);c.arc(s*.16,-s*.2,s*.2,0,Math.PI*2);c.arc(0,-s*.34,s*.22,0,Math.PI*2);c.fill();
+        c.beginPath();c.arc(0,-s*.34,s*.22,Math.PI*1.05,Math.PI*1.95);c.stroke();
+        if(ripe){
+            fill("#9fb4ff");c.shadowColor="#9fb4ff";c.shadowBlur=10;
+            [[-.2,-.22],[.05,-.42],[.18,-.2],[-.05,-.16],[.22,-.36]].forEach(([x,y])=>{c.beginPath();c.arc(x*s,y*s,s*.05,0,Math.PI*2);c.fill();});
+        }
+        break;
+
+    }
+
+    default:
+
+        break;
+
+    }
+
+    c.restore();
+
+}
+
+/* an old building: standing, or wrecked */
+function exploreDrawRuin(c,ruin,size,broken,time,planetId){
+
+    const info=EXPLORE_RUIN_INFO[ruin.type];
+
+    const col=broken?"#6f87ad":info.colour;
+
+    const s=size;
+
+    c.save();
+
+    c.lineJoin="round";
+
+    c.lineCap="round";
+
+    c.strokeStyle=col;
+
+    c.lineWidth=Math.max(1.5,s*.035);
+
+    c.shadowColor=col;
+
+    c.shadowBlur=broken?3:10;
+
+    c.fillStyle="rgba(8,12,30,.94)";
+
+    if(broken)
+        c.rotate(.08);
+
+    const shape=()=>{
+
+        c.beginPath();
+
+        if(ruin.type==="observatory"){
+
+            c.rect(-s*.32,-s*.38,s*.64,s*.38);
+
+            c.moveTo(-s*.32,-s*.38);
+
+            c.arc(0,-s*.38,s*.32,Math.PI,broken?Math.PI*1.55:Math.PI*2);
+
+            if(!broken){
+
+                c.moveTo(s*.05,-s*.68);c.lineTo(s*.12,-s*.4);
+
+            }
+
+        }else if(ruin.type==="outpost"){
+
+            c.rect(-s*.36,-s*.34,s*.72,s*.34);
+
+            c.moveTo(-s*.4,-s*.34);c.lineTo(0,broken?-s*.42:-s*.56);c.lineTo(s*.4,-s*.34);
+
+            if(!broken){
+
+                c.moveTo(s*.24,-s*.46);c.lineTo(s*.24,-s*.82);
+
+                c.moveTo(s*.16,-s*.74);c.lineTo(s*.32,-s*.74);
+
+            }
+
+        }else if(ruin.type==="shrine"){
+
+            c.moveTo(-s*.3,0);c.lineTo(-s*.3,-s*.5);
+
+            c.quadraticCurveTo(0,-s*(broken?.62:.9),broken?0:s*.3,broken?-s*.66:-s*.5);
+
+            if(!broken)c.lineTo(s*.3,0);
+
+        }else{
+
+            c.moveTo(-s*.16,0);c.lineTo(-s*.1,-s*(broken?.45:.78));c.lineTo(s*.1,-s*(broken?.52:.78));c.lineTo(s*.16,0);c.closePath();
+
+            if(!broken)c.rect(-s*.13,-s*.92,s*.26,s*.14);
+
+        }
+
+    };
+
+    shape();
+
+    c.fill();
+
+    shape();
+
+    c.stroke();
+
+    /* details */
+    if(!broken){
+
+        if(ruin.type==="shrine"){
+
+            c.fillStyle="#f3e0ff";
+
+            c.shadowColor="#d08cff";
+
+            c.shadowBlur=14+6*Math.sin(time*2);
+
+            c.beginPath();
+
+            c.moveTo(0,-s*.58);c.lineTo(s*.07,-s*.45);c.lineTo(0,-s*.32);c.lineTo(-s*.07,-s*.45);c.closePath();
+
+            c.fill();
+
+        }
+
+        if(ruin.type==="beacon"){
+
+            const on=!!exploreState(planetId).beacon[ruin.id];
+
+            c.fillStyle=on?"#d6ffe6":"rgba(125,255,176,.3)";
+
+            c.shadowBlur=on?24:4;
+
+            c.fillRect(-s*.08,-s*.9,s*.16,s*.1);
+
+            if(on){
+
+                c.globalAlpha=.25;
+
+                c.beginPath();
+
+                const a=time*1.5;
+
+                c.moveTo(0,-s*.85);c.lineTo(Math.cos(a)*s*1.4,-s*.85-s*.3);c.lineTo(Math.cos(a)*s*1.4,-s*.85+s*.3);c.closePath();
+
+                c.fillStyle="#d6ffe6";
+
+                c.fill();
+
+                c.globalAlpha=1;
+
+            }
+
+        }
+
+        /* a lit doorway */
+        c.fillStyle="rgba(255,236,170,"+(.35+.15*Math.sin(time*2))+")";
+
+        c.shadowBlur=6;
+
+        c.fillRect(-s*.06,-s*.16,s*.12,s*.16);
+
+    }else{
+
+        /* rubble and a wisp of smoke */
+        c.fillStyle="rgba(40,48,70,.95)";
+
+        c.shadowBlur=0;
+
+        [[-.3,.02,.1],[.22,.01,.08],[.05,.03,.06]].forEach(([x,y,r])=>{c.beginPath();c.arc(x*s,y*s,r*s,0,Math.PI*2);c.fill();});
+
+        c.fillStyle="rgba(180,190,210,.25)";
+
+        for(let i=0;i<3;i++){
+
+            const k=(time*.3+i/3)%1;
+
+            c.globalAlpha=(1-k)*.6;
+
+            c.beginPath();
+
+            c.arc(Math.sin(time+i)*s*.1,-s*.4-k*s*.6,s*(.05+k*.08),0,Math.PI*2);
+
+            c.fill();
+
+        }
+
+    }
+
+    c.restore();
+
+}
+
+/* a small crashed asteroid, cracking as it's hit */
+function exploreDrawRock(c,rock,size,time,shake){
+
+    const m=MATERIALS[rock.mat] || {color:"#7fd8ff"};
+
+    const rng=exploreRng(rock.id);
+
+    const pts=[];
+
+    for(let i=0;i<9;i++){
+
+        const a=i/9*Math.PI*2;
+
+        const r=size*(.4+rng()*.14);
+
+        pts.push([Math.cos(a)*r,Math.sin(a)*r*.82]);
+
+    }
+
+    c.save();
+
+    c.translate(shake?(Math.random()-.5)*4:0,-size*.32);
+
+    c.beginPath();
+
+    pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
+
+    c.closePath();
+
+    c.fillStyle="rgba(20,18,30,.96)";
+
+    c.shadowColor=m.color;
+
+    c.shadowBlur=10;
+
+    c.fill();
+
+    c.lineWidth=Math.max(1.5,size*.05);
+
+    c.strokeStyle=m.color;
+
+    c.stroke();
+
+    c.shadowBlur=0;
+
+    /* cracks grow with damage */
+    const damage=1-rock.hp/rock.max;
+
+    c.strokeStyle="rgba(255,240,220,"+(.3+.5*damage)+")";
+
+    c.lineWidth=1.2;
+
+    const cracks=Math.floor(damage*6);
+
+    for(let i=0;i<cracks;i++){
+
+        const a=rng()*Math.PI*2;
+
+        c.beginPath();
+
+        c.moveTo(0,0);
+
+        c.lineTo(Math.cos(a)*size*.22,Math.sin(a)*size*.18);
+
+        c.lineTo(Math.cos(a+.4)*size*.38,Math.sin(a+.4)*size*.3);
+
+        c.stroke();
+
+    }
+
+    /* the material glints inside */
+    c.fillStyle=m.color;
+
+    c.globalAlpha=.55+.35*Math.sin(time*3+rock.max);
+
+    c.beginPath();
+
+    c.arc(size*.08,-size*.06,size*.08,0,Math.PI*2);
+
+    c.fill();
+
+    c.restore();
+
+}
+
+const exploreRockShake={};
+
+const exploreChips=[];
+
+/*
+ * Adds everything out on the planet to the scene's depth-sorted
+ * queue, registers taps and walk-ins, and lets nature take its
+ * course (on the owner's device).
+ */
+function exploreDrawPlanet(composeQueue,p){
+
+    const planetId=selectedStartPlanet;
+
+    const layout=exploreLayout(planetId);
+
+    const st=exploreState(planetId);
+
+    const time=performance.now()/1000;
+
+    const base=Math.max(64,p.width*.21);
+
+    try{
+
+        exploreNatureTick(planetId);
+
+    }catch(error){}
+
+    world.rockScreen={};
+
+    const petProj=
+        roamingActive && !roomState
+        ?projectSphere(roamingLat,roamingLon,p.viewLat,p.viewLon,p.cx,p.cy,p.R)
+        :null;
+
+    const place=(lat,lon,size,draw,onTap,walk)=>{
+
+        const proj=projectSphere(lat,lon,p.viewLat,p.viewLon,p.cx,p.cy,p.R);
+
+        if(!proj.visible)
+            return null;
+
+        const up=Math.atan2(proj.y-p.cy,proj.x-p.cx)+Math.PI/2;
+
+        composeQueue.push({
+            z:p.groundDepthAt(proj.x,proj.y),
+            alpha:1,
+            draw:()=>{
+
+                p.c.save();
+
+                p.c.translate(proj.x,proj.y);
+
+                p.c.rotate(up);
+
+                try{
+
+                    draw(p.c);
+
+                }finally{
+
+                    p.c.restore();
+
+                }
+
+            }
+        });
+
+        if(onTap)
+            world.hits.push({x:proj.x,y:proj.y-size*.4,r:size*.5,z:4,onTap});
+
+        if(walk && petProj){
+
+            const dx=(petProj.x-proj.x)/(size*.45),dy=(petProj.y-proj.y+size*.1)/(size*.35);
+
+            walk(dx*dx+dy*dy<=1);
+
+        }
+
+        return proj;
+
+    };
+
+    if(!world.exploreInside)
+        world.exploreInside={};
+
+    /* decorations and bushes */
+    layout.decor.forEach(d=>{
+
+        const size=base*d.scale*(d.type==="bush"?.78:1);
+
+        place(
+            d.lat,d.lon,size,
+            c=>exploreDrawDecor(c,d,size,exploreColourFor(planetId),time,planetId),
+            d.type==="bush"?(pt)=>exploreBushTap(d,pt):null,
+            d.type==="bush"?(inside)=>{
+
+                if(inside && !world.exploreInside[d.id] && exploreBushRipe(planetId,d)){
+
+                    world.exploreInside[d.id]=true;
+
+                    worldRunAction({"data-action":"bush-pick","data-target":d.id});
+
+                    sound("click");
+
+                }
+
+                if(!inside)
+                    world.exploreInside[d.id]=false;
+
+            }:null
+        );
+
+    });
+
+    /* the old buildings */
+    layout.ruins.forEach(ruin=>{
+
+        const size=base*1.3;
+
+        const broken=exploreRuinBroken(planetId,ruin);
+
+        place(
+            ruin.lat,ruin.lon,size,
+            c=>exploreDrawRuin(c,ruin,size,broken,time,planetId),
+            ()=>exploreRuinBubble(ruin),
+            (inside)=>{
+
+                const key="ruin:"+ruin.id;
+
+                const cooling=performance.now()-worldLastRoomExitAt<WORLD_ENTER_COOLDOWN_MS || worldLastRoomExitKey==="r:"+ruin.id;
+
+                if(inside && !world.exploreInside[key] && !cooling){
+
+                    world.exploreInside[key]=true;
+
+                    if(broken)
+                        exploreRuinBubble(ruin);
+                    else
+                        enterRoom("ruin",ruin.id);
+
+                }
+
+                if(!inside){
+
+                    world.exploreInside[key]=false;
+
+                    if(worldLastRoomExitKey==="r:"+ruin.id)
+                        worldLastRoomExitKey=null;
+
+                }
+
+            }
+        );
+
+    });
+
+    /* crashed asteroids */
+    st.rocks.forEach(rock=>{
+
+        const size=Math.max(40,p.width*.12);
+
+        const shake=(exploreRockShake[rock.id] || 0)>performance.now();
+
+        const proj=place(
+            rock.lat,rock.lon,size,
+            c=>exploreDrawRock(c,rock,size,time,shake),
+            (pt)=>exploreRockTap(rock,pt),
+            null
+        );
+
+        if(proj)
+            world.rockScreen[rock.id]={x:proj.x,y:proj.y-size*.32,r:size*.5};
+
+    });
+
+}
+
+function exploreBushTap(bush,pt){
+
+    const planetId=selectedStartPlanet;
+
+    const ripe=exploreBushRipe(planetId,bush);
+
+    const left=Math.max(0,BUSH_REGROW_MS-(Date.now()-(exploreState(planetId).picked[bush.id] || 0)));
+
+    worldShowBubble({
+        x:pt.x,y:pt.y-30,
+        iconHtml:SNACK_ICON,
+        title:"Glow Berry bush",
+        meta:ripe?"Ripe — berries ready":"Regrowing · "+Math.ceil(left/60000)+" min",
+        text:"Walk a pet into it to shake the berries loose, then carry them home — any pet eats them.",
+        buttons:ripe?[{label:"Pick the berries",primary:true,action:()=>worldRunAction({"data-action":"bush-pick","data-target":bush.id})}]:[]
+    });
+
+}
+
+/* hitting an asteroid: the roaming pet has to be close by */
+function exploreRockTap(rock,pt){
+
+    const head=world.roamHead;
+
+    if(!roamingActive || !head){
+
+        worldShowBubble({
+            x:pt.x,y:pt.y-30,
+            iconHtml:"☄",
+            title:"Crashed asteroid",
+            meta:((MATERIALS[rock.mat] || {}).name || "Material")+" inside · "+rock.hp+"/"+rock.max,
+            text:"Send a pet out to roam, walk up to it and tap it again and again to crack it — or hit it with a powerup.",
+            buttons:[]
+        });
+
+        return;
+
+    }
+
+    if(Math.hypot(head.x-pt.x,head.y-pt.y)>Math.max(140,(world.scene && world.scene.W || 400)*.33)){
+
+        showShipToast("Walk closer to hit it");
+
+        return;
+
+    }
+
+    exploreRockShake[rock.id]=performance.now()+160;
+
+    for(let i=0;i<4;i++)
+        exploreChips.push({x:pt.x,y:pt.y,vx:(Math.random()-.5)*180,vy:-Math.random()*200,t0:performance.now(),col:(MATERIALS[rock.mat] || {}).color || "#fff"});
+
+    sound("click",1.4);
+
+    worldRunAction({"data-action":"rock-hit","data-target":rock.id,"data-stat":"1"});
+
+}
+
+/* powerups crack asteroids they reach */
+function exploreBlastRocks(test){
+
+    Object.keys(world.rockScreen || {}).forEach(id=>{
+
+        const r=world.rockScreen[id];
+
+        if(test(r)){
+
+            exploreRockShake[id]=performance.now()+300;
+
+            worldRunAction({"data-action":"rock-hit","data-target":id,"data-stat":"999"});
+
+        }
+
+    });
+
+}
+
+function exploreDrawChips(c){
+
+    const now=performance.now();
+
+    for(let i=exploreChips.length-1;i>=0;i--){
+
+        const ch=exploreChips[i];
+
+        const t=(now-ch.t0)/1000;
+
+        if(t>.6){
+
+            exploreChips.splice(i,1);
+
+            continue;
+
+        }
+
+        c.save();
+
+        c.globalAlpha=1-t/.6;
+
+        c.fillStyle=ch.col;
+
+        c.fillRect(ch.x+ch.vx*t,ch.y+ch.vy*t+400*t*t,4,4);
+
+        c.restore();
+
+    }
+
+}
+
+function exploreRuinBubble(ruin){
+
+    const planetId=selectedStartPlanet;
+
+    const info=EXPLORE_RUIN_INFO[ruin.type];
+
+    const broken=exploreRuinBroken(planetId,ruin);
+
+    const pet=getRoamingPet();
+
+    const isBuilder=pet && (pet.role || "builder")==="builder";
+
+    const reward=3+2*((getPlanet(planetId) || {tier:0}).tier || 0);
+
+    const s=world.scene;
+
+    const proj=s && s.mode==="planet"?projectSphere(ruin.lat,ruin.lon,s.viewLat,s.viewLon,s.cx,s.cy,s.R):{x:200,y:300};
+
+    worldShowBubble({
+        x:proj.x,y:proj.y-60,
+        iconHtml:info.icon,
+        title:info.name+(broken?" (in ruins)":""),
+        meta:broken?"Needs a builder · repair for "+reward+" "+COIN_ICON_HTML:"Standing · walk in to explore",
+        text:broken
+            ?"Something came down on it. A builder pet can put it back together."
+            :"An old building from before the settlers arrived.",
+        buttons:broken
+            ?[{label:isBuilder?"Repair · +"+reward+" "+COIN_ICON_HTML:"Needs a builder pet",primary:true,disabled:!isBuilder,action:()=>{
+
+                worldRunAction({"data-action":"ruin-repair","data-target":ruin.id,"data-pet":pet.id});
+
+                world.effects.push({type:"repair",x:proj.x,y:proj.y-40,t0:performance.now()});
+
+            }}]
+            :[]
+    });
+
+}
+
+/* ---------- inside the old buildings ---------- */
+
+function roomRuinFixtures(c,list,planetId,st,time){
+
+    const ruin=exploreLayout(planetId).ruins.find(r => r.id===roomState.id);
+
+    if(!ruin){
+
+        leaveRoom();
+
+        return;
+
+    }
+
+    const info=EXPLORE_RUIN_INFO[ruin.type];
+
+    if(ruin.type==="observatory"){
+
+        list.push({v:-2,draw:()=>{
+
+            /* a slit in the dome, full of stars */
+            const a=roomWallPt(.38,.05),b=roomWallPt(.62,.95);
+
+            c.save();
+
+            c.fillStyle="#02030c";
+
+            c.fillRect(a.x,a.y,b.x-a.x,b.y-a.y);
+
+            c.fillStyle="#fff";
+
+            for(let i=0;i<30;i++){
+
+                c.globalAlpha=.3+.7*((i*7)%5)/5;
+
+                c.fillRect(a.x+((i*37.7)%(b.x-a.x)),a.y+((i*91.3)%(b.y-a.y)),1.5,1.5);
+
+            }
+
+            c.restore();
+
+            roomNeonPath(c,info.colour,2,()=>c.rect(a.x,a.y,b.x-a.x,b.y-a.y));
+
+        }});
+
+        list.push({v:.4,draw:()=>{
+
+            const p=roomFloorPt(.5,.4);
+
+            roomNeonPath(c,info.colour,3,()=>{
+
+                c.moveTo(p.x-30*p.s,p.y);c.lineTo(p.x,p.y-60*p.s);c.lineTo(p.x+30*p.s,p.y);
+
+                c.moveTo(p.x-14*p.s,p.y-56*p.s);c.lineTo(p.x+44*p.s,p.y-120*p.s);
+
+            });
+
+            c.save();
+
+            c.fillStyle="#eafcff";
+
+            c.font="800 11px system-ui,sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText("TELESCOPE",p.x,p.y+16);
+
+            c.restore();
+
+            world.hits.push({x:p.x+10*p.s,y:p.y-70*p.s,r:60*p.s,z:6,onTap:()=>worldShowBubble({
+                x:p.x,y:p.y-120*p.s,
+                iconHtml:"🔭",
+                title:"Old telescope",
+                text:"Still pointed at the stars. Have a look at where you could fly next.",
+                buttons:[{label:"Look through it",primary:true,action:()=>{try{openStarMap();}catch(e){}}}]
+            })});
+
+        }});
+
+    }else if(ruin.type==="outpost"){
+
+        const st2=exploreState(planetId);
+
+        const ready=Date.now()-(st2.cache[ruin.id] || 0)>=CACHE_RESTOCK_MS;
+
+        list.push({v:.4,draw:()=>{
+
+            const box=roomDrawBox(c,.5,.4,90,54,info.colour,ready?"SUPPLY CRATE":"CRATE · EMPTY");
+
+            if(ready){
+
+                c.save();
+
+                c.globalAlpha=.5+.4*Math.sin(performance.now()/300);
+
+                c.fillStyle="#ffe6b0";
+
+                c.font="800 "+Math.round(16*box.s)+"px system-ui,sans-serif";
+
+                c.textAlign="center";
+
+                c.fillText("?",box.x,box.y+6);
+
+                c.restore();
+
+            }
+
+            world.hits.push({x:box.x,y:box.y,r:Math.max(box.w,box.h)*.6,z:6,onTap:()=>{
+
+                if(ready){
+
+                    worldRunAction({"data-action":"cache-open","data-target":ruin.id});
+
+                }else{
+
+                    worldShowBubble({x:box.x,y:box.top,iconHtml:"📦",title:"Supply crate",text:"Empty for now — the supply drones restock it every so often.",buttons:[]});
+
+                }
+
+            }});
+
+        }});
+
+        /* shelves of old supplies, and the last crew's logbook */
+        list.push({v:-2,draw:()=>{
+
+            for(let row=0;row<2;row++){
+
+                const a=roomWallPt(.08,.35+row*.3),b=roomWallPt(.92,.35+row*.3);
+
+                roomNeonPath(c,"#ffb347",1.4,()=>{c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);});
+
+                for(let k=0;k<5;k++){
+
+                    const q=roomWallPt(.14+k*.17+(row*.05),.35+row*.3);
+
+                    const w=14+(k*7)%10,h=10+(k*5)%12;
+
+                    roomNeonPath(c,"rgba(255,179,71,.7)",1.2,()=>c.rect(q.x-w/2,q.y-h,w,h));
+
+                }
+
+            }
+
+            const lp=roomWallPt(.5,.82);
+
+            c.save();
+
+            c.fillStyle="rgba(255,236,170,.85)";
+
+            c.font="700 11px system-ui,sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText("📖 LOGBOOK",lp.x,lp.y);
+
+            c.restore();
+
+            world.hits.push({x:lp.x,y:lp.y-4,r:40,z:5,onTap:()=>worldShowBubble({
+                x:lp.x,y:lp.y-10,
+                iconHtml:"📖",
+                title:"The outpost logbook",
+                text:"“Day 212. The drones still drop supplies into the crate, even though the rest of the crew has flown on. If you're reading this — help yourself, and leave the place as you found it.”",
+                buttons:[]
+            })});
+
+        }});
+
+    }else if(ruin.type==="shrine"){
+
+        /* five chimes; the song is etched faintly on the wall */
+        const song=[0,2,4,1,3];
+
+        if(!roomState.shrine)
+            roomState.shrine=[];
+
+        list.push({v:-2,draw:()=>{
+
+            const p=roomWallPt(.5,.4);
+
+            c.save();
+
+            c.font="700 16px system-ui,sans-serif";
+
+            c.textAlign="center";
+
+            c.fillStyle="rgba(214,192,255,.32)";
+
+            c.fillText(song.map(i=>"◇◆◈◉○"[i]).join("  "),p.x,p.y);
+
+            c.restore();
+
+        }});
+
+        [0,1,2,3,4].forEach(i=>{
+
+            const u=.18+.16*i;
+
+            list.push({v:.42,draw:()=>{
+
+                const p=roomFloorPt(u,.42);
+
+                const lit=roomState.shrine.length && roomState.shrine[roomState.shrine.length-1]===i && performance.now()-(roomState.shrineAt || 0)<300;
+
+                c.save();
+
+                c.fillStyle=lit?"#ffffff":"rgba(214,192,255,.25)";
+
+                c.strokeStyle="#d08cff";
+
+                c.lineWidth=2;
+
+                c.shadowColor="#d08cff";
+
+                c.shadowBlur=lit?26:10;
+
+                c.beginPath();
+
+                c.moveTo(p.x,p.y-(70+i*6)*p.s);c.lineTo(p.x+10*p.s,p.y-40*p.s);c.lineTo(p.x,p.y-10*p.s);c.lineTo(p.x-10*p.s,p.y-40*p.s);c.closePath();
+
+                c.fill();c.stroke();
+
+                c.fillStyle="rgba(234,252,255,.7)";
+
+                c.font="700 12px system-ui,sans-serif";
+
+                c.textAlign="center";
+
+                c.fillText("◇◆◈◉○"[i],p.x,p.y+14);
+
+                c.restore();
+
+                world.hits.push({x:p.x,y:p.y-40*p.s,r:24*p.s,z:6,onTap:()=>{
+
+                    sound("click",.8+i*.25);
+
+                    roomState.shrine.push(i);
+
+                    roomState.shrineAt=performance.now();
+
+                    roomState.shrine=roomState.shrine.slice(-song.length);
+
+                    if(roomState.shrine.join()===song.join()){
+
+                        roomState.shrine=[];
+
+                        worldRunAction({"data-action":"shrine-reward","data-target":ruin.id});
+
+                    }
+
+                }});
+
+            }});
+
+        });
+
+    }else if(ruin.type==="beacon"){
+
+        /* the spiral stair up the tower */
+        list.push({v:-2,draw:()=>{
+
+            const g=roomGeo;
+
+            roomNeonPath(c,"rgba(125,255,176,.7)",1.4,()=>{
+
+                for(let i=0;i<7;i++){
+
+                    const y=g.backY-(g.backY-g.wallTop)*(i+1)/8;
+
+                    const x0=g.cx+(i%2?-1:1)*g.backW*.36,x1=g.cx+(i%2?1:-1)*g.backW*.36;
+
+                    c.moveTo(x0,y+(g.backY-g.wallTop)/8);c.lineTo(x1,y);
+
+                }
+
+            });
+
+        }});
+
+        list.push({v:.35,draw:()=>{
+
+            const p=roomFloorPt(.5,.35);
+
+            const on=!!exploreState(planetId).beacon[ruin.id];
+
+            c.save();
+
+            c.fillStyle=on?"#d6ffe6":"rgba(125,255,176,.18)";
+
+            c.shadowColor="#7dffb0";
+
+            c.shadowBlur=on?36:6;
+
+            c.beginPath();
+
+            c.arc(p.x,p.y-60*p.s,26*p.s,0,Math.PI*2);
+
+            c.fill();
+
+            c.restore();
+
+            roomNeonPath(c,"#7dffb0",2,()=>{c.rect(p.x-20*p.s,p.y-30*p.s,40*p.s,30*p.s);});
+
+            c.save();
+
+            c.fillStyle="#eafcff";
+
+            c.font="800 11px system-ui,sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText(on?"LAMP · ON":"LAMP · OFF",p.x,p.y+16);
+
+            c.restore();
+
+            world.hits.push({x:p.x,y:p.y-50*p.s,r:40*p.s,z:6,onTap:()=>{sound("click");worldRunAction({"data-action":"beacon-toggle","data-target":ruin.id});}});
+
+        }});
+
+    }
+
+    void st;void time;
 
 }
 
@@ -38763,7 +40734,7 @@ function drawPlanetFocusScene(){
 
                         world.hits.push({
                             x:px,y:py,r:petSize*.7,z:6,
-                            onTap:()=>worldOpenPetHolo(pet)
+                            onTap:()=>worldPetBubble(pet,px,py-petSize*.9)
                         });
 
                     }
@@ -39637,6 +41608,12 @@ chosenFocusShip
             composeQueue,
             {c,cx,cy,R:radius,viewLat:roamViewLat,viewLon:roamViewLon,width,groundDepthAt}
         );
+
+        if(flightProgress<=.001)
+            exploreDrawPlanet(
+                composeQueue,
+                {c,cx,cy,R:radius,viewLat:roamViewLat,viewLon:roamViewLon,width,groundDepthAt}
+            );
 
         if(flightProgress<=.001)
             worldPlanetStructures({c,cx,cy,R:radius,viewLat:roamViewLat,viewLon:roamViewLon,width});
@@ -44464,7 +46441,7 @@ function renderPlanetDetail(id){
         );
 
     const shopItem=
-        getShopItemForPlanet(id);
+        getShopSaleItemForPlanet(id);
 
     const stock=
         shopItem
@@ -44800,6 +46777,22 @@ function renderPlanetDetail(id){
 
         }
     );
+
+    /* every planet sells everyday pet food */
+    itemCardsHtml=
+        '<div class="item-shop-card">'+
+        '<div class="item-shop-card-main">'+
+        '<div class="item-shop-card-icon">'+SNACK_ICON+'</div>'+
+        '<div class="item-shop-card-name">'+SNACK_NAME+' ×'+SNACK_BUNDLE+'</div>'+
+        '<div class="item-shop-card-meta">Pet food · '+getSnackStock(id)+' here</div>'+
+        '</div>'+
+        '<div class="item-shop-card-btn-wrap">'+
+        '<button class="remove-btn" style="width:100%;" data-action="buy-snacks" '+
+        (getTotalAvailableCoins(id)<SNACK_BUNDLE_COST?'disabled':'')+'>'+
+        'Buy '+SNACK_BUNDLE_COST+' '+COIN_ICON_HTML+'</button>'+
+        '</div>'+
+        '</div>'+
+        itemCardsHtml;
 
     if(itemCardsHtml){
 
@@ -45226,7 +47219,9 @@ function renderPlanetDetail(id){
 
                             const canFeedPilot=
                                 ship.pendingPilot.energy<100 &&
-                                getBank(id)>=pilotFoodCost;
+                                getSnackStock(id)>=1;
+
+                            void pilotFoodCost;
 
                             html+=
                                 '<div class="ship-bay">'+
@@ -46165,7 +48160,14 @@ function renderPlanetDetail(id){
 
     html+=
         '<div class="customizer-section">'+
-        '<div class="customizer-section-title">🐾 Pets</div>';
+        '<div class="customizer-section-title">🐾 Pets</div>'+
+        '<div class="selected-shape-info" style="margin-bottom:12px;">'+
+        '<span>'+SNACK_ICON+' '+SNACK_NAME+' here</span>'+
+        '<strong>'+getSnackStock(id)+'</strong>'+
+        '</div>'+
+        '<button class="neon-btn" style="margin:-4px 0 12px;" data-action="buy-snacks" '+
+        (getTotalAvailableCoins(id)<SNACK_BUNDLE_COST?'disabled':'')+'>'+
+        'Buy '+SNACK_BUNDLE+' '+SNACK_ICON+' · '+SNACK_BUNDLE_COST+' '+COIN_ICON_HTML+'</button>';
 
     if(!pets.length){
 
@@ -46381,12 +48383,11 @@ function renderPlanetDetail(id){
                     'data-pet="'+pet.id+'" '+
                     (
                         pet.energy>=100 ||
-                        getTotalAvailableCoins(id)<
-                        PET_FOOD_COST
+                        getSnackStock(id)<1
                         ?'disabled'
                         :''
                     )+
-                    '>Feed ('+PET_FOOD_COST+' '+COIN_ICON_HTML+')</button>'+
+                    '>Feed '+SNACK_ICON+' <span style="opacity:.65;">('+getSnackStock(id)+' left)</span></button>'+
                     '</div>'+
                     (
                         petExpanded
@@ -47812,11 +49813,11 @@ function renderPlanetDetail(id){
                         pet.id+'" '+
                         (
                             pet.energy>=100 ||
-                            getBank(id)<PET_FOOD_COST
+                            getSnackStock(id)<1
                             ?'disabled'
                             :''
                         )+
-                        '>Feed</button>'+
+                        '>Feed '+SNACK_ICON+'</button>'+
                         '<button class="control-btn" style="flex:1;'+
                         'padding:7px 10px;font-size:10px;" '+
                         'data-action="cancel-pending-pilot" data-ship="'+
@@ -48270,9 +50271,33 @@ function executePlanetDetailAction(target){
             "data-action"
         );
 
+    if(action==="buy-snacks"){
+
+        buySnacks(planetDetailId);
+
+        return;
+
+    }
+
+    if(action==="sell-snack"){
+
+        sellSnack(planetDetailId);
+
+        return;
+
+    }
+
     if(WORLD_ACTIONS.has(action)){
 
         worldExecuteAction(action,target,planetDetailId);
+
+        return;
+
+    }
+
+    if(EXPLORE_ACTIONS.has(action)){
+
+        exploreExecuteAction(action,target,planetDetailId);
 
         return;
 
@@ -80027,6 +82052,37 @@ document.addEventListener(
         }
     );
 
+    const pause=document.getElementById("roamPauseBtn");
+
+    if(pause){
+
+        ["pointerdown","touchstart","mousedown"].forEach(
+            t=>pause.addEventListener(t,e=>e.stopPropagation(),{passive:true})
+        );
+
+        pause.addEventListener("click",e=>{
+
+            e.stopPropagation();
+
+            sound("click");
+
+            if(roomHoloOpen){
+
+                worldCloseHolo();
+
+                return;
+
+            }
+
+            const pet=getRoamingPet();
+
+            if(pet)
+                worldOpenHolo("pets",{petId:pet.id,title:"⏸ PAUSED · "+(SPECIES_DISPLAY_NAMES[pet.species] || "PET").toUpperCase()});
+
+        });
+
+    }
+
     const leave=document.getElementById("roomLeaveBtn");
 
     if(leave){
@@ -80040,6 +82096,21 @@ document.addEventListener(
     }
 
 })();
+
+/* everyone starts with a handful of berries for their pets */
+try{
+
+    if(planetSave && !planetSave.snackStarter){
+
+        addSnackStock("earth",6);
+
+        planetSave.snackStarter=true;
+
+        localStorage.setItem(SAVE_KEY,JSON.stringify(planetSave));
+
+    }
+
+}catch(error){}
 
 warmGlobeTextures();
 
