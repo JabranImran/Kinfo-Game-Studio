@@ -911,6 +911,13 @@ function handleMessage(player,message){
                 ?Math.max(-1,Math.min(1,message.facing))
                 :null,
             back:message.back===true,
+            /* inside a structure or ship: which room, and where on its floor */
+            room:
+                typeof message.room==='string'
+                ?message.room.slice(0,80)
+                :null,
+            ru:Number.isFinite(message.ru)?message.ru:null,
+            rv:Number.isFinite(message.rv)?message.rv:null,
             moving:message.moving===true,
             lives:
                 Number.isFinite(message.lives)
