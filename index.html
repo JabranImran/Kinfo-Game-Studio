@@ -4153,6 +4153,53 @@ and (max-height:500px){
     text-align:left;
 }
 
+
+/* ---- build sites, forge, satellites ---- */
+.forged-icon{display:inline-flex;align-items:center;vertical-align:-.15em;}
+.forged-icon img{height:.78em !important;width:.78em !important;filter:drop-shadow(0 0 2px rgba(255,139,240,.6));}
+.forged-icon img+img{margin-left:-.28em;margin-top:.3em;}
+.pet-subtabs{display:flex;gap:6px;margin:4px 0 8px;}
+.pet-subtab{
+    flex:1;padding:8px 4px;border-radius:12px;cursor:pointer;
+    font:800 11.5px system-ui,sans-serif;color:var(--ink-dim);
+    background:rgba(4,10,28,.6);border:1px solid rgba(95,243,255,.18);
+    transition:all .15s ease;
+}
+.pet-subtab.active{color:var(--ink);border-color:var(--neon-cyan);background:rgba(95,243,255,.12);box-shadow:0 0 12px rgba(95,243,255,.25),inset 0 0 8px rgba(95,243,255,.12);}
+.pet-subtab:active{transform:scale(.96);}
+.site-crew{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.site-crew-btn{
+    display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:12px;cursor:pointer;
+    font:700 12px system-ui,sans-serif;color:var(--ink-dim);
+    background:rgba(4,10,28,.7);border:1px solid rgba(255,215,107,.25);
+}
+.site-crew-btn.on{color:var(--ink);border-color:var(--neon-green);background:rgba(125,255,176,.1);box-shadow:0 0 10px rgba(125,255,176,.25);}
+.site-crew-tick{font-weight:900;color:var(--neon-amber);}
+.site-crew-btn.on .site-crew-tick{color:var(--neon-green);}
+.site-crew-meta{font-size:10.5px;opacity:.65;}
+.forge-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.forge-card{padding:10px;border-radius:14px;border:1px solid rgba(255,139,240,.28);background:rgba(20,6,28,.55);}
+.forge-card-head{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--ink);gap:8px;}
+.forge-card-head span{font-size:11.5px;display:flex;gap:8px;}
+.forge-card-recipe{font-size:13px;color:var(--ink-dim);margin:6px 0 8px;}
+.forge-card-recipe b{color:#ffb3f3;}
+.sat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:6px;}
+.sat-card{
+    padding:10px;border-radius:14px;display:flex;flex-direction:column;gap:6px;
+    border:1px solid color-mix(in srgb,var(--sat) 45%,transparent);
+    background:rgba(4,10,28,.7);box-shadow:inset 0 0 14px color-mix(in srgb,var(--sat) 14%,transparent);
+}
+.sat-card-icon{font-size:26px;text-align:center;filter:drop-shadow(0 0 6px var(--sat));}
+.sat-card-name{font:800 12.5px system-ui,sans-serif;color:var(--ink);text-align:center;}
+.sat-count{color:var(--sat);}
+.sat-card-text{font-size:11px;color:var(--ink-dim);text-align:center;line-height:1.35;}
+.sat-card .neon-btn{padding:7px 6px;font-size:11px;}
+.sat-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;margin-top:6px;border-radius:12px;background:rgba(4,10,28,.6);border:1px solid rgba(95,243,255,.16);font-size:12px;color:var(--ink-dim);}
+.sat-row.aboard{border-color:rgba(255,215,107,.25);}
+.sat-row-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+.sat-row .control-btn{width:auto;padding:6px 10px;font-size:11px;}
+.sat-row-note{font-size:11px;opacity:.6;}
+.structure-tier{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:800;color:var(--neon-violet);border:1px solid rgba(185,140,255,.4);}
 </style>
 
 </head>
@@ -8158,6 +8205,9 @@ const EMP_ITEM={
 
 function getItemInfo(itemId){
 
+    if(isForgedItemId(itemId))
+        return getForgedInfo(itemId);
+
     if(
         itemId==="emp" ||
         !itemId
@@ -8381,6 +8431,9 @@ const ITEM_ICON_HTML={
 };
 
 function getItemIconHtml(itemId){
+
+    if(isForgedItemId(itemId))
+        return forgedIconHtml(itemId);
 
     return(
         ITEM_ICON_HTML[
@@ -8823,8 +8876,8 @@ const STRUCTURES={
         description:
             "Builds new ships. Earth's factory comes for free — "+
             "anywhere else, it has to be built first, using "+
-            "materials brought in from Mars and Titan plus a pet "+
-            "stationed there to actually do the work.",
+            "materials brought in from Mars and Titan, and a "+
+            "builder pet to do the work — the site waits for one.",
         /*
          * Requirements to BUILD the factory itself on a
          * non-Earth planet. Now specifically Mars + Titan's own
@@ -8838,6 +8891,7 @@ const STRUCTURES={
          * material cost stays in a similar ballpark to the old
          * three-planet recipe despite dropping a planet's worth.
          */
+        tier:1,
         buildMaterials:[
             {materialId:"volatile-alloy",amount:4},
             {materialId:"shadow-vapor",amount:4}
@@ -8856,10 +8910,11 @@ const STRUCTURES={
             "they're there. Every mission carries real risk — a "+
             "pet can die out there — and always needs at least "+
             "one other ship left docked for you to fly yourself.",
+        /* tier 2: Europa + Neptune */
+        tier:2,
         buildMaterials:[
-            {materialId:"solar-plating",amount:3},
-            {materialId:"shadow-vapor",amount:3},
-            {materialId:"chrono-crystal",amount:3}
+            {materialId:"cryo-shard",amount:3},
+            {materialId:"mirror-alloy",amount:3}
         ],
         requiresPet:true,
         buildDurationSeconds:75
@@ -8873,12 +8928,54 @@ const STRUCTURES={
             "Lets this planet house a pet that didn't originate "+
             "here. Without a Bio Dome at the destination, a ship "+
             "carrying a pet in cargo has nowhere to drop it off.",
+        /* tier 3: Kepler + Aurora */
+        tier:3,
         buildMaterials:[
-            {materialId:"nova-dust",amount:3},
-            {materialId:"mirror-alloy",amount:3}
+            {materialId:"chrono-crystal",amount:3},
+            {materialId:"magnetic-resin",amount:3}
         ],
         requiresPet:true,
         buildDurationSeconds:60
+    },
+
+    "powerup-forge":{
+        id:"powerup-forge",
+        name:"Powerup Forge",
+        icon:"⚒",
+        description:
+            "Fuses two different powerups into one that fires both "+
+            "from a single charge. Every pet style knows one recipe "+
+            "of its own, so who you bring to the anvil decides what "+
+            "comes out.",
+        /* tier 4: Helios + Nova (and a little Kepler) */
+        tier:4,
+        buildMaterials:[
+            {materialId:"solar-plating",amount:4},
+            {materialId:"nova-dust",amount:4},
+            {materialId:"chrono-crystal",amount:3}
+        ],
+        requiresPet:true,
+        buildDurationSeconds:90
+    },
+
+    "satellite-factory":{
+        id:"satellite-factory",
+        name:"Satellite Factory",
+        icon:"🛰",
+        description:
+            "Builds satellites that ride in your cargo hold and get "+
+            "thrown out mid-flight with a swipe up from the ship. "+
+            "Each one carries a powerup's power — fired by tap, or "+
+            "left to decide for itself.",
+        /* tier 5: Zenith, with Nova and Helios */
+        tier:5,
+        buildMaterials:[
+            {materialId:"prime-core",amount:4},
+            {materialId:"nova-dust",amount:3},
+            {materialId:"solar-plating",amount:3}
+        ],
+        requiresPet:true,
+        buildDurationSeconds:110
     }
 
 };
@@ -10934,13 +11031,13 @@ const STRUCTURE_UPGRADES={
         {
             id:"ship-factory-cargo-hold",
             structureId:"ship-factory",
-            name:"Cargo Hold Expansion",
+            name:"Cargo Hold I",
             icon:"📦",
             description:
                 "Adds an optional toggle when building a ship "+
                 "here (or a retrofit for one already docked): "+
-                "+10 total cargo capacity, for a steeper coin "+
-                "cost.",
+                "+10 cargo slots. Pets ride in cargo (10 slots "+
+                "each), satellites too (15).",
             unlockMaterials:[
                 {materialId:"volatile-alloy",amount:4},
                 {materialId:"magnetic-resin",amount:4}
@@ -10952,13 +11049,12 @@ const STRUCTURE_UPGRADES={
         {
             id:"ship-factory-dual-perk",
             structureId:"ship-factory",
-            name:"Pet Bay Expansion II",
-            icon:"🐾",
+            name:"Cargo Hold III",
+            icon:"📦",
             description:
-                "A second tier on top of Pet Bay Expansion — "+
-                "adds an optional toggle when building a ship "+
-                "here: room for 3 pets in cargo instead of 2, "+
-                "for an even steeper coin cost.",
+                "The biggest hold: an optional toggle when "+
+                "building a ship here (or a retrofit) for +45 "+
+                "cargo slots in all.",
             unlockMaterials:[
                 {materialId:"cryo-shard",amount:5},
                 {materialId:"nova-dust",amount:5}
@@ -10970,11 +11066,12 @@ const STRUCTURE_UPGRADES={
         {
             id:"ship-factory-pet-bay",
             structureId:"ship-factory",
-            name:"Pet Bay Expansion",
-            icon:"🐾",
+            name:"Cargo Hold II",
+            icon:"📦",
             description:
-                "Adds an optional toggle when building a ship "+
-                "here: room for 2 pets in cargo instead of 1.",
+                "An optional toggle when building a ship here "+
+                "(or a retrofit) for +25 cargo slots in all — "+
+                "room for a couple of pets and a satellite.",
             unlockMaterials:[
                 {materialId:"mirror-alloy",amount:5},
                 {materialId:"solar-plating",amount:5}
@@ -12707,6 +12804,28 @@ const DEFAULT_SHIP_STYLE_SHAPES=[
  */
 const DEFAULT_STRUCTURE_SHAPES={
 
+    "powerup-forge":[
+        {type:"custom",x:200,y:182,color:"#7a6a5a",scale:1,rotation:0,points:[[-52,-7],[52,-7],[52,7],[-52,7]],outlineColor:"#ffb347",holePoints:null},
+        {type:"custom",x:228,y:96,color:"#4a4e62",scale:1,rotation:0,points:[[-8,-22],[8,-22],[8,22],[-8,22]],outlineColor:"#ff8bf0",holePoints:null},
+        {type:"custom",x:200,y:143,color:"#3c3f58",scale:1,rotation:0,points:[[-42,-33],[42,-33],[42,33],[-42,33]],outlineColor:"#ff8bf0",holePoints:null},
+        {type:"custom",x:200,y:104,color:"#ff7a3a",scale:1,rotation:0,points:[[-50,8],[0,-20],[50,8]],outlineColor:"#ffd25c",holePoints:null},
+        {type:"circle",x:200,y:150,color:"#ff9a3a",scale:.62,rotation:0,points:null,outlineColor:"#ffd25c",holePoints:null},
+        {type:"circle",x:200,y:152,color:"#fff2b3",scale:.3,rotation:0,points:null,outlineColor:"#ffe45c",holePoints:null},
+        {type:"custom",x:200,y:173,color:"#9fb4d0",scale:1,rotation:0,points:[[-20,-5],[24,-5],[14,1],[6,1],[6,4],[-8,4],[-8,1],[-20,1]],outlineColor:"#eafcff",holePoints:null}
+    ],
+
+    "satellite-factory":[
+        {type:"custom",x:200,y:182,color:"#5a6a86",scale:1,rotation:0,points:[[-52,-7],[52,-7],[52,7],[-52,7]],outlineColor:"#5ff3ff",holePoints:null},
+        {type:"custom",x:176,y:104,color:"#9fb4d0",scale:1,rotation:0,points:[[-2,-24],[2,-24],[2,24],[-2,24]],outlineColor:"#5ff3ff",holePoints:null},
+        {type:"circle",x:176,y:79,color:"#ff5ec4",scale:.18,rotation:0,points:null,outlineColor:"#ffb3e6",holePoints:null},
+        {type:"custom",x:200,y:150,color:"#d8e4f2",scale:1,rotation:0,points:[[-44,-26],[44,-26],[44,26],[-44,26]],outlineColor:"#5ff3ff",holePoints:null},
+        {type:"custom",x:180,y:150,color:"#3a6fd8",scale:1,rotation:0,points:[[-16,-12],[16,-12],[16,12],[-16,12]],outlineColor:"#4f9dff",holePoints:null},
+        {type:"circle",x:220,y:150,color:"#7cf9ff",scale:.4,rotation:0,points:null,outlineColor:"#4f9dff",holePoints:null},
+        {type:"custom",x:224,y:118,color:"#9fb4d0",scale:1,rotation:0,points:[[-3,-8],[3,-8],[3,8],[-3,8]],outlineColor:"#5ff3ff",holePoints:null},
+        {type:"circle",x:226,y:104,color:"#eaf6ff",scale:.62,rotation:0,points:null,outlineColor:"#9fc0e0",holePoints:null}
+    ],
+
+
     shop:[
         {
             type:"custom",x:200,y:181,
@@ -13343,6 +13462,3527 @@ function getSkillTitle(){
     return title.name;
 
 }
+
+/* =========================================================
+   BUILD SITES, ONE CARGO HOLD, THE POWERUP FORGE AND SATELLITES
+
+   - Buying a structure puts its build site on the planet at once:
+     rubble, scaffolding and a ghost of the finished building that
+     fills in from the ground up as pets work on it. A site with no
+     builders simply waits; tap it to send pets over (each extra pet
+     speeds it up).
+   - Pets and satellites ride in the ship's one cargo hold, taking
+     10 and 15 slots each.
+   - The Powerup Forge fuses two different powerups into one that
+     fires both. Every species (and every planet's natives) knows
+     exactly one recipe; the forged-item code itself takes any pair.
+   - The Satellite Factory builds satellites from blueprints you
+     stock by selling powerups. Swipe up from the ship mid-flight to
+     throw one out; manual ones fire when tapped, automatic ones
+     decide for themselves.
+========================================================= */
+
+/* ---------- one cargo hold ---------- */
+
+const PET_CARGO_SLOTS=10;
+
+const SAT_CARGO_SLOTS=15;
+
+/* what the three factory cargo upgrades take a ship's hold up to */
+const CARGO_TIER_BONUS={cargoHold:10,petBay:25,dualPerk:45};
+
+function getShipExtraCargoUsed(ship){
+
+    if(!ship)
+        return 0;
+
+    return(
+        (Array.isArray(ship.cargoPets)?ship.cargoPets.length:0)*PET_CARGO_SLOTS+
+        (Array.isArray(ship.satCargo)?ship.satCargo.length:0)*SAT_CARGO_SLOTS
+    );
+
+}
+
+function getShipCargoUsed(ship){
+
+    return getCargoUsed((ship && ship.materials) || {})+getShipExtraCargoUsed(ship);
+
+}
+
+function shipCargoRoom(ship){
+
+    if(!ship)
+        return 0;
+
+    return getShipCargoCapacity(ship.materialCapBonus)-getShipCargoUsed(ship);
+
+}
+
+/* the run's own hold: pets aboard and satellites still in cargo */
+function runExtraCargoUsed(){
+
+    return(
+        (Array.isArray(currentShipCargoPets)?currentShipCargoPets.length:0)*PET_CARGO_SLOTS+
+        satRun.cargo.length*SAT_CARGO_SLOTS
+    );
+
+}
+
+function shipBuildCargoBonus(build){
+
+    let bonus=0;
+
+    if(build.cargoHold)
+        bonus=Math.max(bonus,CARGO_TIER_BONUS.cargoHold);
+
+    if(build.petBay)
+        bonus=Math.max(bonus,CARGO_TIER_BONUS.petBay);
+
+    if(build.dualPerk)
+        bonus=Math.max(bonus,CARGO_TIER_BONUS.dualPerk);
+
+    return bonus;
+
+}
+
+/*
+ * Ships built before the merge had a separate pet bay. Their extra
+ * pet slots become hold space once, so nobody loses room.
+ */
+function migrateMergedCargo(){
+
+    if(!planetSave || !planetSave.ships || planetSave.cargoMerged)
+        return;
+
+    Object.keys(planetSave.ships).forEach(pid=>{
+
+        (planetSave.ships[pid] || []).forEach(ship=>{
+
+            const extraBays=Math.max(0,(Math.floor(ship.cargoPetCapacity) || 1)-1);
+
+            if(extraBays>0)
+                ship.materialCapBonus=Math.max(ship.materialCapBonus || 0,extraBays===1?CARGO_TIER_BONUS.petBay:CARGO_TIER_BONUS.dualPerk);
+
+        });
+
+    });
+
+    planetSave.cargoMerged=true;
+
+}
+
+/* ---------- build sites ---------- */
+
+const SITE_EXTRA_PET_RATE=.6;
+
+function siteRateFor(n){
+
+    return n<=0?0:1+(n-1)*SITE_EXTRA_PET_RATE;
+
+}
+
+function siteNeedMs(job){
+
+    return (job.durationSeconds || 60)*1000;
+
+}
+
+/* pets that are actually putting in work right now: still here, builders, not starving */
+function siteActiveWorkers(planetId,job){
+
+    const pets=getPets(planetId);
+
+    return (job.workers || []).filter(id=>{
+
+        const pet=pets.find(p => p.id===id);
+
+        return !!pet && pet.energy>0 && (pet.role || "builder")==="builder";
+
+    });
+
+}
+
+function siteProgressMs(job){
+
+    const since=Math.max(0,Date.now()-(job.lastTick || Date.now()));
+
+    return Math.min(siteNeedMs(job),(job.workMs || 0)+since*siteRateFor(job.lastN || 0));
+
+}
+
+function siteFraction(job){
+
+    return Math.max(0,Math.min(1,siteProgressMs(job)/siteNeedMs(job)));
+
+}
+
+/* bank the work done so far, then carry on at the current crew's pace */
+function siteFold(planetId,job){
+
+    job.workMs=siteProgressMs(job);
+
+    job.lastTick=Date.now();
+
+    job.lastN=siteActiveWorkers(planetId,job).length;
+
+}
+
+/* refold when the crew has changed size since last time (a pet got hungry, left, came back) */
+function siteSync(planetId,job){
+
+    const n=siteActiveWorkers(planetId,job).length;
+
+    if(n===(job.lastN || 0))
+        return false;
+
+    siteFold(planetId,job);
+
+    return true;
+
+}
+
+/*
+ * What the live timers should show for a job. For a site with a crew
+ * this is a virtual start and duration that tick at the crew's pace;
+ * for a site with nobody on it, idle:true.
+ */
+function siteTimerView(build){
+
+    if(!build || !build.site)
+        return build;
+
+    const rate=siteRateFor(build.lastN || 0);
+
+    if(!rate)
+        return {idle:true,frac:siteFraction(build)};
+
+    const progress=siteProgressMs(build);
+
+    const need=siteNeedMs(build);
+
+    return {startedAt:Date.now()-progress/rate,durationSeconds:need/rate/1000};
+
+}
+
+function getSiteJob(planetId,structureId){
+
+    return getBuildQueue(planetId).find(b => b.type==="structure" && b.structureId===structureId) || null;
+
+}
+
+/* builders and pilots heading for whatever they're working on */
+function petBuildJob(planetId,pet,activeBuild){
+
+    const queue=getBuildQueue(planetId);
+
+    const site=queue.find(b => b.site && (b.workers || []).includes(pet.id));
+
+    if(site)
+        return site;
+
+    return queue.find(b => !b.site) || null;
+
+}
+
+function petShortName(planetId,pet){
+
+    const name=SPECIES_DISPLAY_NAMES[pet.species] || "Native pet";
+
+    const same=getPets(planetId).filter(p => (SPECIES_DISPLAY_NAMES[p.species] || "Native pet")===name);
+
+    return same.length>1?name+" "+(same.indexOf(pet)+1):name;
+
+}
+
+/* the shop's buy button: lays the site down (with any free builders already on it) */
+function placeStructureSite(planetId,structureId){
+
+    const structure=STRUCTURES[structureId];
+
+    const queue=planetSave.buildQueue[planetId];
+
+    const busy=new Set();
+
+    queue.forEach(b=>{
+
+        if(b.site)
+            (b.workers || []).forEach(id => busy.add(id));
+
+    });
+
+    const workers=getPets(planetId).filter(p => (p.role || "builder")==="builder" && p.energy>0 && !busy.has(p.id)).map(p => p.id);
+
+    const job={
+        type:"structure",
+        structureId,
+        site:true,
+        planetId,
+        startedAt:Date.now(),
+        durationSeconds:structure.buildDurationSeconds,
+        workMs:0,
+        lastTick:Date.now(),
+        workers,
+        lastN:0
+    };
+
+    job.lastN=siteActiveWorkers(planetId,job).length;
+
+    queue.push(job);
+
+    return job;
+
+}
+
+function siteToggleWorker(planetId,structureId,petId){
+
+    const job=getSiteJob(planetId,structureId);
+
+    const pet=getPets(planetId).find(p => p.id===petId);
+
+    if(!job || !job.site || !pet)
+        return;
+
+    getBuildQueue(planetId).forEach(b=>{
+
+        if(b.site)
+            siteFold(planetId,b);
+
+    });
+
+    const on=(job.workers || []).includes(petId);
+
+    getBuildQueue(planetId).forEach(b=>{
+
+        if(b.site && b.workers)
+            b.workers=b.workers.filter(id => id!==petId);
+
+    });
+
+    if(!on){
+
+        if((pet.role || "builder")!=="builder"){
+
+            showShipToast("Only builders can work on a site — make "+petShortName(planetId,pet)+" a builder first");
+
+            return;
+
+        }
+
+        job.workers=(job.workers || []).concat(petId);
+
+    }
+
+    getBuildQueue(planetId).forEach(b=>{
+
+        if(b.site)
+            b.lastN=siteActiveWorkers(planetId,b).length;
+
+    });
+
+    savePlanetProgress();
+
+    const st=STRUCTURES[structureId];
+
+    showShipToast(on?petShortName(planetId,pet)+" stepped off the "+st.name+" site":petShortName(planetId,pet)+" is building the "+st.name+(pet.energy<=0?" (once it's fed)":"")+"!");
+
+}
+
+/* the bubble a site shows when tapped on the planet */
+function siteBubble(planetId,structureId,x,y){
+
+    const job=getSiteJob(planetId,structureId);
+
+    const st=STRUCTURES[structureId];
+
+    if(!job || !st)
+        return;
+
+    const builders=getPets(planetId).filter(p => (p.role || "builder")==="builder");
+
+    const crew=siteActiveWorkers(planetId,job).length;
+
+    const view=siteTimerView(job);
+
+    const pct=Math.round(siteFraction(job)*100);
+
+    const buttons=builders.slice(0,6).map(p=>{
+
+        const on=(job.workers || []).includes(p.id);
+
+        return{
+            label:(on?"✓ ":"＋ ")+petShortName(planetId,p)+(p.energy<=0?" · hungry":""),
+            primary:on,
+            keepOpen:true,
+            action:()=>{
+
+                worldRunAction({"data-action":"site-workers","data-structure":structureId,"data-pet":p.id});
+
+                setTimeout(()=>siteBubble(planetId,structureId,x,y),80);
+
+            }
+        };
+
+    });
+
+    if(!builders.length){
+
+        buttons.push({label:"🐾 Get a pet",primary:true,action:()=>worldOpenHolo("pets",{title:"PETS"})});
+
+    }
+
+    worldShowBubble({
+        x,y,
+        iconHtml:getStructureIconHtml(structureId),
+        title:st.name+" · build site",
+        meta:pct+"% built · "+(crew?crew+" builder"+(crew>1?"s":"")+" · "+formatRemainingText(job):"waiting for builders"),
+        text:builders.length
+            ?"Tap pets to put them on the job (or take them off). Each extra builder speeds it up; hungry pets down tools until fed."
+            :"Nobody here can build it yet. Adopt a pet at the pen (or make one a builder) and send it over.",
+        buttons
+    });
+
+    void view;
+
+}
+
+/* the menu's own view of a site: progress plus the crew picker */
+function siteMenuHtml(planetId,job){
+
+    const st=STRUCTURES[job.structureId];
+
+    const view=siteTimerView(job);
+
+    const pct=Math.round(siteFraction(job)*1000)/10;
+
+    const builders=getPets(planetId).filter(p => (p.role || "builder")==="builder");
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+getStructureIconHtml(job.structureId)+' '+st.name+' · build site</div>'+
+        '<div class="metric-note state-warn">🏗 '+
+        (
+            view && !view.idle
+            ?'Being built — <span class="live-timer" data-start="'+view.startedAt+'" data-duration="'+view.durationSeconds+'">'+formatRemainingText(job)+'</span>'
+            :'Waiting for builders · '+Math.round(pct)+'% done'
+        )+
+        '</div>'+
+        '<div class="live-bar"><div class="live-bar-fill"'+
+        (view && !view.idle?' data-start="'+view.startedAt+'" data-duration="'+view.durationSeconds+'"':'')+
+        ' style="width:'+pct+'%"></div></div>';
+
+    if(!builders.length){
+
+        html+=
+            '<div class="metric-note">No builder pets here. Adopt one in the Pets tab (or switch a pet to Builder) and it can get to work.</div>'+
+            '<button class="neon-btn" data-action="planet-tab" data-tab="pets">🐾 Pets</button>';
+
+    }else{
+
+        html+='<div class="site-crew">';
+
+        builders.forEach(p=>{
+
+            const on=(job.workers || []).includes(p.id);
+
+            html+=
+                '<button class="site-crew-btn'+(on?' on':'')+'" data-action="site-workers" data-structure="'+job.structureId+'" data-pet="'+p.id+'">'+
+                '<span class="site-crew-tick">'+(on?'✓':'＋')+'</span>'+
+                '<span>'+petShortName(planetId,p)+'</span>'+
+                '<span class="site-crew-meta">'+(p.energy<=0?'hungry':Math.round(p.energy)+'%')+'</span>'+
+                '</button>';
+
+        });
+
+        html+=
+            '</div>'+
+            '<div class="metric-note">One builder builds at normal speed; each extra adds 60%. You can also tap the site itself on the planet.</div>';
+
+    }
+
+    html+='</div>';
+
+    return html;
+
+}
+
+/*
+ * Drawing a structure that's still a site: rubble round its foot, a
+ * faint blueprint of the finished building, the real thing rising
+ * from the ground up as work goes on, scaffolding and a little crane.
+ * Drawn in the item's own upright space (origin at its foot).
+ */
+function drawSiteBody(c,item,iconSize,renderBody){
+
+    const job=item.site;
+
+    const frac=siteFraction(job);
+
+    const working=(job.lastN || 0)>0;
+
+    const t=performance.now()/1000;
+
+    /* a default design stands about .8 icons tall and .6 wide, its foot just above the anchor */
+    const H=iconSize*.82;
+
+    const half=iconSize*.36;
+
+    const foot=-iconSize*.05;
+
+    /* blueprint ghost */
+    c.save();
+
+    c.globalAlpha*=.16;
+
+    renderBody();
+
+    c.restore();
+
+    /* the built part */
+    if(frac>0){
+
+        c.save();
+
+        c.beginPath();
+
+        c.rect(-half*2.2,foot-H*frac,half*4.4,H*frac+iconSize*.7);
+
+        c.clip();
+
+        renderBody();
+
+        c.restore();
+
+    }
+
+    /* scaffolding */
+    c.save();
+
+    c.strokeStyle=working?"#ffd76b":"#7f93b8";
+
+    c.shadowColor=c.strokeStyle;
+
+    c.shadowBlur=working?8:3;
+
+    c.lineWidth=Math.max(1.4,iconSize*.022);
+
+    c.globalAlpha*=.85;
+
+    const top=foot-H*Math.max(.45,Math.min(1.05,frac+.3));
+
+    c.beginPath();
+
+    [-half*.82,half*.82].forEach(px=>{
+
+        c.moveTo(px,foot);
+
+        c.lineTo(px,top);
+
+    });
+
+    for(let k=1;k<=4;k++){
+
+        const yy=foot+(top-foot)*k/4;
+
+        c.moveTo(-half*.82,yy);
+
+        c.lineTo(half*.82,yy);
+
+    }
+
+    c.moveTo(-half*.82,foot);
+
+    c.lineTo(half*.82,foot+(top-foot)*.25);
+
+    c.moveTo(half*.82,foot+(top-foot)*.5);
+
+    c.lineTo(-half*.82,foot+(top-foot)*.75);
+
+    c.stroke();
+
+    /* the crane: an arm over the top with a swinging hook */
+    const armY=top-iconSize*.08;
+
+    c.beginPath();
+
+    c.moveTo(half*.82,foot);
+
+    c.lineTo(half*.82,armY);
+
+    c.lineTo(-half*1.1,armY);
+
+    const sway=working?Math.sin(t*1.8)*iconSize*.05:0;
+
+    const hookX=-half*.5+sway;
+
+    const hookY=armY+iconSize*(.22+.06*Math.sin(t*1.1));
+
+    c.moveTo(hookX,armY);
+
+    c.lineTo(hookX,hookY);
+
+    c.stroke();
+
+    c.fillStyle=c.strokeStyle;
+
+    c.fillRect(hookX-iconSize*.035,hookY,iconSize*.07,iconSize*.05);
+
+    c.restore();
+
+    /* rubble round the foot, thinning out as it's used up */
+    c.save();
+
+    const stones=Math.round(9*(1-frac*.7));
+
+    for(let i=0;i<stones;i++){
+
+        const sx=(-1+2*((i*.618)%1))*half*1.5;
+
+        const sr=iconSize*(.05+.035*((i*7)%3));
+
+        c.fillStyle=i%2?"#5a5f75":"#7a6a5a";
+
+        c.strokeStyle="#9fb4d0";
+
+        c.lineWidth=1;
+
+        c.beginPath();
+
+        c.moveTo(sx-sr,foot+2);
+
+        c.lineTo(sx-sr*.6,foot-sr*1.2);
+
+        c.lineTo(sx+sr*.5,foot-sr*1.4);
+
+        c.lineTo(sx+sr,foot+2);
+
+        c.closePath();
+
+        c.fill();
+
+        c.stroke();
+
+    }
+
+    c.restore();
+
+    /* sparks while it's being worked on */
+    if(working){
+
+        c.save();
+
+        for(let i=0;i<5;i++){
+
+            const ph=(t*1.6+i*.37)%1;
+
+            const sx=Math.sin(i*2.1+t)*half*.5;
+
+            const sy=foot-H*frac-ph*iconSize*.3;
+
+            c.globalAlpha*=1;
+
+            c.fillStyle=i%2?"#fff2b3":"#ffb347";
+
+            c.globalAlpha=Math.max(0,1-ph);
+
+            c.fillRect(sx,sy,2.2,2.2);
+
+        }
+
+        c.restore();
+
+    }
+
+    /* progress pill */
+    c.save();
+
+    const bw=iconSize*.8,bh=Math.max(5,iconSize*.06);
+
+    const by=iconSize*.12;
+
+    c.fillStyle="rgba(4,8,22,.85)";
+
+    c.fillRect(-bw/2,by,bw,bh);
+
+    c.fillStyle=working?"#7dffb0":"#ffd76b";
+
+    c.shadowColor=c.fillStyle;
+
+    c.shadowBlur=8;
+
+    c.fillRect(-bw/2,by,bw*frac,bh);
+
+    c.shadowBlur=0;
+
+    c.strokeStyle="rgba(188,236,255,.6)";
+
+    c.lineWidth=1;
+
+    c.strokeRect(-bw/2,by,bw,bh);
+
+    c.fillStyle="#eafcff";
+
+    c.font="800 "+Math.max(9,Math.round(iconSize*.11))+"px system-ui,sans-serif";
+
+    c.textAlign="center";
+
+    c.textBaseline="top";
+
+    c.fillText(working?Math.round(frac*100)+"% · building":"tap to build · "+Math.round(frac*100)+"%",0,by+bh+3);
+
+    c.restore();
+
+}
+
+/* ---------- the Powerup Forge ---------- */
+
+const FORGE_PREFIX="forge:";
+
+const FORGE_COST=6;
+
+const FORGE_ENERGY=15;
+
+/*
+ * One recipe per pet style. Natives (a planet's own procedural pets)
+ * each know their home world's recipe. Pairs not listed here are
+ * still valid forged items; future species just add a line.
+ */
+const FORGE_RECIPES={
+    cat:["emp","regen-coil"],
+    gorilla:["incinerator-beam","solar-blade"],
+    penguin:["ricochet-orb","nova-burst"],
+    koala:["ghost-shield","regen-coil"],
+    rex:["singularity","emp"],
+    "native:earth":["emp","chrono-field"],
+    "native:mars":["regen-coil","incinerator-beam"],
+    "native:titan":["incinerator-beam","ghost-shield"],
+    "native:europa":["return-capsule","ghost-shield"],
+    "native:neptune":["ghost-shield","chrono-field"],
+    "native:kepler":["chrono-field","singularity"],
+    "native:aurora":["ricochet-orb","emp"],
+    "native:helios":["solar-blade","nova-burst"],
+    "native:nova":["nova-burst","return-capsule"],
+    "native:zenith":["singularity","solar-blade"]
+};
+
+const FORGED_NAMES={
+    "emp+regen-coil":"Surge Mender",
+    "incinerator-beam+solar-blade":"Plasma Saber",
+    "nova-burst+ricochet-orb":"Gold Rush Orb",
+    "ghost-shield+regen-coil":"Dream Shell",
+    "emp+singularity":"Event Horizon",
+    "chrono-field+emp":"Stasis Pulse",
+    "incinerator-beam+regen-coil":"Cauteriser",
+    "ghost-shield+incinerator-beam":"Phantom Lance",
+    "ghost-shield+return-capsule":"Escape Veil",
+    "chrono-field+ghost-shield":"Time Phase",
+    "chrono-field+singularity":"Slow Collapse",
+    "emp+ricochet-orb":"Arc Bouncer",
+    "nova-burst+solar-blade":"Sunreaper",
+    "nova-burst+return-capsule":"Jackpot Pod",
+    "singularity+solar-blade":"Void Edge"
+};
+
+const POWERUP_COLOURS={
+    "emp":"#ffe45c","regen-coil":"#ff5c7a","incinerator-beam":"#ff7a1a",
+    "return-capsule":"#e0b070","ghost-shield":"#eaf4ff","chrono-field":"#8a7fff",
+    "ricochet-orb":"#4fd6ff","solar-blade":"#ffd25c","nova-burst":"#ffd76b",
+    "singularity":"#b98cff"
+};
+
+function isBasePowerupId(id){
+
+    return id==="emp" || !!SHOP_ITEMS[id];
+
+}
+
+function forgedItemId(a,b){
+
+    return FORGE_PREFIX+[a,b].sort().join("+");
+
+}
+
+/* (a literal, not FORGE_PREFIX: this runs while the save loads, before the constants above exist) */
+function isForgedItemId(id){
+
+    return typeof id==="string" && id.indexOf("forge:")===0;
+
+}
+
+function forgedParts(id){
+
+    if(!isForgedItemId(id))
+        return null;
+
+    const parts=id.slice(FORGE_PREFIX.length).split("+").filter(isBasePowerupId);
+
+    return parts.length===2 && parts[0]!==parts[1]?parts:null;
+
+}
+
+/* what a powerup id is made of: itself, or the two halves of a forged one */
+function powerupParts(id){
+
+    return forgedParts(id) || [id || "emp"];
+
+}
+
+function equipmentHas(equipment,partId){
+
+    return powerupParts(equipment).includes(partId);
+
+}
+
+const forgedInfoCache={};
+
+function getForgedInfo(id){
+
+    if(forgedInfoCache[id])
+        return forgedInfoCache[id];
+
+    const parts=forgedParts(id);
+
+    if(!parts)
+        return EMP_ITEM;
+
+    const a=getItemInfo(parts[0]),b=getItemInfo(parts[1]);
+
+    const key=parts.join("+");
+
+    const info={
+        id,
+        forged:true,
+        parts,
+        name:FORGED_NAMES[key] || a.name+" + "+b.name,
+        icon:a.icon+b.icon,
+        cost:(a.cost || 1)+(b.cost || 1),
+        description:"Forged from "+a.name+" and "+b.name+" — one charge fires both at once."
+    };
+
+    forgedInfoCache[id]=info;
+
+    return info;
+
+}
+
+function forgedIconHtml(id){
+
+    const parts=forgedParts(id);
+
+    if(!parts)
+        return getItemIconHtml("emp");
+
+    return '<span class="forged-icon">'+getItemIconHtml(parts[0])+getItemIconHtml(parts[1])+'</span>';
+
+}
+
+/* both halves' icons, overlapped, as a world token */
+function forgedDrawIcons(c,id,x,y,iconSize){
+
+    const parts=forgedParts(id) || ["emp","emp"];
+
+    const k=iconSize*.72;
+
+    parts.forEach((part,i)=>{
+
+        const sprite=worldSprite(getItemIconHtml(part));
+
+        const dx=(i?1:-1)*iconSize*.22,dy=(i?1:-1)*iconSize*.12;
+
+        if(sprite.img && sprite.img.complete && sprite.img.naturalWidth){
+
+            c.drawImage(sprite.img,x+dx-k/2,y+dy-k/2,k,k);
+
+        }else{
+
+            c.font=Math.round(k)+"px system-ui,'Apple Color Emoji',sans-serif";
+
+            c.textAlign="center";
+
+            c.textBaseline="middle";
+
+            c.fillStyle="#fff";
+
+            c.fillText(sprite.text || "?",x+dx,y+dy);
+
+        }
+
+    });
+
+}
+
+function forgeRecipeKey(pet){
+
+    if(!pet)
+        return null;
+
+    if(pet.species && SPECIES_DISPLAY_NAMES[pet.species])
+        return pet.species;
+
+    return "native:"+(pet.homePlanetId || "earth");
+
+}
+
+function forgeRecipeFor(pet){
+
+    return FORGE_RECIPES[forgeRecipeKey(pet)] || null;
+
+}
+
+function forgeRecipeHtml(recipe){
+
+    if(!recipe)
+        return "—";
+
+    const out=forgedItemId(recipe[0],recipe[1]);
+
+    return getItemIconHtml(recipe[0])+' + '+getItemIconHtml(recipe[1])+' → '+forgedIconHtml(out)+' <b>'+getForgedInfo(out).name+'</b>';
+
+}
+
+/* why a pet can't forge right now (null when it can) */
+function forgeBlocker(planetId,pet){
+
+    const recipe=forgeRecipeFor(pet);
+
+    if(!recipe)
+        return "doesn't know a recipe yet";
+
+    if(!hasStructure(planetId,"powerup-forge"))
+        return "needs a Powerup Forge on this planet";
+
+    if(pet.energy<=0)
+        return "is too hungry to work the forge";
+
+    const missing=recipe.filter(id => id!=="emp" && getItemStock(planetId,id)<1);
+
+    /* EMP is free to equip, but forging still melts down a real one if you have it; with none, the forge charges 2 coins more */
+    if(missing.length)
+        return "needs "+missing.map(id => getItemInfo(id).name).join(" and ")+" in the vault";
+
+    if(getTotalAvailableCoins(planetId)<forgeCost(planetId,recipe))
+        return "needs "+forgeCost(planetId,recipe)+" coins";
+
+    return null;
+
+}
+
+function forgeCost(planetId,recipe){
+
+    return FORGE_COST+(recipe.includes("emp") && getItemStock(planetId,"emp")<1?2:0);
+
+}
+
+function forgePowerup(planetId,petId){
+
+    const pet=getPets(planetId).find(p => p.id===petId);
+
+    if(!pet || forgeBlocker(planetId,pet))
+        return;
+
+    const recipe=forgeRecipeFor(pet);
+
+    if(!spendCoins(planetId,forgeCost(planetId,recipe)))
+        return;
+
+    recipe.forEach(id=>{
+
+        if(getItemStock(planetId,id)>0)
+            addItemStock(planetId,id,-1);
+
+    });
+
+    const out=forgedItemId(recipe[0],recipe[1]);
+
+    addItemStock(planetId,out,1);
+
+    pet.energy=Math.max(0,pet.energy-FORGE_ENERGY);
+
+    if(!planetSave.forgedKinds)
+        planetSave.forgedKinds={};
+
+    const first=!planetSave.forgedKinds[out];
+
+    planetSave.forgedKinds[out]=(planetSave.forgedKinds[out] || 0)+1;
+
+    addRankPoints(first?40:12,"Forged a powerup");
+
+    savePlanetProgress();
+
+    world.forgeFlash={t0:performance.now(),id:out};
+
+    if(first)
+        showMilestoneFlourish(forgedIconHtml(out),getForgedInfo(out).name+" forged!",petShortName(planetId,pet)+"'s own recipe — equip it like any powerup");
+    else
+        showShipToast(petShortName(planetId,pet)+" forged a "+getForgedInfo(out).name+"!");
+
+}
+
+/* in a run: one charge, both effects (aimed halves fire together at the next tap) */
+const AIMED_RUN_POWERUPS=["incinerator-beam","ricochet-orb","solar-blade","singularity"];
+
+let forgedAimParts=null;
+
+function powerupChargeReady(){
+
+    return(
+        empCharge>=EMP_MAX && running && !paused && !gameOver &&
+        (worldState==="field" || worldState==="orbital") &&
+        empCooldown<=0
+    );
+
+}
+
+function fireRunPowerupNow(part){
+
+    empCharge=EMP_MAX;
+
+    empCooldown=0;
+
+    if(part==="emp")activateEMP();
+    else if(part==="regen-coil")activateRegenCoil();
+    else if(part==="ghost-shield")activateGhostShield();
+    else if(part==="chrono-field")activateChronoField();
+    else if(part==="nova-burst")activateNovaBurst();
+    else if(part==="return-capsule"){
+
+        if(!capsuleActive && (runCoins>0 || Object.keys(runMaterials).length))
+            launchCapsule("active");
+
+    }
+
+}
+
+function activateForgedPowerup(id){
+
+    if(forgedAimParts || !powerupChargeReady())
+        return;
+
+    const parts=forgedParts(id);
+
+    if(!parts)
+        return;
+
+    const aimed=parts.filter(p => AIMED_RUN_POWERUPS.includes(p) && !(p==="ricochet-orb" && ricochetBall) && !(p==="solar-blade" && bladeActive) && !(p==="singularity" && singularity));
+
+    let cooldown=0;
+
+    parts.filter(p => !AIMED_RUN_POWERUPS.includes(p)).forEach(p=>{
+
+        fireRunPowerupNow(p);
+
+        cooldown=Math.max(cooldown,empCooldown);
+
+    });
+
+    empCooldown=cooldown;
+
+    floatingText(getForgedInfo(id).name.toUpperCase(),W/2,H/2-58,"#ff8bf0");
+
+    shockwaves.push(new Shockwave(W/2,H/2,Math.min(W,H)*.22));
+
+    if(aimed.length){
+
+        forgedAimParts=aimed;
+
+        empCharge=EMP_MAX;
+
+    }else{
+
+        empCharge=0;
+
+    }
+
+    updateHUD();
+
+}
+
+function fireForgedAimedAt(x,y){
+
+    const parts=forgedAimParts || [];
+
+    forgedAimParts=null;
+
+    const cooldown=empCooldown;
+
+    parts.forEach(p=>{
+
+        empCharge=EMP_MAX;
+
+        if(p==="incinerator-beam")fireIncineratorBeam(x,y);
+        else if(p==="ricochet-orb")fireRicochetOrb(x,y);
+        else if(p==="solar-blade")beginSolarBlade(x,y);
+        else if(p==="singularity")placeSingularity(x,y);
+
+    });
+
+    empCharge=0;
+
+    empCooldown=Math.max(cooldown,empCooldown);
+
+    updateHUD();
+
+}
+
+/* ---------- satellites ---------- */
+
+const SAT_HP=3;
+
+const SAT_MANUAL_CD=10;
+
+const SAT_AUTO_CD=14;
+
+const SAT_COST={manual:8,auto:12};
+
+const SAT_BUILD_SECONDS=30;
+
+const SAT_MAX_ACTIVE=4;
+
+const SAT_RADIUS=13;
+
+function satTypeName(type){
+
+    return getItemInfo(type).name;
+
+}
+
+function satColour(type){
+
+    const parts=powerupParts(type);
+
+    return POWERUP_COLOURS[parts[0]] || "#5ff3ff";
+
+}
+
+function satPanelColour(type){
+
+    const parts=powerupParts(type);
+
+    return POWERUP_COLOURS[parts[1] || parts[0]] || "#4f9dff";
+
+}
+
+function satModeLabel(mode){
+
+    return mode==="auto"?"Automatic":"Manual";
+
+}
+
+function satModeBlurb(type,mode){
+
+    const parts=powerupParts(type);
+
+    const aimed=parts.some(p => p==="incinerator-beam" || p==="singularity");
+
+    if(mode==="auto")
+        return "Fires on its own when it's worth it — aiming included.";
+
+    return aimed?"Tap it, then tap where to fire.":"Tap it to fire.";
+
+}
+
+/* what each powerup does from a satellite */
+const SAT_POWER_TEXT={
+    "emp":"a pulse that clears rocks around it",
+    "regen-coil":"repairs itself to full",
+    "incinerator-beam":"a beam toward its target",
+    "return-capsule":"a lifeline: patches your hull, and saves the ship from a final hit",
+    "ghost-shield":"a deflector bubble that bats rocks away",
+    "chrono-field":"a slow field around it",
+    "ricochet-orb":"an arc that jumps rock to rock",
+    "solar-blade":"spinning blades that cut anything close",
+    "nova-burst":"pulls in nearby coins",
+    "singularity":"a small black hole at its target"
+};
+
+function satPowerText(type){
+
+    return powerupParts(type).map(p => SAT_POWER_TEXT[p] || "its power").join(", plus ");
+
+}
+
+function satNewId(){
+
+    return "sat_"+Date.now().toString(36)+"_"+Math.floor(Math.random()*1e5).toString(36);
+
+}
+
+/* -- on the planet: blueprints from selling powerups, the hangar, building, loading -- */
+
+function satCredits(planetId){
+
+    if(!planetSave.satCredits)
+        planetSave.satCredits={};
+
+    if(!planetSave.satCredits[planetId])
+        planetSave.satCredits[planetId]={};
+
+    return planetSave.satCredits[planetId];
+
+}
+
+function satHangar(planetId){
+
+    if(!planetSave.satStock)
+        planetSave.satStock={};
+
+    if(!planetSave.satStock[planetId])
+        planetSave.satStock[planetId]=[];
+
+    return planetSave.satStock[planetId];
+
+}
+
+/* called whenever a powerup is sold: one satellite blueprint of that kind, here */
+function satOnPowerupSold(planetId,itemId){
+
+    if(!(isBasePowerupId(itemId) || forgedParts(itemId)))
+        return "";
+
+    const credits=satCredits(planetId);
+
+    credits[itemId]=(credits[itemId] || 0)+1;
+
+    return hasStructure(planetId,"satellite-factory")?" · +1 "+satTypeName(itemId)+" satellite blueprint":"";
+
+}
+
+function satBuild(planetId,type,mode){
+
+    if(!hasStructure(planetId,"satellite-factory"))
+        return;
+
+    mode=mode==="auto"?"auto":"manual";
+
+    const credits=satCredits(planetId);
+
+    if(!(credits[type]>0))
+        return;
+
+    if(getBuildQueue(planetId).filter(b => b.type==="satellite").length>=2){
+
+        showShipToast("The factory floor is full — two satellites at a time");
+
+        return;
+
+    }
+
+    if(!spendCoins(planetId,SAT_COST[mode]))
+        return;
+
+    credits[type]--;
+
+    if(credits[type]<=0)
+        delete credits[type];
+
+    const builders=getWorkingPetCount(planetId);
+
+    planetSave.buildQueue[planetId]=getBuildQueue(planetId);
+
+    planetSave.buildQueue[planetId].push({
+        type:"satellite",
+        satType:type,
+        satMode:mode,
+        startedAt:Date.now(),
+        durationSeconds:Math.max(12,Math.round(SAT_BUILD_SECONDS/(1+builders*.5)))
+    });
+
+    savePlanetProgress();
+
+    showShipToast("Building a "+satModeLabel(mode).toLowerCase()+" "+satTypeName(type)+" satellite");
+
+}
+
+function satJobComplete(planetId,build){
+
+    satHangar(planetId).push({id:satNewId(),type:build.satType,mode:build.satMode});
+
+    addRankPoints(15,"Built a satellite");
+
+    showShipToast("🛰 "+satTypeName(build.satType)+" satellite ready in the hangar!");
+
+}
+
+function satFindShip(planetId,shipId){
+
+    return (getShips(planetId) || []).find(s => s.id===shipId) || null;
+
+}
+
+function satLoad(planetId,satId,shipId){
+
+    const hangar=satHangar(planetId);
+
+    const i=hangar.findIndex(s => s.id===satId);
+
+    const ship=satFindShip(planetId,shipId);
+
+    if(i<0 || !ship)
+        return;
+
+    if(shipCargoRoom(ship)<SAT_CARGO_SLOTS){
+
+        showShipToast("Not enough cargo room — a satellite takes "+SAT_CARGO_SLOTS);
+
+        return;
+
+    }
+
+    if(!Array.isArray(ship.satCargo))
+        ship.satCargo=[];
+
+    ship.satCargo.push(hangar.splice(i,1)[0]);
+
+    savePlanetProgress();
+
+    showShipToast("🛰 Satellite loaded — swipe up from the ship in flight to deploy it");
+
+}
+
+function satUnload(planetId,satId,shipId){
+
+    const ship=satFindShip(planetId,shipId);
+
+    if(!ship || !Array.isArray(ship.satCargo))
+        return;
+
+    const i=ship.satCargo.findIndex(s => s.id===satId);
+
+    if(i<0)
+        return;
+
+    satHangar(planetId).push(ship.satCargo.splice(i,1)[0]);
+
+    savePlanetProgress();
+
+}
+
+/* -- in a run -- */
+
+const satRun={cargo:[],field:[],effects:[],aim:null,gesture:null};
+
+let satLaunchShip=null;
+
+const SAT_ORBIT_STORE_KEY="sat-orbits-v1";
+
+let satOrbitStore=null;
+
+function satOrbitAll(){
+
+    if(satOrbitStore)
+        return satOrbitStore;
+
+    try{
+
+        satOrbitStore=JSON.parse(localStorage.getItem(SAT_ORBIT_STORE_KEY) || "{}") || {};
+
+    }catch(error){
+
+        satOrbitStore={};
+
+    }
+
+    return satOrbitStore;
+
+}
+
+function satOrbitKey(){
+
+    return (orbitalLocaleOwnerId || "me")+":"+currentPlanetId;
+
+}
+
+function satOrbitList(){
+
+    const all=satOrbitAll();
+
+    const key=satOrbitKey();
+
+    if(!Array.isArray(all[key]))
+        all[key]=[];
+
+    return all[key];
+
+}
+
+let satOrbitDirty=false;
+
+function satSaveOrbits(){
+
+    satOrbitDirty=false;
+
+    try{
+
+        localStorage.setItem(SAT_ORBIT_STORE_KEY,JSON.stringify(satOrbitAll(),(k,v) => k==="dep" || k==="dep0" || k==="fx" || k==="hit" || k==="flash"?undefined:v));
+
+    }catch(error){}
+
+}
+
+/* the satellites in play right now: riding with the ship in a field, parked round the planet in orbit */
+function satActiveList(){
+
+    if(worldState==="field")
+        return satRun.field;
+
+    if(worldState==="orbital")
+        return satOrbitList();
+
+    return null;
+
+}
+
+function satScreenPos(sat){
+
+    let x,y;
+
+    if(sat.space==="orbit"){
+
+        x=W/2-orbitalX+sat.wx;
+
+        y=H/2-orbitalY+sat.wy;
+
+    }else{
+
+        x=W/2+sat.ox;
+
+        y=H/2+sat.oy;
+
+    }
+
+    if(sat.dep){
+
+        const k=Math.min(1,(performance.now()-sat.dep.t0)/sat.dep.ms);
+
+        const s=1.70158;
+
+        const e=1+(s+1)*Math.pow(k-1,3)+s*Math.pow(k-1,2);
+
+        return{x:W/2+(x-W/2)*e,y:H/2+(y-H/2)*e,k};
+
+    }
+
+    return{x,y,k:1};
+
+}
+
+function satBeginRun(ship){
+
+    satRun.cargo=ship && Array.isArray(ship.satCargo)?ship.satCargo.map(s => Object.assign({},s)):[];
+
+    satRun.field=ship && Array.isArray(ship.fieldSats)?ship.fieldSats.map(s => Object.assign({},s,{dep:null,fx:null})):[];
+
+    satRun.effects=[];
+
+    satRun.aim=null;
+
+    satRun.gesture=null;
+
+    forgedAimParts=null;
+
+}
+
+function satStrip(list){
+
+    return list.map(s=>{
+
+        const o=Object.assign({},s);
+
+        delete o.dep;
+
+        delete o.dep0;
+
+        delete o.fx;
+
+        delete o.hit;
+
+        delete o.flash;
+
+        return o;
+
+    });
+
+}
+
+/* a landed ship keeps what's still in its hold and what's still flying with it */
+function satAttachToShip(ship){
+
+    if(!ship)
+        return;
+
+    ship.satCargo=satStrip(satRun.cargo);
+
+    ship.fieldSats=satStrip(satRun.field);
+
+}
+
+function satDeploy(dirX,dirY,speed){
+
+    if(!satRun.cargo.length)
+        return;
+
+    const list=satActiveList();
+
+    if(!list)
+        return;
+
+    if(list.length>=SAT_MAX_ACTIVE){
+
+        floatingText("SATELLITE LIMIT",W/2,H/2-60,"#ff8d8d");
+
+        return;
+
+    }
+
+    const len=Math.hypot(dirX,dirY) || 1;
+
+    dirX/=len;
+
+    dirY/=len;
+
+    let dist=Math.max(90,Math.min(Math.min(W,H)*.48,70+speed*260));
+
+    const margin=34;
+
+    /* shorten the throw until it lands on screen */
+    let tx=W/2+dirX*dist,ty=H/2+dirY*dist;
+
+    for(let i=0;i<20 && (tx<margin || tx>W-margin || ty<margin+40 || ty>H-margin-60);i++){
+
+        dist*=.9;
+
+        tx=W/2+dirX*dist;
+
+        ty=H/2+dirY*dist;
+
+    }
+
+    tx=Math.max(margin,Math.min(W-margin,tx));
+
+    ty=Math.max(margin+40,Math.min(H-margin-60,ty));
+
+    /* and never on top of the ship */
+    if(Math.hypot(tx-W/2,ty-H/2)<80){
+
+        tx=W/2+dirX*80;
+
+        ty=H/2+dirY*80;
+
+    }
+
+    const item=satRun.cargo.shift();
+
+    const sat={
+        id:item.id || satNewId(),
+        type:item.type,
+        mode:item.mode,
+        hp:item.hp || SAT_HP,
+        cd:2,
+        dep:{t0:performance.now(),ms:650}
+    };
+
+    if(worldState==="orbital"){
+
+        sat.space="orbit";
+
+        sat.wx=tx-(W/2-orbitalX);
+
+        sat.wy=ty-(H/2-orbitalY);
+
+        satOrbitDirty=true;
+
+    }else{
+
+        sat.space="field";
+
+        sat.ox=tx-W/2;
+
+        sat.oy=ty-H/2;
+
+    }
+
+    list.push(sat);
+
+    sound("click");
+
+    floatingText("🛰 "+satTypeName(sat.type).toUpperCase(),tx,ty-26,satColour(sat.type));
+
+    satRun.effects.push({kind:"launch",x:W/2,y:H/2,tx,ty,t0:performance.now(),colour:satColour(sat.type)});
+
+    updateHUD();
+
+}
+
+function satRemove(sat,list){
+
+    const i=list.indexOf(sat);
+
+    if(i>=0)
+        list.splice(i,1);
+
+    if(sat.space==="orbit")
+        satOrbitDirty=true;
+
+    if(satRun.aim===sat)
+        satRun.aim=null;
+
+}
+
+function satDestroy(sat,list){
+
+    const p=satScreenPos(sat);
+
+    explosions.push(new Explosion(p.x,p.y,.8));
+
+    for(let i=0;i<26;i++){
+
+        const a=Math.random()*Math.PI*2;
+
+        particles.push({x:p.x,y:p.y,vx:Math.cos(a)*random(60,260),vy:Math.sin(a)*random(60,260),life:random(.3,.8),maxLife:.8,size:random(1,3),color:i%2?satColour(sat.type):"#ffffff"});
+
+    }
+
+    floatingText("SATELLITE LOST",p.x,p.y-20,"#ff8d8d");
+
+    satRemove(sat,list);
+
+}
+
+function satAsteroidsNear(x,y,r){
+
+    return asteroids.filter(a => Math.hypot(a.x-x,a.y-y)<r+(a.radius || 0));
+
+}
+
+function satBlast(predicate){
+
+    let n=0;
+
+    for(let i=asteroids.length-1;i>=0;i--){
+
+        if(asteroids[i] && predicate(asteroids[i])){
+
+            detonateAsteroid(i,true,true);
+
+            n++;
+
+        }
+
+    }
+
+    return n;
+
+}
+
+/* where an automatic satellite (or an un-aimed manual one) points: the best line or cluster */
+function satAutoAim(p,part){
+
+    if(!asteroids.length)
+        return null;
+
+    if(part==="singularity"){
+
+        let best=null,bestN=0;
+
+        asteroids.forEach(a=>{
+
+            if(Math.hypot(a.x-p.x,a.y-p.y)>340)
+                return;
+
+            const n=satAsteroidsNear(a.x,a.y,120).length;
+
+            if(n>bestN){
+
+                bestN=n;
+
+                best=a;
+
+            }
+
+        });
+
+        return best?{x:best.x,y:best.y,n:bestN}:null;
+
+    }
+
+    let best=null,bestN=0;
+
+    asteroids.forEach(a=>{
+
+        const dx=a.x-p.x,dy=a.y-p.y,len=Math.hypot(dx,dy) || 1;
+
+        if(len>420)
+            return;
+
+        const n=asteroids.filter(b=>{
+
+            const t=((b.x-p.x)*dx+(b.y-p.y)*dy)/len;
+
+            return t>0 && Math.abs((b.x-p.x)*dy-(b.y-p.y)*dx)/len<(b.radius || 10)+16;
+
+        }).length;
+
+        if(n>bestN){
+
+            bestN=n;
+
+            best=a;
+
+        }
+
+    });
+
+    return best?{x:best.x,y:best.y,n:bestN}:null;
+
+}
+
+function satNeedsAim(sat){
+
+    return powerupParts(sat.type).some(p => p==="incinerator-beam" || p==="singularity");
+
+}
+
+/* should an automatic satellite fire now? */
+function satAutoWants(sat,p){
+
+    return powerupParts(sat.type).some(part=>{
+
+        if(part==="emp")return satAsteroidsNear(p.x,p.y,Math.min(W,H)*.3).length>=4 || satAsteroidsNear(p.x,p.y,70).length>0;
+        if(part==="regen-coil")return sat.hp<SAT_HP;
+        if(part==="incinerator-beam"){const a=satAutoAim(p,part);return !!a && a.n>=2;}
+        if(part==="singularity"){const a=satAutoAim(p,part);return !!a && a.n>=3;}
+        if(part==="ricochet-orb")return satAsteroidsNear(p.x,p.y,260).length>=2;
+        if(part==="solar-blade")return satAsteroidsNear(p.x,p.y,110).length>=2;
+        if(part==="chrono-field")return satAsteroidsNear(p.x,p.y,170).length>=3 || satAsteroidsNear(W/2,H/2,150).length>=2;
+        if(part==="ghost-shield")return satAsteroidsNear(p.x,p.y,95).length>0;
+        if(part==="nova-burst")return coinPickups.filter(c => Math.hypot(c.x-p.x,c.y-p.y)<230).length>=3;
+        if(part==="return-capsule")return lives<2;
+        return false;
+
+    });
+
+}
+
+function satFire(sat,list,aimX,aimY){
+
+    const p=satScreenPos(sat);
+
+    const now=performance.now();
+
+    powerupParts(sat.type).forEach(part=>{
+
+        if(part==="emp"){
+
+            const R=Math.min(W,H)*.3;
+
+            satBlast(a => Math.hypot(a.x-p.x,a.y-p.y)<R+(a.radius || 0));
+
+            shockwaves.push(new Shockwave(p.x,p.y,R));
+
+            sound("emp");
+
+        }else if(part==="regen-coil"){
+
+            sat.hp=SAT_HP;
+
+            satRun.effects.push({kind:"ring",x:p.x,y:p.y,t0:now,colour:"#7dffb0",r:34,follow:sat});
+
+            floatingText("+HP",p.x,p.y-24,"#7dffb0");
+
+        }else if(part==="incinerator-beam"){
+
+            let tx=aimX,ty=aimY;
+
+            if(tx===undefined){
+
+                const a=satAutoAim(p,part);
+
+                if(!a)
+                    return;
+
+                tx=a.x;
+
+                ty=a.y;
+
+            }
+
+            const dx=tx-p.x,dy=ty-p.y,len=Math.hypot(dx,dy) || 1;
+
+            satBlast(a=>{
+
+                const t=((a.x-p.x)*dx+(a.y-p.y)*dy)/len;
+
+                return t>0 && Math.abs((a.x-p.x)*dy-(a.y-p.y)*dx)/len<(a.radius || 10)+16;
+
+            });
+
+            const far=Math.max(W,H)*1.5;
+
+            satRun.effects.push({kind:"beam",x:p.x,y:p.y,tx:p.x+dx/len*far,ty:p.y+dy/len*far,t0:now,colour:"#ff7a1a"});
+
+            sound("click");
+
+        }else if(part==="ricochet-orb"){
+
+            const chain=[{x:p.x,y:p.y}];
+
+            let from=p;
+
+            const used=new Set();
+
+            for(let jump=0;jump<5;jump++){
+
+                let best=null,bestD=260;
+
+                asteroids.forEach(a=>{
+
+                    if(used.has(a))
+                        return;
+
+                    const d=Math.hypot(a.x-from.x,a.y-from.y);
+
+                    if(d<bestD){
+
+                        bestD=d;
+
+                        best=a;
+
+                    }
+
+                });
+
+                if(!best)
+                    break;
+
+                used.add(best);
+
+                chain.push({x:best.x,y:best.y});
+
+                from={x:best.x,y:best.y};
+
+            }
+
+            satBlast(a => used.has(a));
+
+            if(chain.length>1)
+                satRun.effects.push({kind:"chain",pts:chain,t0:now,colour:"#4fd6ff"});
+
+        }else if(part==="solar-blade"){
+
+            sat.bladeUntil=now+3500;
+
+        }else if(part==="singularity"){
+
+            let tx=aimX,ty=aimY;
+
+            if(tx===undefined){
+
+                const a=satAutoAim(p,part);
+
+                tx=a?a.x:p.x;
+
+                ty=a?a.y:p.y-90;
+
+            }
+
+            satRun.effects.push({kind:"hole",x:tx,y:ty,t0:now,ms:2400,space:sat.space,wx:tx-(W/2-orbitalX),wy:ty-(H/2-orbitalY)});
+
+        }else if(part==="chrono-field"){
+
+            sat.chronoUntil=now+6000;
+
+        }else if(part==="ghost-shield"){
+
+            sat.ghostUntil=now+6000;
+
+        }else if(part==="nova-burst"){
+
+            let got=0;
+
+            for(let i=coinPickups.length-1;i>=0;i--){
+
+                const coin=coinPickups[i];
+
+                if(Math.hypot(coin.x-p.x,coin.y-p.y)>230)
+                    continue;
+
+                satRun.effects.push({kind:"ray",x:p.x,y:p.y,tx:coin.x,ty:coin.y,t0:now,colour:"#ffd76b"});
+
+                if(coin.isHeart){
+
+                    lives=Math.min(3,lives+1);
+
+                }else{
+
+                    const value=Math.round((coin.value || 1)*(1+getPerkEffect("coinMultiplier")));
+
+                    runCoins+=value;
+
+                    got+=value;
+
+                }
+
+                coinPickups.splice(i,1);
+
+            }
+
+            if(got)
+                floatingText("+"+got+" "+COIN_ICON_HTML,p.x,p.y-26,"#ffd76b");
+
+        }else if(part==="return-capsule"){
+
+            if(lives<3){
+
+                lives++;
+
+                sat.hp=Math.max(1,sat.hp-1);
+
+                floatingText("+1 ❤ LIFELINE",W/2,H/2-40,"#ff8d8d");
+
+                satRun.effects.push({kind:"ray",x:p.x,y:p.y,tx:W/2,ty:H/2,t0:now,colour:"#ff8d8d"});
+
+            }
+
+        }
+
+    });
+
+    sat.cd=sat.mode==="auto"?SAT_AUTO_CD:SAT_MANUAL_CD;
+
+    sat.flash=now;
+
+    if(sat.space==="orbit")
+        satOrbitDirty=true;
+
+    updateHUD();
+
+    void list;
+
+}
+
+/* the ship's last heart: a lifeline satellite gives itself up instead */
+function satLifelineSave(){
+
+    const list=satActiveList();
+
+    if(!list)
+        return false;
+
+    const sat=list.find(s => equipmentHas(s.type,"return-capsule") && !s.dep);
+
+    if(!sat)
+        return false;
+
+    const p=satScreenPos(sat);
+
+    satRun.effects.push({kind:"ray",x:p.x,y:p.y,tx:W/2,ty:H/2,t0:performance.now(),colour:"#ff8d8d"});
+
+    floatingText("LIFELINE SAVED YOU",W/2,H/2-50,"#ff8d8d");
+
+    satDestroy(sat,list);
+
+    return true;
+
+}
+
+function satUpdateRun(dt){
+
+    const list=satActiveList();
+
+    if(!list)
+        return;
+
+    const now=performance.now();
+
+    for(let i=list.length-1;i>=0;i--){
+
+        const sat=list[i];
+
+        if(!list.includes(sat))
+            continue;
+
+        if(sat.dep && now-sat.dep.t0>=sat.dep.ms){
+
+            sat.dep=null;
+
+            sat.dep0=now;
+
+            satRun.effects.push({kind:"ring",x:0,y:0,t0:now,colour:satColour(sat.type),r:42,follow:sat});
+
+        }
+
+        sat.cd=Math.max(0,(sat.cd || 0)-dt);
+
+        const p=satScreenPos(sat);
+
+        /* fields round the satellite */
+        if(sat.chronoUntil>now){
+
+            asteroids.forEach(a=>{
+
+                if(Math.hypot(a.x-p.x,a.y-p.y)<170){
+
+                    a.x-=a.vx*dt*.65;
+
+                    a.y-=a.vy*dt*.65;
+
+                }
+
+            });
+
+        }
+
+        if(sat.ghostUntil>now){
+
+            asteroids.forEach(a=>{
+
+                const dx=a.x-p.x,dy=a.y-p.y,d=Math.hypot(dx,dy) || 1;
+
+                if(d<80+(a.radius || 0) && (a.vx*dx+a.vy*dy)<0){
+
+                    const dot=(a.vx*dx+a.vy*dy)/(d*d);
+
+                    a.vx-=2*dot*dx;
+
+                    a.vy-=2*dot*dy;
+
+                }
+
+            });
+
+        }
+
+        if(sat.bladeUntil>now)
+            satBlast(a => Math.hypot(a.x-p.x,a.y-p.y)<62+(a.radius || 0)*.5);
+
+        /* rocks hitting it */
+        if(!(sat.ghostUntil>now)){
+
+            for(let k=asteroids.length-1;k>=0;k--){
+
+                const a=asteroids[k];
+
+                if(a && Math.hypot(a.x-p.x,a.y-p.y)<(a.radius || 10)+SAT_RADIUS){
+
+                    detonateAsteroid(k,true,true);
+
+                    sat.hp--;
+
+                    sat.hit=now;
+
+                    if(sat.space==="orbit")
+                        satOrbitDirty=true;
+
+                    if(sat.hp<=0){
+
+                        satDestroy(sat,list);
+
+                        break;
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        if(!list.includes(sat))
+            continue;
+
+        /* automatic ones think for themselves */
+        if(sat.mode==="auto" && !sat.dep && sat.cd<=0 && p.x>-20 && p.x<W+20 && p.y>-20 && p.y<H+20 && satAutoWants(sat,p))
+            satFire(sat,list);
+
+    }
+
+    /* black holes pulling rocks in */
+    satRun.effects.forEach(e=>{
+
+        if(e.kind!=="hole")
+            return;
+
+        const k=(now-e.t0)/e.ms;
+
+        if(k>1)
+            return;
+
+        const hx=e.space==="orbit"?W/2-orbitalX+e.wx:e.x,hy=e.space==="orbit"?H/2-orbitalY+e.wy:e.y;
+
+        asteroids.forEach(a=>{
+
+            const dx=hx-a.x,dy=hy-a.y,d=Math.hypot(dx,dy) || 1;
+
+            if(d<160){
+
+                a.x+=dx/d*Math.min(d,220*dt);
+
+                a.y+=dy/d*Math.min(d,220*dt);
+
+            }
+
+        });
+
+        satBlast(a => Math.hypot(a.x-hx,a.y-hy)<22);
+
+    });
+
+    if(satOrbitDirty && worldState==="orbital" && Math.random()<.05)
+        satSaveOrbits();
+
+}
+
+function satDrawOne(c,sat){
+
+    const p=satScreenPos(sat);
+
+    const now=performance.now();
+
+    const t=now/1000;
+
+    const col=satColour(sat.type);
+
+    const panelCol=satPanelColour(sat.type);
+
+    const unfold=sat.dep?0:Math.min(1,(now-(sat.dep0 || 0))/400);
+
+    if(!sat.dep && !sat.dep0)
+        sat.dep0=now-400;
+
+    const bob=Math.sin(t*1.6+(sat.id || "").length)*2;
+
+    const x=p.x,y=p.y+bob;
+
+    c.save();
+
+    /* fields */
+    if(sat.chronoUntil>now){
+
+        c.save();
+
+        c.globalAlpha=.14+.06*Math.sin(t*3);
+
+        c.fillStyle="#8a7fff";
+
+        c.beginPath();
+
+        c.arc(x,y,170,0,Math.PI*2);
+
+        c.fill();
+
+        c.globalAlpha=.5;
+
+        c.strokeStyle="#c9c2ff";
+
+        c.setLineDash([6,8]);
+
+        c.lineDashOffset=-t*20;
+
+        c.stroke();
+
+        c.restore();
+
+    }
+
+    if(sat.ghostUntil>now){
+
+        c.save();
+
+        c.globalAlpha=.35+.15*Math.sin(t*5);
+
+        c.strokeStyle="#eaf4ff";
+
+        c.shadowColor="#eaf4ff";
+
+        c.shadowBlur=14;
+
+        c.lineWidth=2;
+
+        c.beginPath();
+
+        c.arc(x,y,80,0,Math.PI*2);
+
+        c.stroke();
+
+        c.restore();
+
+    }
+
+    if(sat.bladeUntil>now){
+
+        c.save();
+
+        c.translate(x,y);
+
+        c.rotate(t*9);
+
+        c.strokeStyle="#ffd25c";
+
+        c.shadowColor="#ffd25c";
+
+        c.shadowBlur=12;
+
+        c.lineWidth=3;
+
+        for(let k=0;k<3;k++){
+
+            c.rotate(Math.PI*2/3);
+
+            c.beginPath();
+
+            c.arc(0,0,52,0,.9);
+
+            c.stroke();
+
+        }
+
+        c.restore();
+
+    }
+
+    /* the craft: panels, body, icon, antenna */
+    c.translate(x,y);
+
+    c.rotate(Math.sin(t*.7+(sat.id || "").length)*.12+(sat.dep?t*9:0));
+
+    if(sat.ghostUntil>now)
+        c.globalAlpha*=.55;
+
+    const pw=18*unfold,ph=9;
+
+    [-1,1].forEach(side=>{
+
+        if(pw<1)
+            return;
+
+        const px=side*(SAT_RADIUS-2);
+
+        c.fillStyle="rgba(10,24,60,.95)";
+
+        c.fillRect(side>0?px:px-pw,-ph/2,pw,ph);
+
+        c.strokeStyle=panelCol;
+
+        c.shadowColor=panelCol;
+
+        c.shadowBlur=6;
+
+        c.lineWidth=1.2;
+
+        c.strokeRect(side>0?px:px-pw,-ph/2,pw,ph);
+
+        c.shadowBlur=0;
+
+        c.globalAlpha*=.6;
+
+        c.beginPath();
+
+        for(let g=1;g<3;g++){
+
+            const gx=(side>0?px:px-pw)+pw*g/3;
+
+            c.moveTo(gx,-ph/2);
+
+            c.lineTo(gx,ph/2);
+
+        }
+
+        c.moveTo(side>0?px:px-pw,0);
+
+        c.lineTo(side>0?px+pw:px,0);
+
+        c.stroke();
+
+        c.globalAlpha/=.6;
+
+    });
+
+    c.beginPath();
+
+    for(let k=0;k<6;k++){
+
+        const a=k*Math.PI/3+Math.PI/6;
+
+        c.lineTo(Math.cos(a)*SAT_RADIUS*.85,Math.sin(a)*SAT_RADIUS*.85);
+
+    }
+
+    c.closePath();
+
+    c.fillStyle=sat.hit && now-sat.hit<180?"#ffffff":"rgba(6,10,28,.95)";
+
+    c.fill();
+
+    c.strokeStyle=col;
+
+    c.shadowColor=col;
+
+    c.shadowBlur=10;
+
+    c.lineWidth=1.8;
+
+    c.stroke();
+
+    c.shadowBlur=0;
+
+    c.beginPath();
+
+    c.moveTo(0,-SAT_RADIUS*.85);
+
+    c.lineTo(0,-SAT_RADIUS-8);
+
+    c.stroke();
+
+    c.fillStyle=Math.sin(t*6)>0?col:"#ffffff";
+
+    c.beginPath();
+
+    c.arc(0,-SAT_RADIUS-9,2,0,Math.PI*2);
+
+    c.fill();
+
+    c.rotate(-(Math.sin(t*.7+(sat.id || "").length)*.12+(sat.dep?t*9:0)));
+
+    if(isForgedItemId(sat.type)){
+
+        forgedDrawIcons(c,sat.type,0,0,14);
+
+    }else{
+
+        const sprite=worldSprite(getItemIconHtml(sat.type));
+
+        if(sprite.img && sprite.img.complete && sprite.img.naturalWidth)
+            c.drawImage(sprite.img,-7,-7,14,14);
+        else{
+
+            c.font="11px system-ui,'Apple Color Emoji',sans-serif";
+
+            c.textAlign="center";
+
+            c.textBaseline="middle";
+
+            c.fillStyle="#fff";
+
+            c.fillText(sprite.text || "?",0,0);
+
+        }
+
+    }
+
+    c.restore();
+
+    if(sat.dep)
+        return;
+
+    /* readiness ring, health and mode */
+    c.save();
+
+    const maxCd=sat.mode==="auto"?SAT_AUTO_CD:SAT_MANUAL_CD;
+
+    const ready=(sat.cd || 0)<=0;
+
+    c.lineWidth=2.4;
+
+    c.strokeStyle=ready?col:"rgba(188,236,255,.35)";
+
+    if(ready && sat.mode!=="auto"){
+
+        c.shadowColor=col;
+
+        c.shadowBlur=10+6*Math.sin(t*4);
+
+    }
+
+    c.beginPath();
+
+    c.arc(x,y,SAT_RADIUS+9,-Math.PI/2,-Math.PI/2+Math.PI*2*(ready?1:1-(sat.cd/maxCd)));
+
+    c.stroke();
+
+    c.shadowBlur=0;
+
+    for(let k=0;k<SAT_HP;k++){
+
+        c.fillStyle=k<sat.hp?"#ff8d8d":"rgba(255,255,255,.18)";
+
+        c.beginPath();
+
+        c.arc(x-7+k*7,y+SAT_RADIUS+15,2.2,0,Math.PI*2);
+
+        c.fill();
+
+    }
+
+    c.fillStyle="#eafcff";
+
+    c.font="800 8px system-ui,sans-serif";
+
+    c.textAlign="center";
+
+    c.textBaseline="middle";
+
+    c.fillText(sat.mode==="auto"?"AUTO":"TAP",x,y-SAT_RADIUS-20);
+
+    if(satRun.aim===sat){
+
+        c.strokeStyle="#ff8bf0";
+
+        c.setLineDash([4,5]);
+
+        c.lineDashOffset=-t*30;
+
+        c.beginPath();
+
+        c.arc(x,y,SAT_RADIUS+22+3*Math.sin(t*6),0,Math.PI*2);
+
+        c.stroke();
+
+        c.setLineDash([]);
+
+        c.fillStyle="#ff8bf0";
+
+        c.font="900 10px system-ui,sans-serif";
+
+        c.fillText("TAP TO AIM",x,y+SAT_RADIUS+30);
+
+    }
+
+    c.restore();
+
+}
+
+function satDrawEffects(c){
+
+    const now=performance.now();
+
+    satRun.effects=satRun.effects.filter(e=>{
+
+        const age=(now-e.t0)/1000;
+
+        c.save();
+
+        let alive=true;
+
+        if(e.kind==="launch"){
+
+            const k=Math.min(1,age/.65);
+
+            alive=age<.9;
+
+            c.globalAlpha=Math.max(0,.7-age*.8);
+
+            c.strokeStyle=e.colour;
+
+            c.shadowColor=e.colour;
+
+            c.shadowBlur=10;
+
+            c.lineWidth=2;
+
+            c.setLineDash([3,6]);
+
+            c.beginPath();
+
+            c.moveTo(e.x,e.y);
+
+            c.lineTo(e.x+(e.tx-e.x)*k,e.y+(e.ty-e.y)*k);
+
+            c.stroke();
+
+        }else if(e.kind==="ring"){
+
+            alive=age<.7;
+
+            const fp=e.follow?satScreenPos(e.follow):e;
+
+            c.globalAlpha=Math.max(0,1-age/.7);
+
+            c.strokeStyle=e.colour;
+
+            c.shadowColor=e.colour;
+
+            c.shadowBlur=12;
+
+            c.lineWidth=2;
+
+            c.beginPath();
+
+            c.arc(fp.x,fp.y,6+(e.r || 40)*(age/.7),0,Math.PI*2);
+
+            c.stroke();
+
+        }else if(e.kind==="beam" || e.kind==="ray"){
+
+            const dur=e.kind==="beam"?.45:.4;
+
+            alive=age<dur;
+
+            c.globalAlpha=Math.max(0,1-age/dur);
+
+            c.strokeStyle=e.colour;
+
+            c.shadowColor=e.colour;
+
+            c.shadowBlur=18;
+
+            c.lineWidth=e.kind==="beam"?6*(1-age/dur)+1:2;
+
+            c.beginPath();
+
+            c.moveTo(e.x,e.y);
+
+            c.lineTo(e.tx,e.ty);
+
+            c.stroke();
+
+            if(e.kind==="beam"){
+
+                c.strokeStyle="#fff2b3";
+
+                c.lineWidth=1.5;
+
+                c.stroke();
+
+            }
+
+        }else if(e.kind==="chain"){
+
+            alive=age<.5;
+
+            c.globalAlpha=Math.max(0,1-age/.5);
+
+            c.strokeStyle=e.colour;
+
+            c.shadowColor=e.colour;
+
+            c.shadowBlur=14;
+
+            c.lineWidth=2.4;
+
+            c.beginPath();
+
+            e.pts.forEach((pt,i)=>{
+
+                if(!i){
+
+                    c.moveTo(pt.x,pt.y);
+
+                    return;
+
+                }
+
+                const prev=e.pts[i-1];
+
+                for(let s=1;s<=4;s++){
+
+                    const k=s/4;
+
+                    const jx=s<4?(Math.random()-.5)*10:0,jy=s<4?(Math.random()-.5)*10:0;
+
+                    c.lineTo(prev.x+(pt.x-prev.x)*k+jx,prev.y+(pt.y-prev.y)*k+jy);
+
+                }
+
+            });
+
+            c.stroke();
+
+        }else if(e.kind==="hole"){
+
+            const k=(now-e.t0)/e.ms;
+
+            alive=k<1;
+
+            const hx=e.space==="orbit"?W/2-orbitalX+e.wx:e.x,hy=e.space==="orbit"?H/2-orbitalY+e.wy:e.y;
+
+            const r=26*Math.sin(Math.min(1,k)*Math.PI);
+
+            const g=c.createRadialGradient(hx,hy,1,hx,hy,r*2.4+1);
+
+            g.addColorStop(0,"rgba(0,0,0,1)");
+
+            g.addColorStop(.4,"rgba(60,20,120,.8)");
+
+            g.addColorStop(1,"rgba(185,140,255,0)");
+
+            c.fillStyle=g;
+
+            c.beginPath();
+
+            c.arc(hx,hy,r*2.4+1,0,Math.PI*2);
+
+            c.fill();
+
+            c.strokeStyle="#c9a8ff";
+
+            c.lineWidth=1.5;
+
+            c.beginPath();
+
+            c.arc(hx,hy,r*1.4,now/150,now/150+4);
+
+            c.stroke();
+
+        }
+
+        c.restore();
+
+        return alive;
+
+    });
+
+}
+
+function satDrawRun(c){
+
+    if(!running)
+        return;
+
+    /* between fields the escort still flies alongside the ship */
+    const list=satActiveList() || (worldState!=="orbital"?satRun.field:null);
+
+    if(list)
+        list.forEach(sat => satDrawOne(c,sat));
+
+    satDrawEffects(c);
+
+    /* the hold: how many are ready to throw */
+    if(satRun.cargo.length && (worldState==="field" || worldState==="orbital")){
+
+        const t=performance.now()/1000;
+
+        c.save();
+
+        c.globalAlpha=.55+.25*Math.sin(t*2.5);
+
+        c.fillStyle="#bcecff";
+
+        c.font="800 10px system-ui,sans-serif";
+
+        c.textAlign="center";
+
+        c.fillText("🛰×"+satRun.cargo.length+"  swipe up ↑",W/2,H/2+52);
+
+        c.restore();
+
+    }
+
+}
+
+/* tapping a manual satellite (or aiming one) */
+function satTapAt(x,y){
+
+    const list=satActiveList();
+
+    if(!list)
+        return false;
+
+    if(satRun.aim){
+
+        const sat=satRun.aim;
+
+        satRun.aim=null;
+
+        if(list.includes(sat) && (sat.cd || 0)<=0)
+            satFire(sat,list,x,y);
+
+        return true;
+
+    }
+
+    let best=null,bestD=SAT_RADIUS+16;
+
+    list.forEach(sat=>{
+
+        if(sat.dep)
+            return;
+
+        const p=satScreenPos(sat);
+
+        const d=Math.hypot(p.x-x,p.y-y);
+
+        if(d<bestD){
+
+            bestD=d;
+
+            best=sat;
+
+        }
+
+    });
+
+    if(!best)
+        return false;
+
+    if(best.mode==="auto"){
+
+        floatingText("AUTO",x,y-24,"#bcecff");
+
+        return true;
+
+    }
+
+    if((best.cd || 0)>0){
+
+        floatingText(Math.ceil(best.cd)+"s",x,y-24,"#bcecff");
+
+        return true;
+
+    }
+
+    if(satNeedsAim(best)){
+
+        satRun.aim=best;
+
+        return true;
+
+    }
+
+    satFire(best,list);
+
+    return true;
+
+}
+
+(function(){
+
+    if(typeof canvas==="undefined" || !canvas)
+        return;
+
+    const inPlay=()=>running && !paused && !gameOver && (worldState==="field" || worldState==="orbital");
+
+    canvas.addEventListener("pointerdown",event=>{
+
+        if(!inPlay() || (typeof coPilotSessionShipKey!=="undefined" && coPilotSessionShipKey))
+            return;
+
+        const p=pointerPosition(event);
+
+        /* the player's own forged aim takes the tap first */
+        if(forgedAimParts){
+
+            event.stopImmediatePropagation();
+
+            event.preventDefault();
+
+            fireForgedAimedAt(p.x,p.y);
+
+            return;
+
+        }
+
+        if(satTapAt(p.x,p.y)){
+
+            event.stopImmediatePropagation();
+
+            event.preventDefault();
+
+            return;
+
+        }
+
+        if(satRun.cargo.length && Math.hypot(p.x-W/2,p.y-H/2)<54 && !(typeof phaseUI!=="undefined" && phaseUI.classList.contains("show")))
+            satRun.gesture={x0:p.x,y0:p.y,t0:performance.now(),id:event.pointerId,confirmed:false};
+
+    },{capture:true,passive:false});
+
+    window.addEventListener("pointermove",event=>{
+
+        const g=satRun.gesture;
+
+        if(!g || event.pointerId!==g.id)
+            return;
+
+        if(g.failed)
+            return;
+
+        const p=pointerPosition(event);
+
+        const dx=p.x-g.x0,dy=p.y-g.y0;
+
+        if(!g.confirmed && -dy>12 && -dy>Math.abs(dx)*.6){
+
+            g.confirmed=true;
+
+            /* a deploy, not a steer */
+            if(typeof orbitalDragging!=="undefined"){
+
+                orbitalDragging=false;
+
+                orbitalDragConfirmed=false;
+
+            }
+
+        }else if(!g.confirmed && Math.hypot(dx,dy)>12){
+
+            /* not an upward swipe: hand the drag back to steering */
+            g.failed=true;
+
+            return;
+
+        }
+
+        /* until it's decided, the drag belongs to the satellite */
+        event.stopImmediatePropagation();
+
+    },{capture:true});
+
+    const end=event=>{
+
+        const g=satRun.gesture;
+
+        if(!g || event.pointerId!==g.id)
+            return;
+
+        satRun.gesture=null;
+
+        if(!g.confirmed || g.failed || !inPlay())
+            return;
+
+        const p=pointerPosition(event);
+
+        const dx=p.x-g.x0,dy=p.y-g.y0;
+
+        const ms=Math.max(30,performance.now()-g.t0);
+
+        if(dy>-34 || Math.abs(dy)<Math.abs(dx)*.5)
+            return;
+
+        satDeploy(dx,dy,Math.hypot(dx,dy)/ms);
+
+    };
+
+    window.addEventListener("pointerup",end,{capture:true});
+
+    window.addEventListener("pointercancel",()=>{satRun.gesture=null;},{capture:true});
+
+})();
+
+/* ---------- planet-menu sections for the new structures ---------- */
+
+function forgeTabHtml(planetId){
+
+    const pets=getPets(planetId);
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+getStructureIconHtml("powerup-forge")+' Powerup Forge</div>'+
+        '<div class="metric-note">Fuses two different powerups into one that fires both from a single charge. '+
+        'Each pet knows one recipe — its own. Forging melts down one of each powerup from the vault, costs '+FORGE_COST+' '+COIN_ICON_HTML+
+        ' and tires the pet a little.</div>';
+
+    if(!pets.length){
+
+        html+='<div class="metric-note">No pets here to work the forge.</div>';
+
+    }else{
+
+        html+='<div class="forge-list">';
+
+        pets.forEach(pet=>{
+
+            html+=forgePetCardHtml(planetId,pet);
+
+        });
+
+        html+='</div>';
+
+    }
+
+    const forged=Object.keys(planetSave.forgedKinds || {});
+
+    html+=
+        '<div class="metric-note" style="margin-top:10px;">Recipes discovered: '+forged.length+' · every pair of powerups can be forged; new pet styles bring new recipes.</div>'+
+        '</div>';
+
+    html+=renderStructureDesignerHtml("powerup-forge","Powerup Forge");
+
+    return html;
+
+}
+
+function forgePetCardHtml(planetId,pet){
+
+    const recipe=forgeRecipeFor(pet);
+
+    const blocker=forgeBlocker(planetId,pet);
+
+    const cost=recipe?forgeCost(planetId,recipe):FORGE_COST;
+
+    let have="";
+
+    if(recipe){
+
+        have=recipe.map(id=>{
+
+            const n=getItemStock(planetId,id);
+
+            const ok=n>0 || id==="emp";
+
+            return '<span class="'+(ok?'state-good':'state-bad')+'">'+getItemIconHtml(id)+' '+(id==="emp" && n<1?'spare':n)+'</span>';
+
+        }).join(' ');
+
+    }
+
+    return(
+        '<div class="forge-card">'+
+        '<div class="forge-card-head"><b>'+petShortName(planetId,pet)+'</b><span>'+have+'</span></div>'+
+        '<div class="forge-card-recipe">'+forgeRecipeHtml(recipe)+'</div>'+
+        '<button class="neon-btn'+(blocker?'':' primary')+'" data-action="forge-powerup" data-pet="'+pet.id+'" '+(blocker?'disabled':'')+'>'+
+        (blocker?'Can\'t forge — '+blocker:'⚒ Forge · '+cost+' '+COIN_ICON_HTML)+
+        '</button>'+
+        '</div>'
+    );
+
+}
+
+/* the pet card's Forge tab */
+function petForgeTabHtml(planetId,pet){
+
+    const recipe=forgeRecipeFor(pet);
+
+    let html=
+        '<div class="pet-role-panel">'+
+        '<div class="pet-role-panel-title">⚒ Forge recipe</div>'+
+        '<div class="pet-role-panel-text">'+forgeRecipeHtml(recipe)+'</div>';
+
+    if(recipe){
+
+        const out=forgedItemId(recipe[0],recipe[1]);
+
+        html+='<div class="pet-role-panel-note">'+getForgedInfo(out).description+'</div>';
+
+    }
+
+    if(hasStructure(planetId,"powerup-forge")){
+
+        const blocker=forgeBlocker(planetId,pet);
+
+        html+=
+            '<button class="neon-btn'+(blocker?'':' primary')+'" data-action="forge-powerup" data-pet="'+pet.id+'" '+(blocker?'disabled':'')+'>'+
+            (blocker?'Can\'t forge — '+blocker:'⚒ Forge one · '+forgeCost(planetId,recipe)+' '+COIN_ICON_HTML)+
+            '</button>';
+
+    }else if(getSiteJob(planetId,"powerup-forge")){
+
+        html+=
+            '<div class="pet-role-panel-note">The forge is still being built here.</div>'+
+            '<button class="neon-btn" data-action="planet-tab" data-tab="structure-powerup-forge">🏗 See the build site</button>';
+
+    }else{
+
+        const unlocked=isStructureUnlocked(planetId,"powerup-forge");
+
+        html+=
+            '<div class="pet-role-panel-note">'+(unlocked?'Build a Powerup Forge on this planet to start forging.':'The Powerup Forge unlocks once you\'ve sold its materials here.')+'</div>'+
+            '<button class="neon-btn" data-action="goto-structure-shop" data-structure="powerup-forge">🛒 '+(unlocked?'Buy a Powerup Forge':'See what unlocks the forge')+'</button>';
+
+    }
+
+    html+='</div>';
+
+    return html;
+
+}
+
+function satFactoryTabHtml(planetId){
+
+    const credits=satCredits(planetId);
+
+    const types=Object.keys(credits).filter(k => credits[k]>0);
+
+    const coins=getTotalAvailableCoins(planetId);
+
+    let html=
+        '<div class="customizer-section">'+
+        '<div class="customizer-section-title">'+getStructureIconHtml("satellite-factory")+' Satellite Factory</div>'+
+        '<div class="metric-note">Satellites ride in cargo ('+SAT_CARGO_SLOTS+' slots each). In flight, <b>swipe up from your ship</b> to throw one out — the faster the swipe, the further it goes. '+
+        'They have '+SAT_HP+' hull points against rocks, stay with the ship in a field and stay put round a planet in orbit, and keep going between flights until destroyed.</div>'+
+        '<div class="customizer-section-title" style="margin-top:10px;">Blueprints</div>';
+
+    if(!types.length){
+
+        html+=
+            '<div class="metric-note state-warn">No blueprints in stock. Every powerup you <b>sell</b> at this planet\'s vault stocks one satellite of that kind (forged powerups make forged satellites).</div>'+
+            '<button class="neon-btn" data-action="planet-tab" data-tab="vault">🏦 Sell a powerup at the Vault</button>';
+
+    }else{
+
+        html+='<div class="sat-grid">';
+
+        types.forEach(type=>{
+
+            html+=
+                '<div class="sat-card" style="--sat:'+satColour(type)+'">'+
+                '<div class="sat-card-icon">'+(isForgedItemId(type)?forgedIconHtml(type):getItemIconHtml(type))+'</div>'+
+                '<div class="sat-card-name">'+satTypeName(type)+' <span class="sat-count">×'+credits[type]+'</span></div>'+
+                '<div class="sat-card-text">'+satPowerText(type)+'</div>'+
+                ['manual','auto'].map(mode=>
+                    '<button class="neon-btn'+(mode==="auto"?' primary':'')+'" data-action="sat-build" data-item="'+type+'" data-option="'+mode+'" '+(coins<SAT_COST[mode]?'disabled':'')+'>'+
+                    (mode==="auto"?'🤖 Automatic':'☝ Manual')+' · '+SAT_COST[mode]+' '+COIN_ICON_HTML+'</button>'
+                ).join('')+
+                '</div>';
+
+        });
+
+        html+='</div>'+
+            '<div class="metric-note">Manual: '+satModeBlurb("emp","manual")+' Beams and black holes: tap it, then tap where. · Automatic: '+satModeBlurb("emp","auto")+'</div>';
+
+    }
+
+    const jobs=getBuildQueue(planetId).filter(b => b.type==="satellite");
+
+    jobs.forEach(job=>{
+
+        html+=
+            '<div class="metric-note state-warn">🛰 Building '+satModeLabel(job.satMode).toLowerCase()+' '+satTypeName(job.satType)+' — '+
+            '<span class="live-timer" data-start="'+job.startedAt+'" data-duration="'+job.durationSeconds+'">'+formatRemainingText(job)+'</span>'+
+            '<div class="live-bar"><div class="live-bar-fill" data-start="'+job.startedAt+'" data-duration="'+job.durationSeconds+'" style="width:'+liveProgressPercent(job)+'%"></div></div>'+
+            '</div>';
+
+    });
+
+    const hangar=satHangar(planetId);
+
+    const ships=(getShips(planetId) || []);
+
+    html+='<div class="customizer-section-title" style="margin-top:10px;">Hangar</div>';
+
+    if(!hangar.length){
+
+        html+='<div class="metric-note">Nothing waiting in the hangar.</div>';
+
+    }else{
+
+        hangar.forEach(sat=>{
+
+            html+=
+                '<div class="sat-row">'+
+                '<span>'+(isForgedItemId(sat.type)?forgedIconHtml(sat.type):getItemIconHtml(sat.type))+' '+satTypeName(sat.type)+' · '+satModeLabel(sat.mode)+'</span>'+
+                '<span class="sat-row-btns">'+
+                (
+                    ships.length
+                    ?ships.map((ship,i)=>{
+
+                        const room=shipCargoRoom(ship);
+
+                        return '<button class="control-btn" data-action="sat-load" data-item="'+sat.id+'" data-ship="'+ship.id+'" '+(room<SAT_CARGO_SLOTS?'disabled':'')+'>'+
+                            ROCKET_ICON_HTML+' '+(ships.length>1?'#'+(i+1)+' ':'')+(room<SAT_CARGO_SLOTS?'full':'Load')+'</button>';
+
+                    }).join('')
+                    :'<span class="sat-row-note">no ship docked</span>'
+                )+
+                '</span>'+
+                '</div>';
+
+        });
+
+    }
+
+    ships.forEach((ship,i)=>{
+
+        (ship.satCargo || []).forEach(sat=>{
+
+            html+=
+                '<div class="sat-row aboard">'+
+                '<span>'+ROCKET_ICON_HTML+(ships.length>1?' #'+(i+1):'')+' carries '+(isForgedItemId(sat.type)?forgedIconHtml(sat.type):getItemIconHtml(sat.type))+' '+satTypeName(sat.type)+' · '+satModeLabel(sat.mode)+'</span>'+
+                '<button class="control-btn" data-action="sat-unload" data-item="'+sat.id+'" data-ship="'+ship.id+'">Unload</button>'+
+                '</div>';
+
+        });
+
+        if((ship.fieldSats || []).length){
+
+            html+='<div class="metric-note">'+ROCKET_ICON_HTML+(ships.length>1?' #'+(i+1):'')+' has '+ship.fieldSats.length+' satellite'+(ship.fieldSats.length>1?'s':'')+' flying escort — they rejoin it next flight.</div>';
+
+        }
+
+    });
+
+    html+='</div>';
+
+    html+=renderStructureDesignerHtml("satellite-factory","Satellite Factory");
+
+    return html;
+
+}
+
+/* Roles / Abilities / Forge tabs inside an expanded pet card */
+const petSubTabByPet={};
+
+function petSubTab(petId){
+
+    return petSubTabByPet[petId] || "roles";
+
+}
+
+function petSubTabsHtml(pet){
+
+    const cur=petSubTab(pet.id);
+
+    return(
+        '<div class="pet-subtabs">'+
+        [["roles","🔧 Roles"],["abilities","✨ Abilities"],["forge","⚒ Forge"]].map(([id,label])=>
+            '<button class="pet-subtab'+(cur===id?' active':'')+'" data-action="pet-subtab" data-pet="'+pet.id+'" data-tab="'+id+'">'+label+'</button>'
+        ).join('')+
+        '</div>'
+    );
+
+}
+
+function petNoPerkHtml(pet){
+
+    return(
+        '<div class="pet-role-panel">'+
+        '<div class="pet-role-panel-title">✨ Abilities</div>'+
+        '<div class="pet-role-panel-text">'+(SPECIES_DISPLAY_NAMES[pet.species] || "Native pets")+' don\'t carry a perk yet — but every pet has a forge recipe (see the Forge tab).</div>'+
+        '</div>'
+    );
+
+}
+
+/* ---------- rooms for the new structures ---------- */
+
+function roomForgeFixtures(c,list,planetId,st,time){
+
+    roomTerminal(c,list,.18,"FORGE CONSOLE",st.colour,"structure-powerup-forge");
+
+    /* the furnace glowing on the back wall */
+    list.push({v:-2,draw:()=>{
+
+        const p=roomWallPt(.62,.42);
+
+        const w=roomGeo.backW*.22,h=(roomGeo.backY-roomGeo.wallTop)*.5;
+
+        const t=performance.now()/1000;
+
+        const g=c.createRadialGradient(p.x,p.y+h*.2,4,p.x,p.y+h*.2,w*.7);
+
+        g.addColorStop(0,"rgba(255,242,179,"+(.75+.2*Math.sin(t*5))+")");
+
+        g.addColorStop(.5,"rgba(255,122,26,.5)");
+
+        g.addColorStop(1,"rgba(255,122,26,0)");
+
+        c.save();
+
+        c.fillStyle="rgba(10,6,14,.95)";
+
+        c.fillRect(p.x-w/2,p.y-h/2,w,h);
+
+        c.fillStyle=g;
+
+        c.fillRect(p.x-w/2,p.y-h/2,w,h);
+
+        c.restore();
+
+        roomNeonPath(c,st.colour,2,()=>{c.moveTo(p.x-w/2,p.y+h/2);c.lineTo(p.x-w/2,p.y-h/2+w*.3);c.arc(p.x,p.y-h/2+w*.3,w/2,Math.PI,0);c.lineTo(p.x+w/2,p.y+h/2);});
+
+    }});
+
+    /* the anvil: walk a pet up to it to forge its recipe */
+    list.push({
+        v:.46,
+        walk:{u:.5,v:.46,r:.1,id:"anvil",onWalk:()=>roomForgeBubble(planetId,true)},
+        draw:()=>{
+
+            const p=roomFloorPt(.5,.46);
+
+            const s=p.s;
+
+            const t=performance.now()/1000;
+
+            const flash=world.forgeFlash && performance.now()-world.forgeFlash.t0<1600?world.forgeFlash:null;
+
+            c.save();
+
+            c.fillStyle="rgba(8,10,24,.95)";
+
+            c.beginPath();
+
+            c.moveTo(p.x-46*s,p.y-38*s);
+
+            c.lineTo(p.x+56*s,p.y-38*s);
+
+            c.lineTo(p.x+30*s,p.y-26*s);
+
+            c.lineTo(p.x+18*s,p.y-26*s);
+
+            c.lineTo(p.x+18*s,p.y-10*s);
+
+            c.lineTo(p.x+30*s,p.y);
+
+            c.lineTo(p.x-30*s,p.y);
+
+            c.lineTo(p.x-18*s,p.y-10*s);
+
+            c.lineTo(p.x-18*s,p.y-26*s);
+
+            c.lineTo(p.x-34*s,p.y-26*s);
+
+            c.closePath();
+
+            c.fill();
+
+            c.restore();
+
+            roomNeonPath(c,st.accent,2,()=>{
+
+                c.moveTo(p.x-46*s,p.y-38*s);
+
+                c.lineTo(p.x+56*s,p.y-38*s);
+
+                c.lineTo(p.x+30*s,p.y-26*s);
+
+                c.lineTo(p.x+18*s,p.y-26*s);
+
+                c.lineTo(p.x+18*s,p.y-10*s);
+
+                c.lineTo(p.x+30*s,p.y);
+
+                c.lineTo(p.x-30*s,p.y);
+
+                c.lineTo(p.x-18*s,p.y-10*s);
+
+                c.lineTo(p.x-18*s,p.y-26*s);
+
+                c.lineTo(p.x-34*s,p.y-26*s);
+
+                c.closePath();
+
+            });
+
+            /* embers, or the fresh forging rising off it */
+            c.save();
+
+            for(let i=0;i<7;i++){
+
+                const ph=(t*.8+i*.143)%1;
+
+                c.globalAlpha=(1-ph)*(flash?1:.5);
+
+                c.fillStyle=i%2?"#ffb347":"#fff2b3";
+
+                c.fillRect(p.x+Math.sin(i*1.7+t*2)*30*s,p.y-40*s-ph*50*s,2.4,2.4);
+
+            }
+
+            c.restore();
+
+            if(flash){
+
+                const k=(performance.now()-flash.t0)/1600;
+
+                const d={k:"item",r:flash.id,n:1};
+
+                c.save();
+
+                c.globalAlpha=Math.min(1,2-k*2+.4);
+
+                drawWorldItem(c,d,p.x,p.y-60*s-k*30*s,36*s,{});
+
+                c.restore();
+
+            }
+
+            c.save();
+
+            c.fillStyle="#eafcff";
+
+            c.font="800 "+Math.round(10*s+1)+"px system-ui,sans-serif";
+
+            c.textAlign="center";
+
+            c.fillText("ANVIL · walk up to forge",p.x,p.y+16*s);
+
+            c.restore();
+
+            world.hits.push({x:p.x,y:p.y-24*s,r:58*s,z:6,onTap:()=>roomForgeBubble(planetId,false)});
+
+        }
+    });
+
+    /* two pedestals showing what the roaming pet's recipe needs */
+    const pet=getRoamingPet();
+
+    const recipe=forgeRecipeFor(pet);
+
+    (recipe || []).forEach((id,i)=>{
+
+        const u=i?.76:.24;
+
+        list.push({v:.4,draw:()=>{
+
+            const box=roomDrawBox(c,u,.4,34,28,st.colour,null);
+
+            const n=getItemStock(planetId,id);
+
+            drawWorldItem(c,{k:"item",r:id,n:1},box.x,box.top-18*box.s,30*box.s,{dim:n<1 && id!=="emp",count:n});
+
+        }});
+
+    });
+
+    roomDrawWorkers(c,list,planetId,"builder",time);
+
+}
+
+function roomForgeBubble(planetId,walked){
+
+    const pet=getRoamingPet();
+
+    const p=roomFloorPt(.5,.46);
+
+    if(!pet){
+
+        if(!walked)
+            worldOpenHolo("structure-powerup-forge",{title:"FORGE"});
+
+        return;
+
+    }
+
+    const recipe=forgeRecipeFor(pet);
+
+    const blocker=forgeBlocker(planetId,pet);
+
+    worldShowBubble({
+        x:p.x,y:p.y-70*p.s,
+        iconHtml:"⚒",
+        title:petShortName(planetId,pet)+"'s recipe",
+        meta:forgeRecipeHtml(recipe),
+        text:blocker?petShortName(planetId,pet)+" "+blocker+".":"Melts down one of each and fuses them — "+forgeCost(planetId,recipe)+" "+COIN_ICON_HTML+".",
+        buttons:[
+            {label:"⚒ Forge",primary:true,disabled:!!blocker,action:()=>worldRunAction({"data-action":"forge-powerup","data-pet":pet.id})},
+            {label:"Every pet's recipe",action:()=>worldOpenHolo("structure-powerup-forge",{title:"FORGE"})}
+        ]
+    });
+
+}
+
+function roomSatFactoryFixtures(c,list,planetId,st,time){
+
+    roomTerminal(c,list,.2,"ORBITAL WORKS",st.colour,"structure-satellite-factory");
+
+    /* the assembly cradle: a satellite turning under the arm */
+    list.push({v:.45,draw:()=>{
+
+        const p=roomFloorPt(.55,.45);
+
+        const s=p.s;
+
+        const t=performance.now()/1000;
+
+        const job=getBuildQueue(planetId).find(b => b.type==="satellite");
+
+        c.save();
+
+        c.strokeStyle=st.colour;
+
+        c.lineWidth=2;
+
+        c.shadowColor=st.colour;
+
+        c.shadowBlur=12;
+
+        c.beginPath();
+
+        c.ellipse(p.x,p.y,70*s,18*s,0,0,Math.PI*2);
+
+        c.stroke();
+
+        c.restore();
+
+        const fake={id:"cradle",type:job?job.satType:"emp",mode:job?job.satMode:"manual",hp:SAT_HP,cd:0,space:"field",ox:0,oy:0};
+
+        c.save();
+
+        c.globalAlpha=job?.65+.3*Math.sin(t*4):.3;
+
+        c.translate(p.x,p.y-56*s);
+
+        c.scale(1.6*s,1.6*s);
+
+        c.translate(-W/2,-H/2);
+
+        satDrawOne(c,fake);
+
+        c.restore();
+
+        if(job){
+
+            const k=liveProgressPercent(job)/100;
+
+            c.save();
+
+            c.strokeStyle="#7dffb0";
+
+            c.lineWidth=4;
+
+            c.shadowColor="#7dffb0";
+
+            c.shadowBlur=10;
+
+            c.beginPath();
+
+            c.arc(p.x,p.y-56*s,48*s,-Math.PI/2,-Math.PI/2+k*Math.PI*2);
+
+            c.stroke();
+
+            c.restore();
+
+        }
+
+        c.save();
+
+        c.fillStyle="#eafcff";
+
+        c.font="800 12px system-ui,sans-serif";
+
+        c.textAlign="center";
+
+        c.fillText(job?"Building "+satTypeName(job.satType)+" · "+formatRemainingText(job):"Assembly cradle · tap to build",p.x,p.y+34*s);
+
+        c.restore();
+
+        world.hits.push({x:p.x,y:p.y-50*s,r:70*s,z:6,onTap:()=>worldOpenHolo("structure-satellite-factory",{title:"SATELLITE FACTORY"})});
+
+    }});
+
+    /* the hangar rack: finished satellites waiting to be loaded */
+    list.push({v:.3,draw:()=>{
+
+        const box=roomDrawBox(c,.85,.3,74,46,st.accent,"HANGAR "+satHangar(planetId).length);
+
+        const hangar=satHangar(planetId).slice(0,6);
+
+        hangar.forEach((sat,i)=>{
+
+            const x=box.x-box.w/2+box.w*((i%3)+.5)/3;
+
+            const y=box.top+box.h*(.3+.42*Math.floor(i/3));
+
+            c.save();
+
+            c.translate(x,y);
+
+            c.scale(.55*box.s,.55*box.s);
+
+            c.translate(-W/2,-H/2);
+
+            satDrawOne(c,Object.assign({space:"field",ox:0,oy:0,hp:SAT_HP,cd:0},sat));
+
+            c.restore();
+
+            world.hits.push({x,y,r:16*box.s,z:7,onTap:()=>roomHangarBubble(planetId,sat,x,y)});
+
+        });
+
+    }});
+
+    roomDrawWorkers(c,list,planetId,"builder",time);
+
+}
+
+function roomHangarBubble(planetId,sat,x,y){
+
+    const ship=world.shownShipId?satFindShip(planetId,world.shownShipId):null;
+
+    worldShowBubble({
+        x,y:y-20,
+        iconHtml:"🛰",
+        title:satTypeName(sat.type)+" satellite",
+        meta:satModeLabel(sat.mode)+" · "+SAT_CARGO_SLOTS+" cargo slots",
+        text:"Power: "+satPowerText(sat.type)+". "+satModeBlurb(sat.type,sat.mode),
+        buttons:ship
+            ?[{label:"Load onto the ship",primary:true,disabled:shipCargoRoom(ship)<SAT_CARGO_SLOTS,action:()=>worldRunAction({"data-action":"sat-load","data-item":sat.id,"data-ship":ship.id})}]
+            :[{label:"No ship docked here",disabled:true}]
+    });
+
+}
+
+
+/* the ship's satellite rack: what's riding in cargo, ready to be thrown out in flight */
+function roomShipSatRack(c,list,planetId,ship){
+
+    const sats=Array.isArray(ship.satCargo)?ship.satCargo:[];
+
+    list.push({v:.66,draw:()=>{
+
+        const box=roomDrawBox(c,.6,.66,64,22,"#5ff3ff","SATELLITES "+sats.length+" · "+SAT_CARGO_SLOTS+"/EACH");
+
+        sats.slice(0,3).forEach((sat,i)=>{
+
+            const x=box.x+(i-(Math.min(3,sats.length)-1)/2)*24*box.s;
+
+            const y=box.top-12*box.s;
+
+            c.save();
+
+            c.translate(x,y);
+
+            c.scale(.6*box.s,.6*box.s);
+
+            c.translate(-W/2,-H/2);
+
+            satDrawOne(c,Object.assign({space:"field",ox:0,oy:0,hp:SAT_HP,cd:0},sat));
+
+            c.restore();
+
+            world.hits.push({x,y,r:14*box.s,z:7,onTap:()=>worldShowBubble({
+                x,y:y-20,
+                iconHtml:"🛰",
+                title:satTypeName(sat.type)+" satellite",
+                meta:satModeLabel(sat.mode)+" · in cargo",
+                text:"In flight, swipe up from the ship to throw it out. Power: "+satPowerText(sat.type)+".",
+                buttons:hasStructure(planetId,"satellite-factory")
+                    ?[{label:"Unload to the hangar",action:()=>worldRunAction({"data-action":"sat-unload","data-item":sat.id,"data-ship":ship.id})}]
+                    :[]
+            })});
+
+        });
+
+    }});
+
+}
+
+/* ---------- actions ---------- */
+
+const FEATURE_ACTIONS=new Set(["site-workers","forge-powerup","sat-build","sat-load","sat-unload","pet-subtab"]);
+
+function featureExecuteAction(action,target,planetId){
+
+    if(action==="pet-subtab"){
+
+        petSubTabByPet[target.getAttribute("data-pet")]=target.getAttribute("data-tab");
+
+    }else if(action==="site-workers"){
+
+        siteToggleWorker(planetId,target.getAttribute("data-structure"),target.getAttribute("data-pet"));
+
+    }else if(action==="forge-powerup"){
+
+        forgePowerup(planetId,target.getAttribute("data-pet"));
+
+    }else if(action==="sat-build"){
+
+        satBuild(planetId,target.getAttribute("data-item"),target.getAttribute("data-option"));
+
+    }else if(action==="sat-load"){
+
+        satLoad(planetId,target.getAttribute("data-item"),target.getAttribute("data-ship"));
+
+    }else if(action==="sat-unload"){
+
+        satUnload(planetId,target.getAttribute("data-item"),target.getAttribute("data-ship"));
+
+    }
+
+    if(planetDetailId)
+        renderPlanetDetail(planetDetailId);
+
+}
+
 
 let planetSave=
     loadPlanetSave();
@@ -17385,7 +21025,8 @@ const MP_LOCAL_ONLY_ACTIONS=
         "toggle-ship-pilot",
         "open-pet-role",
         "goto-structure-shop",
-        "roam-pet"
+        "roam-pet",
+        "pet-subtab"
     ]);
 
 /*
@@ -18200,6 +21841,16 @@ function mpApplyShipLanding(message,targetSave){
                 ) || 1
             )
         );
+
+    ship.satCargo=
+        Array.isArray(data.satCargo)
+        ?data.satCargo.slice(0,8)
+        :[];
+
+    ship.fieldSats=
+        Array.isArray(data.fieldSats)
+        ?data.fieldSats.slice(0,SAT_MAX_ACTIVE)
+        :[];
 
     ship.wave=
         Math.max(
@@ -20337,11 +23988,8 @@ function withdrawFoodToShip(planetId,shipId,perkId){
     }
 
     const room=
-        getShipCargoCapacity(
-            ship.materialCapBonus
-        )-
-        getCargoUsed(
-            ship.materials
+        shipCargoRoom(
+            ship
         );
 
     const amount=
@@ -20486,11 +24134,8 @@ function withdrawMaterialToShip(planetId,shipId,materialId){
         ] || 0;
 
     const room=
-        getShipCargoCapacity(
-            ship.materialCapBonus
-        )-
-        getCargoUsed(
-            ship.materials
+        shipCargoRoom(
+            ship
         );
 
     const amount=
@@ -21388,7 +25033,8 @@ function sellItemStock(planetId,itemId){
      * it before it was ever seen.
      */
     let soldMessage=
-        "Sold for "+price+" "+COIN_ICON_HTML;
+        "Sold for "+price+" "+COIN_ICON_HTML+
+        satOnPowerupSold(planetId,itemId);
 
     if(
         !isForeignItemUnlockedAt(
@@ -21633,9 +25279,11 @@ function loadPetToCargo(planetId,shipId,petId){
     }
 
     if(
-        ship.cargoPets.length>=
-        (ship.cargoPetCapacity || 1)
+        shipCargoRoom(ship)<
+        PET_CARGO_SLOTS
     ){
+
+        showShipToast("Not enough cargo room — a pet takes "+PET_CARGO_SLOTS+" slots");
 
         return;
 
@@ -24794,15 +28442,22 @@ function getCargoPetPreviewInfo(ship){
 
     if(
         !ship ||
-        !Array.isArray(ship.cargoPets) ||
-        !ship.cargoPets.length
+        (
+            !ship.pendingPilot &&
+            (
+                !Array.isArray(ship.cargoPets) ||
+                !ship.cargoPets.length
+            )
+        )
     ){
 
         return null;
 
     }
 
+    /* the pilot sits at the window; otherwise the first pet in cargo */
     const pet=
+        ship.pendingPilot ||
         ship.cargoPets[0];
 
     let seed=0;
@@ -30100,9 +33755,7 @@ function drawStarMapScene(
                      * you're actually flying.
                      */
                     const starMapCargoPetInfo=
-                        getCargoPetPreviewInfo({
-                            cargoPets:currentShipCargoPets
-                        });
+                        getCargoPetPreviewInfo({cargoPets:currentShipCargoPets,pendingPilot:currentShipPendingPilot});
 
                     drawCargoAura(
                         c,
@@ -30122,9 +33775,7 @@ currentShipStyleRaw
                             c,
                             true,
                             starMapCargoPetInfo,
-                            getPrimaryCargoPerkId(
-                                currentShipCargoPets
-                            )
+                            getPrimaryCargoPerkId(currentShipCargoPets,currentShipPendingPilot)
                         );
 
                     }
@@ -32283,12 +35934,13 @@ function tryBoardRoamingPet(){
     if(!ship)
         return;
 
-    const capacity=ship.cargoPetCapacity || 1;
+    if(shipCargoRoom(ship)<PET_CARGO_SLOTS){
 
-    const aboard=Array.isArray(ship.cargoPets)?ship.cargoPets.length:0;
+        showShipToast("The cargo hold is full — a pet takes "+PET_CARGO_SLOTS+" slots");
 
-    if(aboard>=capacity)
         return;
+
+    }
 
     const petId=roamingPetId;
 
@@ -32695,7 +36347,7 @@ function worldItemInfo(d){
         return{
             name:it.name,
             iconHtml:getItemIconHtml(d.r),
-            colour:"#5ff3ff",
+            colour:isForgedItemId(d.r)?"#ff8bf0":"#5ff3ff",
             text:(it.description || "")+" Tap the pet carrying it to use it."
         };
 
@@ -32800,7 +36452,11 @@ function drawWorldItem(c,d,x,y,size,opts){
 
     const iconSize=size*.62;
 
-    if(sprite.img && sprite.img.complete && sprite.img.naturalWidth){
+    if(d.k==="item" && isForgedItemId(d.r)){
+
+        forgedDrawIcons(c,d.r,x,y,iconSize);
+
+    }else if(sprite.img && sprite.img.complete && sprite.img.naturalWidth){
 
         c.drawImage(sprite.img,x-iconSize/2,y-iconSize/2,iconSize,iconSize);
 
@@ -32971,7 +36627,7 @@ function worldShipCargo(ship){
 
 function worldShipCargoRoom(ship){
 
-    return getShipCargoCapacity(ship.materialCapBonus)-getCargoUsed(ship.materials || {});
+    return shipCargoRoom(ship);
 
 }
 
@@ -33740,6 +37396,35 @@ const AIMED_POWERUPS={"incinerator-beam":1,"ricochet-orb":1,"singularity":1};
 
 function worldFirePowerup(pet,itemId,origin){
 
+    const parts=forgedParts(itemId);
+
+    if(!parts){
+
+        worldFirePowerupOne(pet,itemId,origin);
+
+        return;
+
+    }
+
+    /* forged: the instant halves go off now, an aimed half waits for the tap */
+    const aimed=parts.filter(p => AIMED_POWERUPS[p]);
+
+    parts.filter(p => !AIMED_POWERUPS[p]).forEach(p => worldFirePowerupOne(pet,p,origin));
+
+    if(aimed.length){
+
+        world.aim={itemId:aimed[0],more:aimed.slice(1),pet,origin};
+
+        showShipToast(getForgedInfo(itemId).name+" ready — tap where to fire");
+
+    }
+
+    world.effects.push({type:"dmg",text:getForgedInfo(itemId).name+"!",x:origin.x,y:origin.y-20,t0:performance.now()});
+
+}
+
+function worldFirePowerupOne(pet,itemId,origin){
+
     const now=performance.now();
 
     sound("click");
@@ -33795,6 +37480,15 @@ function worldFireAimed(px,py){
     const now=performance.now();
 
     const head=world.roamHead && world.roamHead.pet===a.pet?world.roamHead:a.origin;
+
+    (a.more || []).forEach(more=>{
+
+        world.effects.push({type:more,x:head.x,y:head.y,tx:px,ty:py,t0:now,petId:a.pet.id});
+
+        if(more==="singularity")
+            exploreBlastRocks(r => Math.hypot(r.x-px,r.y-py)<140);
+
+    });
 
     world.effects.push({type:a.itemId,x:head.x,y:head.y,tx:px,ty:py,t0:now,petId:a.pet.id});
 
@@ -34558,7 +38252,7 @@ function worldPlanetStructures(p){
 
     Object.keys(world.structureLatLon).forEach(id=>{
 
-        if(id==="pets-fallback")
+        if(id==="pets-fallback" || (world.siteIds && world.siteIds.has(id)))
             return;
 
         entries.push({key:"s:"+id,kind:"structure",id,lat:world.structureLatLon[id].lat,lon:world.structureLatLon[id].lon});
@@ -35202,6 +38896,8 @@ const ROOM_STYLE={
     "ship-factory":{name:"Ship Factory",colour:"#5ff3ff",accent:"#4f9dff"},
     "pilot-training":{name:"Pilot Training",colour:"#b98cff",accent:"#ff8bf0"},
     "bio-dome":{name:"Bio Dome",colour:"#7dffb0",accent:"#d6ff6b"},
+    "powerup-forge":{name:"Powerup Forge",colour:"#ff8bf0",accent:"#ffb347"},
+    "satellite-factory":{name:"Satellite Factory",colour:"#5ff3ff",accent:"#ffd76b"},
     "ship":{name:"Ship",colour:"#4f9dff",accent:"#ff5ec4"}
 };
 
@@ -35668,6 +39364,14 @@ function roomFixtures(c,time){
 
         roomDomeFixtures(c,list,planetId,st,time);
 
+    }else if(roomState.id==="powerup-forge"){
+
+        roomForgeFixtures(c,list,planetId,st,time);
+
+    }else if(roomState.id==="satellite-factory"){
+
+        roomSatFactoryFixtures(c,list,planetId,st,time);
+
     }
 
     return list;
@@ -36121,11 +39825,11 @@ function roomShopFixtures(c,list,planetId,st,time){
 
     blueprints.forEach((id,i)=>{
 
-        const u=.62+.24*(i%2),v=.36+.26*Math.floor(i/2);
+        const u=.5+.2*(i%3),v=.36+.26*Math.floor(i/3);
 
         list.push({v,draw:()=>{
 
-            const box=roomDrawBox(c,u,v,56,26,st.accent,null);
+            const box=roomDrawBox(c,u,v,46,22,st.accent,null);
 
             const unlocked=isStructureUnlocked(planetId,id);
 
@@ -36154,11 +39858,15 @@ function roomShopFixtures(c,list,planetId,st,time){
 
             c.fillStyle="#eafcff";
 
-            c.font="800 "+Math.round(9*box.s+2)+"px system-ui,sans-serif";
+            c.font="800 "+Math.round(8*box.s+2)+"px system-ui,sans-serif";
 
             c.textAlign="center";
 
-            c.fillText(STRUCTURES[id].name+(building?" · building":unlocked?"":" · locked"),box.x,box.base+12*box.s);
+            c.fillText(STRUCTURES[id].name,box.x,box.base+11*box.s);
+
+            c.globalAlpha=.65;
+
+            c.fillText(building?"on site":unlocked?"ready to buy":"🔒 T"+(STRUCTURES[id].tier || 1),box.x,box.base+22*box.s);
 
             c.restore();
 
@@ -36715,7 +40423,7 @@ function roomShipFixtures(c,list,planetId,st,time){
     /* the cargo hold: crates of coins, materials and food */
     list.push({v:.5,draw:()=>{
 
-        const box=roomDrawBox(c,.84,.5,96,70,"#ff9f3a","CARGO "+getCargoUsed(ship.materials || {})+"/"+getShipCargoCapacity(ship.materialCapBonus));
+        const box=roomDrawBox(c,.84,.5,96,70,"#ff9f3a","CARGO "+getShipCargoUsed(ship)+"/"+getShipCargoCapacity(ship.materialCapBonus));
 
         const cargo=worldShipCargo(ship);
 
@@ -36756,9 +40464,9 @@ function roomShipFixtures(c,list,planetId,st,time){
         walk:{u:.86,v:.82,r:.09,id:"petbay",onWalk:()=>roomBoardPetBay(ship)},
         draw:()=>{
 
-            const cap=ship.cargoPetCapacity || 1;
-
             const pets=ship.cargoPets || [];
+
+            const cap=Math.min(4,pets.length+Math.max(0,Math.floor(shipCargoRoom(ship)/PET_CARGO_SLOTS)));
 
             const p=roomFloorPt(.86,.82);
 
@@ -36781,8 +40489,8 @@ function roomShipFixtures(c,list,planetId,st,time){
                     world.hits.push({x,y:p.y-16*p.s,r:20*p.s,z:7,onTap:()=>worldShowBubble({
                         x,y:p.y-40*p.s,
                         iconHtml:"🐾",
-                        title:(SPECIES_DISPLAY_NAMES[cp.species] || "Pet")+" in the pet bay",
-                        text:"Riding along as cargo — its perk works on every flight.",
+                        title:(SPECIES_DISPLAY_NAMES[cp.species] || "Pet")+" in cargo",
+                        text:"Riding along in the hold ("+PET_CARGO_SLOTS+" slots) — its perk works on every flight.",
                         buttons:[{label:"Let it out here",primary:true,action:()=>worldRunAction({"data-action":"unload-pet","data-ship":ship.id,"data-pet":cp.id})}]
                     })});
 
@@ -36798,12 +40506,14 @@ function roomShipFixtures(c,list,planetId,st,time){
 
             c.textAlign="center";
 
-            c.fillText("PET BAY "+pets.length+"/"+cap,p.x,p.y+18*p.s);
+            c.fillText("PETS "+pets.length+" · "+PET_CARGO_SLOTS+"/PET",p.x-10*p.s,p.y+18*p.s);
 
             c.restore();
 
         }
     });
+
+    roomShipSatRack(c,list,planetId,ship);
 
 }
 
@@ -36906,11 +40616,9 @@ function roomBoardPetBay(ship){
     if(!pet || !roamingPetId)
         return;
 
-    const cap=ship.cargoPetCapacity || 1;
+    if(shipCargoRoom(ship)<PET_CARGO_SLOTS){
 
-    if((ship.cargoPets || []).length>=cap){
-
-        showShipToast("The pet bay is full");
+        showShipToast("Not enough cargo room — a pet takes "+PET_CARGO_SLOTS+" slots");
 
         return;
 
@@ -41477,16 +45185,33 @@ function drawPlanetFocusScene(){
 
     }
 
+    world.siteIds=new Set();
+
     for(
         const structureId in
         STRUCTURES
     ){
 
-        if(
+        const built=
             hasStructure(
                 selectedStartPlanet,
                 structureId
-            )
+            );
+
+        const siteJob=
+            built
+            ?null
+            :getSiteJob(
+                selectedStartPlanet,
+                structureId
+            );
+
+        if(siteJob)
+            world.siteIds.add(structureId);
+
+        if(
+            built ||
+            siteJob
         ){
 
             surfaceItems.push({
@@ -41497,7 +45222,21 @@ function drawPlanetFocusScene(){
                         structureId
                     ].icon,
                 tab:
-                    "structure-"+structureId
+                    "structure-"+structureId,
+                /* older jobs (from before sites) just fill in by the clock */
+                site:
+                    !siteJob
+                    ?null
+                    :siteJob.site
+                    ?siteJob
+                    :{
+                        site:true,
+                        legacy:true,
+                        durationSeconds:siteJob.durationSeconds,
+                        workMs:Date.now()-siteJob.startedAt,
+                        lastTick:Date.now(),
+                        lastN:1
+                    }
             });
 
         }
@@ -41888,6 +45627,8 @@ function drawPlanetFocusScene(){
                  * built in the Structure Designer is what you
                  * actually see standing on the planet.
                  */
+                const renderBody=()=>{
+
                 let drewCustomDesign=false;
 
                 /*
@@ -42084,6 +45825,13 @@ function drawPlanetFocusScene(){
 
                 }
 
+                };
+
+                if(item.site)
+                    drawSiteBody(c,item,iconSize,renderBody);
+                else
+                    renderBody();
+
                 c.textAlign="center";
 
                 c.textBaseline="alphabetic";
@@ -42123,6 +45871,21 @@ function drawPlanetFocusScene(){
                     swipeable:
                         item.kind==="ship"
                 });
+
+                if(item.site && mode==="draw"){
+
+                    world.hits.push({
+                        x:ix,
+                        y:iy-iconSize*.45,
+                        r:iconSize*.55,
+                        z:7,
+                        onTap:()=>
+                            item.site.legacy
+                            ?worldOpenHolo(item.tab,{title:STRUCTURES[item.structureId].name.toUpperCase()})
+                            :siteBubble(selectedStartPlanet,item.structureId,ix,iy-iconSize*1.15)
+                    });
+
+                }
 
             };
 
@@ -42299,20 +46062,29 @@ function drawPlanetFocusScene(){
                     let targetPosition=
                         null;
 
+                    const petJob=
+                        petBuildJob(
+                            selectedStartPlanet,
+                            pet,
+                            activeBuild
+                        );
+
                     if(
                         role==="builder" &&
-                        activeBuild
+                        petJob
                     ){
 
                         const targetId=
                             (
-                                activeBuild.type===
+                                petJob.type===
                                 "ship" ||
-                                activeBuild.type===
+                                petJob.type===
                                 "ship-service"
                             )
                             ?"ship-factory"
-                            :activeBuild.structureId;
+                            :petJob.type==="satellite"
+                            ?"satellite-factory"
+                            :petJob.structureId;
 
                         if(
                             structurePositions[
@@ -42492,7 +46264,7 @@ function drawPlanetFocusScene(){
                      */
                     const isPetWorking=
                         role==="builder" &&
-                        !!activeBuild &&
+                        !!petJob &&
                         targetPosition!==null;
 
                     /*
@@ -42825,9 +46597,7 @@ chosenFocusShip
                     flightProgress>0,
                     focusCargoPetInfo,
                     chosenFocusShip
-                    ?getPrimaryCargoPerkId(
-                        chosenFocusShip.cargoPets
-                    )
+                    ?getPrimaryCargoPerkId(chosenFocusShip.cargoPets,chosenFocusShip.pendingPilot)
                     :null
                 );
 
@@ -44455,6 +48225,8 @@ function getEquippedLabel(ship){
         ship.equipment==="emp" ||
         !ship.equipment
         ?"⚡ EMP"
+        :isForgedItemId(ship.equipment)
+        ?getForgedInfo(ship.equipment).icon+" "+getForgedInfo(ship.equipment).name
         :SHOP_ITEMS[ship.equipment]
         ?SHOP_ITEMS[ship.equipment].icon+
           " "+
@@ -44644,9 +48416,24 @@ function resolveBuildQueue(planetId){
         const build of queue
     ){
 
+        if(
+            build.site &&
+            siteSync(planetId,build)
+        ){
+
+            changed=true;
+
+        }
+
         const readyAt=
-            build.startedAt+
-            build.durationSeconds*1000;
+            build.site
+            ?(
+                siteProgressMs(build)>=siteNeedMs(build)
+                ?0
+                :Infinity
+            )
+            :build.startedAt+
+             build.durationSeconds*1000;
 
         if(now>=readyAt){
 
@@ -44666,9 +48453,7 @@ function resolveBuildQueue(planetId){
                     3,
                     {},
                     null,
-                    build.cargoHold
-                    ?10
-                    :0,
+                    shipBuildCargoBonus(build),
                     !!build.dualPerk,
                     null,
                     /*
@@ -44739,31 +48524,30 @@ function resolveBuildQueue(planetId){
                     ){
 
                         servedShip.materialCapBonus=
-                            (
+                            Math.max(
                                 servedShip.
-                                materialCapBonus || 0
-                            )+10;
+                                materialCapBonus || 0,
+                                CARGO_TIER_BONUS.cargoHold
+                            );
 
                     }else if(
                         build.serviceId==="pet-bay"
                     ){
 
-                        servedShip.cargoPetCapacity=
+                        servedShip.materialCapBonus=
                             Math.max(
-                                2,
-                                servedShip.
-                                cargoPetCapacity || 1
+                                servedShip.materialCapBonus || 0,
+                                CARGO_TIER_BONUS.petBay
                             );
 
                     }else if(
                         build.serviceId==="pet-bay-2"
                     ){
 
-                        servedShip.cargoPetCapacity=
+                        servedShip.materialCapBonus=
                             Math.max(
-                                3,
-                                servedShip.
-                                cargoPetCapacity || 1
+                                servedShip.materialCapBonus || 0,
+                                CARGO_TIER_BONUS.dualPerk
                             );
 
                     }
@@ -44777,6 +48561,16 @@ function resolveBuildQueue(planetId){
                     );
 
                 }
+
+            }else if(
+                build.type===
+                "satellite"
+            ){
+
+                satJobComplete(
+                    planetId,
+                    build
+                );
 
             }else if(
                 build.type===
@@ -44862,6 +48656,8 @@ function resolveBuildQueue(planetId){
 
 function resolveAllBuildQueues(){
 
+    migrateMergedCargo();
+
     for(
         const planet of PLANETS
     ){
@@ -44902,9 +48698,7 @@ function computeShipBuildCost(planetId){
  */
 function computeStructureBuildCost(structureId){
 
-    return structureId==="ship-factory"
-        ?18
-        :15;
+    return {"ship-factory":18,"pilot-training":15,"bio-dome":15,"powerup-forge":24,"satellite-factory":30}[structureId] || 15;
 
 }
 
@@ -44950,21 +48744,21 @@ const SHIP_SERVICES={
         requiresUpgrade:null
     },
     "cargo-hold":{
-        name:"Cargo Hold",
+        name:"Cargo Hold I",
         cost:6,
         energyPerPet:5,
         baseSeconds:60,
         requiresUpgrade:"ship-factory-cargo-hold"
     },
     "pet-bay":{
-        name:"Pet Bay",
+        name:"Cargo Hold II",
         cost:8,
         energyPerPet:5,
         baseSeconds:60,
         requiresUpgrade:"ship-factory-pet-bay"
     },
     "pet-bay-2":{
-        name:"Pet Bay II",
+        name:"Cargo Hold III",
         cost:10,
         energyPerPet:5,
         baseSeconds:75,
@@ -44978,13 +48772,13 @@ function isShipServiceApplicable(ship,serviceId){
         return (Number(ship.lives)||3)<3;
 
     if(serviceId==="cargo-hold")
-        return !((ship.materialCapBonus||0)>=10);
+        return (ship.materialCapBonus||0)<CARGO_TIER_BONUS.cargoHold;
 
     if(serviceId==="pet-bay")
-        return (ship.cargoPetCapacity||1)<2;
+        return (ship.materialCapBonus||0)<CARGO_TIER_BONUS.petBay;
 
     if(serviceId==="pet-bay-2")
-        return (ship.cargoPetCapacity||1)===2;
+        return (ship.materialCapBonus||0)<CARGO_TIER_BONUS.dualPerk;
 
     return false;
 
@@ -45298,12 +49092,6 @@ function buildStructure(planetId,structureId){
     )
         return;
 
-    if(
-        structure.requiresPet &&
-        getWorkingPetCount(planetId)<=0
-    )
-        return;
-
     const cost=
         computeStructureBuildCost(
             structureId
@@ -45332,21 +49120,18 @@ function buildStructure(planetId,structureId){
 
     }
 
-    planetSave.buildQueue[
-        planetId
-    ].push({
-        type:"structure",
-        structureId:structureId,
-        startedAt:Date.now(),
-        durationSeconds:
-            structure.buildDurationSeconds
-    });
+    const site=
+        placeStructureSite(
+            planetId,
+            structureId
+        );
 
     savePlanetProgress();
 
     showShipToast(
-        structure.name+
-        " construction started!"
+        site.workers.length
+        ?structure.name+" site laid out — "+site.workers.length+" builder"+(site.workers.length>1?"s":"")+" on it!"
+        :structure.name+" site laid out — tap it on the planet to send builders"
     );
 
     renderPlanetDetail(
@@ -48041,6 +51826,17 @@ function renderPerkShopRow(
  */
 function formatRemainingText(build){
 
+    if(build && build.site){
+
+        const view=siteTimerView(build);
+
+        if(view.idle)
+            return "waiting for builders";
+
+        build=view;
+
+    }
+
     const remaining=
         Math.max(
             0,
@@ -48060,6 +51856,9 @@ function formatRemainingText(build){
 }
 
 function liveProgressPercent(build){
+
+    if(build && build.site)
+        return Math.round(siteFraction(build)*1000)/10;
 
     return Math.round(
         clamp(
@@ -48794,7 +52593,8 @@ function renderPlanetDetail(id){
                     id+"_"+ship.id;
 
                 const cargoCap=
-                    ship.cargoPetCapacity || 1;
+                    (Array.isArray(ship.cargoPets)?ship.cargoPets.length:0)+
+                    Math.max(0,Math.floor(shipCargoRoom(ship)/PET_CARGO_SLOTS));
 
                 const cargoPets=
                     Array.isArray(
@@ -49217,8 +53017,14 @@ function renderPlanetDetail(id){
                         '<div class="ship-bay">'+
                         '<div class="ship-bay-header" data-action="toggle-ship-cargo" '+
                         'data-ship="'+ship.id+'">'+
-                        '<span class="ship-bay-label">Pet Bay ('+
-                        cargoPets.length+'/'+cargoCap+')</span>'+
+                        '<span class="ship-bay-label">🐾 Pets in cargo ('+
+                        cargoPets.length+' · '+PET_CARGO_SLOTS+' slots each)'+
+                        (
+                            (ship.satCargo || []).length
+                            ?' · 🛰 '+ship.satCargo.length
+                            :''
+                        )+
+                        '</span>'+
                         '<span style="opacity:.6;">'+
                         (cargoOpen ? "▲" : "▼")+'</span>'+
                         '</div>'+
@@ -50201,7 +54007,14 @@ function renderPlanetDetail(id){
                     (
                         petExpanded
                         ?'<div class="pet-card-detail">'+
-                         roleRowHtml
+                         petSubTabsHtml(pet)+
+                         (
+                             petSubTab(pet.id)==="roles"
+                             ?roleRowHtml
+                             :petSubTab(pet.id)==="forge"
+                             ?petForgeTabHtml(id,pet)
+                             :(getPerkForSpecies(pet.species)?'':petNoPerkHtml(pet))
+                         )
                         :''
                     );
 
@@ -50224,7 +54037,8 @@ function renderPlanetDetail(id){
 
                     if(
                         !petPerk ||
-                        !petExpanded
+                        !petExpanded ||
+                        petSubTab(pet.id)!=="abilities"
                     )
                         return;
 
@@ -50302,6 +54116,7 @@ function renderPlanetDetail(id){
 
                 if(
                     petExpanded &&
+                    petSubTab(pet.id)==="roles" &&
                     role==="pilot" &&
                     hasPilotTraining &&
                     (expandedPetRoleByPet[pet.id] || role)==="pilot"
@@ -50478,7 +54293,9 @@ function renderPlanetDetail(id){
         job=>{
 
             const jobName=
-                job.type==="ship"
+                job.type==="satellite"
+                ?"a "+satTypeName(job.satType)+" satellite"
+                :job.type==="ship"
                 ?"a ship"
                 :job.type==="ship-service"
                 ?(
@@ -50667,6 +54484,17 @@ function renderPlanetDetail(id){
      */
     function formatRemaining(build){
 
+        if(build && build.site){
+
+            const view=siteTimerView(build);
+
+            if(view.idle)
+                return '<span>waiting for builders</span>';
+
+            build=view;
+
+        }
+
         return(
             '<span class="live-timer" data-start="'+
             build.startedAt+
@@ -50684,6 +54512,17 @@ function renderPlanetDetail(id){
      * job progresses, driven by the same ticker.
      */
     function progressBarHtml(build){
+
+        if(build && build.site){
+
+            const view=siteTimerView(build);
+
+            if(view.idle)
+                return '<div class="live-bar"><div class="live-bar-fill" style="width:'+Math.round(view.frac*1000)/10+'%"></div></div>';
+
+            build=view;
+
+        }
 
         return(
             '<div class="live-bar"><div class="live-bar-fill" '+
@@ -50766,7 +54605,9 @@ function renderPlanetDetail(id){
                 structureId
             )+
             '</div>'+
-            '<div class="item-shop-card-name">'+structure.name+'</div>'+
+            '<div class="item-shop-card-name">'+structure.name+
+            (structure.tier?'<span class="structure-tier">T'+structure.tier+'</span>':'')+
+            '</div>'+
             (
                 unlocked
                 ?''
@@ -50790,7 +54631,6 @@ function renderPlanetDetail(id){
                 );
 
             const canBuild=
-                workingPetsHere>0 &&
                 getTotalAvailableCoins(id)>=
                 structureCost;
 
@@ -50882,23 +54722,23 @@ function renderPlanetDetail(id){
 
                 rowHtml+=
                     '<div style="margin-top:8px;">'+
-                    '🐾 Working pet stationed here: '+
+                    '🏗 Buying it lays out the build site on the planet. '+
+                    '🐾 Builders here: '+
                     '<span class="'+
                     (
                         workingPetsHere>0
                         ?'state-good'
-                        :'state-bad'
+                        :'state-warn'
                     )+
                     '">'+
                     (
                         workingPetsHere>0
-                        ?'Yes ('+workingPetsHere+')'
-                        :'None — required to build (a pet '+
-                         'with 0 energy doesn\'t count until fed)'
+                        ?workingPetsHere+' ready to start'
+                        :'none yet — the site waits until one arrives'
                     )+
                     '</span>'+
-                    ' · Build time: '+
-                    structure.buildDurationSeconds+'s'+
+                    ' · '+
+                    structure.buildDurationSeconds+'s with one builder, faster with more'+
                     '</div>';
 
             }
@@ -51007,7 +54847,7 @@ function renderPlanetDetail(id){
          */
         const previewCargo=
             getShipCargoCapacity(
-                useCargoHold ? 10 : 0
+                shipBuildCargoBonus({cargoHold:useCargoHold,petBay:usePetBay,dualPerk:useDualPerk})
             );
 
         const previewPetBay=
@@ -51038,8 +54878,8 @@ function renderPlanetDetail(id){
             '<div class="item-shop-card-meta">'+
             '<span style="color:#ff8d8d;letter-spacing:2px;">'+
             '♥♥♥</span> 3 hearts<br>'+
-            'Cargo '+previewCargo+'<br>'+
-            'Pet bay '+previewPetBay+'<br>'+
+            '📦 Cargo '+previewCargo+'<br>'+
+            '<span style="opacity:.7;">🐾 '+PET_CARGO_SLOTS+' · 🛰 '+SAT_CARGO_SLOTS+' slots each</span><br>'+
             'Ready in '+shipDuration+'s'+
             '</div>'+
             '</div>'+
@@ -51055,7 +54895,7 @@ function renderPlanetDetail(id){
                      ?toggleBtn(
                          "cargoHold",
                          shipBuildToggles.cargoHold,
-                         '📦 Cargo Hold +10 (+3 '+COIN_ICON_HTML+')'
+                         '📦 Cargo Hold I: 30 (+3 '+COIN_ICON_HTML+')'
                       )
                      :''
                  )+
@@ -51064,7 +54904,7 @@ function renderPlanetDetail(id){
                      ?toggleBtn(
                          "petBay",
                          usePetBay,
-                         '🐾 Pet Bay: 2 pets (+4 '+COIN_ICON_HTML+')'
+                         '📦 Cargo Hold II: 45 (+4 '+COIN_ICON_HTML+')'
                       )
                      :''
                  )+
@@ -51073,7 +54913,7 @@ function renderPlanetDetail(id){
                      ?toggleBtn(
                          "dualPerk",
                          shipBuildToggles.dualPerk,
-                         '🐾 Pet Bay II: 3 pets (+5 '+COIN_ICON_HTML+')'
+                         '📦 Cargo Hold III: 65 (+5 '+COIN_ICON_HTML+')'
                       )
                      :''
                  )+
@@ -51198,17 +55038,19 @@ function renderPlanetDetail(id){
                     '♡'.repeat(3-shipLives)+
                     '</span></span>'+
                     '<span>📦 '+
-                    getCargoUsed(
-                        dockedShip.materials
+                    getShipCargoUsed(
+                        dockedShip
                     )+'/'+
                     getShipCargoCapacity(
                         dockedShip.materialCapBonus
                     )+'</span>'+
                     '<span>🐾 '+
-                    dockedCargoPets.length+'/'+
+                    dockedCargoPets.length+'</span>'+
                     (
-                        dockedShip.cargoPetCapacity || 1
-                    )+'</span>'+
+                        (dockedShip.satCargo || []).length
+                        ?'<span>🛰 '+dockedShip.satCargo.length+'</span>'
+                        :''
+                    )+
                     '</div>'+
                     '</div>'+
                     '</div>'+
@@ -51334,6 +55176,10 @@ function renderPlanetDetail(id){
 
     html+=
         '</div>';
+
+    }else if(structureBuild && structureBuild.site){
+
+    html+=siteMenuHtml(id,structureBuild);
 
     }else if(structureBuild){
 
@@ -51808,6 +55654,10 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }else if(pilotTrainingBuild && pilotTrainingBuild.site){
+
+    html+=siteMenuHtml(id,pilotTrainingBuild);
+
     }else if(pilotTrainingBuild){
 
     html+=
@@ -51891,6 +55741,10 @@ function renderPlanetDetail(id){
     html+=
         '</div>';
 
+    }else if(bioDomeBuild && bioDomeBuild.site){
+
+    html+=siteMenuHtml(id,bioDomeBuild);
+
     }else if(bioDomeBuild){
 
     html+=
@@ -51913,6 +55767,44 @@ function renderPlanetDetail(id){
     }
 
     }
+
+    /* -------- Powerup Forge and Satellite Factory -------- */
+
+    ["powerup-forge","satellite-factory"].forEach(
+        sid=>{
+
+            const built=
+                getStructure(id,sid);
+
+            const job=
+                planetQueue.find(
+                    b =>
+                        b.type==="structure" &&
+                        b.structureId===sid
+                );
+
+            if(built){
+
+                if(tab==="structure-"+sid)
+                    html+=sid==="powerup-forge"?forgeTabHtml(id):satFactoryTabHtml(id);
+
+            }else if(job){
+
+                if(tab==="structure-"+sid)
+                    html+=job.site?siteMenuHtml(id,job):'<div class="customizer-section"><div class="metric-note state-warn">🏗 Under construction — '+formatRemaining(job)+'</div>'+progressBarHtml(job)+'</div>';
+
+            }else if(showShop){
+
+                structureCardsHtml+=
+                    renderStructureShopRow(
+                        sid,
+                        "Build"
+                    );
+
+            }
+
+        }
+    );
 
     if(structureCardsHtml){
 
@@ -52127,6 +56019,14 @@ function executePlanetDetailAction(target){
     if(WORLD_ACTIONS.has(action)){
 
         worldExecuteAction(action,target,planetDetailId);
+
+        return;
+
+    }
+
+    if(FEATURE_ACTIONS.has(action)){
+
+        featureExecuteAction(action,target,planetDetailId);
 
         return;
 
@@ -61608,6 +65508,8 @@ function syncCurrentShipFlightState(){
 
     if(ship){
 
+        satAttachToShip(ship);
+
         ship.equipment=
             currentShipEquipment ||
             "emp";
@@ -61804,6 +65706,16 @@ function checkPlayerCollisions(){
 
             lives--;
 
+            /* a lifeline satellite gives itself up to save the ship */
+            if(
+                lives<=0 &&
+                satLifelineSave()
+            ){
+
+                lives=1;
+
+            }
+
             combo=1;
 
             comboTimer=0;
@@ -61865,8 +65777,10 @@ function checkPlayerCollisions(){
                 resolveRunEndCargoPets();
 
                 if(
-                    currentShipEquipment===
-                    "return-capsule" &&
+                    equipmentHas(
+                        currentShipEquipment,
+                        "return-capsule"
+                    ) &&
                     (
                         runCoins>0 ||
                         Object.keys(
@@ -61959,9 +65873,7 @@ function drawCustomShipShapes(
      * along, not a placeholder.
      */
     const cargoPetInfo=
-        getCargoPetPreviewInfo({
-            cargoPets:currentShipCargoPets
-        });
+        getCargoPetPreviewInfo({cargoPets:currentShipCargoPets,pendingPilot:currentShipPendingPilot});
 
     drawCargoAura(
         ctx,
@@ -61981,9 +65893,7 @@ currentShipStyleRaw
             ctx,
             true,
             cargoPetInfo,
-            getPrimaryCargoPerkId(
-                currentShipCargoPets
-            )
+            getPrimaryCargoPerkId(currentShipCargoPets,currentShipPendingPilot)
         );
 
     }
@@ -67674,9 +71584,10 @@ function computeMaterialDropRate(){
  * actual effect still applies in full regardless of what the
  * spark shows.
  */
-function getPrimaryCargoPerkId(cargoPets){
+function getPrimaryCargoPerkId(cargoPets,pilot){
 
     const pet=
+        (pilot && getPerkForSpecies(pilot.species)?pilot:null) ||
         (cargoPets || []).find(
             p =>
                 !!getPerkForSpecies(
@@ -67711,7 +71622,11 @@ function getPerkEffect(effectType){
      * Rig entirely.
      */
     (
-        currentShipCargoPets || []
+        (currentShipCargoPets || []).concat(
+            currentShipPendingPilot
+            ?[currentShipPendingPilot]
+            :[]
+        )
     ).forEach(
         cargoPet=>{
 
@@ -71127,6 +75042,8 @@ function restoreShipRecordAfterOrbit(){
             currentShipStyleId
         );
 
+    satAttachToShip(ship);
+
     ship.pendingPilot=
         currentShipPendingPilot;
 
@@ -72720,6 +76637,8 @@ function landAtCurrentPlanetInner(){
                     currentShipStyleId
                 );
 
+            satAttachToShip(ship);
+
             /*
              * The pilot assignment survives the player's own
              * flight — createShip doesn't take these, so they're
@@ -72832,6 +76751,8 @@ function landAtCurrentPlanetInner(){
                 earthShip.cargoPets &&
                 earthShip.cargoPets.length
             ) &&
+            !(earthShip.satCargo || []).length &&
+            !(earthShip.fieldSats || []).length &&
             !earthShip.pendingPilot
         ){
 
@@ -72876,6 +76797,10 @@ function landAtCurrentPlanetInner(){
                 currentShipCargoPetCapacity,
             cargoPets:
                 currentShipCargoPets,
+            satCargo:
+                satStrip(satRun.cargo),
+            fieldSats:
+                satStrip(satRun.field),
             styleId:
                 currentShipStyleId,
             styleOwnerId:
@@ -73459,6 +77384,8 @@ function update(dt){
 
 
     updateStars(dt);
+
+    satUpdateRun(dt);
 
 
     /*
@@ -75006,6 +78933,8 @@ function draw(){
      * order to swipe it up to depart or down to land. Only a
      * death-capsule sequence hides it.
      */
+    satDrawRun(ctx);
+
     if(
         capsuleMode!==
         "death"
@@ -75520,7 +79449,8 @@ function updateHUD(){
         beamArmed ||
         ricochetArmed ||
         bladeArmed ||
-        singularityArmed
+        singularityArmed ||
+        forgedAimParts
     ){
 
         empButton.innerHTML=
@@ -76159,6 +80089,9 @@ function startGame(){
                 ) || 1
             );
 
+        satLaunchShip=
+            earthChoice;
+
         launchWave=
             Number(
                 earthChoice.wave
@@ -76355,6 +80288,9 @@ function startGame(){
                 ) || 1
             );
 
+        satLaunchShip=
+            ship;
+
         launchWave=
             Number(
                 ship.wave
@@ -76477,6 +80413,12 @@ function startGame(){
 
     currentShipCargoPetCapacity=
         launchCargoPetCapacity;
+
+    satBeginRun(
+        satLaunchShip
+    );
+
+    satLaunchShip=null;
 
     combo=1;
 
@@ -77146,7 +81088,8 @@ function handlePointer(event){
             );
 
             if(
-                getCargoUsed(runMaterials)>=
+                getCargoUsed(runMaterials)+
+                runExtraCargoUsed()>=
                 getShipCargoCapacity(
                     currentShipMaterialCapBonus
                 )
@@ -78887,6 +82830,16 @@ empButton.addEventListener(
 
         initAudio();
 
+        if(isForgedItemId(currentShipEquipment)){
+
+            activateForgedPowerup(
+                currentShipEquipment
+            );
+
+            return;
+
+        }
+
         if(
             currentShipEquipment===
             "regen-coil"
@@ -79560,9 +83513,7 @@ function paintPauseShipPreview(){
             {
                 styleId:currentShipStyleId,
                 perk:currentShipPerk,
-                cargoPets:
-                    currentShipCargoPets || []
-            };
+                cargoPets:currentShipCargoPets || [],pendingPilot:currentShipPendingPilot};
 
         const cargoPetInfo=
             getCargoPetPreviewInfo(
