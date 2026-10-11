@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#090b10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Local Gemma">
-<title>Local Gemma — V0.2.0</title>
+<title>Local Gemma — V0.3.0</title>
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 *{box-sizing:border-box}
@@ -22,12 +22,14 @@ main{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}
 .panel{background:#11141a;border:1px solid #292e39;border-radius:15px;padding:14px;display:flex;flex-direction:column;gap:10px}
 select,button,textarea{font:inherit;color:#fff}
 select{width:100%;background:#151821;border:1px solid #303644;border-radius:12px;padding:11px}
+label.small{display:flex;flex-direction:column;gap:4px}
 button{border:1px solid #303644;background:#151821;border-radius:12px;padding:10px 14px;cursor:pointer}
 button:disabled{opacity:.45;cursor:not-allowed}
 .primary{background:#245eea;border-color:#245eea}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .bar{height:7px;background:#242934;border-radius:8px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:#4d8dff;transition:width .2s}
+.notice{background:#2a2312;border:1px solid #5a4a1c;color:#ffd27a;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4}
 #messages{flex:1;display:flex;flex-direction:column;gap:12px;min-height:30vh}
 .msg{max-width:92%;padding:11px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .user{align-self:flex-end;background:#245eea}
@@ -42,20 +44,27 @@ details summary{cursor:pointer;font-size:12px;color:#9098a6}
 <body>
 <div class="app">
 <header>
-  <div><h1>Local Gemma</h1><div class="small">Runs on your device · V0.2.0</div></div>
+  <div><h1>Local Gemma</h1><div class="small">Runs on your device · V0.3.0</div></div>
   <div class="badges"><span id="gpuBadge" class="badge">WebGPU…</span><span id="netBadge" class="badge">…</span></div>
 </header>
 <main>
   <section class="panel" id="setup">
-    <b>Choose a model</b>
-    <select id="modelSelect"></select>
+    <div id="notice" class="notice" hidden></div>
+    <label class="small">Model<select id="modelSelect"></select></label>
     <div id="modelNote" class="small"></div>
+    <label class="small">Engine
+      <select id="engineSelect">
+        <option value="gpu">GPU (WebGPU): faster</option>
+        <option value="cpu">CPU: slower, but uses less memory and is often more stable on iPhone</option>
+      </select>
+    </label>
     <div class="row">
       <button id="loadBtn" class="primary">Download &amp; load</button>
       <button id="clearCacheBtn">Delete downloaded models</button>
     </div>
     <div class="bar"><i id="progress"></i></div>
-    <div id="status" class="small">The first load downloads the model. After that it loads from storage on this device and works offline.</div>
+    <div id="status" class="small">Downloads are saved on this phone in pieces. If the app restarts, tap the button again and it carries on where it stopped.</div>
+    <div id="storage" class="small"></div>
     <details><summary>Diagnostic log</summary><div id="log" class="log">App started.</div><button id="copyLogBtn" style="margin-top:8px">Copy log</button></details>
   </section>
 
@@ -76,149 +85,289 @@ details summary{cursor:pointer;font-size:12px;color:#9098a6}
 </div>
 
 <script type="module">
-// Transformers.js v4 (the version that supports Gemma 4). Full file path so the browser gets the ES-module build.
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4/dist/transformers.min.js";
 
-// Biggest first. Sizes are approximate download sizes.
 const MODELS = [
   { id: "onnx-community/gemma-4-E2B-it-ONNX", name: "Gemma 4 E2B (≈3 GB)",
-    note: "The real Gemma 4. Very likely too big for Safari on most iPhones: if the page reloads itself or shows “A problem repeatedly occurred”, Safari ran out of memory. Try a smaller model." },
+    note: "The real Gemma 4. The download can now finish, but loading 3 GB into memory is very likely more than Safari allows on an iPhone." },
   { id: "onnx-community/gemma-3-1b-it-ONNX-GQA", name: "Gemma 3 1B (≈1 GB)",
-    note: "A good middle ground for newer iPhones (iPhone 15 Pro or later recommended)." },
+    note: "Middle ground. Best chance on an iPhone 15 Pro or newer." },
   { id: "onnx-community/gemma-3-270m-it-ONNX", name: "Gemma 3 270M (≈0.3 GB)",
-    note: "Tiny and fast. Should run on almost any iPhone with iOS 26 or later. Answers are much simpler." },
+    note: "Tiny and fast. Should run on almost any recent iPhone. Simple answers." },
 ];
+const MAX_NEW_TOKENS = 384;   // shorter replies = less memory
+const HISTORY_TURNS  = 8;     // only the last few messages are sent to the model
 
 const $ = id => document.getElementById(id);
-let lib = null, generator = null, loadedModel = null, history = [], stopper = null, busy = false;
+let lib=null, generator=null, loadedModel=null, history=[], stopper=null, busy=false;
 
+// ---------- small helpers ----------
+const ls = { get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}}, del(k){try{localStorage.removeItem(k)}catch{}} };
 function log(msg){ const l=`[${new Date().toLocaleTimeString()}] ${msg}`; $("log").textContent+="\n"+l; console.log("[LocalGemma]",msg); }
 function setStatus(t,cls=""){ $("status").textContent=t; $("status").className="small "+cls; }
 function setProgress(p){ $("progress").style.width=Math.max(0,Math.min(100,p))+"%"; }
 function badge(id,text,cls){ $(id).textContent=text; $(id).className="badge "+cls; }
-function addMessage(role,text){ const e=document.createElement("div"); e.className="msg "+role; e.textContent=text; $("messages").appendChild(e); e.scrollIntoView({block:"end"}); return e; }
-function fmtMB(b){ return (b/1048576).toFixed(0)+" MB"; }
+function addMessage(role,text,scroll=true){ const e=document.createElement("div"); e.className="msg "+role; e.textContent=text; $("messages").appendChild(e); if(scroll) e.scrollIntoView({block:"end"}); return e; }
+function fmtMB(b){ return b>=1073741824 ? (b/1073741824).toFixed(2)+" GB" : (b/1048576).toFixed(0)+" MB"; }
+const short = url => url.split("/").pop();
+const modelName = id => MODELS.find(m=>m.id===id)?.name.split(" (")[0] ?? id;
 
 // ---------- device checks ----------
 let gpuInfo = { available:false, f16:false };
 async function checkDevice(){
   badge("netBadge", navigator.onLine?"ONLINE":"OFFLINE", navigator.onLine?"ok":"warn");
-  if(!navigator.gpu){ badge("gpuBadge","No WebGPU","bad"); log("navigator.gpu missing. Needs iOS/Safari 26+ (or turn WebGPU on in Settings › Safari › Advanced › Feature Flags)."); return; }
+  if(!navigator.gpu){ badge("gpuBadge","No WebGPU","warn"); gpuInfo={available:false,f16:false}; return; }
   try{
-    const adapter = await navigator.gpu.requestAdapter();
-    if(!adapter) throw new Error("no adapter");
-    gpuInfo = { available:true, f16: adapter.features.has("shader-f16") };
+    const a = await navigator.gpu.requestAdapter();
+    if(!a) throw new Error("no adapter");
+    gpuInfo = { available:true, f16:a.features.has("shader-f16") };
     badge("gpuBadge", gpuInfo.f16?"WebGPU · f16":"WebGPU", "ok");
-    log(`WebGPU adapter OK. shader-f16: ${gpuInfo.f16}. maxBufferSize: ${fmtMB(adapter.limits.maxBufferSize)}`);
-  }catch(e){ badge("gpuBadge","WebGPU blocked","bad"); log("WebGPU adapter request failed: "+e.message); }
+  }catch(e){ badge("gpuBadge","WebGPU blocked","warn"); gpuInfo={available:false,f16:false}; }
 }
 addEventListener("online",checkDevice); addEventListener("offline",checkDevice);
 await checkDevice();
+if(!gpuInfo.available){ $("engineSelect").value="cpu"; log("WebGPU not available; using CPU engine."); }
+
+// ======================================================================
+// Resumable, disk-backed model storage.
+// Files are downloaded in 16 MB pieces straight into IndexedDB, so the
+// phone never holds a whole multi-GB file in memory while downloading,
+// and every finished piece survives the app being closed or reset.
+// Transformers.js reads the files through env.customCache.
+// ======================================================================
+const PIECE = 16*1024*1024;
+let dbPromise=null;
+function openDB(){
+  return dbPromise ||= new Promise((res,rej)=>{
+    const r=indexedDB.open("local-gemma-store",1);
+    r.onupgradeneeded=()=>{ const d=r.result; d.createObjectStore("chunks"); d.createObjectStore("meta"); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+async function tx(store,mode,fn){
+  const d=await openDB();
+  return new Promise((res,rej)=>{
+    const t=d.transaction(store,mode); let out; const r=fn(t.objectStore(store));
+    if(r) r.onsuccess=()=>{ out=r.result; };
+    t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error||new Error("storage write aborted (phone storage full?)"));
+  });
+}
+const getMeta   = url => tx("meta","readonly", s=>s.get(url));
+const putMeta   = (url,m) => tx("meta","readwrite", s=>s.put(m,url));
+const putPiece  = (url,i,blob) => tx("chunks","readwrite", s=>s.put(blob,[url,i]));
+const getPieces = url => tx("chunks","readonly", s=>s.getAll(IDBKeyRange.bound([url,0],[url,Infinity])));
+async function deleteFile(url){
+  await tx("chunks","readwrite", s=>s.delete(IDBKeyRange.bound([url,0],[url,Infinity])));
+  await tx("meta","readwrite", s=>s.delete(url));
+}
+
+// download progress shared across files
+const dl = new Map();
+function showDownload(){
+  let L=0,T=0; for(const f of dl.values()){ L+=f.loaded; T+=Math.max(f.total,f.loaded); }
+  if(T){ setProgress(L/T*90); setStatus(`Downloading… ${fmtMB(L)} of ${fmtMB(T)} (saved as it goes)`); }
+}
+
+const inflight = new Map();
+function ensureFile(url){
+  if(!inflight.has(url)) inflight.set(url, downloadFile(url).finally(()=>inflight.delete(url)));
+  return inflight.get(url);
+}
+async function downloadFile(url){
+  let m = await getMeta(url) || { bytes:0, pieces:0, total:0, done:false };
+  if(m.done) return m;
+  if(m.bytes) log(`Resuming ${short(url)} from ${fmtMB(m.bytes)}`);
+  for(let attempt=1;;attempt++){
+    try{
+      const r = await fetch(url, m.bytes ? { headers:{ Range:`bytes=${m.bytes}-` } } : {});
+      if(r.status===404 || r.status===401 || r.status===403) return null;     // optional file that doesn't exist
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      if(m.bytes && r.status!==206){ log(`Server wouldn't resume ${short(url)}; restarting that file`); await deleteFile(url); m={bytes:0,pieces:0,total:0,done:false}; }
+      if(!m.total){ const cr=r.headers.get("content-range"); m.total = cr ? +cr.split("/")[1] || 0 : +(r.headers.get("content-length")||0); }
+      const reader = r.body.getReader();
+      let parts=[], size=0;
+      const flush = async () => {
+        if(!size) return;
+        await putPiece(url, m.pieces, new Blob(parts));
+        m.pieces++; m.bytes+=size; parts=[]; size=0;
+        await putMeta(url, m);
+      };
+      for(;;){
+        const { done, value } = await reader.read();
+        if(done) break;
+        parts.push(value); size += value.byteLength;
+        dl.set(url,{ loaded:m.bytes+size, total:m.total }); showDownload();
+        if(size >= PIECE) await flush();
+      }
+      await flush();
+      m.done = true; m.total = m.bytes; await putMeta(url, m);
+      log(`Saved ${short(url)} (${fmtMB(m.bytes)})`);
+      return m;
+    }catch(e){
+      if(attempt>=8) throw e;
+      log(`Connection hiccup on ${short(url)} (${e.message}). Retrying from ${fmtMB(m.bytes)}…`);
+      await new Promise(r=>setTimeout(r, Math.min(15000, 1000*attempt)));
+    }
+  }
+}
+
+let storageHits = 0;
+const diskCache = {
+  async match(req){
+    const url = typeof req==="string" ? req : req?.url;
+    if(!url || !/^https:\/\/huggingface\.co\//.test(url)) return undefined;
+    try{
+      const m = await ensureFile(url);
+      if(!m) return undefined;
+      const blob = new Blob(await getPieces(url));   // disk-backed; not read into memory here
+      if(m.total && blob.size !== m.total){ log(`${short(url)} is incomplete in storage; re-downloading`); await deleteFile(url); return diskCache.match(req); }
+      storageHits++;
+      return new Response(blob, { status:200, headers:{ "content-length":String(blob.size) } });
+    }catch(e){
+      log(`Storage problem with ${short(url)}: ${e.message}`);
+      return undefined;   // Transformers.js will fall back to a normal download
+    }
+  },
+  async put(){ /* files are stored by match() above */ },
+};
+
+async function showStorage(){
+  if(!navigator.storage?.estimate) return;
+  try{ const e=await navigator.storage.estimate(); $("storage").textContent=`Using ${fmtMB(e.usage||0)} of phone storage (up to ${fmtMB(e.quota||0)} allowed).`; }catch{}
+}
 
 // ---------- model picker ----------
-for(const m of MODELS){ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name; $("modelSelect").appendChild(o); }
-let saved=null; try{ saved=localStorage.getItem("lg-model"); }catch{}
-if(saved && MODELS.some(m=>m.id===saved)) $("modelSelect").value=saved;
+function fillModels(){
+  const cur=$("modelSelect").value; $("modelSelect").innerHTML="";
+  for(const m of MODELS){ const o=document.createElement("option"); o.value=m.id; o.textContent=m.name+(ls.get("lg-ready:"+m.id)?"  ✓ downloaded":""); $("modelSelect").appendChild(o); }
+  if(cur) $("modelSelect").value=cur;
+}
+fillModels();
+const lastModel = ls.get("lg-model");
+if(lastModel && MODELS.some(m=>m.id===lastModel)) $("modelSelect").value=lastModel;
+const savedEngine = ls.get("lg-engine"); if(savedEngine && gpuInfo.available) $("engineSelect").value=savedEngine;
 const showNote=()=>{ $("modelNote").textContent = MODELS.find(m=>m.id===$("modelSelect").value).note; };
-$("modelSelect").onchange=()=>{ showNote(); try{localStorage.setItem("lg-model",$("modelSelect").value)}catch{} };
-showNote();
+$("modelSelect").onchange=()=>{ showNote(); ls.set("lg-model",$("modelSelect").value); };
+$("engineSelect").onchange=()=>ls.set("lg-engine",$("engineSelect").value);
+showNote(); showStorage();
 
 // ---------- loading ----------
 async function loadModel(){
   if(busy) return;
   const id = $("modelSelect").value;
-  busy = true; $("loadBtn").disabled = true; setProgress(1);
+  const useGPU = $("engineSelect").value==="gpu" && gpuInfo.available;
+  busy=true; $("loadBtn").disabled=true; $("notice").hidden=true; setProgress(1);
+  ls.set("lg-model",id);
+  ls.set("lg-loading", JSON.stringify({ id, engine:useGPU?"gpu":"cpu", at:Date.now() }));   // crash detector
+  dl.clear(); storageHits=0;
   try{
+    if(navigator.storage?.persist){ try{ log("Persistent storage granted: "+await navigator.storage.persist()); }catch{} }
     if(!lib){
       setStatus("Loading the AI runtime…");
       lib = await import(TRANSFORMERS_URL);
-      log("Transformers.js loaded"+(lib.env?.version?` (v${lib.env.version})`:""));
+      log("Transformers.js loaded"+(lib.env?.version?` v${lib.env.version}`:""));
     }
-    // Ask the browser not to evict the multi-GB download.
-    if(navigator.storage?.persist){ try{ log("Persistent storage: "+await navigator.storage.persist()); }catch{} }
-    if(navigator.storage?.estimate){ try{ const e=await navigator.storage.estimate(); log(`Storage: ${fmtMB(e.usage||0)} used of ${fmtMB(e.quota||0)} available to this site`); }catch{} }
+    lib.env.allowLocalModels = false;
+    lib.env.useBrowserCache  = false;
+    lib.env.useCustomCache   = true;
+    lib.env.customCache      = diskCache;
 
     if(generator){ try{ await generator.dispose?.(); }catch{} generator=null; loadedModel=null; }
 
-    // q4f16 needs GPU half-precision support; otherwise fall back.
-    const device = gpuInfo.available ? "webgpu" : "wasm";
-    const dtype  = gpuInfo.available && gpuInfo.f16 ? "q4f16" : "q4";
-    log(`Loading ${id} on ${device} as ${dtype}`);
+    const device = useGPU ? "webgpu" : "wasm";
+    const dtype  = useGPU && gpuInfo.f16 ? "q4f16" : "q4";
+    log(`Loading ${id} on ${device} (${dtype})`);
 
-    const files = new Map();
+    const reading = new Map();
     const progress_callback = p => {
-      if(p.status==="progress" && p.file){
-        files.set(p.file,{loaded:p.loaded||0,total:p.total||0});
-        let L=0,T=0; for(const f of files.values()){L+=f.loaded;T+=f.total}
-        if(T){ setProgress(L/T*95); setStatus(`Downloading / reading model… ${fmtMB(L)} of ${fmtMB(T)}`); }
-      } else if(p.status==="done" && p.file){ log("Ready: "+p.file); }
-      else if(p.status==="ready"){ setStatus("Preparing model on the GPU… (can take a minute)"); setProgress(97); }
+      if(p.status==="progress" && p.file && !inflight.size){
+        reading.set(p.file,{loaded:p.loaded||0,total:p.total||0});
+        let L=0,T=0; for(const f of reading.values()){L+=f.loaded;T+=f.total}
+        if(T){ setProgress(90+L/T*7); setStatus(`Loading into memory… ${fmtMB(L)} of ${fmtMB(T)}`); }
+      } else if(p.status==="ready"){ setStatus("Preparing the model… (can take a minute)"); setProgress(98); }
     };
 
-    // Text-only pipeline: loads only the text parts of the model, which keeps memory as low as possible.
     generator = await lib.pipeline("text-generation", id, { device, dtype, progress_callback });
 
-    loadedModel = id; setProgress(100);
-    setStatus("Model ready, running on this device. "+(navigator.onLine?"You can now go offline.":""),"ok");
-    log("Model loaded.");
+    log(storageHits ? `${storageHits} file(s) served from on-device storage.` : "WARNING: this runtime version didn't use the on-device storage, so downloads won't resume.");
+    loadedModel=id; setProgress(100);
+    ls.del("lg-loading"); ls.set("lg-ready:"+id,"1"); fillModels(); showStorage();
+    setStatus(`${modelName(id)} is ready and running on this phone. Works offline from now on.`,"ok");
     $("prompt").disabled=false; $("sendBtn").disabled=false; $("prompt").placeholder="Ask anything…";
-    $("setup").hidden = true;
-    addMessage("assistant", `${MODELS.find(m=>m.id===id).name.split(" (")[0]} is ready. Everything runs on your phone.`);
+    $("setup").hidden=true;
+    if(!history.length) addMessage("assistant", `${modelName(id)} is ready. Everything runs on your phone.`);
   }catch(e){
-    console.error(e); log("LOAD ERROR: "+(e?.stack||e)); setProgress(0);
-    const msg = String(e?.message||e);
-    if(/memory|allocation|OOM|buffer/i.test(msg)) setStatus("Ran out of memory. Pick a smaller model.","bad");
-    else if(!navigator.onLine) setStatus("You're offline and this model isn't downloaded yet.","bad");
-    else setStatus("Load failed: "+msg+" — open the diagnostic log for details.","bad");
-  }finally{ busy=false; $("loadBtn").disabled=false; }
+    console.error(e); log("LOAD ERROR: "+(e?.stack||e)); setProgress(0); ls.del("lg-loading");
+    const msg=String(e?.message||e);
+    if(/memory|allocat|OOM|buffer|device lost/i.test(msg)) setStatus("Ran out of memory. Try the CPU engine or a smaller model.","bad");
+    else if(!navigator.onLine) setStatus("You're offline and this model isn't fully downloaded yet. Downloaded parts are saved.","bad");
+    else setStatus("Load failed: "+msg+". Downloaded parts are saved; open the log for details.","bad");
+  }finally{ busy=false; $("loadBtn").disabled=false; showStorage(); }
 }
 $("loadBtn").onclick = loadModel;
 
 // ---------- chat ----------
+function saveChat(){ ls.set("lg-chat", JSON.stringify(history.slice(-40))); }
 async function send(){
-  const text = $("prompt").value.trim();
+  const text=$("prompt").value.trim();
   if(!text || !generator || busy) return;
-  busy = true; $("prompt").value=""; $("sendBtn").disabled=true; $("stopBtn").disabled=false;
-  addMessage("user", text);
-  history.push({ role:"user", content:text });
-  const out = addMessage("assistant","…");
-  let streamed = "";
+  busy=true; $("prompt").value=""; $("sendBtn").disabled=true; $("stopBtn").disabled=false;
+  addMessage("user",text); history.push({role:"user",content:text}); saveChat();
+  const out=addMessage("assistant","…"); let streamed="";
   try{
-    const streamer = new lib.TextStreamer(generator.tokenizer, {
-      skip_prompt:true, skip_special_tokens:true,
-      callback_function: t => { streamed += t; out.textContent = streamed; out.scrollIntoView({block:"end"}); }
-    });
+    const streamer=new lib.TextStreamer(generator.tokenizer,{ skip_prompt:true, skip_special_tokens:true,
+      callback_function:t=>{ streamed+=t; out.textContent=streamed; out.scrollIntoView({block:"end"}); } });
     stopper = lib.InterruptableStoppingCriteria ? new lib.InterruptableStoppingCriteria() : null;
-    const t0 = performance.now();
-    const result = await generator(history.slice(-12), {
-      max_new_tokens: 512, do_sample: false, streamer,
-      ...(stopper ? { stopping_criteria: stopper } : {})
-    });
-    const reply = (result?.[0]?.generated_text?.at?.(-1)?.content ?? streamed).trim() || "(no response)";
-    out.textContent = reply;
-    history.push({ role:"assistant", content:reply });
-    log(`Generated in ${((performance.now()-t0)/1000).toFixed(1)} s`);
+    const t0=performance.now();
+    const result=await generator(history.slice(-HISTORY_TURNS), { max_new_tokens:MAX_NEW_TOKENS, do_sample:false, streamer, ...(stopper?{stopping_criteria:stopper}:{}) });
+    const reply=(result?.[0]?.generated_text?.at?.(-1)?.content ?? streamed).trim() || "(no response)";
+    out.textContent=reply; history.push({role:"assistant",content:reply}); saveChat();
+    log(`Reply in ${((performance.now()-t0)/1000).toFixed(1)} s`);
   }catch(e){
     console.error(e); log("GENERATION ERROR: "+(e?.stack||e));
-    out.textContent = "Error: "+(e?.message||e)+(/memory|buffer|device lost/i.test(String(e))?"\nThe phone ran out of memory. Try a smaller model.":"");
-    history.pop();
+    out.textContent="Error: "+(e?.message||e); history.pop(); saveChat();
   }finally{ busy=false; stopper=null; $("sendBtn").disabled=false; $("stopBtn").disabled=true; }
 }
-$("sendBtn").onclick = send;
-$("prompt").addEventListener("keydown", e => { if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); } });
-$("stopBtn").onclick = () => stopper?.interrupt();
-$("clearChatBtn").onclick = () => { history=[]; $("messages").innerHTML=""; };
-$("setupBtn").onclick = () => { $("setup").hidden = !$("setup").hidden; };
-$("copyLogBtn").onclick = async () => { try{ await navigator.clipboard.writeText($("log").textContent); setStatus("Log copied."); }catch{ setStatus("Couldn't copy; long-press the log to select it."); } };
+$("sendBtn").onclick=send;
+$("prompt").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } });
+$("stopBtn").onclick=()=>stopper?.interrupt();
+$("clearChatBtn").onclick=()=>{ history=[]; saveChat(); $("messages").innerHTML=""; };
+$("setupBtn").onclick=()=>{ $("setup").hidden=!$("setup").hidden; };
+$("copyLogBtn").onclick=async()=>{ try{ await navigator.clipboard.writeText($("log").textContent); setStatus("Log copied."); }catch{ setStatus("Couldn't copy; long-press the log to select it."); } };
 
-// Removes the cached model files (Transformers.js stores them in the "transformers-cache" Cache Storage).
-$("clearCacheBtn").onclick = async () => {
-  if(!confirm("Delete all downloaded models from this phone? You'll need to download again.")) return;
-  try{ for(const k of await caches.keys()) if(/transformers/i.test(k)) await caches.delete(k); setStatus("Downloaded models deleted."); log("Model cache cleared."); }
-  catch(e){ setStatus("Couldn't clear: "+e.message,"bad"); }
+$("clearCacheBtn").onclick=async()=>{
+  if(busy) return;
+  if(!confirm("Delete all downloaded models from this phone?")) return;
+  try{
+    if(generator){ try{ await generator.dispose?.(); }catch{} generator=null; }
+    if(dbPromise){ (await dbPromise).close(); dbPromise=null; }
+    await new Promise((res,rej)=>{ const r=indexedDB.deleteDatabase("local-gemma-store"); r.onsuccess=res; r.onerror=()=>rej(r.error); r.onblocked=res; });
+    for(const k of await caches.keys()) if(/transformers/i.test(k)) await caches.delete(k);
+    for(const m of MODELS) ls.del("lg-ready:"+m.id);
+    fillModels(); showStorage(); setProgress(0);
+    $("prompt").disabled=true; $("sendBtn").disabled=true;
+    setStatus("Downloaded models deleted."); log("Storage cleared.");
+  }catch(e){ setStatus("Couldn't clear: "+e.message,"bad"); }
 };
 
-// Offline support: caches this page and the runtime so the app opens with no connection.
+// ---------- startup: restore chat, detect crashes, auto-load ----------
+try{ history = JSON.parse(ls.get("lg-chat")||"[]"); }catch{ history=[]; }
+for(const h of history) addMessage(h.role,h.content,false);
+
+const crashed = (()=>{ try{ return JSON.parse(ls.get("lg-loading")); }catch{ return null; } })();
+if(crashed){
+  ls.del("lg-loading");
+  const n=$("notice"); n.hidden=false;
+  n.textContent = `The app restarted while loading ${modelName(crashed.id)}. This usually means Safari ran out of memory (or the app was closed mid-way). `+
+    (ls.get("lg-ready:"+crashed.id) || crashed.engine==="cpu"
+      ? "Try a smaller model."
+      : "Downloaded parts are saved: tap “Download & load” to continue. If it keeps restarting after the download finishes, switch the engine to CPU or pick a smaller model.");
+  log("Detected a restart during the previous load.");
+} else if(lastModel && ls.get("lg-ready:"+lastModel)){
+  log("Auto-loading "+modelName(lastModel)+" from on-device storage.");
+  loadModel();
+}
+
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("./sw.js").then(()=>log("Offline support on.")).catch(e=>log("Service worker not registered: "+e.message));
 }
