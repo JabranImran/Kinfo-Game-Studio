@@ -3041,7 +3041,16 @@ background:linear-gradient(90deg,rgba(95,243,255,.1),rgba(185,140,255,.06));bord
 .next-step-text{flex:1;font:600 12px system-ui,sans-serif;color:var(--ink);line-height:1.3;}
 .next-step-btn{flex-shrink:0;padding:6px 10px;border-radius:10px;cursor:pointer;font:800 11px system-ui,sans-serif;
 color:#04121c;background:var(--neon-cyan);border:none;box-shadow:0 0 10px rgba(95,243,255,.45);}
-.next-step-btn[disabled]{opacity:.45;box-shadow:none;}</style>
+.next-step-btn[disabled]{opacity:.45;box-shadow:none;}
+.room-holo.as-bubble{overflow:visible;animation:worldBubbleIn .16s ease-out;}
+.room-holo.as-bubble .room-holo-body{border-radius:0 0 20px 20px;}
+.room-holo.as-bubble .room-holo-bar{padding:6px 10px 4px 14px;}
+.room-holo.as-bubble::after{content:"";position:absolute;left:var(--tail-x,50%);bottom:-8px;width:14px;height:14px;
+transform:translateX(-50%) rotate(45deg);background:rgba(4,8,22,.96);
+border-right:1.5px solid var(--neon-cyan);border-bottom:1.5px solid var(--neon-cyan);}
+.room-holo.as-bubble.tail-up::after{bottom:auto;top:-8px;border:none;border-left:1.5px solid var(--neon-cyan);border-top:1.5px solid var(--neon-cyan);}
+.ship-bubble-card .ship-card{margin:0;}
+.room-holo-body .next-steps{display:none;}</style>
 
 </head>
 
@@ -9616,6 +9625,276 @@ floatingText = function (text, x, y, color) {
 mpQueueFloatingText(text, x, y, color);
 return floatingTextLocal.apply(this, arguments);
 };
+const PAD_HEIGHT = 18;
+const SHIP_GROUND_AT_SCALE = 44;
+const YARD_SHIP_SCALE = .34;
+const YARD_MAX = 10;
+function yardOwnerHere() {
+if (typeof mp === "undefined" || !mp.connected)
+return null;
+return activePlanetOwnerId || mp.myId;
+}
+function yardClaim(ship) {
+const owner = yardOwnerHere();
+if (!owner || !ship)
+return null;
+return mp.claimedShips[mpShipKey(owner, ship.id)] || null;
+}
+function shipClaimedByOther(ship) {
+const claim = yardClaim(ship);
+return claim && claim.byId !== mp.myId ? claim : null;
+}
+function myCrewShipHere(ships) {
+if (typeof mp === "undefined" || !mp.connected)
+return null;
+return (ships || []).find(s => {
+const claim = yardClaim(s);
+return claim && claim.byId !== mp.myId && (claim.coPilots || []).some(cp => cp.id === mp.myId);
+}) || null;
+}
+function resolvePadShip(ships) {
+if (!ships || !ships.length)
+return null;
+return myCrewShipHere(ships) || (selectedStartPlanet === "earth" ? resolveEarthLaunchChoice() : resolveLaunchShip(ships));
+}
+function yardSlotLatLon(slot) {
+const side = slot % 2 === 0 ? -1 : 1;
+const rank = Math.floor(slot / 2);
+return {
+lat: Math.PI / 2 - (.27 + (rank % 2) * .07),
+lon: side * (.42 + rank * .34)
+};
+}
+function yardPlayerColour(playerId) {
+if (typeof mp === "undefined")
+return "#ff8bf0";
+if (playerId === mp.myId)
+return mp.myColour || "#5ff3ff";
+return (mp.remotePlayerInfo[playerId] || {}).colour || "#ff8bf0";
+}
+function drawLaunchPad(c, g, alpha, occupied, flight) {
+const t = performance.now() / 1000;
+const deck = g - PAD_HEIGHT;
+c.save();
+c.globalAlpha *= alpha;
+c.fillStyle = "rgba(4,8,22,.75)";
+c.beginPath();
+c.ellipse(0, g + 1, 40, 8, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#5ff3ff";
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 10;
+c.lineWidth = 1.6;
+c.stroke();
+c.strokeStyle = "#9fb4d0";
+c.shadowBlur = 4;
+c.lineWidth = 2.2;
+c.beginPath();
+[[-30, -22], [30, 22], [-12, -10], [12, 10]].forEach(([foot, top]) => {
+c.moveTo(foot, g);
+c.lineTo(top, deck);
+});
+c.moveTo(-26, g - PAD_HEIGHT * .45);
+c.lineTo(26, g - PAD_HEIGHT * .45);
+c.moveTo(-28, g);
+c.lineTo(12, deck);
+c.moveTo(28, g);
+c.lineTo(-12, deck);
+c.stroke();
+c.fillStyle = "rgba(8,14,36,.95)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(-32, deck - 5, 64, 6, 3);
+else
+c.rect(-32, deck - 5, 64, 6);
+c.fill();
+c.strokeStyle = occupied ? "#7dffb0" : "#5ff3ff";
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 12;
+c.lineWidth = 1.8;
+c.stroke();
+[-28, 28].forEach((x, i) => {
+c.fillStyle = Math.sin(t * 3 + i * Math.PI) > 0 ? "#ff5ec4" : "#ffd76b";
+c.shadowColor = c.fillStyle;
+c.shadowBlur = 8;
+c.beginPath();
+c.arc(x, deck - 6, 1.8, 0, Math.PI * 2);
+c.fill();
+});
+if (flight > 0) {
+const g2 = c.createRadialGradient(0, deck, 1, 0, deck, 40);
+g2.addColorStop(0, "rgba(255,215,107," + (.7 * (1 - flight)) + ")");
+g2.addColorStop(1, "rgba(255,122,26,0)");
+c.fillStyle = g2;
+c.beginPath();
+c.arc(0, deck, 40, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+}
+function drawShipAtScale(c, ship, scale, engines) {
+const info = getCargoPetPreviewInfo(ship);
+c.save();
+c.translate(0, -SHIP_GROUND_AT_SCALE * scale / .55);
+c.scale(scale, scale);
+c.translate(-200, -140);
+drawCargoAura(c, info);
+for (const shape of getShipShapesForShip(ship))
+shape.draw(c, !!engines, info, getPrimaryCargoPerkId(ship.cargoPets, ship.pendingPilot));
+c.restore();
+}
+const yardSeen = {};
+function shipYardEntries(o) {
+const out = [];
+world.yardLatLon = {};
+const ships = (o.ships || []).slice(0, YARD_MAX);
+const now = performance.now();
+ships.forEach((ship, slot) => {
+const pos = yardSlotLatLon(slot);
+world.yardLatLon[ship.id] = pos;
+if (ship.id === o.padShipId) {
+delete yardSeen[ship.id];
+return;
+}
+if (!yardSeen[ship.id])
+yardSeen[ship.id] = now;
+const proj = projectSphere(pos.lat, pos.lon, o.viewLat, o.viewLon, o.cx, o.cy, o.radius);
+if (!proj.visible)
+return;
+out.push({
+label: "yard:" + ship.id,
+z: o.groundDepthAt(proj.x, proj.y),
+alpha: o.alpha,
+draw: () => {
+const c = o.c;
+const appear = Math.min(1, (performance.now() - yardSeen[ship.id]) / 450);
+const claim = shipClaimedByOther(ship);
+const scale = YARD_SHIP_SCALE * (.85 + .15 * Math.min(1, proj.z * 1.4));
+const up = Math.atan2(proj.y - o.cy, proj.x - o.cx) + Math.PI / 2;
+c.save();
+c.globalAlpha *= appear;
+c.translate(proj.x, proj.y - (1 - appear) * 14);
+c.rotate(up);
+c.save();
+c.fillStyle = "rgba(0,0,0,.35)";
+c.beginPath();
+c.ellipse(0, 1, 26 * scale / .34, 5 * scale / .34, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = claim ? yardPlayerColour(claim.byId) : "rgba(95,243,255,.45)";
+c.lineWidth = 1.2;
+c.stroke();
+c.restore();
+if (claim) {
+const col = yardPlayerColour(claim.byId);
+const pulse = .6 + .4 * Math.sin(performance.now() / 300);
+const glow = c.createRadialGradient(0, -28, 2, 0, -28, 52);
+glow.addColorStop(0, "rgba(255,255,255,0)");
+glow.addColorStop(.35, col + "55");
+glow.addColorStop(1, col + "00");
+c.save();
+c.globalAlpha *= pulse;
+c.fillStyle = glow;
+c.beginPath();
+c.arc(0, -28, 52, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+try {
+c.shadowBlur = claim ? 16 : 8;
+c.shadowColor = claim ? yardPlayerColour(claim.byId) : "#5ce4ff";
+drawShipAtScale(c, ship, scale, false);
+}
+catch (error) { }
+c.shadowBlur = 0;
+if (claim) {
+const col = yardPlayerColour(claim.byId);
+const crew = (claim.coPilots || []).length;
+c.font = "800 11px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "bottom";
+const label = claim.byName + (crew ? " +" + crew : "");
+const w = c.measureText(label).width + 14;
+const ly = -64 * scale / .34;
+c.fillStyle = "rgba(4,8,22,.85)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(-w / 2, ly - 16, w, 17, 8);
+else
+c.rect(-w / 2, ly - 16, w, 17);
+c.fill();
+c.strokeStyle = col;
+c.lineWidth = 1.2;
+c.stroke();
+c.fillStyle = "#eafcff";
+c.fillText(label, 0, ly);
+}
+c.restore();
+const hitY = proj.y - 40 * scale / .34;
+world.hits.push({
+x: proj.x, y: hitY, r: 30 * scale / .34, z: 6,
+onTap: () => openShipBubbleFromYard(ship.id, proj.x, proj.y - 80 * scale / .34)
+});
+}
+});
+});
+return out;
+}
+function openShipBubble(shipId, x, y) {
+if (typeof worldOpenHolo !== "function")
+return;
+worldHideBubble();
+worldOpenHolo("ships", { shipId, shipOnly: shipId, bubble: { x, y }, title: "" });
+}
+function openShipBubbleFromYard(shipId, x, y) {
+worldHideBubble();
+worldOpenHolo("ships", { shipId, shipOnly: shipId, bubble: { x, y, fromYard: true }, title: "" });
+}
+function shipBubbleTrim(shipId) {
+const content = document.getElementById("planetDetailContent");
+if (!content)
+return;
+const head = content.querySelector('.ship-card-collapsed[data-ship="' + shipId + '"]');
+const card = head && head.closest(".ship-card");
+if (!card) {
+setTimeout(() => {
+if (roomHoloOpen && roomHoloOpen.shipOnly === shipId)
+worldCloseHolo();
+}, 0);
+return;
+}
+card.parentElement.removeChild(card);
+content.innerHTML = "";
+const wrap = document.createElement("div");
+wrap.className = "ship-bubble-card";
+wrap.appendChild(card);
+content.appendChild(wrap);
+}
+function shipBubblePlace() {
+const holo = document.getElementById("roomHolo");
+if (!holo || !roomHoloOpen || !roomHoloOpen.bubble)
+return;
+const host = holo.parentElement.getBoundingClientRect();
+const b = roomHoloOpen.bubble;
+const w = Math.min(340, host.width - 24);
+holo.style.width = w + "px";
+holo.style.right = "auto";
+const left = Math.max(12, Math.min(host.width - w - 12, b.x - w / 2));
+holo.style.left = left + "px";
+const above = b.y - 24;
+const below = host.height - b.y - 150;
+holo.classList.toggle("tail-up", above < 220 && below > above);
+if (holo.classList.contains("tail-up")) {
+holo.style.maxHeight = Math.max(200, below) + "px";
+holo.style.top = (b.y + 90) + "px";
+holo.style.bottom = "auto";
+}
+else {
+holo.style.maxHeight = Math.max(200, Math.min(host.height * .62, above)) + "px";
+holo.style.top = "auto";
+holo.style.bottom = (host.height - b.y + 14) + "px";
+}
+holo.style.setProperty("--tail-x", Math.max(18, Math.min(w - 18, b.x - left)) + "px");
+}
 const FEATURE_ACTIONS = new Set(["site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "pet-subtab") {
@@ -15619,7 +15898,6 @@ if (!current)
 return [];
 const sameSystemSelectable = PLANETS.filter(p => p.id !== current.id &&
 isRoute(current.id, p.id) &&
-score >= p.requirement &&
 isPlanetUnlocked(p.id)).map(p => p.id);
 if (mp.connected &&
 starMapDrawingOwnerId &&
@@ -15627,7 +15905,6 @@ starMapDrawingOwnerId !==
 mp.myId &&
 isBridgeHub(current.id)) {
 const bridgeSelectable = PLANETS.filter(p => isBridgeHub(p.id) &&
-score >= p.requirement &&
 isPlanetUnlocked(p.id)).map(p => p.id);
 return [
 ...new Set([
@@ -18351,6 +18628,10 @@ entries.push({ key: "s:" + id, kind: "structure", id, lat: world.structureLatLon
 });
 if (world.shownShipId)
 entries.push({ key: "ship:" + world.shownShipId, kind: "ship", id: world.shownShipId, lat: SHIP_LAT, lon: 0 });
+Object.keys(world.yardLatLon || {}).forEach(id => {
+if (id !== world.shownShipId)
+entries.push({ key: "ship:" + id, kind: "ship", id, lat: world.yardLatLon[id].lat, lon: world.yardLatLon[id].lon });
+});
 const petProj = roamingActive
 ? projectSphere(roamingLat, roamingLon, p.viewLat, p.viewLon, p.cx, p.cy, p.R)
 : null;
@@ -18602,6 +18883,9 @@ function worldHideBubbleIfOutside(event) {
 const el = document.getElementById("worldBubble");
 if (el && !el.classList.contains("hidden") && !el.contains(event.target))
 worldHideBubble();
+const holo = document.getElementById("roomHolo");
+if (roomHoloOpen && roomHoloOpen.bubble && holo && !holo.contains(event.target))
+worldCloseHolo();
 }
 let roomHoloOpen = null;
 function worldOpenHolo(tab, opts) {
@@ -18634,7 +18918,12 @@ expandedPetCardId = opts.petId;
 if (opts.shipId !== undefined)
 expandedShipCardId = opts.shipId;
 holo.querySelector(".room-holo-title").textContent = opts.title || "";
-roomHoloOpen = { tab };
+roomHoloOpen = { tab, shipOnly: opts.shipOnly || null, bubble: opts.bubble || null };
+holo.classList.toggle("as-bubble", !!opts.bubble);
+if (!opts.bubble) {
+holo.style.cssText = "";
+holo.classList.remove("tail-up");
+}
 try {
 resolveBuildQueue(planetId);
 renderPlanetDetail(planetId);
@@ -18643,13 +18932,17 @@ catch (error) {
 console.error("Holo render failed:", error);
 }
 holo.classList.remove("hidden");
+shipBubblePlace();
 worldHideBubble();
 }
 function worldCloseHolo() {
 const holo = document.getElementById("roomHolo");
 const content = document.getElementById("planetDetailContent");
-if (holo)
+if (holo) {
 holo.classList.add("hidden");
+holo.classList.remove("as-bubble", "tail-up");
+holo.style.cssText = "";
+}
 if (content && content._homeParent && content.parentElement !== content._homeParent)
 content._homeParent.appendChild(content);
 if (roomHoloOpen) {
@@ -22450,14 +22743,25 @@ c.restore();
 const shipProj = projectSphere(SHIP_LAT, 0, roamViewLat, roamViewLon, cx, cy, radius);
 const shipVisible = !roamingActive ||
 shipProj.visible;
+const padShip = resolvePadShip(focusShips);
 const drawShipLayer = () => {
 c.save();
 try {
-if (focusShips.length &&
+if (shipVisible) {
+c.save();
+c.translate(shipProj.x, shipProj.y);
+c.rotate(Math.atan2(shipProj.y - cy, shipProj.x - cx) + Math.PI / 2);
+drawLaunchPad(c, SHIP_GROUND_AT_SCALE, Math.max(0, 1 - flight * 1.6), !!padShip, flightProgress);
+c.restore();
+}
+if (padShip &&
 shipVisible) {
-const chosenFocusShip = selectedStartPlanet === "earth"
-? resolveEarthLaunchChoice()
-: resolveLaunchShip(focusShips);
+const chosenFocusShip = padShip;
+if (world.padPrevId !== chosenFocusShip.id) {
+if (world.padPrevId !== undefined)
+world.padSwapAt = performance.now();
+world.padPrevId = chosenFocusShip.id;
+}
 world.shownShipId =
 chosenFocusShip
 ? chosenFocusShip.id
@@ -22484,6 +22788,14 @@ const shipUpAngle = Math.atan2(surfaceY - cy, surfaceX - cx);
 c.rotate((shipUpAngle +
 Math.PI / 2) *
 (1 - shipEase));
+const swapK = world.padSwapAt
+? Math.min(1, (performance.now() - world.padSwapAt) / 520)
+: 1;
+c.globalAlpha *= swapK;
+c.translate(0, -PAD_HEIGHT * (1 - shipEase) -
+(1 - swapK) * (1 - swapK) * 70);
+if (roamingActive && flightProgress <= .001)
+world.hits.push({ x: shipX, y: shipY, r: Math.max(30, width * .08), z: 6, onTap: () => openShipBubble(chosenFocusShip.id, shipX, shipY - 60) });
 const pulse = Math.sin(time * 3) * 1.5;
 if (typeof ShapeObject !== "undefined") {
 c.save();
@@ -22511,6 +22823,7 @@ c.restore();
 }
 else {
 canvas._shipHitArea = null;
+world.shownShipId = null;
 }
 }
 catch (shipDrawError) {
@@ -22611,8 +22924,21 @@ alpha: surfaceAlpha,
 draw: entry.draw
 }));
 const shipSorted = flightProgress <= .001 &&
-focusShips.length > 0 &&
 shipVisible;
+if (flight < .95) {
+shipYardEntries({
+c, cx, cy, radius,
+viewLat: roamViewLat,
+viewLon: roamViewLon,
+ships: focusShips,
+padShipId: padShip ? padShip.id : null,
+alpha: Math.max(0, 1 - flight * 1.6),
+groundDepthAt
+}).forEach(e => composeQueue.push(e));
+}
+else {
+world.yardLatLon = {};
+}
 if (shipSorted) {
 composeQueue.push({
 z: groundDepthAt(shipProj.x, shipProj.y +
@@ -23803,14 +24129,15 @@ console.error("Co-pilot arrival view failed:", error);
 function resolveEarthLaunchChoice() {
 const candidates = getEarthLaunchCandidates();
 const explicit = candidates.find(s => s.id ===
-selectedLaunchShipId);
+selectedLaunchShipId &&
+!shipClaimedByOther(s));
 if (explicit)
 return explicit;
 if (mp.connected &&
 activePlanetOwnerId) {
 return mpFindMyClaimedShip(activePlanetOwnerId, candidates);
 }
-return candidates[0];
+return candidates.find(s => !shipClaimedByOther(s)) || candidates[0];
 }
 function resolveDefaultStartPlanet() {
 const lastPlanet = planetSave.lastSelectedPlanet;
@@ -23849,14 +24176,15 @@ const ships = readyShips.length
 ? readyShips
 : allShips;
 const chosen = ships.find(s => s.id ===
-selectedLaunchShipId);
+selectedLaunchShipId &&
+!shipClaimedByOther(s));
 if (chosen)
 return chosen;
 if (mp.connected &&
 activePlanetOwnerId) {
 return mpFindMyClaimedShip(activePlanetOwnerId, ships);
 }
-return [...ships].sort((a, b) => b.score - a.score)[0];
+return [...ships].filter(s => !shipClaimedByOther(s)).sort((a, b) => b.score - a.score)[0] || null;
 }
 function renderLaunchPreview() {
 const el = document.getElementById("launchPreview");
@@ -24598,6 +24926,27 @@ renderPlanetFocus();
 }
 setInterval(updateLiveTimers, 500);
 function renderPlanetDetail(id) {
+const only = typeof roomHoloOpen !== "undefined" &&
+roomHoloOpen &&
+roomHoloOpen.shipOnly;
+if (only) {
+planetDetailTab = "ships";
+expandedShipCardId = only;
+}
+renderPlanetDetailFull(id);
+if (only) {
+shipBubbleTrim(only);
+const ships = selectedStartPlanet === "earth"
+? getEarthLaunchCandidates()
+: (getShips(selectedStartPlanet) || []);
+const pad = resolvePadShip(ships);
+if (roomHoloOpen.bubble && roomHoloOpen.bubble.fromYard && pad && pad.id === only)
+setTimeout(() => { if (roomHoloOpen && roomHoloOpen.shipOnly === only)
+worldCloseHolo(); }, 350);
+shipBubblePlace();
+}
+}
+function renderPlanetDetailFull(id) {
 const planet = getPlanet(id);
 const container = document.getElementById("planetDetailContent");
 if (!planet ||
@@ -33494,10 +33843,13 @@ PLANETS.filter(p => p.id !==
 current.id &&
 isRoute(current.id, p.id));
 }
-const reachable = candidates.filter(p => p.requirement <= score);
-if (reachable.length)
+const reachable = candidates.filter(p => isPlanetUnlocked(p.id));
 candidates =
-reachable;
+reachable.length
+? reachable
+: PLANETS.filter(p => p.id !== current.id &&
+isRoute(current.id, p.id) &&
+isPlanetUnlocked(p.id));
 if (!candidates.length)
 return null;
 return candidates[Math.floor(Math.random() *
@@ -33579,8 +33931,7 @@ positions[index].x +
 bubble.style.top =
 positions[index].y +
 "%";
-const unlocked = score >=
-planet.requirement;
+const unlocked = isPlanetUnlocked(planet.id);
 bubble.innerHTML =
 `
                 <canvas
@@ -33596,8 +33947,7 @@ bubble.innerHTML =
                     ${unlocked
                 ? "SELECT"
                 :
-                    planet.requirement.toLocaleString() +
-                        " PTS"}
+                    "LOCKED"}
                 </span>
                 `;
 try {
@@ -33617,9 +33967,7 @@ bubble.addEventListener("pointerdown", event => {
 event.preventDefault();
 event.stopPropagation();
 if (!unlocked) {
-floatingText("NEED " +
-planet.requirement.toLocaleString() +
-" POINTS", W / 2, H * .5, "#ff8a9f");
+floatingText("NOT DISCOVERED YET", W / 2, H * .5, "#ff8a9f");
 return;
 }
 chooseDestination(planet.id, candidateOwner);
@@ -33657,8 +34005,7 @@ function chooseDestination(id, ownerId) {
 const destination = getPlanet(id);
 if (!destination)
 return;
-if (score <
-destination.requirement)
+if (!isPlanetUnlocked(destination.id))
 return;
 const currentSystemOwner = getCurrentSystemOwnerId();
 const targetSystemOwner = ownerId ||
@@ -35683,6 +36030,12 @@ closePlanetDetail();
 return;
 }
 sound("click");
+if (downArea.swipeable &&
+world.shownShipId &&
+focusCanvas._shipHitArea) {
+openShipBubble(world.shownShipId, focusCanvas._shipHitArea.x, focusCanvas._shipHitArea.y - 60);
+return;
+}
 if (downArea.tab) {
 openPlanetDetail(selectedStartPlanet);
 planetDetailTab =
