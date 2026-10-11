@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#090b10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Local Gemma">
-<title>Local Gemma — V0.3.0</title>
+<title>Local Gemma — V0.4.0</title>
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 *{box-sizing:border-box}
@@ -44,7 +44,7 @@ details summary{cursor:pointer;font-size:12px;color:#9098a6}
 <body>
 <div class="app">
 <header>
-  <div><h1>Local Gemma</h1><div class="small">Runs on your device · V0.3.0</div></div>
+  <div><h1>Local Gemma</h1><div class="small">Runs on your device · V0.4.0</div></div>
   <div class="badges"><span id="gpuBadge" class="badge">WebGPU…</span><span id="netBadge" class="badge">…</span></div>
 </header>
 <main>
@@ -211,25 +211,53 @@ async function downloadFile(url){
   }
 }
 
-let storageHits = 0;
-const diskCache = {
-  async match(req){
-    const url = typeof req==="string" ? req : req?.url;
-    if(!url || !/^https:\/\/huggingface\.co\//.test(url)) return undefined;
-    try{
-      const m = await ensureFile(url);
-      if(!m) return undefined;
-      const blob = new Blob(await getPieces(url));   // disk-backed; not read into memory here
-      if(m.total && blob.size !== m.total){ log(`${short(url)} is incomplete in storage; re-downloading`); await deleteFile(url); return diskCache.match(req); }
-      storageHits++;
-      return new Response(blob, { status:200, headers:{ "content-length":String(blob.size) } });
-    }catch(e){
-      log(`Storage problem with ${short(url)}: ${e.message}`);
-      return undefined;   // Transformers.js will fall back to a normal download
-    }
-  },
-  async put(){ /* files are stored by match() above */ },
-};
+// Which files a model needs: asks Hugging Face for the file list (remembered for offline use).
+// Vision/audio encoders are skipped: this app is text-only.
+async function fileList(id, dtype){
+  const key = `lg-files:${id}:${dtype}`;
+  try{
+    const r = await fetch(`https://huggingface.co/api/models/${id}/tree/main?recursive=true`);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const want = new RegExp(`_${dtype}\\.onnx(_data(_\\d+)?)?$`);
+    const files = (await r.json()).filter(f=>f.type==="file").map(f=>f.path).filter(p =>
+      (!p.includes("/") && /\.(json|jinja)$/.test(p)) ||
+      (p.startsWith("onnx/") && want.test(p) && !/vision|audio/i.test(p)));
+    if(!files.some(p=>p.endsWith(".onnx"))) throw new Error(`no ${dtype} model files in this repo`);
+    ls.set(key, JSON.stringify(files));
+    return files;
+  }catch(e){
+    const saved = ls.get(key);
+    if(saved) return JSON.parse(saved);
+    throw new Error("Couldn't get the model's file list: "+e.message);
+  }
+}
+const fileURL = (id,path) => `https://huggingface.co/${id}/resolve/main/${path}`;
+
+// Download everything into on-device storage first (3 files at a time).
+async function prefetch(id, dtype){
+  const files = await fileList(id, dtype);
+  log(`${files.length} files needed: ${files.map(short).join(", ")}`);
+  const queue = files.map(p=>fileURL(id,p));
+  const worker = async () => { while(queue.length) await ensureFile(queue.shift()); };
+  await Promise.all([worker(),worker(),worker()]);
+}
+
+// Talk to sw.js, which hands saved files to the AI runtime whenever it asks Hugging Face for them.
+function askSW(msg){
+  return new Promise(res=>{
+    const c=navigator.serviceWorker?.controller; if(!c) return res(null);
+    const ch=new MessageChannel(); ch.port1.onmessage=e=>res(e.data); c.postMessage(msg,[ch.port2]);
+    setTimeout(()=>res(null),1500);
+  });
+}
+async function ensureSW(){
+  if(!("serviceWorker" in navigator)) return false;
+  await navigator.serviceWorker.ready;
+  if(!navigator.serviceWorker.controller)
+    await new Promise(r=>{ navigator.serviceWorker.addEventListener("controllerchange",r,{once:true}); setTimeout(r,4000); });
+  const pong = await askSW({type:"ping"});
+  return !!(pong && pong.servesModels);
+}
 
 async function showStorage(){
   if(!navigator.storage?.estimate) return;
@@ -259,28 +287,40 @@ async function loadModel(){
   busy=true; $("loadBtn").disabled=true; $("notice").hidden=true; setProgress(1);
   ls.set("lg-model",id);
   ls.set("lg-loading", JSON.stringify({ id, engine:useGPU?"gpu":"cpu", at:Date.now() }));   // crash detector
-  dl.clear(); storageHits=0;
+  dl.clear();
   try{
     if(navigator.storage?.persist){ try{ log("Persistent storage granted: "+await navigator.storage.persist()); }catch{} }
+
+    const device = useGPU ? "webgpu" : "wasm";
+    const dtype  = useGPU && gpuInfo.f16 ? "q4f16" : "q4";
+
+    // 1) Make sure the offline helper is running, so saved files can be handed over.
+    const swOK = await ensureSW();
+    if(!swOK) log("WARNING: offline helper (sw.js) isn't active or is out of date. Upload the new sw.js and reopen the app. Loading without saved files.");
+
+    // 2) Download (or resume) every needed file into on-device storage.
+    if(swOK){
+      setStatus("Checking downloaded files…");
+      await prefetch(id, dtype);
+      setProgress(90);
+    }
+
+    // 3) Load. The runtime thinks it's downloading from Hugging Face; sw.js answers from storage.
     if(!lib){
       setStatus("Loading the AI runtime…");
       lib = await import(TRANSFORMERS_URL);
       log("Transformers.js loaded"+(lib.env?.version?` v${lib.env.version}`:""));
     }
     lib.env.allowLocalModels = false;
-    lib.env.useBrowserCache  = false;
-    lib.env.useCustomCache   = true;
-    lib.env.customCache      = diskCache;
+    lib.env.useBrowserCache  = !swOK;   // don't store a second copy when sw.js has the files
 
     if(generator){ try{ await generator.dispose?.(); }catch{} generator=null; loadedModel=null; }
-
-    const device = useGPU ? "webgpu" : "wasm";
-    const dtype  = useGPU && gpuInfo.f16 ? "q4f16" : "q4";
     log(`Loading ${id} on ${device} (${dtype})`);
+    const before = (await askSW({type:"ping"}))?.served ?? 0;
 
     const reading = new Map();
     const progress_callback = p => {
-      if(p.status==="progress" && p.file && !inflight.size){
+      if(p.status==="progress" && p.file){
         reading.set(p.file,{loaded:p.loaded||0,total:p.total||0});
         let L=0,T=0; for(const f of reading.values()){L+=f.loaded;T+=f.total}
         if(T){ setProgress(90+L/T*7); setStatus(`Loading into memory… ${fmtMB(L)} of ${fmtMB(T)}`); }
@@ -289,7 +329,7 @@ async function loadModel(){
 
     generator = await lib.pipeline("text-generation", id, { device, dtype, progress_callback });
 
-    log(storageHits ? `${storageHits} file(s) served from on-device storage.` : "WARNING: this runtime version didn't use the on-device storage, so downloads won't resume.");
+    if(swOK){ const after=(await askSW({type:"ping"}))?.served ?? 0; log(`${after-before} file(s) loaded from on-device storage.`); }
     loadedModel=id; setProgress(100);
     ls.del("lg-loading"); ls.set("lg-ready:"+id,"1"); fillModels(); showStorage();
     setStatus(`${modelName(id)} is ready and running on this phone. Works offline from now on.`,"ok");
@@ -297,7 +337,7 @@ async function loadModel(){
     $("setup").hidden=true;
     if(!history.length) addMessage("assistant", `${modelName(id)} is ready. Everything runs on your phone.`);
   }catch(e){
-    console.error(e); log("LOAD ERROR: "+(e?.stack||e)); setProgress(0); ls.del("lg-loading");
+    console.error(e); log(`LOAD ERROR: ${e?.name||"Error"}: ${e?.message||e}\n${e?.stack||""}`); setProgress(0); ls.del("lg-loading");
     const msg=String(e?.message||e);
     if(/memory|allocat|OOM|buffer|device lost/i.test(msg)) setStatus("Ran out of memory. Try the CPU engine or a smaller model.","bad");
     else if(!navigator.onLine) setStatus("You're offline and this model isn't fully downloaded yet. Downloaded parts are saved.","bad");
@@ -324,7 +364,7 @@ async function send(){
     out.textContent=reply; history.push({role:"assistant",content:reply}); saveChat();
     log(`Reply in ${((performance.now()-t0)/1000).toFixed(1)} s`);
   }catch(e){
-    console.error(e); log("GENERATION ERROR: "+(e?.stack||e));
+    console.error(e); log(`GENERATION ERROR: ${e?.name}: ${e?.message}\n${e?.stack||""}`);
     out.textContent="Error: "+(e?.message||e); history.pop(); saveChat();
   }finally{ busy=false; stopper=null; $("sendBtn").disabled=false; $("stopBtn").disabled=true; }
 }
