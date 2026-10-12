@@ -3078,7 +3078,11 @@ color:var(--ink);transition:transform .12s ease;}
 .tp-cap i{display:block;height:100%;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-violet));}
 .tp-note{font-size:10.5px;opacity:.75;white-space:nowrap;}
 .world-bubble .neon-btn .tp-ship{justify-content:flex-start;}
-.world-bubble-buttons .neon-btn .tp-ship img{width:30px !important;height:34px !important;}</style>
+.world-bubble-buttons .neon-btn .tp-ship img{width:30px !important;height:34px !important;}
+.tp-main{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tp-sub{font-size:10.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.world-bubble-buttons .neon-btn .tp-eq img{width:1em !important;height:1em !important;}
+.tp-hold{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}</style>
 
 </head>
 
@@ -10135,13 +10139,13 @@ return hit.url;
 let url = "";
 try {
 const cv = document.createElement("canvas");
-cv.width = 64;
-cv.height = 72;
+cv.width = 96;
+cv.height = 108;
 const c = cv.getContext("2d");
-c.translate(32, 68);
+c.translate(48, 100);
 c.shadowColor = "#5ce4ff";
 c.shadowBlur = 6;
-drawShipAtScale(c, ship, .2, false);
+drawShipAtScale(c, ship, .36, false);
 url = cv.toDataURL();
 }
 catch (error) { }
@@ -10174,15 +10178,11 @@ ships.slice(0, 5).forEach((ship, i) => {
 const used = getShipCargoUsed(ship);
 const cap = getShipCargoCapacity(ship.materialCapBonus);
 const room = cap - used;
-const ok = isCoin || isPowerup || room >= 1;
+const sameFit = isPowerup && (ship.equipment || "emp") === d.r;
+const ok = !sameFit && (isCoin || isPowerup || room >= 1);
 const name = (ships.length > 1 ? "Ship " + (i + 1) : "Your ship") + (world.shownShipId === ship.id ? " · on the pad" : "");
-const right = isPowerup
-? '<span class="tp-note">fits as its powerup</span>'
-: isCoin
-? '<span class="tp-note">' + (ship.coins || 0) + ' ' + COIN_ICON_HTML + ' aboard</span>'
-: '<span class="tp-cap"><i style="width:' + Math.min(100, used / Math.max(1, cap) * 100) + '%"></i></span><span class="tp-note">' + used + '/' + cap + '</span>';
 buttons.push({
-label: '<span class="tp-ship"><img src="' + shipThumbUrl(ship) + '" alt=""><span class="tp-name">' + name + '</span>' + right + '</span>',
+label: transporterShipRow(ship, name, isPowerup, isCoin),
 disabled: !ok,
 action: () => transporterSend(d, src, ship, 1)
 });
@@ -10198,7 +10198,7 @@ worldShowBubble({
 x: x || 200, y: y || 300,
 iconHtml: "🛸",
 title: "Beam " + worldItemInfo(d).name + " to…",
-meta: isPowerup ? "Powerups go into the ship's powerup bay" : isCoin ? "Coins ride aboard without using slots" : "1 cargo slot each",
+meta: isPowerup ? "It goes in the ship's powerup bay — the one fitted now comes back here" : isCoin ? "Coins ride aboard without using slots" : "1 cargo slot each",
 text: "",
 buttons
 });
@@ -10219,9 +10219,11 @@ world.tpFx = { t0: performance.now(), d: one };
 sound("click");
 showShipToast("🛸 Beamed " + (n > 1 ? n + "× " : "") + worldItemInfo(one).name + " to the ship");
 }
-function roomTransporterFixture(c, list, planetId, st) {
-list.push({ v: .74, draw: () => {
-const p = roomFloorPt(.22, .74);
+function roomTransporterFixture(c, list, planetId, st, u, v) {
+u = u === undefined ? .22 : u;
+v = v === undefined ? .74 : v;
+list.push({ v, draw: () => {
+const p = roomFloorPt(u, v);
 const s = p.s;
 const t = performance.now() / 1000;
 const fx = world.tpFx && performance.now() - world.tpFx.t0 < 1100 ? world.tpFx : null;
@@ -10285,7 +10287,7 @@ x: p.x, y: p.y - 30 * s,
 iconHtml: "🛸",
 title: "Ship transporter",
 meta: transporterShips().length + " ship" + (transporterShips().length === 1 ? "" : "s") + " docked here",
-text: "Drag anything off the shelves (or off your pet's head) onto the pad, then pick which ship to beam it to.",
+text: "Drag anything off the shelves or the pick-up tray (or off your pet's head) onto the pad, then pick which ship to beam it to.",
 buttons: []
 }) });
 } });
@@ -10437,6 +10439,153 @@ setTimeout(() => go(tries - 1), 150);
 }
 };
 go(14);
+}
+const STAT_BLURB = {
+range: "how far it can fly on a mission",
+endurance: "longer trips, more gathered",
+survival: "its odds of coming home"
+};
+function roomTrainForPet(pod, pet) {
+const planetId = selectedStartPlanet;
+const p = roomFloorPt(pod.u, .42);
+if ((pet.role || "builder") !== "pilot") {
+worldShowBubble({
+x: p.x, y: p.y - 100 * p.s,
+iconHtml: pod.icon,
+title: petShortName(planetId, pet) + " isn't a pilot",
+text: "Only pilots train in the simulators.",
+buttons: [{ label: pet.pilotLicensed ? "Make pilot" : "Buy pilot licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML, primary: true, disabled: !pet.pilotLicensed && getTotalAvailableCoins(planetId) < PET_PILOT_ASSIGNMENT_FEE, keepOpen: true, action: () => {
+worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" });
+setTimeout(() => {
+const again = getPets(planetId).find(x => x.id === pet.id);
+if (again)
+roomTrainForPet(pod, again);
+}, 120);
+} }]
+});
+return;
+}
+const level = getPetStatLevel(pet, pod.stat);
+const cost = computePilotPointTrainCost(level);
+const max = getPetStatMaxLevel(planetId);
+const pts = pet.pilotPoints || 0;
+worldShowBubble({
+x: p.x, y: p.y - 100 * p.s,
+iconHtml: pod.icon,
+title: petShortName(planetId, pet) + " · " + pod.label.toLowerCase(),
+meta: "Level " + level + (level >= max ? " (max here)" : " → " + (level + 1)) + " · " + cost + " ⭐ · has " + pts.toLocaleString() + " ⭐",
+text: (STAT_BLURB[pod.stat] ? "Raises " + STAT_BLURB[pod.stat] + ". " : "") + "Pilot points come from scoring with this pet aboard — as pilot or in cargo.",
+buttons: [
+{ label: level >= max ? "Maxed here" : "Train · " + cost + " ⭐", primary: true, disabled: level >= max || pts < cost, keepOpen: true, action: () => {
+worldRunAction({ "data-action": "train-pet-stat", "data-pet": pet.id, "data-stat": pod.stat });
+setTimeout(() => {
+const again = getPets(planetId).find(x => x.id === pet.id);
+if (again)
+roomTrainForPet(pod, again);
+}, 120);
+} },
+{ label: "◂ Other pilots", keepOpen: true, action: () => roomTrainPick(pod) }
+]
+});
+}
+function roomTrainPick(pod) {
+const planetId = selectedStartPlanet;
+const p = roomFloorPt(pod.u, .42);
+const pilots = getPets(planetId).filter(pet => (pet.role || "builder") === "pilot");
+worldShowBubble({
+x: p.x, y: p.y - 100 * p.s,
+iconHtml: pod.icon,
+title: pod.label.charAt(0) + pod.label.slice(1).toLowerCase() + " simulator",
+meta: pilots.length ? "Pick a pilot to train — or drag one onto the pod" : "No pilots here yet",
+text: pilots.length ? "" : "Get a pet licensed at the licence desk and it can train here.",
+buttons: pilots.length
+? pilots.slice(0, 6).map(pet => ({
+label: petShortName(planetId, pet) + " · Lv " + getPetStatLevel(pet, pod.stat) + " · " + (pet.pilotPoints || 0).toLocaleString() + " ⭐",
+primary: true,
+keepOpen: true,
+action: () => roomTrainForPet(pod, pet)
+}))
+: [{ label: "🪪 Pilot licences", primary: true, keepOpen: true, action: () => roomLicenceBubble() }]
+});
+}
+function roomLicenceBubble() {
+const planetId = selectedStartPlanet;
+const p = roomFloorPt(.18, .7);
+const pets = getPets(planetId);
+const coins = getTotalAvailableCoins(planetId);
+const refresh = () => setTimeout(roomLicenceBubble, 140);
+worldShowBubble({
+x: p.x, y: p.y - 50 * p.s,
+iconHtml: "🪪",
+title: "Pilot licences",
+meta: pets.filter(x => x.pilotLicensed).length + " of " + pets.length + " licensed · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML + " each",
+text: pets.length ? "A licence is for life — the pet keeps it if it goes back to building." : "No pets on this planet yet. Adopt one at the Shop.",
+buttons: pets.slice(0, 7).map(pet => {
+const name = petShortName(planetId, pet);
+const pilot = (pet.role || "builder") === "pilot";
+if (pet.pilotLicensed && pilot)
+return { label: "✓ " + name + " · licensed pilot", disabled: true };
+if (pet.pilotLicensed)
+return { label: "✓ " + name + " · licensed — make pilot", keepOpen: true, action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); } };
+return {
+label: name + " · Buy licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML,
+primary: true,
+disabled: coins < PET_PILOT_ASSIGNMENT_FEE,
+keepOpen: true,
+action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); }
+};
+})
+});
+}
+function roomLicenceDeskFixture(c, list, planetId, st) {
+list.push({ v: .7, draw: () => {
+const box = roomDrawBox(c, .18, .7, 62, 30, "#ffd76b", "PILOT LICENCES");
+const t = performance.now() / 1000;
+c.save();
+c.translate(box.x, box.top - 16 * box.s);
+c.scale(Math.cos(t * 1.3), 1);
+c.fillStyle = "rgba(255,215,107,.18)";
+c.strokeStyle = "#ffd76b";
+c.shadowColor = "#ffd76b";
+c.shadowBlur = 10;
+c.lineWidth = 1.4;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(-16 * box.s, -10 * box.s, 32 * box.s, 20 * box.s, 3 * box.s);
+else
+c.rect(-16 * box.s, -10 * box.s, 32 * box.s, 20 * box.s);
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.font = Math.round(11 * box.s) + "px system-ui,'Apple Color Emoji',sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("✈", -8 * box.s, 0);
+c.fillStyle = "#ffd76b";
+c.fillRect(0, -4 * box.s, 11 * box.s, 1.5);
+c.fillRect(0, 1 * box.s, 8 * box.s, 1.5);
+c.restore();
+const licensed = getPets(planetId).filter(x => x.pilotLicensed).length;
+c.save();
+c.fillStyle = "#ffd76b";
+c.font = "800 " + Math.round(8 * box.s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(licensed + "/" + getPets(planetId).length + " licensed", box.x, box.base + 24 * box.s);
+c.restore();
+world.hits.push({ x: box.x, y: box.top, r: 40 * box.s, z: 6, onTap: () => roomLicenceBubble() });
+} });
+}
+function transporterShipRow(ship, name, isPowerup, isCoin) {
+const used = getShipCargoUsed(ship);
+const cap = getShipCargoCapacity(ship.materialCapBonus);
+const eq = ship.equipment || "emp";
+return ('<span class="tp-ship"><img src="' + shipThumbUrl(ship) + '" alt="">' +
+'<span class="tp-main"><span class="tp-name">' + name + '</span>' +
+'<span class="tp-sub"><span class="tp-eq" title="Equipped">' + getItemIconHtml(eq) + ' ' + getItemInfo(eq).name + '</span>' +
+(isCoin ? ' · ' + (ship.coins || 0) + ' ' + COIN_ICON_HTML : '') + '</span></span>' +
+'<span class="tp-hold"><span class="tp-cap"><i style="width:' + Math.min(100, used / Math.max(1, cap) * 100) + '%"></i></span>' +
+'<span class="tp-note">📦 ' + used + '/' + cap + '</span></span>' +
+'</span>');
 }
 const FEATURE_ACTIONS = new Set(["open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
@@ -19272,6 +19421,8 @@ function worldDropAt(x, y, d, src) {
 let best = null, bestD = Infinity;
 world.drops.forEach(t => {
 const dist = Math.hypot(x - t.x, y - t.y);
+if (d && d.k === "pet" && !t.petDrop)
+return;
 if (dist <= t.r && dist < bestD && t.accept(d, src)) {
 best = t;
 bestD = dist;
@@ -19360,6 +19511,8 @@ function worldDrawOverlay(c, W, H) {
 const g = world.drag;
 if (g && g.active) {
 world.drops.forEach(t => {
+if (g.desc && g.desc.k === "pet" && !t.petDrop)
+return;
 if (!t.accept(g.desc, g.src))
 return;
 const over = Math.hypot(g.x - t.x, g.y - t.y) <= t.r;
@@ -19374,7 +19527,18 @@ c.arc(t.x, t.y, Math.min(t.r, 80) * .85, 0, Math.PI * 2);
 c.stroke();
 c.restore();
 });
+if (g.desc && g.desc.k === "pet") {
+const pet = getPets(selectedStartPlanet).find(x => x.id === g.desc.r);
+if (pet) {
+try {
+drawSpacePet(c, selectedStartPlanet, g.x, g.y - 22, 40, pet.energy, performance.now() / 400, pet.species, false, "builder", 1);
+}
+catch (error) { }
+}
+}
+else {
 drawWorldItem(c, g.desc, g.x, g.y - 18, Math.max(34, (g.hit.r || 20) * 1.4), {});
+}
 }
 const now = performance.now();
 world.flyBacks = world.flyBacks.filter(f => {
@@ -19545,7 +19709,10 @@ meta: "Energy " + Math.round(pet.energy) + "% · " + ((pet.role || "builder") ==
 text: pet.carry ? "Carrying " + worldItemInfo(pet.carry).name + "." : "Drop things on it to hand them over — or berries to feed it.",
 buttons: [
 { label: "Feed " + SNACK_ICON + " (" + getSnackStock(planetId) + " in the vault)", primary: true, disabled: pet.energy >= 100 || getSnackStock(planetId) < 1, action: () => worldRunAction({ "data-action": "feed-pet", "data-pet": pet.id }) },
-{ label: "Pet details", action: () => worldOpenPetHolo(pet) }
+{ label: "Pet details", action: () => worldOpenPetHolo(pet) },
+...(!roamingActive && getPets(planetId).some(p => p.id === pet.id)
+? [{ label: "🐾 Roam the world", action: () => { worldHideBubble(); startRoamingPet(pet.id); } }]
+: [])
 ]
 });
 }
@@ -20153,6 +20320,7 @@ blueprints.forEach((id, i) => {
 roomBlueprintFixture(c, list, planetId, st, id, .5 + .2 * (i % 3), .36 + .26 * Math.floor(i / 3), i);
 });
 roomPetPenFixture(c, list, planetId);
+roomTransporterFixture(c, list, planetId, st, .24, .76);
 }
 function roomFactoryFixtures(c, list, planetId, st, time) {
 roomTerminal(c, list, .2, "BUILD CONSOLE", st.colour, "structure-ship-factory");
@@ -20236,12 +20404,19 @@ drawSpacePet(c, planetId, p.x, p.y - size * .5, size, pet.energy, seed + time * 
 }
 catch (error) { }
 worldDrawCarried(c, pet, p.x, p.y - size * .5, size, false);
-world.hits.push({ x: p.x, y: p.y - size * .5, r: size * .6, z: 6, onTap: () => worldPetBubble(pet, p.x, p.y - size) });
+world.hits.push({
+x: p.x, y: p.y - size * .5, r: size * .6, z: 6,
+draggable: true,
+desc: { k: "pet", r: pet.id, n: 1 },
+src: { t: "petfig", p: pet.id },
+onTap: () => worldPetBubble(pet, p.x, p.y - size)
+});
 } });
 });
 }
 function roomTrainingFixtures(c, list, planetId, st, time) {
 roomTerminal(c, list, .5, "MISSION BOARD", st.colour, "structure-pilot-training");
+roomLicenceDeskFixture(c, list, planetId, st);
 const pods = [
 { stat: "range", label: "RANGE", icon: "🧭", u: .22 },
 { stat: "endurance", label: "ENDURANCE", icon: "⏱", u: .5 },
@@ -20273,7 +20448,18 @@ c.font = "800 " + Math.round(10 * p.s + 1) + "px system-ui,sans-serif";
 c.textAlign = "center";
 c.fillText(pod.icon + " " + pod.label, p.x, p.y - 96 * p.s);
 c.restore();
-world.hits.push({ x: p.x, y: p.y - 45 * p.s, r: 40 * p.s, z: 5, onTap: () => roomTrainAt(pod, true) });
+world.hits.push({ x: p.x, y: p.y - 45 * p.s, r: 40 * p.s, z: 5, onTap: () => roomTrainPick(pod) });
+world.drops.push({
+x: p.x, y: p.y - 45 * p.s, r: 48 * p.s,
+kind: "pod",
+petDrop: true,
+accept: d => !!d && d.k === "pet",
+drop: d => {
+const pet = getPets(selectedStartPlanet).find(x => x.id === d.r);
+if (pet)
+roomTrainForPet(pod, pet);
+}
+});
 }
 });
 });
