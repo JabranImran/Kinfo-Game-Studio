@@ -3082,7 +3082,11 @@ color:var(--ink);transition:transform .12s ease;}
 .tp-main{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
 .tp-sub{font-size:10.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .world-bubble-buttons .neon-btn .tp-eq img{width:1em !important;height:1em !important;}
-.tp-hold{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}</style>
+.tp-hold{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
+.pet-row img{width:34px !important;height:34px !important;}
+.world-bubble-buttons .neon-btn .pet-row img{width:34px !important;height:34px !important;}
+.pet-row-act{flex-shrink:0;font:900 11px system-ui,sans-serif;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.1);}
+.world-bubble-buttons .neon-btn .pet-row .pet-row-act img,.pet-row-act img{width:1em !important;height:1em !important;vertical-align:-.15em;}</style>
 
 </head>
 
@@ -9976,9 +9980,34 @@ toggleRoamingUI(false);
 if (typeof renderPlanetFocus === "function")
 renderPlanetFocus();
 }
+const petThumbCache = {};
+function petThumbUrl(planetId, pet) {
+const key = pet.id + ":" + (pet.species || "") + ":" + Math.round((pet.energy || 0) / 10);
+if (petThumbCache[key])
+return petThumbCache[key];
+let url = "";
+try {
+const cv = document.createElement("canvas");
+cv.width = 72;
+cv.height = 72;
+const c = cv.getContext("2d");
+drawSpacePet(c, pet.homePlanetId || planetId, 36, 40, 54, pet.energy, (pet.id.length * 7) % 10, pet.species, false, "builder", 1);
+url = cv.toDataURL();
+}
+catch (error) { }
+petThumbCache[key] = url;
+return url;
+}
+function petRowLabel(planetId, pet, detail, act) {
+return ('<span class="tp-ship pet-row"><img src="' + petThumbUrl(planetId, pet) + '" alt="">' +
+'<span class="tp-main"><span class="tp-name">' + petShortName(planetId, pet) + '</span>' +
+'<span class="tp-sub">' + detail + '</span></span>' +
+(act ? '<span class="pet-row-act">' + act + '</span>' : '') +
+'</span>');
+}
 function petChoiceButtons(planetId, filter, label, action) {
 return getPets(planetId).filter(filter).slice(0, 5).map(pet => ({
-label: label(pet),
+label: petRowLabel(planetId, pet, "Energy " + Math.round(pet.energy) + "% · " + ((pet.role || "builder") === "pilot" ? "✈ Pilot" : "🔧 Builder"), label(pet).split(" ")[0]),
 primary: true,
 action: () => action(pet)
 }));
@@ -10500,7 +10529,7 @@ meta: pilots.length ? "Pick a pilot to train — or drag one onto the pod" : "No
 text: pilots.length ? "" : "Get a pet licensed at the licence desk and it can train here.",
 buttons: pilots.length
 ? pilots.slice(0, 6).map(pet => ({
-label: petShortName(planetId, pet) + " · Lv " + getPetStatLevel(pet, pod.stat) + " · " + (pet.pilotPoints || 0).toLocaleString() + " ⭐",
+label: petRowLabel(planetId, pet, "Lv " + getPetStatLevel(pet, pod.stat) + " · " + (pet.pilotPoints || 0).toLocaleString() + " ⭐", "Train ▸"),
 primary: true,
 keepOpen: true,
 action: () => roomTrainForPet(pod, pet)
@@ -10523,12 +10552,13 @@ text: pets.length ? "A licence is for life — the pet keeps it if it goes back 
 buttons: pets.slice(0, 7).map(pet => {
 const name = petShortName(planetId, pet);
 const pilot = (pet.role || "builder") === "pilot";
+void name;
 if (pet.pilotLicensed && pilot)
-return { label: "✓ " + name + " · licensed pilot", disabled: true };
+return { label: petRowLabel(planetId, pet, "🪪 Licensed · ✈ Pilot", "✓"), disabled: true };
 if (pet.pilotLicensed)
-return { label: "✓ " + name + " · licensed — make pilot", keepOpen: true, action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); } };
+return { label: petRowLabel(planetId, pet, "🪪 Licensed · 🔧 Builder", "Make pilot"), keepOpen: true, action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); } };
 return {
-label: name + " · Buy licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML,
+label: petRowLabel(planetId, pet, "No licence yet", "Buy · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML),
 primary: true,
 disabled: coins < PET_PILOT_ASSIGNMENT_FEE,
 keepOpen: true,
@@ -19447,6 +19477,7 @@ return;
 const hit = worldHitAt(p.x, p.y);
 if (!hit)
 return;
+if (!hit.passThrough)
 event.stopImmediatePropagation();
 world.drag = { hit, src: hit.src, desc: hit.desc, x0: p.x, y0: p.y, x: p.x, y: p.y, active: false, t0: performance.now() };
 }
@@ -19454,6 +19485,11 @@ function worldPointerMove(event) {
 if (!world.drag)
 return;
 const p = worldPointerPos(event);
+if (world.drag.hit && world.drag.hit.passThrough) {
+if (Math.hypot(p.x - world.drag.x0, p.y - world.drag.y0) > 9)
+world.drag = null;
+return;
+}
 event.stopImmediatePropagation();
 if (world.drag.blade) {
 if (world.blade) {
@@ -19474,6 +19510,7 @@ const g = world.drag;
 if (!g)
 return;
 world.drag = null;
+if (!(g.hit && g.hit.passThrough))
 event.stopImmediatePropagation();
 if (g.blade)
 return;
@@ -20399,6 +20436,9 @@ list.push({ v, draw: () => {
 const p = roomFloorPt(u, v);
 const size = Math.max(24, roomGeo.W * .06) * p.s;
 const facing = Math.cos(time * .18 + seed) > 0 ? 1 : -1;
+const held = world.drag && world.drag.active && world.drag.src && world.drag.src.t === "petfig" && world.drag.src.p === pet.id;
+if (held)
+return;
 try {
 drawSpacePet(c, planetId, p.x, p.y - size * .5, size, pet.energy, seed + time * 2, pet.species, role === "builder", pet.hat || "builder", facing);
 }
@@ -20887,7 +20927,7 @@ c.globalAlpha = .45 + .2 * Math.sin(performance.now() / 60);
 withPetBack(roamingHeadingUp, () => drawSpacePet(c, selectedStartPlanet, p.x, p.y - size * .5, size, pet.energy, anim, pet.species, false, "builder", roamingFacingScale));
 c.restore();
 worldDrawCarried(c, pet, p.x, p.y - size * .5, size, true);
-world.hits.push({ x: p.x, y: p.y - size * .5, r: size * .55, z: 25, onTap: () => worldUseCarried(pet, { x: p.x, y: p.y - size * 1.2 }) });
+world.hits.push({ x: p.x, y: p.y - size * .5, r: size * .55, z: 25, passThrough: true, onTap: () => worldUseCarried(pet, { x: p.x, y: p.y - size * 1.2 }) });
 } });
 list.sort((a, b) => a.v - b.v);
 list.forEach(f => {
@@ -23687,6 +23727,7 @@ x: roamPetProj.x,
 y: roamPetProj.y,
 r: roamPetSize * .55,
 z: 25,
+passThrough: true,
 onTap: () => worldUseCarried(pet, { x: roamPetProj.x, y: roamPetProj.y - roamPetSize * .78 })
 });
 }
@@ -25964,6 +26005,23 @@ itemCardsHtml +=
 renderShopItemRow(id, opportunity.item, "item-foreign-" +
 opportunity.item.id, opportunity.sourcePet);
 });
+{
+const petPrice = computePetCost(id);
+itemCardsHtml =
+'<div class="item-shop-card">' +
+'<div class="item-shop-card-main">' +
+'<div class="item-shop-card-icon">🐾</div>' +
+'<div class="item-shop-card-name">Adopt a pet</div>' +
+'<div class="item-shop-card-meta">' + getPets(id).length + ' living here</div>' +
+'</div>' +
+'<div class="item-shop-card-btn-wrap">' +
+'<button class="remove-btn" style="width:100%;" data-action="buy-pet" ' +
+(getTotalAvailableCoins(id) < petPrice ? 'disabled' : '') + '>' +
+'Adopt ' + petPrice + ' ' + COIN_ICON_HTML + '</button>' +
+'</div>' +
+'</div>' +
+itemCardsHtml;
+}
 itemCardsHtml =
 '<div class="item-shop-card">' +
 '<div class="item-shop-card-main">' +
@@ -36832,7 +36890,7 @@ return area;
 return null;
 }
 focusCanvas.addEventListener("pointerdown", event => {
-if (roamingActive)
+if (roamingActive || roomState)
 return;
 resetHomeIdleTimer();
 downX = event.clientX;
@@ -36845,6 +36903,8 @@ focusCanvas.addEventListener("pointerup", event => {
 if (!tracking)
 return;
 tracking = false;
+if (roomState || roamingActive)
+return;
 const dx = event.clientX - downX;
 const dy = event.clientY - downY;
 const distance = Math.hypot(dx, dy);
