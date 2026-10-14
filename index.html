@@ -3086,7 +3086,34 @@ color:var(--ink);transition:transform .12s ease;}
 .pet-row img{width:34px !important;height:34px !important;}
 .world-bubble-buttons .neon-btn .pet-row img{width:34px !important;height:34px !important;}
 .pet-row-act{flex-shrink:0;font:900 11px system-ui,sans-serif;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.1);}
-.world-bubble-buttons .neon-btn .pet-row .pet-row-act img,.pet-row-act img{width:1em !important;height:1em !important;vertical-align:-.15em;}</style>
+.world-bubble-buttons .neon-btn .pet-row .pet-row-act img,.pet-row-act img{width:1em !important;height:1em !important;vertical-align:-.15em;}
+#bossHud{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 96px);transform:translate(-50%,-8px);width:min(330px,72vw);z-index:40;pointer-events:none;opacity:0;transition:opacity .3s,transform .3s;font-family:system-ui,sans-serif;text-align:center;}
+#bossHud.show{opacity:1;transform:translate(-50%,0);}
+#bossHud .bh-name{display:flex;justify-content:space-between;align-items:baseline;font:900 11px system-ui,sans-serif;letter-spacing:.12em;color:#ffc6f2;text-shadow:0 0 8px #d02bff;}
+#bossHud .bh-name span{font-weight:800;letter-spacing:0;color:#fff;opacity:.85;}
+#bossHud .bh-bar{height:7px;border-radius:5px;background:rgba(40,8,60,.75);border:1px solid rgba(208,43,255,.6);overflow:hidden;margin:3px 0;box-shadow:0 0 12px rgba(208,43,255,.35);}
+#bossHud .bh-bar i{display:block;height:100%;background:linear-gradient(90deg,#ff3b6b,#d02bff);transition:width .35s;}
+#bossHud .bh-sub{font:700 10px system-ui,sans-serif;color:#e8d6ff;opacity:.85;}
+#bossHud .bh-sub img{width:1em;height:1em;vertical-align:-.15em;}
+#bossHud.raid .bh-name{color:#ffd0d6;text-shadow:0 0 8px #ff3b6b;}
+#bossHud.raid .bh-bar{border-color:rgba(255,59,107,.7);}
+#bossHud.raid .bh-bar i{background:linear-gradient(90deg,#ff8a1a,#ff3b6b);}
+#bossBanner{position:fixed;left:50%;top:32%;transform:translate(-50%,-50%) scale(.8);opacity:0;z-index:60;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 26px;border-radius:20px;background:radial-gradient(circle at 50% 30%,rgba(40,140,110,.96),rgba(8,18,26,.97));border:1px solid rgba(154,255,208,.6);box-shadow:0 0 50px rgba(154,255,208,.45);color:#eafff6;font-family:system-ui,sans-serif;text-align:center;transition:opacity .5s,transform .5s;width:min(360px,86vw);}
+#bossBanner.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+#bossBanner em{font-size:30px;font-style:normal;}
+#bossBanner span{font:900 18px system-ui,sans-serif;letter-spacing:.12em;color:#9affd0;text-shadow:0 0 12px #3cdca0;}
+#bossBanner small{font-size:12px;opacity:.9;}
+.boss-card{display:flex;flex-direction:column;gap:5px;margin:8px 0 10px;padding:10px 12px;border-radius:14px;background:linear-gradient(135deg,rgba(60,10,80,.75),rgba(25,5,35,.8));border:1px solid rgba(208,43,255,.55);box-shadow:0 0 18px rgba(208,43,255,.25),inset 0 0 16px rgba(208,43,255,.15);font-size:12px;color:#f1e2ff;text-align:left;}
+.boss-card b{font-size:13px;color:#ffc6f2;}
+.boss-card img{width:1em;height:1em;vertical-align:-.15em;}
+.boss-card-bar{display:block;height:7px;border-radius:5px;background:rgba(255,255,255,.12);overflow:hidden;}
+.boss-card-bar i{display:block;height:100%;background:linear-gradient(90deg,#ff3b6b,#d02bff);}
+.boss-card .boss-warn{color:#ffb3c0;font-weight:700;}
+.boss-card .boss-lock{opacity:.75;font-size:11px;}
+.boss-card.raid{background:linear-gradient(135deg,rgba(90,10,30,.8),rgba(35,5,15,.85));border-color:rgba(255,59,107,.65);box-shadow:0 0 18px rgba(255,59,107,.3);}
+.boss-card.raid b{color:#ffd0d6;}
+.boss-card.lush{background:linear-gradient(135deg,rgba(20,90,60,.7),rgba(8,35,28,.8));border-color:rgba(154,255,208,.55);box-shadow:0 0 18px rgba(154,255,208,.25);}
+.boss-card.lush b{color:#9affd0;}</style>
 
 </head>
 
@@ -4117,6 +4144,17 @@ icon: "⭐",
 x: 50,
 y: 5,
 asteroid: "cosmic"
+},
+{
+id: "nemesis",
+name: "Nemesis",
+tier: 5,
+requirement: 125000,
+unlockRank: 16,
+icon: "☠",
+x: 84,
+y: 3,
+asteroid: "nemesis"
 }
 ];
 function isPlanetUnlocked(planetId) {
@@ -4172,7 +4210,8 @@ const ROUTES = [
 ["kepler", "nova"],
 ["aurora", "nova"],
 ["helios", "zenith"],
-["nova", "zenith"]
+["nova", "zenith"],
+["zenith", "nemesis"]
 ];
 const ROUTE_REVEAL_MS = 1400;
 const canvas = document.getElementById("game");
@@ -4291,7 +4330,7 @@ return terrain === 1 ? 1.25 : 1.45;
 const k = ROAM_TERRAIN_PACE[terrain];
 return k === undefined ? 1 : k;
 }
-function roamingPaceNow() {
+function roamingPaceNow__orig() {
 const pet = getRoamingPet();
 const species = pet && pet.species;
 const speciesPace = PET_SPECIES_PACE[species] || 1;
@@ -4949,6 +4988,14 @@ color: "#ffd76b",
 shape: "gem",
 planetId: "nova"
 },
+"void-ember": {
+id: "void-ember",
+name: "Void Ember",
+icon: "🟣",
+color: "#d02bff",
+shape: "shard",
+planetId: "nemesis"
+},
 "prime-core": {
 id: "prime-core",
 name: "Prime Core",
@@ -5066,7 +5113,8 @@ elite: "prime-core",
 cloak: "shadow-vapor",
 twin: "mirror-alloy",
 rift: "chrono-crystal",
-drift: "aether-dust"
+drift: "aether-dust",
+voidrock: "void-ember"
 };
 function getMaterialForSpecialKind(kind) {
 const id = MATERIAL_BY_SPECIAL_KIND[kind];
@@ -5186,6 +5234,17 @@ description: "Tap to collapse a point in space — nearby asteroids " +
 "get dragged in and destroyed as they reach the " +
 "centre. The most expensive item in the game for a " +
 "reason."
+},
+"nebula-net": {
+id: "nebula-net",
+planetId: "nemesis",
+name: "Nebula Net",
+icon: "🕸",
+cost: 3,
+description: "Casts a shimmering net round your ship: every rock " +
+"inside it turns straight into coins, and any enemy, " +
+"ship or satellite caught in it is snared. Only sold " +
+"on a freed Nemesis."
 }
 };
 function getShopItemForPlanet(planetId) {
@@ -7708,7 +7767,7 @@ const POWERUP_COLOURS = {
 "emp": "#ffe45c", "regen-coil": "#ff5c7a", "incinerator-beam": "#ff7a1a",
 "return-capsule": "#e0b070", "ghost-shield": "#eaf4ff", "chrono-field": "#8a7fff",
 "ricochet-orb": "#4fd6ff", "solar-blade": "#ffd25c", "nova-burst": "#ffd76b",
-"singularity": "#b98cff"
+"singularity": "#b98cff", "nebula-net": "#e78bff"
 };
 function isBasePowerupId(id) {
 return id === "emp" || !!SHOP_ITEMS[id];
@@ -7843,7 +7902,7 @@ return (empCharge >= EMP_MAX && running && !paused && !gameOver &&
 (worldState === "field" || worldState === "orbital") &&
 empCooldown <= 0);
 }
-function fireRunPowerupNow(part) {
+function fireRunPowerupNow__orig(part) {
 empCharge = EMP_MAX;
 empCooldown = 0;
 if (part === "emp")
@@ -7942,7 +8001,8 @@ const SAT_POWER_TEXT = {
 "ricochet-orb": "an arc that jumps rock to rock",
 "solar-blade": "spinning blades that cut anything close",
 "nova-burst": "pulls in nearby coins",
-"singularity": "a small black hole at its target"
+"singularity": "a small black hole at its target",
+"nebula-net": "a net that turns nearby rocks to coins and snares enemies"
 };
 function satPowerText(type) {
 return powerupParts(type).map(p => SAT_POWER_TEXT[p] || "its power").join(", plus ");
@@ -8196,7 +8256,7 @@ satRemove(sat, list);
 function satAsteroidsNear(x, y, r) {
 return asteroids.filter(a => Math.hypot(a.x - x, a.y - y) < r + (a.radius || 0));
 }
-function satBlast(predicate) {
+function satBlast__orig(predicate) {
 let n = 0;
 for (let i = asteroids.length - 1; i >= 0; i--) {
 if (asteroids[i] && predicate(asteroids[i])) {
@@ -8206,7 +8266,7 @@ n++;
 }
 return n;
 }
-function satAutoAim(p, part) {
+function satAutoAim__orig(p, part) {
 if (!asteroids.length)
 return null;
 if (part === "singularity") {
@@ -8241,7 +8301,7 @@ return best ? { x: best.x, y: best.y, n: bestN } : null;
 function satNeedsAim(sat) {
 return powerupParts(sat.type).some(p => p === "incinerator-beam" || p === "singularity");
 }
-function satAutoWants(sat, p) {
+function satAutoWants__orig(sat, p) {
 return powerupParts(sat.type).some(part => {
 if (part === "emp")
 return satAsteroidsNear(p.x, p.y, Math.min(W, H) * .3).length >= 4 || satAsteroidsNear(p.x, p.y, 70).length > 0;
@@ -8270,7 +8330,7 @@ return lives < 2;
 return false;
 });
 }
-function satFire(sat, list, aimX, aimY) {
+function satFire__orig(sat, list, aimX, aimY) {
 const p = satScreenPos(sat);
 const now = performance.now();
 powerupParts(sat.type).forEach(part => {
@@ -10082,7 +10142,7 @@ return s ? s.name.toUpperCase() : "";
 }
 return "";
 }
-function planetBoardHtml(planetId) {
+function planetBoardHtml__orig(planetId) {
 const planet = getPlanet(planetId) || { name: planetId };
 const pets = getPets(planetId);
 const hungry = pets.filter(p => p.energy < 40).length;
@@ -10232,7 +10292,7 @@ text: "",
 buttons
 });
 }
-function transporterSend(d, src, ship, n) {
+function transporterSend__orig(d, src, ship, n) {
 const one = d.k === "coin" ? { k: "coin", r: "coin", n: Math.min(COIN_BAG, d.n || COIN_BAG) } : { k: d.k, r: d.r, n: 1 };
 if (d.k === "item") {
 if (src.t === "vault")
@@ -10617,8 +10677,2902 @@ return ('<span class="tp-ship"><img src="' + shipThumbUrl(ship) + '" alt="">' +
 '<span class="tp-note">📦 ' + used + '/' + cap + '</span></span>' +
 '</span>');
 }
-const FEATURE_ACTIONS = new Set(["open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
+const NEM = "nemesis";
+const BOSS_MAX_HP = 6000;
+const BOSS_SATS = 6;
+const BOSS_SAT_HP = 3;
+const BOSS_SAT_RING = 250;
+const BOSS_PETS = 8;
+const BOSS_PET_HP = 3;
+const BOSS_STAGE_MS = 210000;
+const BOSS_ATTACK_GAP_MS = 360000;
+const BOSS_PET_POWERS = ["incinerator-beam", "emp", "ricochet-orb", "singularity", "chrono-field"];
+const BOSS_PET_SPECIES = ["cat", "penguin", "gorilla", "koala", "rex"];
+const BOSS_STAGE_TEXT = ["", "massing in the asteroid field", "fighting in orbit", "on the ground, stealing"];
+function bossMyId() {
+return (typeof mp !== "undefined" && mp.connected && mp.myId) ? mp.myId : "me";
+}
+function bossIsMe(owner) {
+return !owner || owner === "me" || typeof mp === "undefined" || !mp.connected || owner === mp.myId;
+}
+function bossFresh() {
+const pets = [];
+for (let i = 0; i < BOSS_PETS; i++)
+pets.push({ hp: BOSS_PET_HP, deadAt: 0 });
+return {
+hp: BOSS_MAX_HP, maxHp: BOSS_MAX_HP, coins: 600, defeated: false,
+sats: Array.from({ length: BOSS_SATS }, () => ({ hp: BOSS_SAT_HP, deadAt: 0 })),
+pets,
+lastAttackAt: Date.now(),
+attack: null,
+loot: { coins: 0, mats: {}, items: {} },
+lastTick: Date.now(),
+raidsWon: 0,
+raidsRepelled: 0,
+found: false
+};
+}
+function bossMine() {
+const s = localPlanetSave || planetSave;
+if (!s.boss || typeof s.boss !== "object")
+s.boss = bossFresh();
+const b = s.boss;
+if (!Array.isArray(b.sats) || b.sats.length !== BOSS_SATS)
+b.sats = Array.from({ length: BOSS_SATS }, () => ({ hp: BOSS_SAT_HP, deadAt: 0 }));
+if (!Array.isArray(b.pets) || b.pets.length !== BOSS_PETS)
+b.pets = Array.from({ length: BOSS_PETS }, () => ({ hp: BOSS_PET_HP, deadAt: 0 }));
+if (!b.loot)
+b.loot = { coins: 0, mats: {}, items: {} };
+return b;
+}
+const bossMirror = {};
+function bossState(owner) {
+if (bossIsMe(owner))
+return bossMine();
+return bossMirror[owner] || (((mp.remotePlanetSaves || {})[owner] || {}).boss) || null;
+}
+function bossFlightOwner() {
+return (typeof mp !== "undefined" && mp.connected) ? (orbitalLocaleOwnerId || mp.myId) : "me";
+}
+function bossSurfaceOwner() {
+return (typeof mp !== "undefined" && mp.connected) ? (activePlanetOwnerId || mp.myId) : "me";
+}
+function bossDefeatedFor(owner) {
+const b = bossState(owner);
+return !!(b && b.defeated);
+}
+function bossPetInfo(i) {
+return {
+species: BOSS_PET_SPECIES[i % BOSS_PET_SPECIES.length],
+power: i % 3 === 2 ? null : BOSS_PET_POWERS[i % BOSS_PET_POWERS.length],
+seed: i * 2.399 + .7
+};
+}
+function bossRaiderInfo(k) {
+return {
+species: BOSS_PET_SPECIES[(k + 2) % BOSS_PET_SPECIES.length],
+power: k % 3 === 1 ? null : BOSS_PET_POWERS[(k + 1) % BOSS_PET_POWERS.length],
+seed: 100 + k * 3.17
+};
+}
+function bossPlanetName(id) {
+const p = getPlanet(id);
+return p ? p.name : id;
+}
+function withMySave(fn) {
+const prev = planetSave;
+planetSave = localPlanetSave || planetSave;
+try {
+return fn();
+}
+finally {
+planetSave = prev;
+}
+}
+const bossThr = {};
+function bossThrottle(key, ms) {
+const now = performance.now();
+if (ms && bossThr[key] && now - bossThr[key] < ms)
+return false;
+bossThr[key] = now;
+return true;
+}
+let bossSyncDirty = false;
+let bossSaveDirty = false;
+let bossSaveSoon = false;
+let bossLastSync = 0;
+let bossLastSave = 0;
+function bossMark(important) {
+bossSyncDirty = true;
+bossSaveDirty = true;
+if (important)
+bossSaveSoon = true;
+}
+function bossApply(owner, ev) {
+if (bossIsMe(owner)) {
+bossApplyTo(bossMine(), ev, true);
+bossMark(ev.t !== "hit");
+return;
+}
+mpSend({ type: "fieldEvent", event: { kind: "bossEv", owner, ev } });
+const m = bossState(owner);
+if (m)
+bossApplyTo(m, ev, false);
+}
+function bossApplyTo(b, ev, real) {
+if (!b || b.defeated)
+return;
+const n = Math.max(0, Number(ev.n) || 0);
+if (ev.t === "hit") {
+b.hp = Math.max(0, b.hp - n);
+}
+else if (ev.t === "sat") {
+const s = b.sats[ev.i];
+if (s && s.hp > 0) {
+s.hp = Math.max(0, s.hp - n);
+if (s.hp <= 0) {
+s.deadAt = Date.now();
+b.hp = Math.max(0, b.hp - 40);
+}
+}
+}
+else if (ev.t === "pet") {
+const p = b.pets[ev.i];
+if (p && p.hp > 0) {
+p.hp = Math.max(0, p.hp - n);
+if (p.hp <= 0) {
+p.deadAt = Date.now();
+b.hp = Math.max(0, b.hp - 15);
+}
+}
+}
+else if (ev.t === "ship") {
+b.hp = Math.max(0, b.hp - 12);
+}
+else if (ev.t === "raidKill") {
+const a = b.attack;
+if (a && a.id === ev.id && a.ships > 0) {
+a.ships--;
+a.killed = (a.killed || 0) + 1;
+if (real && a.ships <= 0)
+bossRaidRepelled(b);
+}
+}
+if (real && b.hp <= 0 && !b.defeated)
+bossDefeat(b);
+}
+function bossLootAdd(b, d) {
+if (!b || !d)
+return;
+const n = Math.max(1, d.n || 1);
+if (d.k === "coin")
+b.loot.coins += n;
+else if (d.k === "mat")
+b.loot.mats[d.r] = (b.loot.mats[d.r] || 0) + n;
+else if (d.k === "item")
+b.loot.items[d.r] = (b.loot.items[d.r] || 0) + n;
+else
+b.loot.coins += 3 * n;
+}
+function bossOwnerTick() {
+if (!localPlanetSave)
+return;
+const b = bossMine();
+const now = Date.now();
+const dt = Math.max(0, Math.min(now - (b.lastTick || now), 6 * 3600e3));
+b.lastTick = now;
+if (b.defeated)
+return;
+if (!b.found) {
+if (!withMySave(() => isPlanetUnlocked(NEM)))
+return;
+b.found = true;
+bossMark(true);
+setTimeout(() => bossAnnounce("☠ A dark world has appeared beyond Zenith: Nemesis. Its raiders are out — break its ring, wear it down, free it."), 1500);
+}
+const before = Math.floor(b.coins);
+b.coins = Math.min(4000, b.coins + dt / 60000 * 2);
+if (Math.floor(b.coins / 10) !== Math.floor(before / 10))
+bossSyncDirty = true;
+b.sats.forEach(s => {
+if (s.hp <= 0 && now - (s.deadAt || 0) > 60000 && b.coins >= 25) {
+s.hp = BOSS_SAT_HP;
+b.coins -= 25;
+bossMark();
+}
+});
+b.pets.forEach(p => {
+if (p.hp <= 0 && now - (p.deadAt || 0) > 45000 && b.coins >= 15) {
+p.hp = BOSS_PET_HP;
+b.coins -= 15;
+bossMark();
+}
+});
+if (b.attack)
+bossRaidTick(b, now);
+else if (b.hp < b.maxHp * .85 &&
+now - (b.lastAttackAt || 0) > BOSS_ATTACK_GAP_MS &&
+b.coins >= 60 &&
+Math.random() < 1 / 30)
+bossLaunchRaid(b, now);
+bossSiegeTick(b, now);
+}
+function bossRouteHops() {
+const hops = { [NEM]: 0 };
+const q = [NEM];
+while (q.length) {
+const id = q.shift();
+ROUTES.forEach(r => {
+const o = r[0] === id ? r[1] : r[1] === id ? r[0] : null;
+if (o && hops[o] === undefined) {
+hops[o] = hops[id] + 1;
+q.push(o);
+}
+});
+}
+return hops;
+}
+function bossLaunchRaid(b, now, forceTarget) {
+const hops = bossRouteHops();
+const visited = localPlanetSave.visitedPlanets || {};
+const list = PLANETS
+.filter(p => p.id !== NEM && (p.id === "earth" || visited[p.id]))
+.map(p => ({ id: p.id, w: 1 / Math.pow(Math.max(1, hops[p.id] || 6), 1.6) }));
+if (!list.length)
+return;
+let target = forceTarget || list[0].id;
+if (!forceTarget) {
+let r = Math.random() * list.reduce((s, x) => s + x.w, 0);
+for (const x of list) {
+if ((r -= x.w) <= 0) {
+target = x.id;
+break;
+}
+}
+}
+const hurt = 1 - b.hp / b.maxHp;
+let ships = Math.max(3, Math.min(9, 3 + Math.round(hurt * 8)));
+ships = Math.min(ships, Math.floor(b.coins / 20));
+if (ships < 3)
+return;
+const cost = ships * 20;
+b.coins -= cost;
+b.attack = {
+id: "raid" + now.toString(36),
+target, ships, sent: ships, cost,
+stage: 1, stageAt: now, startedAt: now,
+loot: { coins: 0, mats: {} },
+killed: 0
+};
+b.lastAttackAt = now;
+bossMark(true);
+bossAnnounce("⚠ Nemesis has sent " + ships + " raiders to " + bossPlanetName(target) + "! They're " + BOSS_STAGE_TEXT[1] + ".");
+}
+function bossStructureCount(planetId) {
+return withMySave(() => Object.keys(STRUCTURES).filter(id => hasStructure(planetId, id)).length);
+}
+function bossRaidTick(b, now) {
+const a = b.attack;
+if (a.ships <= 0) {
+bossRaidRepelled(b);
+return;
+}
+if (now - a.stageAt > BOSS_STAGE_MS) {
+a.stage++;
+a.stageAt = now;
+bossMark(true);
+if (a.stage > 3) {
+bossRaidSucceeded(b);
+return;
+}
+bossAnnounce("⚠ " + a.ships + " raiders at " + bossPlanetName(a.target) + " are now " + BOSS_STAGE_TEXT[a.stage] + ".");
+}
+const name = bossPlanetName(a.target);
+if (a.stage === 2) {
+const all = satOrbitAll();
+const sats = [...(all["me:" + a.target] || []), ...(all[bossMyId() + ":" + a.target] || [])].filter(s => s && s.hp > 0).length;
+if (sats && Math.random() < Math.min(.45, .07 * sats)) {
+a.ships--;
+a.killed++;
+bossMark(true);
+bossAnnounce("🛰 Your satellites over " + name + " shot down a raider (" + a.ships + " left)");
+}
+}
+if (a.stage === 3) {
+const built = bossStructureCount(a.target);
+if (built && Math.random() < Math.min(.3, .025 * built)) {
+a.ships--;
+a.killed++;
+bossMark(true);
+bossAnnounce("🏰 The buildings on " + name + " fought off a raider (" + a.ships + " left)");
+}
+if (a.ships > 0 && Math.random() < .35)
+bossRaidSteal(b, a);
+}
+if (a.ships <= 0)
+bossRaidRepelled(b);
+}
+function bossRaidSteal(b, a) {
+withMySave(() => {
+const bank = (planetSave.materialBanks || {})[a.target] || {};
+const ids = Object.keys(bank).filter(id => bank[id] > 0);
+if (ids.length && Math.random() < .65) {
+const id = ids[Math.floor(Math.random() * ids.length)];
+bank[id]--;
+a.loot.mats[id] = (a.loot.mats[id] || 0) + 1;
+}
+else if ((planetSave.banks[a.target] || 0) >= 5) {
+planetSave.banks[a.target] -= 5;
+a.loot.coins += 5;
+}
+});
+bossMark();
+}
+function bossRaidSucceeded(b) {
+const a = b.attack;
+const heal = a.ships * 150;
+b.hp = Math.min(b.maxHp, b.hp + heal);
+b.coins += a.cost + (a.loot.coins || 0) + a.ships * 10;
+Object.keys(a.loot.mats).forEach(id => b.loot.mats[id] = (b.loot.mats[id] || 0) + a.loot.mats[id]);
+b.raidsWon = (b.raidsWon || 0) + 1;
+b.attack = null;
+b.lastAttackAt = Date.now();
+bossMark(true);
+bossAnnounce("☠ " + a.ships + " raiders made it home from " + bossPlanetName(a.target) + " — Nemesis healed +" + heal);
+}
+function bossRaidRepelled(b) {
+const a = b.attack;
+if (!a)
+return;
+const reward = a.sent * 8;
+withMySave(() => {
+planetSave.banks[a.target] = (planetSave.banks[a.target] || 0) + reward + (a.loot.coins || 0);
+if (!planetSave.materialBanks)
+planetSave.materialBanks = {};
+const bank = planetSave.materialBanks[a.target] || (planetSave.materialBanks[a.target] = {});
+Object.keys(a.loot.mats).forEach(id => bank[id] = (bank[id] || 0) + a.loot.mats[id]);
+addRankPoints(a.sent * 40, "Raid repelled");
+});
+b.raidsRepelled = (b.raidsRepelled || 0) + 1;
+b.attack = null;
+b.lastAttackAt = Date.now();
+bossMark(true);
+bossAnnounce("🛡 The raid on " + bossPlanetName(a.target) + " is repelled! +" + reward + " coins banked there, and anything stolen came back.");
+}
+function bossSiegeTick(b, now) {
+const ships = (localPlanetSave.ships || {})[NEM] || [];
+if (!ships.length) {
+b.siegeAt = now;
+return;
+}
+const armed = b.pets.some((p, i) => p.hp > 0 && bossPetInfo(i).power);
+if (!armed) {
+b.siegeAt = now;
+return;
+}
+if (now - (b.siegeAt || now) < 75000) {
+if (!b.siegeAt)
+b.siegeAt = now;
+return;
+}
+b.siegeAt = now;
+const ship = ships[Math.floor(Math.random() * ships.length)];
+ship.lives = Math.max(0, (ship.lives || 1) - 1);
+if (ship.lives <= 0) {
+bossWreckShip(ship);
+}
+else {
+bossAnnounce("💥 Void raiders blasted a ship on Nemesis — " + ship.lives + " ♥ left. Launch it, or knock the raiders out!");
+withMySave(() => savePlanetProgress());
+}
+if (selectedStartPlanet === NEM && !running)
+bossSurf.padHit = performance.now();
+}
+function bossWreckShip(ship) {
+const b = bossMine();
+withMySave(() => {
+if (!planetSave.pets[NEM])
+planetSave.pets[NEM] = [];
+if (ship.pendingPilot)
+planetSave.pets[NEM].push(ship.pendingPilot);
+(ship.cargoPets || []).forEach(p => planetSave.pets[NEM].push(p));
+ship.pendingPilot = null;
+ship.cargoPets = [];
+b.loot.coins += ship.coins || 0;
+Object.keys(ship.materials || {}).forEach(id => b.loot.mats[id] = (b.loot.mats[id] || 0) + ship.materials[id]);
+removeShip(NEM, ship.id);
+savePlanetProgress();
+});
+bossMark(true);
+bossAnnounce("💀 A ship on Nemesis was destroyed by void raiders. Its pets scrambled clear; its cargo went to the Nemesis vault.");
+}
+function bossDefeat(b) {
+b.defeated = true;
+b.hp = 0;
+b.attack = null;
+b.defeatedAt = Date.now();
+withMySave(() => {
+addToBank(NEM, 400 + Math.floor(b.coins / 2) + (b.loot.coins || 0));
+if (!planetSave.materialBanks)
+planetSave.materialBanks = {};
+const bank = planetSave.materialBanks[NEM] || (planetSave.materialBanks[NEM] = {});
+Object.keys(b.loot.mats || {}).forEach(id => bank[id] = (bank[id] || 0) + b.loot.mats[id]);
+bank["void-ember"] = (bank["void-ember"] || 0) + 12;
+Object.keys(b.loot.items || {}).forEach(id => addItemStock(NEM, id, b.loot.items[id]));
+addItemStock(NEM, "nebula-net", 1);
+b.loot = { coins: 0, mats: {}, items: {} };
+addRankPoints(2500, "Nemesis defeated");
+savePlanetProgress();
+});
+bossMark(true);
+bossLastSync = 0;
+mpSend({ type: "fieldEvent", event: { kind: "bossFall", owner: bossMyId() } });
+bossCelebrate(bossMyId());
+}
+function bossCelebrate(owner) {
+bossSyncLook(true);
+if (running && (worldState === "field" || worldState === "orbital")) {
+for (let i = 0; i < 4; i++)
+shockwaves.push(new Shockwave(W / 2, H / 2, Math.max(W, H) * (.25 + i * .2)));
+floatingText("NEMESIS HAS FALLEN", W / 2, H * .3, "#9affd0");
+bossFlight.list = [];
+}
+let el = document.getElementById("bossBanner");
+if (!el) {
+el = document.createElement("div");
+el.id = "bossBanner";
+document.body.appendChild(el);
+}
+const who = bossIsMe(owner) ? "" : ((mp.remotePlayerInfo[owner] || {}).name || "A room-mate") + "'s ";
+el.innerHTML = '<em>☠ → 🌿</em><span>' + who + 'NEMESIS HAS FALLEN</span><small>The planet blooms. Its shop is open — with the new <strong>🕸 Nebula Net</strong>.</small>';
+el.classList.remove("show");
+void el.offsetWidth;
+el.classList.add("show");
+setTimeout(() => el.classList.remove("show"), 6500);
+try {
+sound("emp");
+}
+catch (error) { }
+}
+function bossNote(text) {
+if (bossThrottle("note:" + text, 4000))
+showShipToast(text);
+}
+function bossAnnounce(text) {
+bossNote(text);
+bossLastSync = 0;
+}
+function bossSyncTick() {
+const now = performance.now();
+if (typeof mp !== "undefined" && mp.connected && localPlanetSave) {
+if ((bossSyncDirty && now - bossLastSync > 1200) || now - bossLastSync > 9000) {
+bossLastSync = now;
+bossSyncDirty = false;
+mpSend({ type: "fieldEvent", event: { kind: "bossSync", b: bossMine() } });
+}
+}
+if (bossSaveDirty && (now - bossLastSave > 20000 || (bossSaveSoon && now - bossLastSave > 2500))) {
+bossLastSave = now;
+bossSaveDirty = false;
+bossSaveSoon = false;
+withMySave(() => savePlanetProgress());
+}
+}
+window.addEventListener("pagehide", () => {
+if (bossSaveDirty)
+try {
+withMySave(() => savePlanetProgress());
+}
+catch (error) { }
+});
+function bossOnNet(fromId, event) {
+const k = event && event.kind;
+if (!k)
+return false;
+if (k === "bossSync") {
+const prev = bossMirror[fromId];
+bossMirror[fromId] = event.b;
+const name = (mp.remotePlayerInfo[fromId] || {}).name || "A room-mate";
+if (event.b && event.b.attack && (!prev || !prev.attack || prev.attack.id !== event.b.attack.id))
+bossNote("⚠ " + name + "'s Nemesis is raiding " + bossPlanetName(event.b.attack.target) + " — help them fight it off!");
+if (event.b && event.b.defeated && prev && !prev.defeated)
+bossCelebrate(fromId);
+return true;
+}
+if (k === "bossEv") {
+if (event.owner === mp.myId) {
+bossApplyTo(bossMine(), event.ev || {}, true);
+bossMark((event.ev || {}).t !== "hit");
+}
+return true;
+}
+if (k === "bossFall") {
+return true;
+}
+if (k === "bossShips") {
+if (event.key === bossNetKey()) {
+bossFlight.remote = { list: event.list || [], at: performance.now(), ring: event.ring || {} };
+(event.fx || []).forEach(f => bossFlight.fx.push(Object.assign({}, f, { t0: performance.now() })));
+}
+return true;
+}
+if (k === "bossShipHit") {
+if (event.key === bossNetKey() && bossIsHost()) {
+const e = bossFlight.list.find(x => x.id === event.id);
+if (e)
+bossDamageEnemy(bossFlightCtx, e, event.n || 0, { stun: event.stun, slow: event.slow });
+}
+return true;
+}
+if (k === "bossZap" || k === "pvpHit") {
+if (event.to === mp.myId && running && (worldState === "field" || worldState === "orbital")) {
+if (k === "pvpHit")
+floatingText("⚔ " + (event.from || "A player"), W / 2, H / 2 - 64, "#ff7ad9");
+bossHurtLocal(event.eff);
+}
+return true;
+}
+if (k === "satPvp") {
+if (event.to === mp.myId)
+bossSatHitMine(event.id, event.n || 1);
+return true;
+}
+if (k === "petCombat") {
+if (event.to === mp.myId)
+bossHitMyPet(event.eff, event.petId, event.from);
+return true;
+}
+return false;
+}
+const bossFlight = {
+list: [], ctx: null, spawnT: 4, nextId: 1,
+holes: [], fx: [], netFx: [],
+stunUntil: 0, shieldUntil: 0, stunHeading: null,
+lastNet: 0, netHad: false,
+remote: null,
+ringCd: {}, ringAim: {}, ringFlash: {},
+orbit: null,
+planetFloat: []
+};
+let bossFlightCtx = null;
+function bossUnlockedFor(b) {
+return !!(b && b.found);
+}
+function bossFlightContext() {
+if (!running || gameOver || (worldState !== "field" && worldState !== "orbital"))
+return null;
+const owner = bossFlightOwner();
+const b = bossState(owner);
+if (!b || b.defeated)
+return null;
+const here = currentPlanetId;
+const orbit = worldState === "orbital";
+const a = b.attack;
+const ctx = { owner, b, orbit, planet: here, key: worldState + ":" + here + ":" + owner, rate: 0, cap: 0, raid: null, ring: false, planetHit: false };
+if (here === NEM) {
+ctx.ring = orbit;
+ctx.planetHit = orbit;
+ctx.rate = orbit ? 1 / 13 : 1 / 9;
+ctx.cap = orbit ? 3 : 4;
+}
+else if (a && a.target === here && a.ships > 0 && ((a.stage === 1 && !orbit) || (a.stage === 2 && orbit))) {
+ctx.raid = a.id;
+ctx.rate = 1 / 4;
+ctx.cap = Math.min(5, a.ships);
+}
+else if (!orbit && bossUnlockedFor(b)) {
+const near = ROUTES.some(r => (r[0] === NEM && r[1] === here) || (r[1] === NEM && r[0] === here));
+ctx.rate = near ? 1 / 30 : 1 / 100;
+ctx.cap = 1;
+}
+else {
+return null;
+}
+return ctx;
+}
+function bossIsHost() {
+if (worldState === "field")
+return !coPilotSessionShipKey;
+if (worldState === "orbital")
+return typeof mp === "undefined" || !mp.connected || mpIsOrbitalAuthority();
+return false;
+}
+function bossNetKey() {
+if (worldState === "field")
+return "f|" + (coPilotSessionShipKey || ((typeof mp !== "undefined" && mp.connected) ? mpShipKey(flyingShipOwnerId || mp.myId, currentShipId) : "solo"));
+if (worldState === "orbital")
+return "o|" + getOrbitalLocaleKey();
+return null;
+}
+function bossToScreen(px, py) {
+return worldState === "orbital"
+? { x: W / 2 - orbitalX + px, y: H / 2 - orbitalY + py }
+: { x: W / 2 + px, y: H / 2 + py };
+}
+function bossToPlane(sx, sy) {
+return worldState === "orbital"
+? { x: sx - W / 2 + orbitalX, y: sy - H / 2 + orbitalY }
+: { x: sx - W / 2, y: sy - H / 2 };
+}
+function bossScreen(e) {
+return bossToScreen(e.px, e.py);
+}
+function bossMyPlane() {
+return worldState === "orbital" ? { x: orbitalX, y: orbitalY } : { x: 0, y: 0 };
+}
+function bossOnscreen(s, m) {
+m = m || 0;
+return s.x > -m && s.x < W + m && s.y > -m && s.y < H + m;
+}
+function bossPlayersHere() {
+const me = bossMyPlane();
+const out = [{ id: "me", x: me.x, y: me.y }];
+if (worldState === "orbital" && typeof mpGetRemoteShipsHere === "function") {
+mpGetRemoteShipsHere().forEach(r => out.push({ id: r.playerId, x: r.presence.x, y: r.presence.y, name: r.name }));
+}
+return out;
+}
+function bossNearestPlayer(px, py) {
+let best = null;
+bossPlayersHere().forEach(p => {
+const d = Math.hypot(p.x - px, p.y - py);
+if (!best || d < best.d)
+best = Object.assign({ d }, p);
+});
+return best;
+}
+function bossRingPlane(i) {
+const t = Date.now() / 1000;
+const a = i / BOSS_SATS * Math.PI * 2 + t * .05;
+return { x: Math.cos(a) * BOSS_SAT_RING, y: Math.sin(a) * BOSS_SAT_RING, a };
+}
+function bossRingScreen(i) {
+const p = bossRingPlane(i);
+return bossToScreen(p.x, p.y);
+}
+function bossPlanetScreen() {
+const d = Math.hypot(orbitalX, orbitalY);
+return {
+x: W / 2 - orbitalX,
+y: H / 2 - orbitalY,
+r: clamp(ORBITAL_START_RADIUS / Math.max(d, 1) * 70, 14, 180)
+};
+}
+function bossFlightTargets() {
+if (bossIsHost())
+return bossFlight.list;
+const r = bossFlight.remote;
+if (!r || performance.now() - r.at > 1500)
+return [];
+return r.list.map(a => ({ id: a[0], kind: a[1], tier: a[2], px: a[3], py: a[4], hp: a[5], maxHp: a[6], r: a[7], face: a[8], charge: a[9], stunned: a[10], aim: a[11] ? { tx: a[11], ty: a[12], kind: a[13] } : null, remote: true }));
+}
+function bossFlightUpdate(dt) {
+const now = performance.now();
+bossFlightCtx = bossFlightContext();
+const ctx = bossFlightCtx;
+bossFlight.fx = bossFlight.fx.filter(f => now - f.t0 < (f.ms || 700));
+bossFlight.planetFloat = bossFlight.planetFloat.filter(f => now - f.t0 < 900);
+if (worldState !== "orbital" && bossFlight.orbit)
+bossFlight.orbit = null;
+if (!running || (worldState !== "field" && worldState !== "orbital")) {
+bossFlight.list = [];
+bossFlight.holes = [];
+bossFlight.ctx = null;
+return;
+}
+bossAutopilot(dt);
+bossStunSteer();
+bossHolesUpdate(dt, now);
+if (!ctx) {
+if (bossFlight.list.length)
+bossFlight.list = [];
+bossFlight.ctx = null;
+bossLocalPowerTick(null, now);
+return;
+}
+if (bossFlight.ctx !== ctx.key) {
+bossFlight.ctx = ctx.key;
+bossFlight.list = [];
+bossFlight.spawnT = ctx.raid ? 2 : 4;
+bossFlight.ringCd = {};
+bossFlight.ringAim = {};
+if (ctx.raid && !ctx.orbit)
+floatingText("⚠ RAIDERS IN THE FIELD", W / 2, H * .24, "#ff5c7a");
+}
+if (bossIsHost()) {
+bossHostSim(ctx, dt, now);
+bossNetSend(ctx, now);
+}
+bossLocalPowerTick(ctx, now);
+}
+function bossSpawnShip(ctx) {
+const roll = Math.random();
+const tier = ctx.raid
+? (roll < .55 ? 1 : roll < .88 ? 2 : 3)
+: (roll < .7 ? 1 : roll < .92 ? 2 : 3);
+const hp = [0, 3, 5, 6][tier];
+const e = {
+id: bossFlight.nextId++, kind: "ship", tier, hp, maxHp: hp,
+r: [0, 16, 19, 22][tier], age: 0, cd: 1.5 + Math.random() * 2, charge: Math.random() * .4,
+raid: ctx.raid, stunUntil: 0, slowUntil: 0, flash: 0,
+ang: Math.random() * Math.PI * 2, sats: 0, vx: 0, vy: 0, face: 0
+};
+if (ctx.orbit) {
+const me = bossMyPlane();
+const centreAngle = Math.atan2(me.y, me.x);
+const a = centreAngle + (Math.random() < .5 ? -1 : 1) * (.5 + Math.random() * .7);
+e.rr = ctx.planet === NEM ? 300 + Math.random() * 320 : 220 + Math.random() * 300;
+e.orbA = a;
+e.w = (Math.random() < .5 ? -1 : 1) * (.1 + Math.random() * .08);
+e.px = Math.cos(a) * e.rr;
+e.py = Math.sin(a) * e.rr;
+}
+else {
+const side = Math.floor(Math.random() * 4);
+const hw = W / 2 + 60, hh = H / 2 + 60;
+e.px = side === 0 ? -hw : side === 1 ? hw : (Math.random() * 2 - 1) * W / 2;
+e.py = side === 2 ? -hh : side === 3 ? hh : (Math.random() * 2 - 1) * H / 2;
+const tx = (Math.random() * 2 - 1) * W * .25;
+const ty = (Math.random() * 2 - 1) * H * .25;
+const d = Math.hypot(tx - e.px, ty - e.py) || 1;
+const sp = tier === 1 ? 75 : 55;
+e.vx = (tx - e.px) / d * sp;
+e.vy = (ty - e.py) / d * sp;
+e.mode = ctx.raid || tier > 1 ? "hover" : "fly";
+e.stay = 20 + Math.random() * 10;
+}
+bossFlight.list.push(e);
+bossPushFx({ k: "warp", x: e.px, y: e.py, ms: 600 });
+}
+function bossSteer(e, tx, ty, speed, dt) {
+const dx = tx - e.px, dy = ty - e.py, d = Math.hypot(dx, dy) || 1;
+const want = Math.min(speed, d * 1.4);
+const k = Math.min(1, dt * 2.2);
+e.vx += (dx / d * want - e.vx) * k;
+e.vy += (dy / d * want - e.vy) * k;
+e.px += e.vx * dt;
+e.py += e.vy * dt;
+}
+function bossMoveEnemy(ctx, e, dt) {
+if (e.kind === "sat") {
+e.px += e.vx * dt;
+e.py += e.vy * dt;
+e.face += dt * .8;
+if (!ctx.orbit && Math.hypot(e.px, e.py) > Math.max(W, H) * .8)
+e.leave = true;
+return;
+}
+if (ctx.orbit) {
+const near = bossNearestPlayer(e.px, e.py);
+if (e.tier >= 2 && near && near.d < 520) {
+e.ang += dt * .4 * (e.id % 2 ? 1 : -1);
+bossSteer(e, near.x + Math.cos(e.ang) * 230, near.y + Math.sin(e.ang) * 230, 120, dt);
+}
+else {
+e.orbA += e.w * dt;
+bossSteer(e, Math.cos(e.orbA) * e.rr, Math.sin(e.orbA) * e.rr, 130, dt);
+}
+}
+else if (e.mode === "fly") {
+e.px += e.vx * dt;
+e.py += e.vy * dt;
+if (e.age > 2.5)
+e.leave = true;
+}
+else {
+if (!e.raid && e.age > e.stay) {
+e.mode = "fly";
+const d = Math.hypot(e.px, e.py) || 1;
+e.vx = e.px / d * 90;
+e.vy = e.py / d * 90;
+return;
+}
+e.ang += dt * .3 * (e.id % 2 ? 1 : -1);
+const rx = Math.min(W * .38, 260), ry = Math.min(H * .36, 260);
+bossSteer(e, Math.cos(e.ang) * rx, Math.sin(e.ang) * ry, 95, dt);
+}
+if (Math.hypot(e.vx, e.vy) > 4)
+e.face = Math.atan2(e.vy, e.vx);
+}
+function bossEnemyAct(ctx, e, dt, now) {
+if (e.kind === "sat") {
+e.cd -= dt;
+if (e.cd <= 0 && !e.aim) {
+const t = bossNearestPlayer(e.px, e.py);
+if (t && t.d < 480)
+e.aim = { kind: "beam", tx: t.x, ty: t.y, t0: now };
+else
+e.cd = 1;
+}
+bossResolveAim(ctx, e, now);
+return;
+}
+e.cd -= dt;
+if (e.tier === 1) {
+if (e.cd <= 0) {
+e.cd = 1.6 + Math.random() * 1.1;
+const s = bossScreen(e);
+let best = -1, bd = 260;
+asteroids.forEach((a, k) => {
+const d = Math.hypot(a.x - s.x, a.y - s.y);
+if (d < bd) {
+bd = d;
+best = k;
+}
+});
+if (best >= 0) {
+const a = asteroids[best];
+const ap = bossToPlane(a.x, a.y);
+bossPushFx({ k: "zap", x: e.px, y: e.py, tx: ap.x, ty: ap.y, ms: 320 });
+explosions.push(new Explosion(a.x, a.y, .6));
+asteroids.splice(best, 1);
+}
+}
+}
+else if (e.tier === 2) {
+e.charge = Math.min(1, (e.charge || 0) + dt / 12);
+if (e.charge >= 1 && !e.aim) {
+const t = bossNearestPlayer(e.px, e.py);
+if (t && t.d < 460) {
+const kind = ["beam", "beam", "emp", "hole"][Math.floor(Math.random() * 4)];
+e.aim = { kind, tx: t.x, ty: t.y, t0: now };
+e.charge = 0;
+}
+}
+bossResolveAim(ctx, e, now);
+}
+else {
+if (e.cd <= 0) {
+e.cd = 8;
+const sats = bossFlight.list.filter(x => x.kind === "sat").length;
+if (e.sats < 2 && sats < 3 && bossOnscreen(bossScreen(e), -20)) {
+e.sats++;
+bossFlight.list.push({
+id: bossFlight.nextId++, kind: "sat", tier: 0, hp: 2, maxHp: 2, r: 13,
+px: e.px, py: e.py, vx: e.vx * .15, vy: e.vy * .15,
+cd: 3 + Math.random() * 2, age: 0, face: 0, stunUntil: 0, slowUntil: 0, flash: 0, raid: e.raid
+});
+bossPushFx({ k: "warp", x: e.px, y: e.py, ms: 500 });
+}
+}
+}
+}
+function bossResolveAim(ctx, e, now) {
+const a = e.aim;
+if (!a)
+return;
+const delay = a.kind === "emp" ? 650 : a.kind === "hole" ? 500 : 800;
+if (now - a.t0 < delay)
+return;
+e.aim = null;
+if (e.kind === "sat")
+e.cd = 7 + Math.random() * 2;
+if (a.kind === "emp") {
+bossPushFx({ k: "pulse", x: e.px, y: e.py, r: 250, ms: 600 });
+bossPlayersHere().forEach(p => {
+if (Math.hypot(p.x - e.px, p.y - e.py) < 250)
+bossZapPlayer(p.id, "stun");
+});
+}
+else if (a.kind === "hole") {
+bossFlight.holes.push({ px: a.tx, py: a.ty, r: 140, t0: now, until: now + 2600, hostile: true });
+bossPushFx({ k: "hole", x: a.tx, y: a.ty, ms: 2600 });
+}
+else {
+bossEnemyBeam(e.px, e.py, a.tx, a.ty);
+}
+}
+function bossEnemyBeam(x, y, tx, ty) {
+const dx = tx - x, dy = ty - y, len = Math.hypot(dx, dy) || 1;
+const ux = dx / len, uy = dy / len;
+const far = Math.max(W, H) * 1.6;
+bossPushFx({ k: "beam", x, y, tx: x + ux * far, ty: y + uy * far, ms: 450 });
+const onLine = (px, py, w) => {
+const ax = px - x, ay = py - y;
+const along = ax * ux + ay * uy;
+return along > 0 && along < far && Math.abs(ax * uy - ay * ux) < w;
+};
+bossPlayersHere().forEach(p => {
+if (onLine(p.x, p.y, 26))
+bossZapPlayer(p.id, "heart");
+});
+const list = satActiveList();
+if (list) {
+list.slice().forEach(sat => {
+const s = satScreenPos(sat);
+const p = bossToPlane(s.x, s.y);
+if (onLine(p.x, p.y, 20)) {
+sat.hp--;
+sat.hit = performance.now();
+if (sat.space === "orbit")
+satOrbitDirty = true;
+if (sat.hp <= 0)
+satDestroy(sat, list);
+}
+});
+}
+}
+function bossZapPlayer(id, eff) {
+if (id === "me") {
+bossHurtLocal(eff);
+return;
+}
+mpSend({ type: "fieldEvent", event: { kind: "bossZap", to: id, eff } });
+}
+function bossPushFx(f) {
+f.t0 = performance.now();
+bossFlight.fx.push(f);
+if (typeof mp !== "undefined" && mp.connected)
+bossFlight.netFx.push(Object.assign({}, f, { t0: undefined }));
+}
+function bossHostSim(ctx, dt, now) {
+const L = bossFlight.list;
+bossFlight.spawnT -= dt;
+if (bossFlight.spawnT <= 0) {
+bossFlight.spawnT = (1 / ctx.rate) * (.75 + Math.random() * .5);
+if (L.filter(e => e.kind === "ship").length < ctx.cap && !pendingFieldExit)
+bossSpawnShip(ctx);
+}
+const slowAll = timeSlowActive ? .5 : 1;
+L.slice().forEach(e => {
+if (!L.includes(e))
+return;
+e.age += dt;
+e.flash = Math.max(0, (e.flash || 0) - dt);
+const stunned = e.stunUntil > now;
+const sdt = stunned ? 0 : dt * (e.slowUntil > now ? .4 : 1) * slowAll;
+bossMoveEnemy(ctx, e, sdt);
+if (!stunned)
+bossEnemyAct(ctx, e, sdt, now);
+const s = bossScreen(e);
+for (let k = asteroids.length - 1; k >= 0; k--) {
+const a = asteroids[k];
+if (a && Math.hypot(a.x - s.x, a.y - s.y) < (a.radius || 12) + e.r) {
+detonateAsteroid(k, true, false);
+if (!L.includes(e))
+break;
+}
+}
+if (L.includes(e) && e.leave && !bossOnscreen(s, 150))
+L.splice(L.indexOf(e), 1);
+});
+if (ctx.ring)
+bossRingHost(ctx, dt, now);
+if (ctx.planetHit)
+bossPlanetCrashTick(ctx, now);
+}
+function bossRingHost(ctx, dt, now) {
+ctx.b.sats.forEach((st, i) => {
+if (st.hp <= 0)
+return;
+const p = bossRingPlane(i);
+const aim = bossFlight.ringAim[i];
+if (aim) {
+if (now - aim.t0 > 800) {
+delete bossFlight.ringAim[i];
+bossEnemyBeam(p.x, p.y, aim.tx, aim.ty);
+}
+}
+else {
+bossFlight.ringCd[i] = (bossFlight.ringCd[i] === undefined ? 2 + i * 1.3 : bossFlight.ringCd[i]) - dt;
+if (bossFlight.ringCd[i] <= 0) {
+const t = bossNearestPlayer(p.x, p.y);
+if (t && t.d < 400) {
+bossFlight.ringAim[i] = { tx: t.x, ty: t.y, t0: now };
+bossFlight.ringCd[i] = 8 + Math.random() * 3;
+}
+else {
+bossFlight.ringCd[i] = 1;
+}
+}
+}
+const s = bossToScreen(p.x, p.y);
+for (let k = asteroids.length - 1; k >= 0; k--) {
+const a = asteroids[k];
+if (a && Math.hypot(a.x - s.x, a.y - s.y) < (a.radius || 12) + 16) {
+detonateAsteroid(k, true, false);
+break;
+}
+}
+});
+}
+function bossPlanetCrashTick(ctx, now) {
+if (!bossThrottle("crash", 700))
+return;
+const P = bossPlanetScreen();
+for (let k = asteroids.length - 1; k >= 0; k--) {
+const a = asteroids[k];
+if (a && Math.hypot(a.x - P.x, a.y - P.y) < P.r * .85) {
+const n = 4 * (a.size || 1);
+detonateAsteroid(k, true, true);
+bossApply(ctx.owner, { t: "hit", n });
+bossPlanetFloat(n);
+return;
+}
+}
+}
+function bossPlanetFloat(n) {
+const P = bossPlanetScreen();
+const pl = bossToPlane(P.x + (Math.random() - .5) * P.r, P.y - P.r * .6);
+bossFlight.planetFloat.push({ x: pl.x, y: pl.y, n, t0: performance.now() });
+}
+function bossOnBlast(x, y, r, size, special) {
+const now = performance.now();
+if (special === "voidrock" && (worldState === "field" || worldState === "orbital")) {
+const p = bossToPlane(x, y);
+bossFlight.holes.push({ px: p.x, py: p.y, r: 110, t0: now, until: now + 1800, hostile: false });
+bossPushFx({ k: "hole", x: p.x, y: p.y, ms: 1800, small: 1 });
+}
+const ctx = bossFlightCtx;
+if (!ctx || !bossIsHost())
+return;
+const reach = (r || 14) + 34;
+bossFlight.list.slice().forEach(e => {
+const s = bossScreen(e);
+if (Math.hypot(s.x - x, s.y - y) < reach + e.r && bossThrottle("blast:" + e.id, 110))
+bossDamageEnemy(ctx, e, size >= 3 ? 2 : 1, {});
+});
+if (ctx.ring) {
+ctx.b.sats.forEach((st, i) => {
+if (st.hp <= 0)
+return;
+const s = bossRingScreen(i);
+if (Math.hypot(s.x - x, s.y - y) < reach + 16 && bossThrottle("ringblast:" + i, 250)) {
+bossFlight.ringFlash[i] = now;
+bossApply(ctx.owner, { t: "sat", i, n: 1 });
+}
+});
+}
+}
+function bossHolesUpdate(dt, now) {
+bossFlight.holes = bossFlight.holes.filter(h => now < h.until);
+bossFlight.holes.forEach(h => {
+const c = bossToScreen(h.px, h.py);
+for (let k = asteroids.length - 1; k >= 0; k--) {
+const a = asteroids[k];
+if (!a)
+continue;
+const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) || 1;
+if (d > h.r * 1.7)
+continue;
+const pull = (h.hostile ? 150 : 230) * dt * (1 - d / (h.r * 1.7) + .3);
+a.vx += dx / d * pull;
+a.vy += dy / d * pull;
+if (!h.hostile && d < 16 && bossIsHost())
+detonateAsteroid(k, true, true);
+}
+});
+}
+function bossDamageEnemy(ctx, e, n, o) {
+o = o || {};
+const now = performance.now();
+if (o.stun)
+e.stunUntil = Math.max(e.stunUntil || 0, now + o.stun);
+if (o.slow)
+e.slowUntil = Math.max(e.slowUntil || 0, now + o.slow);
+if (!n)
+return;
+e.hp -= n;
+e.flash = .25;
+if (e.hp <= 0)
+bossKillEnemy(ctx, e);
+}
+function bossKillEnemy(ctx, e) {
+const L = bossFlight.list;
+const i = L.indexOf(e);
+if (i < 0)
+return;
+L.splice(i, 1);
+const s = bossScreen(e);
+explosions.push(new Explosion(s.x, s.y, e.kind === "sat" ? 1 : 1.5));
+shockwaves.push(new Shockwave(s.x, s.y, e.kind === "sat" ? 60 : 110));
+shake = Math.max(shake || 0, 8);
+bossPushFx({ k: "boom", x: e.px, y: e.py, ms: 700 });
+if (e.kind === "ship") {
+const pts = [0, 400, 700, 1000][e.tier];
+score += pts;
+floatingText("ENEMY DOWN +" + pts, s.x, s.y - 24, "#ff9de6");
+for (let k = 0; k < 1 + e.tier; k++)
+coinPickups.push(new CoinPickup(s.x + (Math.random() - .5) * 40, s.y + (Math.random() - .5) * 40, 1 + e.tier));
+if (Math.random() < .6)
+materialPickups.push(new MaterialPickup(s.x + (Math.random() - .5) * 30, s.y + (Math.random() - .5) * 30, "void-ember"));
+if (Math.random() < .12)
+coinPickups.push(new CoinPickup(s.x, s.y, 0, true));
+if (e.raid)
+bossApply(ctx.owner, { t: "raidKill", id: e.raid });
+else if (ctx.planet === NEM)
+bossApply(ctx.owner, { t: "ship" });
+}
+else {
+score += 150;
+floatingText("SATELLITE DOWN +150", s.x, s.y - 20, "#ff9de6");
+coinPickups.push(new CoinPickup(s.x, s.y, 2));
+}
+withMySave(() => addRankPoints(e.kind === "ship" ? 6 * e.tier : 4, "Enemy destroyed"));
+try {
+updateHUD();
+}
+catch (error) { }
+}
+function bossNetSend(ctx, now) {
+if (typeof mp === "undefined" || !mp.connected)
+return;
+const busy = bossFlight.list.length > 0 || bossFlight.netFx.length > 0 || Object.keys(bossFlight.ringAim).length > 0;
+if (!busy && !bossFlight.netHad)
+return;
+if (now - bossFlight.lastNet < (busy ? 140 : 900))
+return;
+bossFlight.lastNet = now;
+bossFlight.netHad = busy;
+const ring = {};
+Object.keys(bossFlight.ringAim).forEach(i => ring[i] = 1);
+mpSend({
+type: "fieldEvent",
+event: {
+kind: "bossShips",
+key: bossNetKey(),
+ring,
+list: bossFlight.list.map(e => [
+e.id, e.kind, e.tier, Math.round(e.px), Math.round(e.py), e.hp, e.maxHp, e.r,
+Math.round((e.face || 0) * 100) / 100, Math.round((e.charge || 0) * 100) / 100,
+e.stunUntil > now ? 1 : 0,
+e.aim ? Math.round(e.aim.tx) : 0, e.aim ? Math.round(e.aim.ty) : 0, e.aim ? e.aim.kind : 0
+]),
+fx: bossFlight.netFx.splice(0)
+}
+});
+}
+function bossLoseHeart() {
+if (!running || gameOver)
+return false;
+if (coPilotSessionShipKey && worldState === "field")
+return false;
+explosions.push(new Explosion(W / 2, H / 2, 1.2));
+lives--;
+if (lives <= 0 && satLifelineSave())
+lives = 1;
+combo = 1;
+comboTimer = 0;
+shake = 16;
+try {
+playShipHitSound(W / 2, H / 2, 0, 0, lives, 2);
+}
+catch (error) { }
+if (lives > 0) {
+playerInvulnerable = true;
+invulnerabilityTimer = 0;
+invulnerabilityDuration = computeInvulnerabilityDuration();
+}
+else {
+recordDeathCharge();
+resolveRunEndCargoPets();
+if (equipmentHas(currentShipEquipment, "return-capsule") &&
+(runCoins > 0 || Object.keys(runMaterials).length > 0)) {
+launchCapsule("death");
+return true;
+}
+resolveRunEndMaterials();
+resolveRunEndCoins();
+endGame();
+return true;
+}
+updateCurrentShipScore();
+updateHUD();
+return true;
+}
+function bossHurtLocal(eff) {
+const now = performance.now();
+if (ghostActive || (eff === "heart" && playerInvulnerable)) {
+if (bossThrottle("deflect", 600))
+floatingText("DEFLECTED", W / 2, H / 2 - 44, "#cfefff");
+return;
+}
+if (bossFlight.shieldUntil > now) {
+bossFlight.shieldUntil = 0;
+floatingText("SHIELD ABSORBED IT", W / 2, H / 2 - 44, "#7dffb0");
+shockwaves.push(new Shockwave(W / 2, H / 2, 60));
+return;
+}
+if (eff === "stun")
+bossStun(1600);
+else
+bossLoseHeart();
+}
+function bossStun(ms) {
+const now = performance.now();
+if (bossFlight.stunUntil < now) {
+bossFlight.stunHeading = orbitalHeading;
+floatingText("STUNNED", W / 2, H / 2 - 44, "#8fd8ff");
+}
+bossFlight.stunUntil = Math.max(bossFlight.stunUntil, now + ms);
+shake = Math.max(shake || 0, 6);
+}
+function bossStunned() {
+return bossFlight.stunUntil > performance.now() && running && (worldState === "field" || worldState === "orbital");
+}
+function bossStunSteer() {
+if (bossStunned() && worldState === "orbital" && bossFlight.stunHeading !== null) {
+orbitalHeading = bossFlight.stunHeading;
+orbitalDragging = false;
+}
+}
+function bossBeginOrbitArrival() {
+const auto = !currentShipPendingPilot;
+enterOrbitalSpace();
+if (worldState !== "orbital")
+return;
+orbitalX = 0;
+orbitalY = -640;
+orbitalHeading = Math.PI;
+bossFlight.orbit = { auto, t0: performance.now() };
+floatingText("NEMESIS ORBIT", W / 2, H * .24, "#d02bff");
+floatingText(auto ? "AUTOPILOT: CIRCLING IN TO LAND" : "BREAK THROUGH THE RING TO LAND", W / 2, H * .24 + 24, "#ff9de6");
+}
+function bossAutopilot(dt) {
+const o = bossFlight.orbit;
+if (!o || !o.auto || worldState !== "orbital" || bossStunned())
+return;
+const t = (performance.now() - o.t0) / 1000;
+const d = Math.hypot(orbitalX, orbitalY) || 1;
+const target = Math.max(110, Math.min(640 - t * 5.4, d));
+const th = Math.atan2(orbitalY, orbitalX);
+const tx = -Math.sin(th), ty = Math.cos(th);
+const rx = -orbitalX / d, ry = -orbitalY / d;
+const k = clamp((d - target) / 90, -1, 1.6);
+orbitalHeading = Math.atan2(ty + ry * k, tx + rx * k);
+orbitalSpeed = 150;
+orbitalDragging = false;
+orbitalIdleTimer = 0;
+}
+function bossShapeHit(shape, sx, sy, tr) {
+if (shape.ux !== undefined) {
+const dx = sx - shape.x, dy = sy - shape.y;
+const along = dx * shape.ux + dy * shape.uy;
+if (along < 0)
+return false;
+return Math.abs(dx * shape.uy - dy * shape.ux) <= shape.w + tr;
+}
+return Math.hypot(sx - shape.x, sy - shape.y) <= shape.r + tr;
+}
+function bossMyName() {
+return (typeof mp !== "undefined" && mp.connected && mp.remotePlayerInfo && (mp.remotePlayerInfo[mp.myId] || {}).name) ||
+(typeof playerNameInput !== "undefined" && playerNameInput && playerNameInput.value) || "A player";
+}
+function bossPowerHit(shape, o) {
+o = o || {};
+const ctx = bossFlightCtx;
+const key = o.key || "p";
+const every = o.every || 0;
+const hit = (x, y, r) => bossShapeHit(shape, x, y, r);
+if (ctx) {
+bossFlightTargets().forEach(e => {
+const s = bossScreen(e);
+if (!hit(s.x, s.y, e.r) || !bossThrottle(key + ":e" + e.id, every))
+return;
+if (bossIsHost()) {
+bossDamageEnemy(ctx, e, o.dmg || 0, o);
+}
+else {
+mpSend({ type: "fieldEvent", event: { kind: "bossShipHit", key: bossNetKey(), id: e.id, n: o.dmg || 0, stun: o.stun || 0, slow: o.slow || 0 } });
+floatingText(o.dmg ? "HIT" : "SNARED", s.x, s.y - 20, "#ff9de6");
+}
+});
+if (ctx.ring && o.sat !== 0) {
+ctx.b.sats.forEach((st, i) => {
+if (st.hp <= 0)
+return;
+const s = bossRingScreen(i);
+if (hit(s.x, s.y, 16) && bossThrottle(key + ":r" + i, every || 200)) {
+bossFlight.ringFlash[i] = performance.now();
+bossApply(ctx.owner, { t: "sat", i, n: o.sat || 1 });
+}
+});
+}
+if (ctx.planetHit && o.planet) {
+const P = bossPlanetScreen();
+if (hit(P.x, P.y, P.r * .9) && bossThrottle(key + ":planet", every || 200)) {
+bossApply(ctx.owner, { t: "hit", n: o.planet });
+bossPlanetFloat(o.planet);
+}
+}
+}
+if (worldState === "orbital" && typeof mp !== "undefined" && mp.connected) {
+if (o.pvp && typeof mpGetRemoteShipsHere === "function") {
+mpGetRemoteShipsHere().forEach(r => {
+const sx = W / 2 + (r.presence.x - orbitalX), sy = H / 2 + (r.presence.y - orbitalY);
+if (hit(sx, sy, 20) && bossThrottle("pvp:" + r.playerId, o.pvp === "stun" ? 1500 : 2500)) {
+mpSend({ type: "fieldEvent", event: { kind: "pvpHit", to: r.playerId, eff: o.pvp, from: bossMyName() } });
+floatingText((o.pvp === "stun" ? "STUNNED " : "HIT ") + r.name, sx, sy - 28, "#ff7ad9");
+}
+});
+}
+if (o.sat !== 0)
+bossHitRemoteSats(hit, o.sat || 1, key, every);
+}
+}
+function bossRemoteSatsHere() {
+const out = [];
+if (typeof satRemote === "undefined")
+return out;
+Object.keys(satRemote).forEach(fromId => {
+const entry = satRemote[fromId];
+if (!satRemoteVisible(entry) || entry.space !== "orbital")
+return;
+Object.values(entry.sats).forEach(sat => {
+const p = satScreenPos(sat);
+out.push({ owner: fromId, sat, x: p.x, y: p.y });
+});
+});
+return out;
+}
+function bossHitRemoteSats(hit, n, key, every) {
+bossRemoteSatsHere().forEach(r => {
+if (hit(r.x, r.y, 14) && bossThrottle(key + ":rs" + r.owner + r.sat.id, every || 400)) {
+mpSend({ type: "fieldEvent", event: { kind: "satPvp", to: r.owner, id: r.sat.id, n } });
+r.sat.hit = performance.now();
+floatingText("−" + n, r.x, r.y - 18, "#ff7ad9");
+}
+});
+}
+function bossSatHitMine(id, n) {
+[satActiveList(), satRun.field, satOrbitList()].forEach(list => {
+if (!list)
+return;
+const sat = list.find(s => s.id === id);
+if (!sat)
+return;
+sat.hp -= n;
+sat.hit = performance.now();
+if (sat.space === "orbit")
+satOrbitDirty = true;
+if (sat.hp <= 0)
+satDestroy(sat, list);
+});
+}
+function bossLocalPowerTick(ctx, now) {
+if (ricochetBall)
+bossPowerHit({ x: ricochetBall.x, y: ricochetBall.y, r: (ricochetBall.radius || 10) + 4 }, { dmg: 1, sat: 1, planet: 12, pvp: "heart", key: "orb", every: 600 });
+if (singularity)
+bossPowerHit({ x: singularity.x, y: singularity.y, r: (singularity.radius || 120) * .5 }, { dmg: 1, sat: 1, planet: 15, pvp: "heart", key: "hole", every: 700 });
+if (bladeActive && bladeTrail.length) {
+const p = bladeTrail[bladeTrail.length - 1];
+bossPowerHit({ x: p.x, y: p.y, r: 24 }, { dmg: 1, sat: 1, planet: 4, pvp: "heart", key: "blade", every: 350 });
+}
+}
+function activateNebulaNet() {
+if (empCharge < EMP_MAX ||
+!running || paused || gameOver ||
+(worldState !== "field" && worldState !== "orbital") ||
+empCooldown > 0)
+return;
+bossNebulaBurst(W / 2, H / 2, 230);
+empCharge = 0;
+empUses++;
+aiWindow.itemUses++;
+runItemUsesTotal++;
+shake = 7;
+if (empUses >= EMP_USES_BEFORE_COOLDOWN) {
+empCooldown = EMP_COOLDOWN;
+empUses = 0;
+}
+updateHUD();
+}
+function bossNebulaBurst(x, y, R) {
+let n = 0;
+for (let i = asteroids.length - 1; i >= 0; i--) {
+const a = asteroids[i];
+if (Math.hypot(a.x - x, a.y - y) < R + (a.radius || 0)) {
+coinPickups.push(new CoinPickup(a.x, a.y, a.size || 1));
+explosions.push(new Explosion(a.x, a.y, .5));
+asteroids.splice(i, 1);
+n++;
+}
+}
+const p = bossToPlane(x, y);
+bossPushFx({ k: "net", x: p.x, y: p.y, r: R, ms: 900 });
+shockwaves.push(new Shockwave(x, y, R));
+floatingText(n ? "NEBULA NET · " + n + " ROCKS → COINS" : "NEBULA NET", x, y - 60, "#e78bff");
+try {
+playPowerUpSound("nova-burst");
+}
+catch (error) { }
+bossPowerHit({ x, y, r: R + 30 }, { dmg: 2, stun: 3000, sat: 1, planet: 30, pvp: "stun", key: "net" });
+}
+function bossFlightDraw(c) {
+if (!running || (worldState !== "field" && worldState !== "orbital"))
+return;
+const now = performance.now();
+const ctx = bossFlightCtx;
+c.save();
+try {
+if (worldState === "orbital" && currentPlanetId === NEM) {
+const b = bossState(bossFlightOwner());
+if (b && !b.defeated) {
+const P = bossPlanetScreen();
+const f = b.hp / b.maxHp;
+c.lineWidth = 4;
+c.strokeStyle = "rgba(255,255,255,.12)";
+c.beginPath();
+c.arc(P.x, P.y, P.r + 12, 0, Math.PI * 2);
+c.stroke();
+c.strokeStyle = f > .5 ? "#d02bff" : f > .25 ? "#ff5cbe" : "#ff3b3b";
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 14;
+c.beginPath();
+c.arc(P.x, P.y, P.r + 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
+c.stroke();
+c.shadowBlur = 0;
+if (P.r > 30) {
+c.fillStyle = "#ffd6fb";
+c.font = "900 12px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("☠ " + Math.ceil(b.hp).toLocaleString(), P.x, P.y - P.r - 20);
+}
+b.sats.forEach((st, i) => {
+const s = bossRingScreen(i);
+if (!bossOnscreen(s, 40))
+return;
+bossDrawRingSat(c, s.x, s.y, st, i, now);
+});
+}
+}
+bossFlight.holes.forEach(h => {
+const s = bossToScreen(h.px, h.py);
+bossDrawHole(c, s.x, s.y, h.r * (h.hostile ? 1 : .8), (now - h.t0) / 1000, h.hostile);
+});
+bossFlightTargets().forEach(e => {
+const s = bossScreen(e);
+if (!bossOnscreen(s, 60))
+return;
+if (e.aim)
+bossDrawAim(c, s, e.aim, now);
+if (e.kind === "sat")
+bossDrawEnemySat(c, s.x, s.y, e, now);
+else
+bossDrawEnemyShip(c, s.x, s.y, e, now);
+});
+if (ctx && ctx.ring) {
+const aims = bossIsHost() ? bossFlight.ringAim : ((bossFlight.remote && bossFlight.remote.ring) || {});
+Object.keys(aims).forEach(i => {
+const s = bossRingScreen(Number(i));
+const a = bossFlight.ringAim[i];
+const me = bossToScreen(bossMyPlane().x, bossMyPlane().y);
+bossDrawAim(c, s, a ? { tx: a.tx, ty: a.ty, kind: "beam" } : { tx: bossMyPlane().x, ty: bossMyPlane().y, kind: "beam" }, now, me);
+});
+}
+bossDrawFx(c, now);
+bossFlight.planetFloat.forEach(f => {
+const s = bossToScreen(f.x, f.y);
+const k = (now - f.t0) / 900;
+c.globalAlpha = Math.max(0, 1 - k);
+c.fillStyle = "#ff9de6";
+c.font = "900 15px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("−" + f.n, s.x, s.y - k * 30);
+c.globalAlpha = 1;
+});
+if (bossStunned()) {
+c.strokeStyle = "#8fd8ff";
+c.lineWidth = 2;
+c.shadowColor = "#8fd8ff";
+c.shadowBlur = 12;
+for (let k = 0; k < 5; k++) {
+const a = now / 90 + k * 1.26;
+c.beginPath();
+c.moveTo(W / 2 + Math.cos(a) * 18, H / 2 + Math.sin(a) * 18);
+c.lineTo(W / 2 + Math.cos(a + .3) * 34, H / 2 + Math.sin(a + .3) * 30);
+c.lineTo(W / 2 + Math.cos(a - .1) * 46, H / 2 + Math.sin(a - .1) * 44);
+c.stroke();
+}
+c.shadowBlur = 0;
+}
+if (bossFlight.shieldUntil > now) {
+c.strokeStyle = "rgba(125,255,176," + (.45 + .25 * Math.sin(now / 140)) + ")";
+c.lineWidth = 3;
+c.beginPath();
+c.arc(W / 2, H / 2, 44, 0, Math.PI * 2);
+c.stroke();
+}
+}
+catch (error) {
+console.error("Boss flight draw failed:", error);
+}
+c.restore();
+}
+function bossDrawEnemyShip(c, x, y, e, now) {
+const r = e.r;
+const col = ["#ff3b6b", "#ff3b6b", "#c03bff", "#ff8a1a"][e.tier] || "#ff3b6b";
+c.save();
+c.translate(x, y);
+const g = c.createRadialGradient(0, 0, 2, 0, 0, r * 2.2);
+g.addColorStop(0, "rgba(208,43,255,.32)");
+g.addColorStop(1, "rgba(208,43,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(0, 0, r * 2.2, 0, Math.PI * 2);
+c.fill();
+c.rotate((e.face || 0) + Math.PI / 2);
+c.beginPath();
+c.moveTo(0, -r);
+c.lineTo(r * .9, r * .75);
+c.lineTo(r * .32, r * .42);
+c.lineTo(0, r * .7);
+c.lineTo(-r * .32, r * .42);
+c.lineTo(-r * .9, r * .75);
+c.closePath();
+c.fillStyle = e.flash > 0 ? "#ffffff" : "#160822";
+c.strokeStyle = col;
+c.lineWidth = 2;
+c.shadowColor = col;
+c.shadowBlur = 12;
+c.fill();
+c.stroke();
+c.shadowBlur = 18;
+c.fillStyle = col;
+c.beginPath();
+c.arc(0, r * .08, r * (.22 + .05 * Math.sin(now / 160 + e.id)), 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+if (e.tier === 2) {
+c.strokeStyle = "rgba(255,255,255,.65)";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(0, 0, r * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.charge || 0));
+c.stroke();
+}
+else if (e.tier === 3) {
+c.strokeStyle = "#ffb46b";
+c.lineWidth = 1.6;
+c.strokeRect(-r * .3, r * .55, r * .6, r * .42);
+}
+c.restore();
+if (e.stunned || e.stunUntil > now) {
+c.strokeStyle = "#8fd8ff";
+c.lineWidth = 1.5;
+for (let k = 0; k < 3; k++) {
+const a = now / 80 + k * 2.1;
+c.beginPath();
+c.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+c.lineTo(x + Math.cos(a + .4) * r * 1.5, y + Math.sin(a + .4) * r * 1.5);
+c.stroke();
+}
+}
+bossDrawPips(c, x, y - r - 10, e.hp, e.maxHp, col);
+}
+function bossDrawEnemySat(c, x, y, e, now) {
+c.save();
+c.translate(x, y);
+c.rotate(e.face || now / 1200);
+c.strokeStyle = "#ff3b6b";
+c.fillStyle = e.flash > 0 ? "#fff" : "#1a0613";
+c.lineWidth = 1.6;
+c.shadowColor = "#ff3b6b";
+c.shadowBlur = 10;
+c.beginPath();
+for (let k = 0; k < 8; k++) {
+const a = k / 8 * Math.PI * 2;
+const rr = k % 2 ? e.r * .75 : e.r;
+c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+}
+c.closePath();
+c.fill();
+c.stroke();
+c.fillStyle = "#ff3b6b";
+c.beginPath();
+c.arc(0, 0, 3.5, 0, Math.PI * 2);
+c.fill();
+c.restore();
+bossDrawPips(c, x, y - e.r - 8, e.hp, e.maxHp, "#ff3b6b");
+}
+function bossDrawRingSat(c, x, y, st, i, now) {
+c.save();
+c.translate(x, y);
+if (st.hp <= 0) {
+c.globalAlpha = .35;
+c.strokeStyle = "#6d3a8a";
+c.lineWidth = 1.2;
+for (let k = 0; k < 4; k++) {
+const a = k * 1.7 + i;
+c.beginPath();
+c.moveTo(Math.cos(a) * 4, Math.sin(a) * 4);
+c.lineTo(Math.cos(a) * 12, Math.sin(a) * 12);
+c.stroke();
+}
+c.restore();
+return;
+}
+const flash = now - (bossFlight.ringFlash[i] || 0) < 200;
+c.rotate(now / 900 + i);
+c.fillStyle = flash ? "#ffffff" : "#200a2e";
+c.strokeStyle = "#d02bff";
+c.lineWidth = 2;
+c.shadowColor = "#d02bff";
+c.shadowBlur = 14;
+c.beginPath();
+for (let k = 0; k < 12; k++) {
+const a = k / 12 * Math.PI * 2;
+const rr = k % 2 ? 11 : 18;
+c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+}
+c.closePath();
+c.fill();
+c.stroke();
+c.fillStyle = "#ff3b6b";
+c.shadowColor = "#ff3b6b";
+c.beginPath();
+c.arc(0, 0, 4 + Math.sin(now / 200 + i), 0, Math.PI * 2);
+c.fill();
+c.restore();
+bossDrawPips(c, x, y - 26, st.hp, BOSS_SAT_HP, "#d02bff");
+}
+function bossDrawPips(c, x, y, hp, max, col) {
+const w = 6, gap = 2;
+const total = max * w + (max - 1) * gap;
+for (let k = 0; k < max; k++) {
+c.fillStyle = k < hp ? col : "rgba(255,255,255,.18)";
+c.fillRect(x - total / 2 + k * (w + gap), y, w, 3);
+}
+}
+function bossDrawAim(c, s, aim, now, toScreen) {
+const t = toScreen || bossToScreen(aim.tx, aim.ty);
+c.save();
+if (aim.kind === "emp") {
+c.strokeStyle = "rgba(143,216,255," + (.3 + .3 * Math.sin(now / 60)) + ")";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(s.x, s.y, 30 + 12 * Math.sin(now / 70), 0, Math.PI * 2);
+c.stroke();
+}
+else if (aim.kind === "hole") {
+c.strokeStyle = "rgba(208,43,255,.6)";
+c.setLineDash([4, 6]);
+c.beginPath();
+c.arc(t.x, t.y, 30, 0, Math.PI * 2);
+c.stroke();
+}
+else {
+c.strokeStyle = "rgba(255,59,107," + (.25 + .35 * Math.abs(Math.sin(now / 70))) + ")";
+c.lineWidth = 1.5;
+c.setLineDash([8, 8]);
+c.beginPath();
+c.moveTo(s.x, s.y);
+c.lineTo(t.x, t.y);
+c.stroke();
+}
+c.restore();
+}
+function bossDrawHole(c, x, y, r, t, hostile) {
+c.save();
+c.translate(x, y);
+const g = c.createRadialGradient(0, 0, 2, 0, 0, r);
+g.addColorStop(0, "rgba(0,0,0,.9)");
+g.addColorStop(.35, hostile ? "rgba(255,59,107,.35)" : "rgba(208,43,255,.35)");
+g.addColorStop(1, "rgba(208,43,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(0, 0, r, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = hostile ? "rgba(255,120,150,.6)" : "rgba(230,150,255,.6)";
+c.lineWidth = 1.5;
+for (let k = 0; k < 3; k++) {
+c.beginPath();
+c.arc(0, 0, r * (.25 + .2 * k), t * 4 + k * 2, t * 4 + k * 2 + 2.2);
+c.stroke();
+}
+c.restore();
+}
+function bossDrawFx(c, now) {
+bossFlight.fx.forEach(f => {
+const k = (now - f.t0) / (f.ms || 700);
+if (k < 0 || k > 1)
+return;
+const s = bossToScreen(f.x, f.y);
+c.save();
+c.globalAlpha = Math.max(0, 1 - k);
+if (f.k === "beam" || f.k === "zap") {
+const t = bossToScreen(f.tx, f.ty);
+c.strokeStyle = f.k === "beam" ? "#ff3b6b" : "#e08bff";
+c.lineWidth = f.k === "beam" ? 6 * (1 - k) + 1 : 2;
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 18;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(s.x, s.y);
+if (f.k === "zap") {
+const mx = (s.x + t.x) / 2 + (Math.random() - .5) * 20, my = (s.y + t.y) / 2 + (Math.random() - .5) * 20;
+c.lineTo(mx, my);
+}
+c.lineTo(t.x, t.y);
+c.stroke();
+}
+else if (f.k === "pulse" || f.k === "net") {
+c.strokeStyle = f.k === "net" ? "#e78bff" : "#8fd8ff";
+c.lineWidth = 3;
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 14;
+c.beginPath();
+c.arc(s.x, s.y, (f.r || 200) * Math.min(1, k * 1.6), 0, Math.PI * 2);
+c.stroke();
+if (f.k === "net") {
+c.lineWidth = 1;
+for (let a = 0; a < 12; a++) {
+const ang = a / 12 * Math.PI * 2;
+c.beginPath();
+c.moveTo(s.x, s.y);
+c.lineTo(s.x + Math.cos(ang) * (f.r || 200) * Math.min(1, k * 1.6), s.y + Math.sin(ang) * (f.r || 200) * Math.min(1, k * 1.6));
+c.stroke();
+}
+}
+}
+else if (f.k === "warp") {
+c.strokeStyle = "#d02bff";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(s.x, s.y, 40 * (1 - k) + 4, 0, Math.PI * 2);
+c.stroke();
+}
+else if (f.k === "boom" && bossFlight.remote && !bossIsHost()) {
+c.fillStyle = "#ff9de6";
+c.beginPath();
+c.arc(s.x, s.y, 50 * k, 0, Math.PI * 2);
+c.fill();
+}
+else if (f.k === "hole" && !bossIsHost() && !f.small) {
+bossDrawHole(c, s.x, s.y, 130, (now - f.t0) / 1000, true);
+}
+c.restore();
+});
+}
+function bossHudEl() {
+let el = document.getElementById("bossHud");
+if (!el) {
+el = document.createElement("div");
+el.id = "bossHud";
+el.innerHTML = '<div class="bh-name"></div><div class="bh-bar"><i></i></div><div class="bh-sub"></div>';
+document.body.appendChild(el);
+}
+return el;
+}
+function bossHudTick() {
+const el = bossHudEl();
+let show = null;
+const inFlight = running && (worldState === "field" || worldState === "orbital");
+const planet = inFlight ? currentPlanetId : null;
+const owner = inFlight ? bossFlightOwner() : bossSurfaceOwner();
+const b = planet ? bossState(owner) : null;
+if (b && !b.defeated) {
+if (planet === NEM) {
+const satsUp = b.sats.filter(s => s.hp > 0).length;
+const petsUp = b.pets.filter(p => p.hp > 0).length;
+let sub = inFlight
+? (worldState === "orbital" ? satsUp + "/" + BOSS_SATS + " ring satellites" : "Enemy ships patrol this field")
+: petsUp + " void pets on patrol · war chest " + Math.floor(b.coins) + " " + COIN_ICON_HTML;
+if (bossFlight.orbit && bossFlight.orbit.auto && worldState === "orbital")
+sub += " · AUTOPILOT";
+if (bossStunned())
+sub = "⚡ STUNNED";
+show = { name: "☠ NEMESIS", f: b.hp / b.maxHp, num: Math.ceil(b.hp).toLocaleString() + " / " + b.maxHp.toLocaleString(), sub, cls: "" };
+}
+else if (b.attack && b.attack.target === planet) {
+const a = b.attack;
+const left = Math.max(0, Math.ceil((BOSS_STAGE_MS - (Date.now() - a.stageAt)) / 1000));
+show = {
+name: "⚠ RAID ON " + bossPlanetName(planet).toUpperCase(),
+f: a.ships / Math.max(1, a.sent),
+num: a.ships + " raider" + (a.ships === 1 ? "" : "s"),
+sub: "Stage " + a.stage + "/3 · " + BOSS_STAGE_TEXT[a.stage] + " · " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"),
+cls: "raid"
+};
+}
+}
+if (!show || (typeof roomState !== "undefined" && roomState)) {
+el.classList.remove("show");
+return;
+}
+el.className = "show " + show.cls;
+el.querySelector(".bh-name").innerHTML = show.name + '<span>' + show.num + '</span>';
+el.querySelector(".bh-bar i").style.width = Math.max(0, Math.min(100, show.f * 100)) + "%";
+el.querySelector(".bh-sub").innerHTML = show.sub;
+}
+let bossLookShown = "dark";
+let bossDarkLook = null;
+let bossLushCache = null;
+function bossLushLook() {
+if (bossLushCache)
+return bossLushCache;
+const look = {
+atmosphere: "#9affd0",
+moons: 1,
+fields(x, y, z) {
+const n = globeFbm(x, y, z, 141, 5, 1.6);
+const home = globeHomeland(x, y, z);
+return {
+n,
+h: n + home * .3,
+flower: globeNoise(x * 20 + 1.3, y * 20 - 2.1, z * 20 + .7, 142),
+lake: globeFbm(x, y, z, 143, 4, 2.2) * (1 - home),
+crystal: globeFbm(x, y, z, 144, 3, 4)
+};
+},
+regions: [
+{ colour: "#3fb6ff", terrain: TERRAIN.WATER, gloss: 200, line: "#9fe4ff", f: v => v.lake - .64 },
+{ colour: "#ffd1f7", gloss: 40, emit: 70, line: "#ffffff", f: v => v.flower - .87 },
+{ colour: "#d58cff", terrain: TERRAIN.CRYSTAL, gloss: 220, emit: 120, line: "#f3d6ff", f: v => v.crystal - .74 },
+{ colour: "#8be08a", gloss: 30, line: "#c4ffb9", f: v => v.h - .62 },
+{ colour: "#46b46c", gloss: 30, line: "#86f2a3", f: v => v.h - .45 },
+{ colour: "#2c8a5a", gloss: 25 }
+],
+clouds: {
+colour: "#ffffff",
+line: "#c9fff0",
+f(x, y, z) { return globeFbm(x * 1.4, y * .8, z * 1.4, 145, 3, 2) - .68; }
+}
+};
+for (const r of look.regions) {
+r.rgb = globeHex(r.colour);
+r.terrain = r.terrain || TERRAIN.GROUND;
+r.gloss = r.gloss || 0;
+r.emit = r.emit || 0;
+r.lineColour = r.line || globeNeonOf(r.colour);
+}
+look.clouds.rgb = globeHex(look.clouds.colour);
+look.clouds.lineColour = look.clouds.line;
+bossLushCache = look;
+return look;
+}
+function bossSyncLook(force) {
+if (typeof PLANET_LOOKS === "undefined" || !PLANET_LOOKS[NEM])
+return;
+const owner = running ? bossFlightOwner() : bossSurfaceOwner();
+const want = bossDefeatedFor(owner) ? "lush" : "dark";
+if (want === bossLookShown && !force)
+return;
+if (!bossDarkLook)
+bossDarkLook = PLANET_LOOKS[NEM];
+PLANET_LOOKS[NEM] = want === "lush" ? bossLushLook() : bossDarkLook;
+bossLookShown = want;
+delete globeTextures[NEM];
+delete globeTexturesLow[NEM];
+delete globeBuilds[NEM + "|high"];
+delete globeBuilds[NEM + "|low"];
+delete planetIconCache[NEM];
+try {
+starMapLayoutCache = null;
+}
+catch (error) { }
+}
+const bossSurf = {
+cd: {}, near: {}, raidHp: {}, raidShips: -1, stun: {}, flash: {},
+lastAt: 0, padHit: 0, fx: []
+};
+const bossPetGuard = {};
+const bossPetSlow = {};
+const BOSS_CORE = { lat: .95, lon: Math.PI };
+function bossPetLatLon(seed, T, guard) {
+const lat = guard
+? 1.16 + .2 * Math.sin(T * .031 + seed * 1.7) + .06 * Math.sin(T * .09 + seed)
+: .8 + .5 * Math.sin(T * .021 + seed * 1.7) + .1 * Math.sin(T * .07 + seed);
+const lon = seed * 2.1 + T * .018 * (Math.floor(seed) % 2 ? 1 : -1) + .35 * Math.sin(T * .043 + seed * .6);
+return { lat: Math.max(.12, Math.min(1.42, lat)), lon };
+}
+function bossSurfaceEnemies(planet, b) {
+const out = [];
+if (!b)
+return out;
+if (planet === NEM && !b.defeated) {
+b.pets.forEach((pt, i) => {
+if (pt.hp > 0)
+out.push(Object.assign({ kind: "boss", i, key: "b" + i, hp: pt.hp, maxHp: BOSS_PET_HP }, bossPetInfo(i)));
+});
+}
+const a = b.attack;
+if (a && a.stage === 3 && a.target === planet && a.ships > 0) {
+if (bossSurf.raidShips !== a.ships) {
+bossSurf.raidShips = a.ships;
+bossSurf.raidHp = {};
+}
+for (let k = 0; k < Math.min(6, a.ships); k++)
+out.push(Object.assign({ kind: "raid", i: k, key: "r" + k, raidId: a.id, hp: bossSurf.raidHp[k] === undefined ? 2 : bossSurf.raidHp[k], maxHp: 2 }, bossRaiderInfo(k)));
+}
+return out;
+}
+function bossSurfaceEntries(queue, p) {
+world.bossEnemyPets = [];
+world.bossRemotePets = [];
+world.bossCore = null;
+if (roomState)
+return;
+const planet = selectedStartPlanet;
+const owner = bossSurfaceOwner();
+const b = bossState(owner);
+const now = performance.now();
+const dt = Math.min(.1, (now - (bossSurf.lastAt || now)) / 1000);
+bossSurf.lastAt = now;
+if (typeof mpGetRemoteRoamersHere === "function") {
+mpGetRemoteRoamersHere().forEach(r => {
+const pr = projectSphere(r.presence.lat, r.presence.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (pr.visible && r.presence.petId)
+world.bossRemotePets.push({ playerId: r.playerId, petId: r.presence.petId, x: pr.x, y: pr.y - 14, name: r.name });
+});
+}
+if (!b)
+return;
+const T = Date.now() / 1000;
+const size = Math.max(24, p.width * .068);
+const list = bossSurfaceEnemies(planet, b);
+list.forEach(en => {
+const guard = en.kind === "boss" ? en.i < 4 : en.i < 3;
+const ll = bossPetLatLon(en.seed, T, guard);
+const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const ahead = bossPetLatLon(en.seed, T + .5, guard);
+const pa = projectSphere(ahead.lat, ahead.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+const facing = pa.x < pr.x ? -1 : 1;
+const spot = { en, x: pr.x, y: pr.y, size, owner };
+world.bossEnemyPets.push(spot);
+queue.push({
+z: p.groundDepthAt(pr.x, pr.y + size * .45),
+alpha: 1,
+draw: () => bossDrawEnemyPet(p.c, spot, facing, now)
+});
+});
+if (planet === NEM && !b.defeated) {
+const pr = projectSphere(BOSS_CORE.lat, BOSS_CORE.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (pr.visible) {
+const cs = Math.max(40, p.width * .12);
+world.bossCore = { x: pr.x, y: pr.y - cs * .5, r: cs * .5, owner };
+queue.push({
+z: p.groundDepthAt(pr.x, pr.y),
+alpha: 1,
+draw: () => bossDrawCore(p.c, pr.x, pr.y, cs, b, now)
+});
+}
+}
+queue.push({ z: 1e9, alpha: 1, draw: () => {
+bossDrawSurfFx(p.c, now);
+if (!flightProgress || flightProgress <= .001)
+bossDrawPlanetBar(p, planet, b);
+bossSurfaceAI(dt, now);
+bossSurfBladeTick();
+} });
+}
+function bossDrawPlanetBar(p, planet, b) {
+let a = null;
+if (planet === NEM && !b.defeated)
+a = { name: "☠ NEMESIS", f: b.hp / b.maxHp, num: Math.ceil(b.hp).toLocaleString() + " / " + b.maxHp.toLocaleString(), col: "#d02bff" };
+else if (b.attack && b.attack.target === planet && b.attack.ships > 0)
+a = { name: "⚠ RAID · STAGE " + b.attack.stage + "/3", f: b.attack.ships / Math.max(1, b.attack.sent), num: b.attack.ships + " raiders", col: "#ff3b6b" };
+if (!a)
+return;
+const c = p.c;
+const w = Math.min(230, p.width * .6);
+const x = p.width / 2 - w / 2;
+const top = p.cy - p.R;
+const y = roamingActive ? Math.max(110, p.width * .28) : Math.max(70, top - 34);
+c.save();
+c.fillStyle = "rgba(20,4,30,.7)";
+c.strokeStyle = a.col;
+c.lineWidth = 1;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x, y, w, 7, 4);
+else
+c.rect(x, y, w, 7);
+c.fill();
+c.stroke();
+c.fillStyle = a.col;
+c.shadowColor = a.col;
+c.shadowBlur = 10;
+c.fillRect(x + 1, y + 1, Math.max(0, (w - 2) * a.f), 5);
+c.shadowBlur = 0;
+c.font = "900 10px system-ui,sans-serif";
+c.textAlign = "left";
+c.fillStyle = "#ffd6fb";
+c.fillText(a.name, x, y - 5);
+c.textAlign = "right";
+c.fillStyle = "#fff";
+c.fillText(a.num, x + w, y - 5);
+c.restore();
+}
+function bossDrawEnemyPet(c, spot, facing, now) {
+const { x, y, size, en } = spot;
+const stunned = (bossSurf.stun[en.key] || 0) > now;
+c.save();
+try {
+const g = c.createRadialGradient(x, y, 2, x, y, size * 1.1);
+g.addColorStop(0, "rgba(208,43,255,.45)");
+g.addColorStop(1, "rgba(208,43,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.ellipse(x, y + size * .3, size * 1.1, size * .42, 0, 0, Math.PI * 2);
+c.fill();
+drawSpacePet(c, NEM, x, y, size, 35, stunned ? 0 : now / 1000 * 6 + en.seed, en.species, false, "builder", facing);
+c.fillStyle = "#2a0838";
+c.strokeStyle = "#ff3b6b";
+c.lineWidth = 1.4;
+[-1, 1].forEach(s => {
+c.beginPath();
+c.moveTo(x + s * size * .18, y - size * .62);
+c.lineTo(x + s * size * .34, y - size * .98);
+c.lineTo(x + s * size * .05, y - size * .7);
+c.closePath();
+c.fill();
+c.stroke();
+});
+c.globalAlpha = .22;
+c.fillStyle = "#3a0050";
+c.beginPath();
+c.ellipse(x, y - size * .25, size * .55, size * .5, 0, 0, Math.PI * 2);
+c.fill();
+c.globalAlpha = 1;
+if (now - (bossSurf.flash[en.key] || 0) < 200) {
+c.globalAlpha = .6;
+c.fillStyle = "#fff";
+c.beginPath();
+c.ellipse(x, y - size * .25, size * .55, size * .5, 0, 0, Math.PI * 2);
+c.fill();
+c.globalAlpha = 1;
+}
+c.font = Math.round(size * .42) + "px system-ui,'Apple Color Emoji',sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(en.power ? getItemInfo(en.power).icon : "💰", x, y - size * 1.18);
+bossDrawPips(c, x, y - size * 1.48, en.hp, en.maxHp, "#ff3b6b");
+if (stunned) {
+c.strokeStyle = "#8fd8ff";
+c.lineWidth = 1.5;
+for (let k = 0; k < 3; k++) {
+const a = now / 80 + k * 2.1;
+c.beginPath();
+c.moveTo(x + Math.cos(a) * size * .4, y - size * .4 + Math.sin(a) * size * .3);
+c.lineTo(x + Math.cos(a + .5) * size * .7, y - size * .4 + Math.sin(a + .5) * size * .5);
+c.stroke();
+}
+}
+}
+catch (error) {
+console.error("Enemy pet draw failed:", error);
+}
+c.restore();
+world.hits.push({
+x, y: y - size * .4, r: size * .6, z: 7,
+passThrough: roamingActive,
+onTap: () => bossEnemyPetBubble(spot)
+});
+}
+function bossEnemyPetBubble(spot) {
+const en = spot.en;
+const thief = !en.power;
+const raid = en.kind === "raid";
+worldShowBubble({
+x: spot.x, y: spot.y - spot.size * 1.3,
+iconHtml: thief ? "💰" : getItemIconHtml(en.power),
+title: (raid ? "Raider" : "Void ") + (thief ? "thief" : "guard") + " · " + (SPECIES_DISPLAY_NAMES[en.species] || "pet"),
+meta: "♥".repeat(en.hp) + "♡".repeat(Math.max(0, en.maxHp - en.hp)) + (thief ? " · steals" : " · armed with " + getItemInfo(en.power).name),
+text: thief
+? "Snatches whatever a pet is carrying and hauls it off to the Nemesis vault. Keep your loot away — or knock it out first."
+: "Attacks any pet that comes close" + (raid ? "" : ", and blasts ships left on the pad") + ". It can't be befriended or roamed — fight it with your pet's powerups.",
+buttons: []
+});
+}
+function bossDrawCore(c, x, y, s, b, now) {
+c.save();
+try {
+const pulse = .5 + .5 * Math.sin(now / 300);
+const g = c.createRadialGradient(x, y - s * .5, 4, x, y - s * .5, s * 1.2);
+g.addColorStop(0, "rgba(255,80,220," + (.45 + .2 * pulse) + ")");
+g.addColorStop(1, "rgba(208,43,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(x, y - s * .5, s * 1.2, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#12051c";
+c.strokeStyle = "#d02bff";
+c.lineWidth = 2;
+c.shadowColor = "#d02bff";
+c.shadowBlur = 16;
+c.beginPath();
+c.moveTo(x, y - s * 1.25);
+c.lineTo(x + s * .26, y - s * .3);
+c.lineTo(x + s * .16, y);
+c.lineTo(x - s * .16, y);
+c.lineTo(x - s * .26, y - s * .3);
+c.closePath();
+c.fill();
+c.stroke();
+c.fillStyle = "#ff4fd8";
+c.beginPath();
+c.arc(x, y - s * .62, s * (.08 + .03 * pulse), 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+const f = b.hp / b.maxHp;
+c.fillStyle = "rgba(255,255,255,.18)";
+c.fillRect(x - s * .5, y - s * 1.45, s, 4);
+c.fillStyle = "#ff4fd8";
+c.fillRect(x - s * .5, y - s * 1.45, s * f, 4);
+}
+catch (error) { }
+c.restore();
+world.hits.push({ x, y: y - s * .5, r: s * .5, z: 6, passThrough: roamingActive, onTap: () => {
+worldShowBubble({
+x, y: y - s * 1.3,
+iconHtml: "☠",
+title: "The Void Core",
+meta: Math.ceil(b.hp).toLocaleString() + " / " + b.maxHp.toLocaleString() + " · war chest " + Math.floor(b.coins) + " " + COIN_ICON_HTML,
+text: "Nemesis's heart. Every powerup your pets land on it wears the whole planet down — as do its satellites, ships and guards falling. Knock its health to zero and the planet is freed.",
+buttons: []
+});
+} });
+}
+function bossDrawSurfFx(c, now) {
+bossSurf.fx = bossSurf.fx.filter(f => now - f.t0 < (f.ms || 900));
+bossSurf.fx.forEach(f => {
+const k = (now - f.t0) / (f.ms || 900);
+c.save();
+c.globalAlpha = Math.max(0, 1 - k);
+if (f.k === "text") {
+c.fillStyle = f.colour || "#fff2c0";
+c.font = "900 15px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(f.text, f.x, f.y - k * 34);
+}
+else if (f.k === "net") {
+c.strokeStyle = "#e78bff";
+c.lineWidth = 2;
+c.shadowColor = "#e78bff";
+c.shadowBlur = 12;
+const r = f.r * Math.min(1, k * 1.8);
+c.beginPath();
+c.arc(f.x, f.y, r, 0, Math.PI * 2);
+c.stroke();
+for (let a = 0; a < 10; a++) {
+const ang = a / 10 * Math.PI * 2;
+c.beginPath();
+c.moveTo(f.x, f.y);
+c.lineTo(f.x + Math.cos(ang) * r, f.y + Math.sin(ang) * r);
+c.stroke();
+}
+}
+else if (f.k === "shield") {
+c.strokeStyle = f.colour;
+c.lineWidth = 3;
+c.beginPath();
+c.arc(f.x, f.y, 30 + k * 10, 0, Math.PI * 2);
+c.stroke();
+}
+c.restore();
+});
+if (now - bossSurf.padHit < 700 && world.scene && world.scene.mode === "planet") {
+c.save();
+c.globalAlpha = 1 - (now - bossSurf.padHit) / 700;
+c.fillStyle = "rgba(255,59,107,.25)";
+c.fillRect(0, 0, world.scene.W, world.scene.H);
+c.restore();
+}
+const h = world.roamHead;
+if (roamingActive && h && h.pet) {
+const g = bossPetGuard[h.pet.id];
+if (g && (g.ghost > now || g.shield > now)) {
+c.save();
+c.strokeStyle = g.ghost > now ? "rgba(234,244,255,.7)" : "rgba(125,255,176,.75)";
+c.lineWidth = 2.5;
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 12;
+c.beginPath();
+c.arc(h.x, h.y + 26, 34 + 2 * Math.sin(now / 160), 0, Math.PI * 2);
+c.stroke();
+c.restore();
+}
+}
+}
+function bossSurfText(x, y, text, colour) {
+bossSurf.fx.push({ k: "text", x, y, text, colour, t0: performance.now(), ms: 950 });
+}
+function bossMyRoamer() {
+const h = world.roamHead;
+if (!roamingActive || !h || !h.pet)
+return null;
+return { pet: h.pet, x: h.x, y: h.y + 26 };
+}
+function bossSurfaceAI(dt, now) {
+const me = bossMyRoamer();
+if (!me)
+return;
+(world.bossEnemyPets || []).forEach(spot => {
+const en = spot.en;
+if ((bossSurf.stun[en.key] || 0) > now)
+return;
+const d = Math.hypot(spot.x - me.x, spot.y - me.y);
+if (!en.power) {
+if (d < 130 && me.pet.carry) {
+bossSurf.near[en.key] = (bossSurf.near[en.key] || 0) + dt;
+if (bossSurf.near[en.key] > 1.1 && now > (bossSurf.cd[en.key] || 0)) {
+bossSurf.cd[en.key] = now + 7000;
+bossSurf.near[en.key] = 0;
+bossHitMyPet("steal", me.pet.id, "A void thief");
+}
+}
+else {
+bossSurf.near[en.key] = 0;
+}
+return;
+}
+if (d > 210)
+return;
+if (!bossSurf.cd[en.key])
+bossSurf.cd[en.key] = now + 1500 + Math.random() * 2500;
+if (now < bossSurf.cd[en.key] || now < (bossSurf.anyAt || 0))
+return;
+bossSurf.cd[en.key] = now + 6000 + Math.random() * 3000;
+bossSurf.anyAt = now + 2200;
+const sx = spot.x, sy = spot.y - spot.size * .6;
+const type = en.power;
+if (type === "emp" || type === "chrono-field")
+world.effects.push({ type, x: sx, y: sy, t0: now, petId: "enemy" });
+else
+world.effects.push({ type, x: sx, y: sy, tx: me.x, ty: me.y, t0: now, petId: "enemy" });
+const petId = me.pet.id;
+setTimeout(() => bossHitMyPet(type, petId, "A void guard"), 350);
+});
+}
+function bossHitMyPet(kind, petId, from) {
+const me = bossMyRoamer();
+if (!me || me.pet.id !== petId)
+return;
+const pet = me.pet;
+const now = performance.now();
+const g = bossPetGuard[petId] || {};
+if (g.ghost > now) {
+bossSurfText(me.x, me.y - 60, "IMMUNE", "#eaf4ff");
+return;
+}
+if (g.shield > now) {
+g.shield = 0;
+bossSurfText(me.x, me.y - 60, "SHIELD", "#7dffb0");
+bossSurf.fx.push({ k: "shield", x: me.x, y: me.y, colour: "#7dffb0", t0: now, ms: 500 });
+return;
+}
+const name = petShortName(selectedStartPlanet, pet);
+if (kind === "steal") {
+if (pet.carry) {
+worldRunAction({ "data-action": "pet-combat", "data-pet": petId, "data-option": "steal", "data-item": "0" });
+if (activePlanetOwnerId)
+pet.carry = null;
+bossSurfText(me.x, me.y - 60, "STOLEN!", "#ffd76b");
+showShipToast("💰 " + (from || "A thief") + " snatched what " + name + " was carrying");
+}
+return;
+}
+if (kind === "emp" || kind === "nova-burst") {
+if (pet.carry) {
+worldDropCarriedAt(pet, me.x + 40, me.y + 30);
+bossSurfText(me.x, me.y - 60, "KNOCKED IT LOOSE!", "#ffe45c");
+}
+else {
+bossSurfText(me.x, me.y - 60, "ZAP", "#ffe45c");
+}
+bossPetSlow[petId] = { until: now + 1200, f: .3 };
+return;
+}
+if (kind === "chrono-field") {
+bossPetSlow[petId] = { until: now + 5000, f: .4 };
+bossSurfText(me.x, me.y - 60, "SLOWED", "#8a7fff");
+return;
+}
+if (kind === "nebula-net") {
+bossPetSlow[petId] = { until: now + 3000, f: 0 };
+bossSurfText(me.x, me.y - 60, "NETTED", "#e78bff");
+return;
+}
+const full = { "incinerator-beam": 25, "ricochet-orb": 15, "solar-blade": 20, "singularity": 20 }[kind] || 0;
+const dmg = from && /void/i.test(from) ? Math.round(full * .5) : full;
+if (!dmg)
+return;
+worldRunAction({ "data-action": "pet-combat", "data-pet": petId, "data-option": "hurt", "data-item": String(dmg) });
+if (activePlanetOwnerId)
+pet.energy = Math.max(0, (pet.energy || 0) - dmg);
+bossSurfText(me.x, me.y - 60, "−" + dmg + " ⚡", "#ff7a6b");
+if (kind === "singularity")
+bossPetSlow[petId] = { until: now + 900, f: .2 };
+if ((pet.energy || 0) <= 0) {
+showShipToast("💫 " + name + " is knocked out — back to the ship to recover");
+setTimeout(() => { if (roamingActive)
+endRoaming(); }, 700);
+}
+}
+function bossPetPowerCombat(kind, pet, shape) {
+const now = performance.now();
+const me = bossMyRoamer();
+const fromRoamer = me && me.pet.id === pet.id;
+const effOn = {
+"emp": { dmg: 1, stun: 2500, pets: "knock" },
+"nova-burst": { dmg: 0, pets: "knock" },
+"incinerator-beam": { dmg: 2, pets: "incinerator-beam", core: 30 },
+"ricochet-orb": { dmg: 1, pets: "ricochet-orb", core: 15 },
+"singularity": { dmg: 2, pets: "singularity", core: 25 },
+"solar-blade": { dmg: 1, pets: "solar-blade", core: 10 },
+"chrono-field": { dmg: 0, stun: 4000, pets: "chrono-field" },
+"nebula-net": { dmg: 2, stun: 3000, pets: "nebula-net", core: 20 }
+}[kind];
+if (!effOn)
+return;
+const hit = (x, y, r) => bossShapeHit(shape, x, y, r);
+(world.bossEnemyPets || []).forEach(spot => {
+if (!hit(spot.x, spot.y - spot.size * .4, spot.size * .5) || !bossThrottle("pet:" + kind + spot.en.key, kind === "solar-blade" ? 350 : 500))
+return;
+bossSurfHitEnemy(spot, effOn.dmg, effOn.stun || 0);
+});
+const core = world.bossCore;
+if (core && effOn.core && hit(core.x, core.y, core.r) && bossThrottle("core:" + kind, 700)) {
+bossApply(core.owner, { t: "hit", n: effOn.core });
+bossSurfText(core.x, core.y - core.r, "−" + effOn.core, "#ff9de6");
+}
+Object.values(world.petScreen || {}).forEach(ps => {
+if (!ps || !ps.pet || ps.pet.id === pet.id || (me && ps.pet.id === me.pet.id))
+return;
+if (!hit(ps.x, ps.y - ps.size * .3, ps.size * .45) || !bossThrottle("ipet:" + kind + ps.pet.id, 600))
+return;
+bossHitIdlePet(ps, effOn.pets);
+});
+(world.bossRemotePets || []).forEach(rp => {
+if (rp.petId === pet.id || !hit(rp.x, rp.y, 22) || !bossThrottle("rpet:" + kind + rp.petId, 700))
+return;
+mpSend({ type: "fieldEvent", event: { kind: "petCombat", to: rp.playerId, petId: rp.petId, eff: effOn.pets === "knock" ? "emp" : effOn.pets, from: bossMyName() } });
+bossSurfText(rp.x, rp.y - 40, "HIT " + rp.name, "#ff7ad9");
+});
+if (me && !fromRoamer && hit(me.x, me.y, 22))
+bossHitMyPet(effOn.pets === "knock" ? "emp" : effOn.pets, me.pet.id, "Friendly fire");
+}
+function bossHitIdlePet(ps, eff) {
+const pet = ps.pet;
+if (eff === "knock") {
+if (pet.carry) {
+worldDropCarriedAt(pet, ps.x + 36, ps.y + 24);
+bossSurfText(ps.x, ps.y - ps.size, "KNOCKED LOOSE", "#ffe45c");
+}
+return;
+}
+const dmg = { "incinerator-beam": 25, "ricochet-orb": 15, "solar-blade": 20, "singularity": 20 }[eff] || 0;
+if (!dmg) {
+bossSurfText(ps.x, ps.y - ps.size, eff === "chrono-field" ? "SLOWED" : "NETTED", "#c9b8ff");
+return;
+}
+worldRunAction({ "data-action": "pet-combat", "data-pet": pet.id, "data-option": "hurt", "data-item": String(dmg) });
+if (activePlanetOwnerId)
+pet.energy = Math.max(0, (pet.energy || 0) - dmg);
+bossSurfText(ps.x, ps.y - ps.size, "−" + dmg + " ⚡", "#ff7a6b");
+}
+function bossSurfHitEnemy(spot, n, stun) {
+const en = spot.en;
+const now = performance.now();
+if (stun)
+bossSurf.stun[en.key] = now + stun;
+bossSurf.flash[en.key] = now;
+if (!n) {
+bossSurfText(spot.x, spot.y - spot.size * 1.6, "STUNNED", "#8fd8ff");
+return;
+}
+bossSurfText(spot.x, spot.y - spot.size * 1.6, "−" + n, "#ff9de6");
+if (en.kind === "boss") {
+const willDie = en.hp - n <= 0;
+bossApply(spot.owner, { t: "pet", i: en.i, n });
+if (willDie) {
+bossSurfText(spot.x, spot.y - spot.size * 2, "VOID PET DOWN", "#ffd6fb");
+withMySave(() => addRankPoints(20, "Void pet defeated"));
+}
+}
+else {
+const hp = (bossSurf.raidHp[en.i] === undefined ? 2 : bossSurf.raidHp[en.i]) - n;
+bossSurf.raidHp[en.i] = hp;
+if (hp <= 0) {
+bossSurf.raidHp = {};
+bossApply(spot.owner, { t: "raidKill", id: en.raidId });
+bossSurfText(spot.x, spot.y - spot.size * 2, "RAIDER DOWN", "#ffd6fb");
+withMySave(() => addRankPoints(25, "Raider defeated"));
+}
+}
+}
+function bossSurfBladeTick() {
+if (!world.blade || !world.blade.trail || !world.blade.trail.length)
+return;
+const me = bossMyRoamer();
+if (!me)
+return;
+const p = world.blade.trail[world.blade.trail.length - 1];
+bossPetPowerCombat("solar-blade", me.pet, { x: p.x, y: p.y, r: 20 });
+}
+function bossFindPet(planetId, petId) {
+const here = getPets(planetId).find(p => p.id === petId);
+if (here)
+return here;
+const ships = planetId === "earth" ? (planetSave.ships.earth || []) : (getShips(planetId) || []);
+for (const s of ships) {
+if (s.pendingPilot && s.pendingPilot.id === petId)
+return s.pendingPilot;
+const c = (s.cargoPets || []).find(p => p && p.id === petId);
+if (c)
+return c;
+}
+return null;
+}
+function petCombatAction(planetId, petId, option, amount) {
+const pet = bossFindPet(planetId, petId);
+if (!pet)
+return;
+amount = Number(amount) || 0;
+if (option === "hurt") {
+pet.energy = Math.max(0, Math.round((pet.energy || 0) - amount));
+}
+else if (option === "heal") {
+pet.energy = Math.min(100, Math.round((pet.energy || 0) + amount));
+}
+else if (option === "steal") {
+if (pet.carry) {
+const d = pet.carry;
+pet.carry = null;
+if (planetSave === localPlanetSave) {
+bossLootAdd(bossMine(), d);
+bossMark(true);
+}
+}
+}
+savePlanetProgress();
+}
+function bossBoardCard(planetId) {
+const owner = bossSurfaceOwner();
+const b = bossState(owner);
+if (!b)
+return "";
+if (planetId === NEM) {
+if (b.defeated)
+return '<div class="boss-card lush"><b>🌿 Nemesis has fallen</b><span>The void is gone and the planet is at peace. Its shop is open — and it sells the new <b>🕸 Nebula Net</b>.</span></div>';
+const f = Math.max(0, b.hp / b.maxHp);
+const sats = b.sats.filter(s => s.hp > 0).length;
+const pets = b.pets.filter(p => p.hp > 0).length;
+return ('<div class="boss-card">' +
+'<b>☠ Nemesis · ' + Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString() + '</b>' +
+'<i class="boss-card-bar"><i style="width:' + (f * 100) + '%"></i></i>' +
+'<span>🛰 ' + sats + '/' + BOSS_SATS + ' ring satellites · 😈 ' + pets + '/' + BOSS_PETS + ' void pets · war chest ' + Math.floor(b.coins) + ' ' + COIN_ICON_HTML + '</span>' +
+(b.attack ? '<span class="boss-warn">⚠ Raiding ' + bossPlanetName(b.attack.target) + ' with ' + b.attack.ships + ' ships — stage ' + b.attack.stage + '/3</span>' : '') +
+'<span class="boss-lock">🔒 Shop, building, ship holds and the transporter are jammed until it falls. Docked ships here come under fire.</span>' +
+'</div>');
+}
+const a = b.attack;
+if (a && a.target === planetId) {
+const lootN = (a.loot.coins || 0) + Object.values(a.loot.mats || {}).reduce((s, v) => s + v, 0);
+return ('<div class="boss-card raid">' +
+'<b>⚠ Raid! ' + a.ships + ' of ' + a.sent + ' Nemesis ships remain</b>' +
+'<span>Stage ' + a.stage + '/3: ' + BOSS_STAGE_TEXT[a.stage] + '. Fight them in the field, in orbit, then on the ground — your satellites and buildings help.' + (lootN ? ' Stolen so far: ' + lootN + '.' : '') + '</span>' +
+'</div>');
+}
+return "";
+}
+function bossStarMapOverlay(c, p, px, py, pr, alpha, ownerKey, time) {
+if (alpha <= 0)
+return;
+const owner = ownerKey || bossMyId();
+const b = bossState(owner);
+if (!b)
+return;
+c.save();
+c.globalAlpha = alpha;
+if (p.id === NEM && isPlanetUnlocked(NEM)) {
+if (b.defeated) {
+c.font = "12px system-ui,'Apple Color Emoji',sans-serif";
+c.textAlign = "center";
+c.fillText("🌿", px + pr * 1.2, py - pr * 1.2);
+}
+else {
+const f = b.hp / b.maxHp;
+c.lineWidth = 3;
+c.strokeStyle = "rgba(255,255,255,.15)";
+c.beginPath();
+c.arc(px, py, pr * 1.65, 0, Math.PI * 2);
+c.stroke();
+c.strokeStyle = f > .5 ? "#d02bff" : f > .25 ? "#ff5cbe" : "#ff3b3b";
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = 10;
+c.beginPath();
+c.arc(px, py, pr * 1.65, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#ffc6f2";
+c.font = "800 9px system-ui";
+c.textAlign = "center";
+c.fillText("☠ " + Math.round(f * 100) + "%", px, py - pr * 1.65 - 6);
+}
+}
+const a = b.attack;
+if (a && a.target === p.id && a.ships > 0) {
+const n = Math.min(6, a.ships);
+for (let k = 0; k < n; k++) {
+const ang = time * .8 + k / n * Math.PI * 2;
+const rr = pr * (a.stage === 1 ? 2.6 : a.stage === 2 ? 1.9 : 1.3);
+const x = px + Math.cos(ang) * rr, y = py + Math.sin(ang) * rr;
+c.save();
+c.translate(x, y);
+c.rotate(ang + Math.PI);
+c.fillStyle = "#160822";
+c.strokeStyle = "#ff3b6b";
+c.lineWidth = 1.2;
+c.beginPath();
+c.moveTo(0, -5);
+c.lineTo(4, 4);
+c.lineTo(0, 2);
+c.lineTo(-4, 4);
+c.closePath();
+c.fill();
+c.stroke();
+c.restore();
+}
+const pulse = .5 + .5 * Math.sin(time * 5);
+c.fillStyle = "rgba(255,59,107," + (.75 + .25 * pulse) + ")";
+c.shadowColor = "#ff3b6b";
+c.shadowBlur = 10 + 8 * pulse;
+c.beginPath();
+c.arc(px + pr * 1.3, py - pr * 1.3, 8, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+c.fillStyle = "#fff";
+c.font = "900 11px system-ui";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("!", px + pr * 1.3, py - pr * 1.3 + .5);
+}
+c.restore();
+}
+const BOSS_BLOCKED = new Set([
+"build-structure", "buy", "buy-perk", "buy-pet", "buy-snacks", "buy-upgrade",
+"deposit-all-ship-coins", "deposit-all-ship-material", "unload-pet", "ship-unload-all",
+"equip-item", "toggle-equip", "load-pet", "sat-load", "sat-unload", "sat-build",
+"sell-ship-points", "design-structure", "repair-station", "forge-powerup", "kitchen-add"
+]);
+function bossBlocks(target) {
+if (!target || planetDetailId !== NEM)
+return false;
+if (bossDefeatedFor(bossSurfaceOwner()))
+return false;
+const action = target.getAttribute("data-action");
+let blocked = BOSS_BLOCKED.has(action);
+if (action === "item-move") {
+try {
+const f = JSON.parse(target.getAttribute("data-from") || "{}");
+const t = JSON.parse(target.getAttribute("data-to") || "{}");
+blocked = ["ship", "bay"].includes(f.t) || ["ship", "bay"].includes(t.t);
+}
+catch (error) { }
+}
+if (blocked && bossThrottle("blockToast", 1500))
+showShipToast("☠ Nemesis jams it — the shop, building, ship holds and the transporter stay locked until Nemesis falls");
+return blocked;
+}
+setInterval(() => {
+try {
+bossOwnerTick();
+}
+catch (error) {
+console.error("Boss tick failed:", error);
+}
+}, 4000);
+setInterval(() => {
+try {
+bossSyncTick();
+bossHudTick();
+bossSyncLook();
+}
+catch (error) {
+console.error("Boss sync failed:", error);
+}
+}, 300);
+setTimeout(() => {
+const btn = document.getElementById("empButton");
+if (btn)
+btn.addEventListener("pointerdown", event => {
+if (bossStunned()) {
+event.stopImmediatePropagation();
+event.preventDefault();
+if (bossThrottle("stunBtn", 500))
+floatingText("STUNNED", W / 2, H / 2 - 44, "#8fd8ff");
+}
+}, { capture: true });
+}, 0);
+function detonateAsteroid(index, chain = false, isEMP = false) {
+const a = asteroids[index];
+const info = a ? { x: a.x, y: a.y, r: a.radius, size: a.size, special: a.special } : null;
+const result = detonateAsteroid__orig(index, chain, isEMP);
+if (info && !asteroids.includes(a)) {
+try {
+bossOnBlast(info.x, info.y, info.r, info.size, info.special);
+}
+catch (error) {
+console.error(error);
+}
+}
+return result;
+}
+function activateEMP() {
+const ready = empCharge >= EMP_MAX && empCooldown <= 0;
+const result = activateEMP__orig();
+if (ready && empCharge === 0 && (worldState === "field" || worldState === "orbital"))
+bossPowerHit({ x: W / 2, y: H / 2, r: Math.max(W, H) * .55 }, { dmg: 1, stun: 2200, sat: 1, planet: 25, pvp: "stun", key: "emp" });
+return result;
+}
+function fireIncineratorBeam(targetX, targetY) {
+const result = fireIncineratorBeam__orig(targetX, targetY);
+const dx = targetX - W / 2, dy = targetY - H / 2, len = Math.hypot(dx, dy) || 1;
+bossPowerHit({ x: W / 2, y: H / 2, ux: dx / len, uy: dy / len, w: 34 }, { dmg: 3, sat: 2, planet: 35, pvp: "heart", key: "beam" });
+return result;
+}
+function activateChronoField() {
+const before = timeSlowActive;
+const result = activateChronoField__orig();
+if (!before && timeSlowActive)
+bossPowerHit({ x: W / 2, y: H / 2, r: Math.max(W, H) }, { dmg: 0, slow: 6000, sat: 0, key: "chrono" });
+return result;
+}
+function activateRegenCoil() {
+const before = empCharge;
+const result = activateRegenCoil__orig();
+if (before >= EMP_MAX && empCharge < before) {
+bossFlight.shieldUntil = performance.now() + 6000;
+floatingText("SHIELD UP", W / 2, H / 2 - 64, "#7dffb0");
+}
+return result;
+}
+function fireRunPowerupNow(part) {
+if (part === "nebula-net") {
+empCharge = EMP_MAX;
+empCooldown = 0;
+activateNebulaNet();
+return;
+}
+return fireRunPowerupNow__orig(part);
+}
+function handlePointer(event) {
+if (bossStunned()) {
+if (bossThrottle("stunTap", 500))
+floatingText("STUNNED", W / 2, H / 2 - 44, "#8fd8ff");
+return;
+}
+if (bossFlightCtx && event && event.target === canvas) {
+const r = canvas.getBoundingClientRect();
+const x = event.clientX - r.left, y = event.clientY - r.top;
+const e = bossFlightTargets().find(t => { const s = bossScreen(t); return Math.hypot(s.x - x, s.y - y) < t.r + 10; });
+if (e && bossThrottle("immune", 1200))
+floatingText("TAPS CAN'T HURT IT — KNOCK ROCKS INTO IT", bossScreen(e).x, bossScreen(e).y - 34, "#ff9de6");
+}
+return handlePointer__orig(event);
+}
+function enterPlanetPhase(skipApproach) {
+if (running && !gameOver &&
+worldState === "field" &&
+currentPlanetId === NEM &&
+!bossDefeatedFor(bossFlightOwner())) {
+bossBeginOrbitArrival();
+return;
+}
+return enterPlanetPhase__orig(skipApproach);
+}
+let bossSatFiring = null;
+function satFire(sat, list, aimX, aimY) {
+bossSatFiring = sat;
+try {
+const r = satFire__orig(sat, list, aimX, aimY);
+if (powerupParts(sat.type).includes("nebula-net")) {
+const p = satScreenPos(sat);
+bossNebulaBurst(p.x, p.y, 150);
+}
+return r;
+}
+finally {
+bossSatFiring = null;
+}
+}
+function satBlast(predicate) {
+const n = satBlast__orig(predicate);
+try {
+const ctx = bossFlightCtx;
+const test = (x, y, r) => { try {
+return !!predicate({ x, y, radius: r, size: 1 });
+}
+catch (error) {
+return false;
+} };
+if (ctx) {
+bossFlightTargets().forEach(e => {
+const s = bossScreen(e);
+if (test(s.x, s.y, e.r) && bossThrottle("sat:e" + e.id, 400)) {
+if (bossIsHost())
+bossDamageEnemy(ctx, e, 1, {});
+else
+mpSend({ type: "fieldEvent", event: { kind: "bossShipHit", key: bossNetKey(), id: e.id, n: 1 } });
+}
+});
+if (ctx.ring) {
+ctx.b.sats.forEach((st, i) => {
+if (st.hp <= 0)
+return;
+const s = bossRingScreen(i);
+if (test(s.x, s.y, 16) && bossThrottle("sat:r" + i, 500)) {
+bossFlight.ringFlash[i] = performance.now();
+bossApply(ctx.owner, { t: "sat", i, n: 1 });
+}
+});
+}
+if (ctx.planetHit) {
+const P = bossPlanetScreen();
+if (test(P.x, P.y, P.r * .8) && bossThrottle("sat:planet", 900)) {
+bossApply(ctx.owner, { t: "hit", n: 10 });
+bossPlanetFloat(10);
+}
+}
+}
+if (worldState === "orbital" && typeof mp !== "undefined" && mp.connected) {
+if (typeof mpGetRemoteShipsHere === "function")
+mpGetRemoteShipsHere().forEach(r => {
+const sx = W / 2 + (r.presence.x - orbitalX), sy = H / 2 + (r.presence.y - orbitalY);
+if (test(sx, sy, 20) && bossThrottle("satpvp:" + r.playerId, 2500))
+mpSend({ type: "fieldEvent", event: { kind: "pvpHit", to: r.playerId, eff: "heart", from: bossMyName() + "'s satellite" } });
+});
+bossHitRemoteSats((x, y, r) => test(x, y, r), 1, "satb", 600);
+}
+}
+catch (error) {
+console.error("Satellite combat failed:", error);
+}
+return n;
+}
+function bossNearestHostile(p, maxD) {
+let best = null;
+const consider = (x, y) => {
+const d = Math.hypot(x - p.x, y - p.y);
+if (d < maxD && (!best || d < best.d))
+best = { x, y, d };
+};
+const ctx = bossFlightCtx;
+if (ctx) {
+bossFlightTargets().forEach(e => { const s = bossScreen(e); consider(s.x, s.y); });
+if (ctx.ring)
+ctx.b.sats.forEach((st, i) => { if (st.hp > 0) {
+const s = bossRingScreen(i);
+consider(s.x, s.y);
+} });
+}
+if (worldState === "orbital" && typeof mp !== "undefined" && mp.connected) {
+if (typeof mpGetRemoteShipsHere === "function")
+mpGetRemoteShipsHere().forEach(r => consider(W / 2 + (r.presence.x - orbitalX), H / 2 + (r.presence.y - orbitalY)));
+bossRemoteSatsHere().forEach(r => consider(r.x, r.y));
+}
+return best;
+}
+const BOSS_SAT_REACH = { "emp": 200, "incinerator-beam": 380, "singularity": 340, "ricochet-orb": 260, "solar-blade": 110 };
+function satAutoAim(p, part) {
+const h = bossNearestHostile(p, 380);
+if (h && (part === "incinerator-beam" || part === "singularity"))
+return { x: h.x, y: h.y, n: 9 };
+return satAutoAim__orig(p, part);
+}
+function satAutoWants(sat, p) {
+if (satAutoWants__orig(sat, p))
+return true;
+return powerupParts(sat.type).some(part => {
+if (part === "nebula-net")
+return satAsteroidsNear(p.x, p.y, 150).length >= 3 || !!bossNearestHostile(p, 170);
+const reach = BOSS_SAT_REACH[part];
+return !!reach && !!bossNearestHostile(p, reach);
+});
+}
+function worldFirePowerupOne(pet, itemId, origin) {
+const result = worldFirePowerupOne__orig(pet, itemId, origin);
+try {
+const now = performance.now();
+if (AIMED_POWERUPS[itemId] || itemId === "solar-blade")
+return result;
+if (itemId === "ghost-shield") {
+bossPetGuard[pet.id] = Object.assign(bossPetGuard[pet.id] || {}, { ghost: now + 6000 });
+bossSurfText(origin.x, origin.y - 30, "IMMUNE 6s", "#eaf4ff");
+}
+else if (itemId === "regen-coil") {
+bossPetGuard[pet.id] = Object.assign(bossPetGuard[pet.id] || {}, { shield: now + 10000 });
+worldRunAction({ "data-action": "pet-combat", "data-pet": pet.id, "data-option": "heal", "data-item": "10" });
+if (activePlanetOwnerId)
+pet.energy = Math.min(100, (pet.energy || 0) + 10);
+bossSurfText(origin.x, origin.y - 30, "SHIELD +10 ⚡", "#7dffb0");
+}
+else if (itemId === "return-capsule") {
+const me = bossMyRoamer();
+if (me && me.pet.id === pet.id) {
+bossSurfText(origin.x, origin.y - 30, "BEAMED BACK", "#e0b070");
+setTimeout(() => { if (roamingActive)
+endRoaming(); }, 650);
+}
+}
+else if (itemId === "emp") {
+bossPetPowerCombat("emp", pet, { x: origin.x, y: origin.y, r: 300 });
+}
+else if (itemId === "nova-burst") {
+bossPetPowerCombat("nova-burst", pet, { x: origin.x, y: origin.y, r: 230 });
+}
+else if (itemId === "chrono-field") {
+bossPetPowerCombat("chrono-field", pet, { x: origin.x, y: origin.y, r: 240 });
+}
+else if (itemId === "nebula-net") {
+bossSurf.fx.push({ k: "net", x: origin.x, y: origin.y, r: 220, t0: now, ms: 900 });
+bossPetPowerCombat("nebula-net", pet, { x: origin.x, y: origin.y, r: 220 });
+}
+}
+catch (error) {
+console.error("Pet combat failed:", error);
+}
+return result;
+}
+function worldFireAimed(px, py) {
+const a = world.aim;
+const head = a ? (world.roamHead && world.roamHead.pet === a.pet ? { x: world.roamHead.x, y: world.roamHead.y } : a.origin) : null;
+const result = worldFireAimed__orig(px, py);
+try {
+if (a && head) {
+[a.itemId, ...(a.more || [])].forEach(kind => {
+if (kind === "singularity") {
+bossPetPowerCombat(kind, a.pet, { x: px, y: py, r: 140 });
+}
+else {
+const dx = px - head.x, dy = py - head.y, len = Math.hypot(dx, dy) || 1;
+bossPetPowerCombat(kind, a.pet, { x: head.x, y: head.y, ux: dx / len, uy: dy / len, w: kind === "incinerator-beam" ? 24 : 16 });
+}
+});
+}
+}
+catch (error) {
+console.error("Pet combat failed:", error);
+}
+return result;
+}
+function roamingPaceNow() {
+const base = roamingPaceNow__orig();
+const slow = roamingPetId && bossPetSlow[roamingPetId];
+if (slow && slow.until > performance.now())
+return base * slow.f;
+return base;
+}
+function planetBoardHtml(planetId) {
+const html = planetBoardHtml__orig(planetId);
+const card = bossBoardCard(planetId);
+return card ? html.replace('<div class="board-grid">', card + '<div class="board-grid">') : html;
+}
+function mpInterceptPlanetAction(target) {
+if (bossBlocks(target))
+return true;
+return mpInterceptPlanetAction__orig(target);
+}
+function executePlanetDetailAction(target) {
+if (bossBlocks(target))
+return;
+return executePlanetDetailAction__orig(target);
+}
+function transporterSend(d, src, ship, n) {
+if (selectedStartPlanet === NEM && !bossDefeatedFor(bossSurfaceOwner())) {
+showShipToast("☠ Nemesis jams the transporter — nothing beams in or out until it falls");
+return;
+}
+return transporterSend__orig(d, src, ship, n);
+}
+function bossDebugRaid(target) {
+const b = bossMine();
+b.found = true;
+if (b.hp >= b.maxHp * .85)
+b.hp = b.maxHp * .7;
+b.coins = Math.max(b.coins, 400);
+bossLaunchRaid(b, Date.now(), target);
+return b.attack;
+}
+const FEATURE_ACTIONS = new Set(["pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
+if (action === "pet-combat") {
+petCombatAction(planetId, target.getAttribute("data-pet"), target.getAttribute("data-option"), target.getAttribute("data-item"));
+return;
+}
 if (action === "pet-subtab") {
 petSubTabByPet[target.getAttribute("data-pet")] = target.getAttribute("data-tab");
 }
@@ -11083,6 +14037,8 @@ updateHUD();
 }
 function mpHandleRemoteFieldEvent(message) {
 const event = message.event || {};
+if (typeof bossOnNet === "function" && bossOnNet(message.id, event))
+return;
 if (event.kind === "snapshot") {
 mpApplyFieldSnapshot(event);
 return;
@@ -12450,7 +15406,7 @@ toggle() { }
 }
 };
 }
-function mpInterceptPlanetAction(target) {
+function mpInterceptPlanetAction__orig(target) {
 if (!activePlanetOwnerId) {
 return false;
 }
@@ -15707,6 +18663,35 @@ regions: [
 { colour: "#5f3ea6", gloss: 35, line: "#b58cff", f: v => v.n - .55 },
 { colour: "#9a76db", gloss: 35 }
 ]
+},
+nemesis: {
+atmosphere: "#c040ff",
+init() {
+this.craters = globeMakeCraters(131, 26, .07, .2);
+},
+fields(x, y, z) {
+const away = 1 - globeHomeland(x, y, z);
+return {
+n: globeFbm(x, y, z, 131, 5, 1.8),
+rift: (1 - Math.abs(globeFbm(x, y, z, 132, 4, 1.5) * 2 - 1)) * away,
+t: globeCraterT(this.craters, x, y, z),
+ash: globeFbm(x, y, z, 133, 3, 3.2)
+};
+},
+regions: [
+{ colour: "#ff4fd8", terrain: TERRAIN.LAVA, gloss: 140, emit: 255, line: "#ffb3f4", f: v => v.rift - .95 },
+{ colour: "#a51cff", terrain: TERRAIN.LAVA, gloss: 120, emit: 230, line: "#e08bff", f: v => v.rift - .89 },
+{ colour: "#4a0f6e", gloss: 30, emit: 90, line: "#b04bff", f: v => v.rift - .82 },
+{ colour: "#05020a", gloss: 60, line: "#7a2bb8", f: v => .72 - v.t },
+{ colour: "#2a1038", gloss: 25, line: "#8a3bd0", f: v => v.n - .56 },
+{ colour: "#3a1a4a", gloss: 20, line: "#9b5bd6", f: v => v.ash - .62 },
+{ colour: "#170a20", gloss: 20 }
+],
+clouds: {
+colour: "#3a1450",
+line: "#d02bff",
+f(x, y, z) { return globeFbm(x, y, z, 134, 3, 2.4) - .7; }
+}
 }
 };
 for (const look of Object.values(PLANET_LOOKS)) {
@@ -17304,6 +20289,10 @@ p.unlockRank, px, py + pr * 2.5 + 11);
 }
 c.restore();
 }
+try {
+bossStarMapOverlay(c, p, px, py, pr, labelAlpha, starLayoutOwner, time);
+}
+catch (error) { }
 if (zoom < .15) {
 canvas._starHitAreas.push({
 x: px + (translateX || 0),
@@ -18930,7 +21919,7 @@ showShipToast(getForgedInfo(itemId).name + " ready — tap where to fire");
 }
 world.effects.push({ type: "dmg", text: getForgedInfo(itemId).name + "!", x: origin.x, y: origin.y - 20, t0: performance.now() });
 }
-function worldFirePowerupOne(pet, itemId, origin) {
+function worldFirePowerupOne__orig(pet, itemId, origin) {
 const now = performance.now();
 sound("click");
 if (AIMED_POWERUPS[itemId]) {
@@ -18953,7 +21942,7 @@ exploreBlastRocks(() => true);
 if (itemId === "nova-burst")
 exploreBlastRocks(r => Math.hypot(r.x - origin.x, r.y - origin.y) < 230);
 }
-function worldFireAimed(px, py) {
+function worldFireAimed__orig(px, py) {
 const a = world.aim;
 world.aim = null;
 if (!a)
@@ -23856,6 +26845,7 @@ viewLat: roamViewLat, viewLon: roamViewLon
 };
 try {
 worldDrawPlanetGround(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+bossSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
@@ -27759,7 +30749,7 @@ readout.textContent =
 event.target.value;
 }
 });
-function executePlanetDetailAction(target) {
+function executePlanetDetailAction__orig(target) {
 if (!target ||
 target.disabled ||
 !planetDetailId ||
@@ -29409,6 +32399,14 @@ icon: "🌀",
 description: "Leaves a brief pocket of slowed time behind on " +
 "destruction, easing the pace for everything nearby " +
 "for a moment."
+},
+nemesis: {
+kind: "voidrock",
+name: "Void Shard",
+icon: "🕳",
+description: "Takes three hits. When it finally breaks it tears " +
+"open a tiny black hole that drags nearby rocks in — " +
+"and anything else close by."
 }
 };
 function getPlanetSpecial(planetId) {
@@ -29498,6 +32496,13 @@ color: "#ffffff",
 multiplier: 2.5,
 speed: 1.4,
 behavior: "cosmic"
+},
+nemesis: {
+name: "Void",
+color: "#b04bff",
+multiplier: 2.8,
+speed: 1.45,
+behavior: "cosmic"
 }
 };
 class Asteroid {
@@ -29517,13 +32522,17 @@ special;
 this.radius =
 special === "elite"
 ? 34
+: special === "voidrock"
+? 24
 : size === 3
 ? 28
 : size === 2
 ? 20
 : 13;
 this.durability =
-special === "durable"
+special === "voidrock"
+? 3
+: special === "durable"
 ? 2
 : special === "elite"
 ? 2
@@ -29582,7 +32591,8 @@ drift: "#ff3860",
 cloak: "#8a7fff",
 twin: "#ff9de6",
 rift: "#6ee7c8",
-echo: "#ffb347"
+echo: "#ffb347",
+voidrock: "#d02bff"
 };
 this.color =
 (this.special &&
@@ -29723,6 +32733,8 @@ ctx.setLineDash([]);
 }
 else if ((this.special ===
 "durable" ||
+this.special ===
+"voidrock" ||
 this.special ===
 "elite") &&
 this.cracked) {
@@ -30951,7 +33963,7 @@ partner.vy *= boost;
 floatingText("DOUBLE UP", partner.x, partner.y, "#ff9de6");
 }
 }
-function detonateAsteroid(index, chain = false, isEMP = false) {
+function detonateAsteroid__orig(index, chain = false, isEMP = false) {
 if (!asteroids[index])
 return;
 const asteroid = asteroids[index];
@@ -33720,7 +36732,7 @@ predicted
 });
 saveSessionLog();
 }
-function activateEMP() {
+function activateEMP__orig() {
 if (empCharge <
 EMP_MAX ||
 !running ||
@@ -33780,7 +36792,7 @@ floatingText("EMP COOLDOWN", W / 2, H / 2 + 10, "#ff8ad8");
 }
 updateHUD();
 }
-function activateRegenCoil() {
+function activateRegenCoil__orig() {
 if (empCharge < EMP_MAX ||
 !running ||
 paused ||
@@ -33834,7 +36846,7 @@ empUses = 0;
 }
 updateHUD();
 }
-function activateChronoField() {
+function activateChronoField__orig() {
 if (empCharge < EMP_MAX ||
 !running ||
 paused ||
@@ -34012,7 +37024,7 @@ empUses = 0;
 }
 updateHUD();
 }
-function fireIncineratorBeam(targetX, targetY) {
+function fireIncineratorBeam__orig(targetX, targetY) {
 beamArmed = false;
 empCharge = 0;
 empUses++;
@@ -34067,7 +37079,7 @@ empUses = 0;
 }
 updateHUD();
 }
-function enterPlanetPhase(skipApproach) {
+function enterPlanetPhase__orig(skipApproach) {
 if (!running ||
 gameOver)
 return;
@@ -35185,6 +38197,7 @@ updateStars(dt);
 satUpdateRun(dt);
 petPointsTick();
 satNetTick();
+bossFlightUpdate(dt);
 if (worldState === "planet") {
 if (worldTimer > 7) {
 departPlanet();
@@ -35717,6 +38730,7 @@ ctx.shadowBlur = 0;
 ctx.restore();
 }
 satDrawRun(ctx);
+bossFlightDraw(ctx);
 if (capsuleMode !==
 "death") {
 drawPlayer();
@@ -36471,7 +39485,7 @@ y: event.clientY -
 rect.top
 };
 }
-function handlePointer(event) {
+function handlePointer__orig(event) {
 if (!running ||
 paused ||
 gameOver ||
@@ -37250,6 +40264,11 @@ return;
 }
 singularityArmed = true;
 updateHUD();
+return;
+}
+if (currentShipEquipment ===
+"nebula-net") {
+activateNebulaNet();
 return;
 }
 activateEMP();
