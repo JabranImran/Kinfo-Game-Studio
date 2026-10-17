@@ -3113,7 +3113,9 @@ color:var(--ink);transition:transform .12s ease;}
 .boss-card.raid{background:linear-gradient(135deg,rgba(90,10,30,.8),rgba(35,5,15,.85));border-color:rgba(255,59,107,.65);box-shadow:0 0 18px rgba(255,59,107,.3);}
 .boss-card.raid b{color:#ffd0d6;}
 .boss-card.lush{background:linear-gradient(135deg,rgba(20,90,60,.7),rgba(8,35,28,.8));border-color:rgba(154,255,208,.55);box-shadow:0 0 18px rgba(154,255,208,.25);}
-.boss-card.lush b{color:#9affd0;}</style>
+.boss-card.lush b{color:#9affd0;}
+.boss-card.corpse{background:linear-gradient(135deg,rgba(40,45,60,.85),rgba(18,20,30,.9));border-color:rgba(190,200,230,.45);box-shadow:0 0 14px rgba(190,200,230,.15);}
+.boss-card.corpse b{color:#dfe6ff;}</style>
 
 </head>
 
@@ -7486,7 +7488,7 @@ if (site)
 return site;
 return queue.find(b => !b.site) || null;
 }
-function petShortName(planetId, pet) {
+function petShortName__orig(planetId, pet) {
 const name = SPECIES_DISPLAY_NAMES[pet.species] || "Native pet";
 const same = getPets(planetId).filter(p => (SPECIES_DISPLAY_NAMES[p.species] || "Native pet") === name);
 return same.length > 1 ? name + " " + (same.indexOf(pet) + 1) : name;
@@ -9316,10 +9318,11 @@ showShipToast("A ship needs " + POINTS_PER_COIN.toLocaleString() + " points to s
 return;
 }
 ship.score -= coins * POINTS_PER_COIN;
+ship.wave = 1;
 addToBank(planetId, coins);
 addRankPoints(Math.min(40, coins), "Cashed in points");
 savePlanetProgress();
-showShipToast("Sold " + (coins * POINTS_PER_COIN).toLocaleString() + " points for " + coins + " " + COIN_ICON_HTML + " — banked in the vault");
+showShipToast("Sold " + (coins * POINTS_PER_COIN).toLocaleString() + " points for " + coins + " " + COIN_ICON_HTML + " — banked in the vault · the ship is back to wave 1");
 }
 function shipUnloadAll(planetId, shipId) {
 const ship = (getShips(planetId) || []).find(s => s.id === shipId);
@@ -9944,13 +9947,13 @@ onTap: () => openShipBubbleFromYard(ship.id, proj.x, proj.y - 80 * scale / .34)
 });
 return out;
 }
-function openShipBubble(shipId, x, y) {
+function openShipBubble__orig(shipId, x, y) {
 if (typeof worldOpenHolo !== "function")
 return;
 worldHideBubble();
 worldOpenHolo("ships", { shipId, shipOnly: shipId, bubble: { x, y }, title: "" });
 }
-function openShipBubbleFromYard(shipId, x, y) {
+function openShipBubbleFromYard__orig(shipId, x, y) {
 worldHideBubble();
 worldOpenHolo("ships", { shipId, shipOnly: shipId, bubble: { x, y, fromYard: true }, title: "" });
 }
@@ -11192,7 +11195,10 @@ return true;
 if (k === "bossShips") {
 if (event.key === bossNetKey()) {
 bossFlight.remote = { list: event.list || [], at: performance.now(), ring: event.ring || {} };
-(event.fx || []).forEach(f => bossFlight.fx.push(Object.assign({}, f, { t0: performance.now() })));
+(event.fx || []).forEach(f => {
+bossFlight.fx.push(Object.assign({}, f, { t0: performance.now() }));
+bossFxSound(f);
+});
 }
 return true;
 }
@@ -11538,6 +11544,8 @@ if (e.charge >= 1 && !e.aim) {
 const t = bossNearestPlayer(e.px, e.py);
 if (passive || (t && t.d < 460)) {
 e.aim = { kind: e.power, tx: t ? t.x : e.px, ty: t ? t.y : e.py, t0: now };
+if (!passive)
+bossSfx("charge", bossScreen(e).x);
 e.charge = 0;
 }
 }
@@ -11608,6 +11616,7 @@ bossPushFx({ k: "hole", x: a.tx, y: a.ty, ms: 2600 });
 }
 else if (kind === "ricochet-orb") {
 const dx = a.tx - e.px, dy = a.ty - e.py, d = Math.hypot(dx, dy) || 1;
+bossSfx("orb", bossScreen(e).x);
 bossFlight.list.push({
 id: bossFlight.nextId++, kind: "orb", tier: 0, hp: 1, maxHp: 1, r: 9,
 px: e.px, py: e.py, vx: dx / d * 210, vy: dy / d * 210, life: 4, age: 0, face: 0, stunUntil: 0, slowUntil: 0, flash: 0
@@ -11726,6 +11735,8 @@ const t = bossNearestPlayer(p.x, p.y);
 const passive = BOSS_PASSIVE_POWERS[power];
 if (passive || (t && t.d < 400)) {
 bossFlight.ringAim[i] = { tx: t ? t.x : p.x, ty: t ? t.y : p.y, t0: now, kind: power };
+if (!passive)
+bossSfx("charge", bossToScreen(p.x, p.y).x);
 bossFlight.ringCd[i] = (9 - hurt * 3.5) + Math.random() * 3;
 }
 else {
@@ -11767,6 +11778,7 @@ floatingText("INTERRUPTED", s.x, s.y - 30, "#8fd8ff");
 }
 e.hp -= n;
 e.flash = .25;
+bossSfx("hit", bossScreen(e).x);
 if (e.hp <= 0)
 bossKillEnemy(ctx, e);
 }
@@ -12069,7 +12081,18 @@ return;
 }
 mpSend({ type: "fieldEvent", event: { kind: "bossZap", to: id, eff } });
 }
+const BOSS_FX_SOUND = { warp: "warp", zap: "zap", beam: "beam", pulse: "pulse", hole: "hole", boom: "boom", heal: "heal", net: "pulse" };
+function bossFxSound(f) {
+const kind = f.c === "#ffd76b" ? "steal-coins" : BOSS_FX_SOUND[f.k];
+if (kind) {
+try {
+bossSfx(kind, bossToScreen(f.x, f.y).x);
+}
+catch (error) { }
+}
+}
 function bossPushFx(f) {
+bossFxSound(f);
 f.t0 = performance.now();
 bossFlight.fx.push(f);
 if (typeof mp !== "undefined" && mp.connected)
@@ -12131,6 +12154,8 @@ return;
 }
 }
 function bossPlanetFloat(n) {
+if (bossThrottle("gong", 450))
+bossSfx("gong", bossPlanetScreen().x);
 const P = bossPlanetScreen();
 const pl = bossToPlane(P.x + (Math.random() - .5) * P.r, P.y - P.r * .6);
 bossFlight.planetFloat.push({ x: pl.x, y: pl.y, n, t0: performance.now() });
@@ -12985,7 +13010,7 @@ c.fillStyle = g;
 c.beginPath();
 c.ellipse(x, y + size * .3, size * 1.1, size * .42, 0, 0, Math.PI * 2);
 c.fill();
-drawSpacePet(c, NEM, x, y, size, 35, stunned ? 0 : now / 1000 * 6 + en.seed, en.species, false, "builder", facing);
+drawSpacePet(c, NEM, x, y, size, 75, stunned ? 0 : now / 1000 * 6 + en.seed, en.species, false, "builder", facing);
 c.fillStyle = "#2a0838";
 c.strokeStyle = "#ff3b6b";
 c.lineWidth = 1.4;
@@ -13106,6 +13131,10 @@ buttons: []
 function bossDrawSurfFx(c, now) {
 bossSurf.fx = bossSurf.fx.filter(f => now - f.t0 < (f.ms || 900));
 bossSurf.fx.forEach(f => {
+if (f.k === "hurt") {
+petHurtDraw(c, f, now);
+return;
+}
 const k = (now - f.t0) / (f.ms || 900);
 c.save();
 c.globalAlpha = Math.max(0, 1 - k);
@@ -13211,6 +13240,7 @@ world.effects.push({ type, x: sx, y: sy, t0: now, petId: "enemy" });
 else
 world.effects.push({ type, x: sx, y: sy, tx: me.x, ty: me.y, t0: now, petId: "enemy" });
 const petId = me.pet.id;
+bossSfx("snarl", sx);
 setTimeout(() => bossHitMyPet(type, petId, "A void guard"), 350);
 });
 }
@@ -13238,6 +13268,7 @@ worldRunAction({ "data-action": "pet-combat", "data-pet": petId, "data-option": 
 if (activePlanetOwnerId)
 pet.carry = null;
 bossSurfText(me.x, me.y - 60, "STOLEN!", "#ffd76b");
+bossSfx("steal", me.x);
 showShipToast("💰 " + (from || "A thief") + " snatched what " + name + " was carrying");
 }
 return;
@@ -13271,6 +13302,7 @@ worldRunAction({ "data-action": "pet-combat", "data-pet": petId, "data-option": 
 if (activePlanetOwnerId)
 pet.energy = Math.max(0, (pet.energy || 0) - dmg);
 bossSurfText(me.x, me.y - 60, "−" + dmg + " ⚡", "#ff7a6b");
+petHurtFx(me.x, me.y - 10, dmg, true);
 if (kind === "singularity")
 bossPetSlow[petId] = { until: now + 900, f: .2 };
 if ((pet.energy || 0) <= 0) {
@@ -13318,6 +13350,8 @@ if (rp.petId === pet.id || !hit(rp.x, rp.y, 22) || !bossThrottle("rpet:" + kind 
 return;
 mpSend({ type: "fieldEvent", event: { kind: "petCombat", to: rp.playerId, petId: rp.petId, eff: effOn.pets === "knock" ? "emp" : effOn.pets, from: bossMyName() } });
 bossSurfText(rp.x, rp.y - 40, "HIT " + rp.name, "#ff7ad9");
+if (effOn.pets !== "knock" && effOn.dmg)
+petHurtFx(rp.x, rp.y, 0, false);
 });
 if (me && !fromRoamer && hit(me.x, me.y, 22))
 bossHitMyPet(effOn.pets === "knock" ? "emp" : effOn.pets, me.pet.id, "Friendly fire");
@@ -13340,6 +13374,7 @@ worldRunAction({ "data-action": "pet-combat", "data-pet": pet.id, "data-option":
 if (activePlanetOwnerId)
 pet.energy = Math.max(0, (pet.energy || 0) - dmg);
 bossSurfText(ps.x, ps.y - ps.size, "−" + dmg + " ⚡", "#ff7a6b");
+petHurtFx(ps.x, ps.y - ps.size * .3, dmg, false);
 }
 function bossSurfHitEnemy(spot, n, stun) {
 const en = spot.en;
@@ -13352,6 +13387,7 @@ bossSurfText(spot.x, spot.y - spot.size * 1.6, "STUNNED", "#8fd8ff");
 return;
 }
 bossSurfText(spot.x, spot.y - spot.size * 1.6, "−" + n, "#ff9de6");
+petHurtFx(spot.x, spot.y - spot.size * .4, n, false);
 if (en.kind === "boss") {
 const willDie = en.hp - n <= 0;
 bossApply(spot.owner, { t: "pet", i: en.i, n });
@@ -13836,16 +13872,20 @@ return base;
 }
 function planetBoardHtml(planetId) {
 const html = planetBoardHtml__orig(planetId);
-const card = bossBoardCard(planetId);
+const card = bossBoardCard(planetId) + (typeof corpseBoardCard === "function" ? corpseBoardCard(planetId) : "");
 return card ? html.replace('<div class="board-grid">', card + '<div class="board-grid">') : html;
 }
 function mpInterceptPlanetAction(target) {
 if (bossBlocks(target))
 return true;
+if (typeof r13Intercept === "function" && r13Intercept(target))
+return true;
 return mpInterceptPlanetAction__orig(target);
 }
 function executePlanetDetailAction(target) {
 if (bossBlocks(target))
+return;
+if (typeof r13Blocks === "function" && r13Blocks(target))
 return;
 return executePlanetDetailAction__orig(target);
 }
@@ -13881,8 +13921,843 @@ b.coins = Math.max(b.coins, 400);
 bossLaunchRaid(b, Date.now(), target);
 return b.attack;
 }
-const FEATURE_ACTIONS = new Set(["pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
+const bossSfxLast = {};
+function bossSfx(kind, x) {
+if (typeof audioContext === "undefined" || !audioContext)
+return;
+const now = performance.now();
+if (bossSfxLast[kind] && now - bossSfxLast[kind] < 90)
+return;
+bossSfxLast[kind] = now;
+try {
+const t = audioContext.currentTime;
+let genre = "ambient";
+try {
+genre = getCurrentMusicStyle().genre;
+}
+catch (error) { }
+const wave = genre === "ambient" ? "sine" : genre === "edm" ? "sawtooth" : "square";
+const out = audioContext.createGain();
+let dest = out;
+if (audioContext.createStereoPanner && x !== undefined) {
+const pan = audioContext.createStereoPanner();
+pan.pan.value = Math.max(-.85, Math.min(.85, (x - W / 2) / (W * .5)));
+out.connect(pan);
+pan.connect(audioContext.destination);
+}
+else {
+out.connect(audioContext.destination);
+}
+void dest;
+const tone = (type, f0, f1, dur, vol, delay) => {
+const o = audioContext.createOscillator();
+const g = audioContext.createGain();
+const s = t + (delay || 0);
+o.type = type;
+o.frequency.setValueAtTime(f0, s);
+o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), s + dur);
+g.gain.setValueAtTime(.0001, s);
+g.gain.exponentialRampToValueAtTime(vol, s + Math.min(.03, dur * .2));
+g.gain.exponentialRampToValueAtTime(.0001, s + dur);
+o.connect(g);
+g.connect(out);
+o.start(s);
+o.stop(s + dur + .03);
+};
+const noise = (dur, vol, freq, delay) => {
+const len = Math.floor(audioContext.sampleRate * dur);
+const buf = audioContext.createBuffer(1, len, audioContext.sampleRate);
+const d = buf.getChannelData(0);
+for (let i = 0; i < len; i++)
+d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+const src = audioContext.createBufferSource();
+src.buffer = buf;
+const bp = audioContext.createBiquadFilter();
+bp.type = "bandpass";
+bp.frequency.value = freq;
+const g = audioContext.createGain();
+g.gain.value = vol;
+src.connect(bp);
+bp.connect(g);
+g.connect(out);
+src.start(t + (delay || 0));
+};
+let freq = 200;
+if (kind === "warp") {
+tone(wave, 880, 170, .5, .035);
+tone("sine", 895, 160, .5, .03);
+freq = 400;
+}
+else if (kind === "zap") {
+noise(.1, .18, 2400);
+tone("square", 1300, 280, .11, .025);
+freq = 1300;
+}
+else if (kind === "charge") {
+tone("sine", 260, 1100, .75, .022);
+freq = 600;
+}
+else if (kind === "beam") {
+tone("sawtooth", 150, 90, .42, .05);
+tone("sawtooth", 157, 96, .42, .035);
+noise(.3, .08, 900);
+freq = 150;
+}
+else if (kind === "pulse") {
+tone("square", 70, 620, .4, .04);
+freq = 300;
+}
+else if (kind === "orb") {
+tone("triangle", 420, 880, .14, .04);
+freq = 600;
+}
+else if (kind === "hole") {
+tone(wave, 420, 38, .9, .04);
+freq = 120;
+}
+else if (kind === "boom") {
+noise(.55, .32, 500);
+tone("sawtooth", 220, 40, .55, .05);
+tone("sine", 330, 330, .6, .02, .1);
+tone("sine", 392, 392, .6, .016, .1);
+freq = 220;
+}
+else if (kind === "hit") {
+tone("triangle", 900, 700, .08, .04);
+tone("triangle", 1340, 1100, .08, .025);
+freq = 900;
+}
+else if (kind === "heal") {
+tone("sine", 300, 600, .25, .025);
+freq = 450;
+}
+else if (kind === "snarl") {
+tone("sawtooth", 230, 110, .26, .035);
+noise(.2, .06, 700);
+freq = 180;
+}
+else if (kind === "steal") {
+tone("triangle", 880, 860, .07, .03);
+tone("triangle", 660, 650, .07, .03, .08);
+tone("triangle", 440, 430, .1, .03, .16);
+freq = 660;
+}
+else if (kind === "hurt") {
+tone("square", 620, 300, .18, .04);
+noise(.15, .12, 1500);
+freq = 500;
+}
+else if (kind === "gong") {
+tone("sine", 55, 52, .9, .07);
+tone("sine", 110, 104, .7, .035);
+tone(wave, 165, 150, .4, .012);
+freq = 110;
+}
+else if (kind === "steal-coins") {
+tone("triangle", 1200, 600, .25, .03);
+freq = 900;
+}
+else if (kind === "revive") {
+[523, 659, 784, 1047].forEach((f, i) => tone("triangle", f, f, .35, .035, i * .12));
+freq = 784;
+}
+try {
+recordGameEvent(freq, "enemy-" + kind);
+}
+catch (error) { }
+}
+catch (error) { }
+}
+function shipFactoryDefaultPower(planetId) {
+if (planetId === NEM && !bossDefeatedFor(bossMyId()))
+return "emp";
+const item = getShopItemForPlanet(planetId);
+return item ? item.id : "emp";
+}
+const PET_SHADOW_DESC = typeof CanvasRenderingContext2D !== "undefined"
+? Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "shadowBlur")
+: null;
+function drawSpacePet(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale) {
+const e = Number.isFinite(energy) ? energy : 100;
+const scale = Math.max(0, Math.min(1, (e - 6) / 54));
+if (!PET_SHADOW_DESC || scale >= 1 || !c)
+return drawSpacePet__orig(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale);
+let patched = false;
+try {
+Object.defineProperty(c, "shadowBlur", {
+configurable: true,
+get() { return PET_SHADOW_DESC.get.call(c); },
+set(v) { PET_SHADOW_DESC.set.call(c, v * scale); }
+});
+patched = true;
+}
+catch (error) { }
+try {
+return drawSpacePet__orig(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale);
+}
+finally {
+if (patched)
+delete c.shadowBlur;
+}
+}
+function petHurtFx(x, y, dmg, mine) {
+const now = performance.now();
+bossSurf.fx.push({ k: "hurt", x, y, t0: now, ms: 750, mine: !!mine, dmg: dmg || 0, seed: Math.random() * 6 });
+bossSfx("hurt", x);
+if (mine) {
+try {
+navigator.vibrate && navigator.vibrate(70);
+}
+catch (error) { }
+}
+}
+function petHurtDraw(c, f, now) {
+const k = (now - f.t0) / (f.ms || 750);
+if (k < 0 || k > 1)
+return;
+c.save();
+const g = c.createRadialGradient(f.x, f.y, 2, f.x, f.y, 60);
+g.addColorStop(0, "rgba(255,70,70," + (.75 * (1 - k)) + ")");
+g.addColorStop(1, "rgba(255,30,30,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(f.x, f.y, 60, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "rgba(255,120,120," + (1 - k) + ")";
+c.lineWidth = 3 * (1 - k) + 1;
+c.beginPath();
+c.arc(f.x, f.y, 14 + k * 46, 0, Math.PI * 2);
+c.stroke();
+c.fillStyle = "rgba(255,190,170," + (1 - k) + ")";
+for (let i = 0; i < 10; i++) {
+const a = f.seed + i / 10 * Math.PI * 2;
+const r = 10 + k * (40 + (i % 3) * 14);
+c.beginPath();
+c.arc(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r - k * 10, 2.4 * (1 - k) + .6, 0, Math.PI * 2);
+c.fill();
+}
+if (f.mine && world.scene && world.scene.W) {
+const W2 = world.scene.W, H2 = world.scene.H;
+const v = c.createRadialGradient(W2 / 2, H2 / 2, Math.min(W2, H2) * .35, W2 / 2, H2 / 2, Math.max(W2, H2) * .75);
+v.addColorStop(0, "rgba(255,0,0,0)");
+v.addColorStop(1, "rgba(255,30,30," + (.35 * (1 - k)) + ")");
+c.fillStyle = v;
+c.fillRect(0, 0, W2, H2);
+}
+c.restore();
+}
+function corpseLists() {
+if (!planetSave.corpses || typeof planetSave.corpses !== "object")
+planetSave.corpses = {};
+return planetSave.corpses;
+}
+function getCorpses(planetId) {
+const all = corpseLists();
+if (!Array.isArray(all[planetId]))
+all[planetId] = [];
+return all[planetId];
+}
+function findCorpse(id) {
+const all = corpseLists();
+for (const pid of Object.keys(all)) {
+const list = all[pid] || [];
+const i = list.findIndex(p => p && p.id === id);
+if (i >= 0)
+return { pet: list[i], planetId: pid, list };
+}
+return null;
+}
+function findDeadCargo(id) {
+const ships = planetSave.ships || {};
+for (const pid of Object.keys(ships)) {
+for (const s of ships[pid] || []) {
+const p = (s.cargoPets || []).find(x => x && x.id === id && x.dead);
+if (p)
+return { pet: p, ship: s, planetId: pid };
+}
+}
+return null;
+}
+function isDeadPetId(id) {
+return !!(id && (findCorpse(id) || findDeadCargo(id)));
+}
+function corpseHash(id) {
+let h = 0;
+for (let i = 0; i < String(id).length; i++)
+h = (h * 31 + String(id).charCodeAt(i)) >>> 0;
+return h;
+}
+function corpseDefaultSpot(id) {
+const h = corpseHash(id);
+return { t: "planet", lat: 1.24 + (h % 7) * .02, lon: ((h >> 4) % 140) / 100 - .7 };
+}
+function corpseName(cp, planetId) {
+return SPECIES_DISPLAY_NAMES[cp.species] || "Pet";
+}
+function corpseMoveTo(f, planetId) {
+if (f.planetId === planetId)
+return;
+const i = f.list.indexOf(f.pet);
+if (i >= 0)
+f.list.splice(i, 1);
+getCorpses(planetId).push(f.pet);
+}
+function corpseDie(p, planetId) {
+p.dead = true;
+p.energy = 0;
+p.diedAt = Date.now();
+p.carriedBy = null;
+p.at = null;
+if (p.carry) {
+const spot = corpseDefaultSpot(p.id);
+try {
+worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .05, lon: spot.lon + .04 } }, p.carry);
+}
+catch (error) { }
+p.carry = null;
+}
+getCorpses(planetId).push(p);
+showShipToast("💀 A " + corpseName(p) + " on " + bossPlanetName(planetId) + " ran out of energy. Carry it to Kepler's Spore Greenhouse to bring it back.");
+}
+function corpseForEachPet(fn) {
+const s = planetSave;
+Object.keys(s.pets || {}).forEach(pid => (s.pets[pid] || []).forEach(p => p && fn(p)));
+Object.keys(s.ships || {}).forEach(pid => (s.ships[pid] || []).forEach(ship => {
+if (ship.pendingPilot)
+fn(ship.pendingPilot);
+(ship.cargoPets || []).forEach(p => p && fn(p));
+}));
+}
+const petIsOut = p => !!p && (p.dead || (typeof p.energy === "number" && p.energy <= 0));
+function corpseSweep() {
+if (!localPlanetSave)
+return;
+let ended = false;
+withMySave(() => {
+const s = planetSave;
+let changed = false;
+if (!s.corpseRuleV1) {
+s.corpseRuleV1 = 1;
+let n = 0;
+corpseForEachPet(p => {
+if (!p.dead && typeof p.energy === "number" && p.energy <= 0) {
+p.energy = 15;
+n++;
+}
+});
+if (n)
+setTimeout(() => showShipToast("⚠ " + n + " pet" + (n > 1 ? "s are" : " is") + " nearly out of energy — feed " + (n > 1 ? "them" : "it") + "! A pet at zero energy now becomes a corpse."), 2000);
+changed = true;
+}
+Object.keys(s.pets || {}).forEach(pid => {
+const list = s.pets[pid] || [];
+for (let i = list.length - 1; i >= 0; i--) {
+if (petIsOut(list[i])) {
+const p = list.splice(i, 1)[0];
+if (roamingActive && roamingPetId === p.id)
+ended = true;
+corpseDie(p, pid);
+changed = true;
+}
+}
+});
+Object.keys(s.ships || {}).forEach(pid => {
+(s.ships[pid] || []).forEach(ship => {
+if (petIsOut(ship.pendingPilot)) {
+const p = ship.pendingPilot;
+if (roamingActive && roamingPetId === p.id)
+ended = true;
+ship.pendingPilot = null;
+ship.pendingDestinationId = null;
+ship.pendingRouteStops = [];
+corpseDie(p, pid);
+changed = true;
+}
+(ship.cargoPets || []).forEach(cp => {
+if (cp && !cp.dead && typeof cp.energy === "number" && cp.energy <= 0) {
+cp.dead = true;
+cp.diedAt = Date.now();
+changed = true;
+}
+});
+});
+});
+if (changed)
+savePlanetProgress();
+});
+if (ended && roamingActive)
+endRoaming();
+}
+setInterval(() => { try {
+corpseSweep();
+}
+catch (error) {
+console.error("Corpse sweep failed:", error);
+} }, 2000);
+function corpseDraw(c, cp, x, y, size, planetId) {
+c.save();
+try {
+c.globalAlpha = .75;
+try {
+c.filter = "grayscale(1) brightness(.8)";
+}
+catch (error) { }
+c.translate(x, y - size * .15);
+c.rotate(Math.PI / 2 * .92);
+drawSpacePet(c, planetId || selectedStartPlanet, 0, 0, size, 0, 0, cp.species, false, "builder", 1);
+}
+catch (error) { }
+c.restore();
+c.save();
+try {
+c.filter = "none";
+}
+catch (error) { }
+const t = performance.now() / 1000;
+const k = (t * .35 + corpseHash(cp.id) % 10 / 10) % 1;
+c.globalAlpha = (1 - k) * .5;
+c.fillStyle = "#dfe8ff";
+c.beginPath();
+c.ellipse(x + Math.sin(t * 2) * 4, y - size * .6 - k * size * .9, size * .08, size * .14, 0, 0, Math.PI * 2);
+c.fill();
+c.globalAlpha = 1;
+c.font = Math.round(size * .4) + "px system-ui,'Apple Color Emoji',sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("💀", x + size * .45, y - size * .55);
+c.restore();
+}
+function corpseSurfaceEntries(queue, p) {
+if (roomState)
+return;
+const planet = selectedStartPlanet;
+getCorpses(planet).forEach(cp => {
+if (!cp || cp.carriedBy)
+return;
+const ll = cp.at && cp.at.t === "planet" ? cp.at : corpseDefaultSpot(cp.id);
+const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const size = Math.max(22, p.width * .062);
+queue.push({
+z: p.groundDepthAt(pr.x, pr.y),
+alpha: 1,
+draw: () => {
+corpseDraw(p.c, cp, pr.x, pr.y, size, planet);
+world.hits.push({
+x: pr.x, y: pr.y - size * .3, r: size * .6, z: 6,
+draggable: true,
+desc: { k: "corpse", r: cp.id, n: 1 },
+src: { t: "corpse", p: cp.id },
+onTap: () => corpseBubble(cp, pr.x, pr.y - size * .8)
+});
+}
+});
+});
+}
+function corpseBubble(cp, x, y) {
+const planet = selectedStartPlanet;
+const roamer = roamingActive && world.roamHead && world.roamHead.pet;
+const buttons = [];
+if (roamer && !roamer.carry)
+buttons.push({ label: "🐾 Pick it up", primary: true, action: () => worldMove({ t: "corpse", p: cp.id }, { t: "pet", p: roamer.id }, { k: "corpse", r: cp.id, n: 1 }) });
+worldShowBubble({
+x, y,
+iconHtml: "💀",
+title: corpseName(cp) + " · out of energy",
+meta: "Can't eat, walk or work",
+text: planet === "kepler"
+? "Drag it into the Spore Greenhouse here — its Revival Bloom can bring it back."
+: "Drag it onto a pet to carry it, or onto a ship to load it into the hold. The Spore Greenhouse on Kepler can bring it back to life.",
+buttons
+});
+}
+function worldPlaceTake(planetId, place, d) {
+if (place && place.t === "corpse") {
+const f = findCorpse(place.p);
+if (!f || f.pet.carriedBy)
+return null;
+return { k: "corpse", r: f.pet.id, n: 1 };
+}
+const taken = worldPlaceTake__orig(planetId, place, d);
+if (taken && taken.k === "corpse") {
+const f = findCorpse(taken.r);
+if (f)
+f.pet.carriedBy = null;
+}
+return taken;
+}
+function worldPlacePut(planetId, place, d) {
+if (!d || d.k !== "corpse")
+return worldPlacePut__orig(planetId, place, d);
+const f = findCorpse(d.r);
+if (!f || !place)
+return false;
+const cp = f.pet;
+if (place.t === "corpse") {
+cp.carriedBy = null;
+return true;
+}
+if (place.t === "pet") {
+const pet = getPetByIdAtPlanet(planetId, place.p);
+if (!pet || pet.carry || pet.id === cp.id)
+return false;
+pet.carry = { k: "corpse", r: cp.id, n: 1 };
+cp.carriedBy = pet.id;
+corpseMoveTo(f, planetId);
+return true;
+}
+if (place.t === "ground" && place.at && place.at.t === "planet") {
+cp.carriedBy = null;
+cp.at = { t: "planet", lat: place.at.lat, lon: place.at.lon };
+corpseMoveTo(f, planetId);
+return true;
+}
+if (place.t === "ship") {
+const ship = worldShip(planetId, place.s);
+if (!ship || shipCargoRoom(ship) < PET_CARGO_SLOTS)
+return false;
+const i = f.list.indexOf(cp);
+if (i >= 0)
+f.list.splice(i, 1);
+cp.carriedBy = null;
+cp.at = null;
+if (!Array.isArray(ship.cargoPets))
+ship.cargoPets = [];
+ship.cargoPets.push(cp);
+return true;
+}
+return false;
+}
+function worldItemInfo(d) {
+if (d && d.k === "corpse") {
+const f = findCorpse(d.r);
+const name = f ? corpseName(f.pet) : "pet";
+return {
+name: "A " + name + "'s body",
+iconHtml: "💀",
+colour: "#aab3c8",
+text: "Out of energy for good — unless you get it to Kepler. Load it into a ship's hold to fly it there, and lay it in the Spore Greenhouse's Revival Bloom."
+};
+}
+return worldItemInfo__orig(d);
+}
+function drawWorldItem(c, d, x, y, size, opts) {
+if (d && d.k === "corpse") {
+const f = findCorpse(d.r);
+if (f) {
+corpseDraw(c, f.pet, x, y + size * .25, size * .9);
+return;
+}
+c.save();
+c.font = Math.round(size * .7) + "px system-ui,'Apple Color Emoji',sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("💀", x, y);
+c.restore();
+return;
+}
+return drawWorldItem__orig(c, d, x, y, size, opts);
+}
+function petShortName(planetId, pet) {
+const name = petShortName__orig(planetId, pet);
+return pet && pet.dead ? "💀 " + name : name;
+}
+const REVIVE_COST = 25;
+const REVIVE_MS = 75000;
+const REVIVE_ENERGY = 40;
+function reviveState(planetId) {
+if (!planetSave.revival)
+planetSave.revival = {};
+return planetSave.revival[planetId] || null;
+}
+function reviveCandidates(planetId) {
+const out = [];
+getCorpses(planetId).forEach(cp => out.push({ pet: cp, src: { t: "corpse", p: cp.id }, where: cp.carriedBy ? "carried" : "lying here" }));
+const ships = planetId === "earth" ? (planetSave.ships.earth || []) : (getShips(planetId) || []);
+ships.forEach(s => (s.cargoPets || []).forEach(p => {
+if (p && p.dead)
+out.push({ pet: p, src: { t: "cargo", s: s.id, p: p.id }, where: "in a ship's hold" });
+}));
+return out;
+}
+function reviveStart(planetId, petId) {
+if (reviveState(planetId)) {
+showShipToast("🌸 The bloom is already working on someone");
+return;
+}
+let pet = null;
+const f = findCorpse(petId);
+if (f) {
+pet = f.pet;
+if (pet.carriedBy) {
+const carrier = getPetByIdAtPlanet(planetId, pet.carriedBy) || getPetByIdAtPlanet(f.planetId, pet.carriedBy);
+if (carrier && carrier.carry && carrier.carry.r === petId)
+carrier.carry = null;
+}
+}
+else {
+const c = findDeadCargo(petId);
+if (c)
+pet = c.pet;
+}
+if (!pet)
+return;
+if (!spendCoins(planetId, REVIVE_COST)) {
+showShipToast("The bloom needs " + REVIVE_COST + " " + COIN_ICON_HTML + " of nutrients");
+return;
+}
+if (f) {
+f.list.splice(f.list.indexOf(pet), 1);
+}
+else {
+const c = findDeadCargo(petId);
+c.ship.cargoPets.splice(c.ship.cargoPets.indexOf(pet), 1);
+}
+pet.carriedBy = null;
+planetSave.revival[planetId] = { pet, startAt: Date.now(), ms: REVIVE_MS };
+savePlanetProgress();
+showShipToast("🌸 The petals close round the " + corpseName(pet) + "…");
+}
+function reviveCollect(planetId) {
+const st = reviveState(planetId);
+if (!st || Date.now() - st.startAt < st.ms)
+return;
+const pet = st.pet;
+pet.dead = false;
+pet.diedAt = null;
+pet.energy = REVIVE_ENERGY;
+pet.lastEnergyCheck = Date.now();
+pet.revived = (pet.revived || 0) + 1;
+pet.at = null;
+pet.carry = null;
+if (!planetSave.pets[planetId])
+planetSave.pets[planetId] = [];
+planetSave.pets[planetId].push(pet);
+delete planetSave.revival[planetId];
+addRankPoints(30, "Revived a pet");
+savePlanetProgress();
+showShipToast("🌸 The bloom opens — the " + corpseName(pet) + " is alive again! Feed it, it's weak.");
+bossSfx("revive");
+}
+function roomReviveBloomFixture(c, list, planetId, def) {
+list.push({ v: .8, draw: () => {
+const p = roomFloorPt(.5, .8);
+const s = p.s;
+const st = reviveState(planetId);
+const t = performance.now() / 1000;
+const k = st ? Math.min(1, (Date.now() - st.startAt) / st.ms) : 0;
+const ready = st && k >= 1;
+const open = !st || ready ? 1 : .08 + .12 * Math.sin(t * 1.5) * .5;
+c.save();
+c.fillStyle = "rgba(40,22,30,.9)";
+c.strokeStyle = "#ff9de6";
+c.lineWidth = 2;
+c.shadowColor = "#ff9de6";
+c.shadowBlur = 12;
+c.beginPath();
+c.ellipse(p.x, p.y, 70 * s, 18 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+if (st) {
+c.save();
+c.globalAlpha = .5 + .5 * k;
+try {
+c.filter = k < 1 ? "grayscale(" + (1 - k) + ")" : "none";
+}
+catch (error) { }
+c.translate(p.x, p.y - 26 * s);
+c.rotate(Math.PI / 2 * (1 - k) * .9);
+drawSpacePet(c, planetId, 0, 0, 34 * s, k * 100, t * 2 * k, st.pet.species, false, "builder", 1);
+c.restore();
+}
+const petals = 7;
+for (let i = 0; i < petals; i++) {
+const a = -Math.PI / 2 + (i - (petals - 1) / 2) * (.28 + .32 * open);
+const len = (58 + 6 * Math.sin(t * 2 + i)) * s;
+c.save();
+c.translate(p.x, p.y - 4 * s);
+c.rotate(a + Math.PI / 2);
+c.fillStyle = i % 2 ? "rgba(255,157,230,.55)" : "rgba(255,200,240,.5)";
+c.strokeStyle = "#ffc6f2";
+c.lineWidth = 1.5;
+c.beginPath();
+c.ellipse(0, -len * .5, 13 * s, len * .5, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.restore();
+}
+c.fillStyle = "#fff2ff";
+for (let i = 0; i < 8; i++) {
+const kk = (t * .25 + i / 8) % 1;
+c.globalAlpha = (1 - kk) * (st ? .9 : .4);
+c.beginPath();
+c.arc(p.x + Math.sin(i * 2.1 + t) * 50 * s, p.y - 20 * s - kk * 90 * s, 2 * s, 0, Math.PI * 2);
+c.fill();
+}
+c.globalAlpha = 1;
+if (st) {
+c.strokeStyle = ready ? "#7dffb0" : "#ff9de6";
+c.lineWidth = 4;
+c.beginPath();
+c.arc(p.x, p.y - 90 * s, 14, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+c.stroke();
+}
+c.shadowBlur = 0;
+c.fillStyle = "#ffe6fb";
+c.font = "800 " + Math.round(11 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(ready ? "REVIVED — TAP TO WAKE" : st ? "REVIVING · " + Math.ceil((st.ms - (Date.now() - st.startAt)) / 1000) + "s" : "REVIVAL BLOOM", p.x, p.y + 34 * s);
+c.restore();
+world.drops.push({
+x: p.x, y: p.y - 30 * s, r: 80 * s,
+kind: "bloom",
+accept: d => !!d && d.k === "corpse" && !st,
+drop: (d) => worldRunAction({ "data-action": "revive-start", "data-pet": d.r })
+});
+world.hits.push({ x: p.x, y: p.y - 30 * s, r: 70 * s, z: 6, onTap: () => {
+if (ready) {
+worldRunAction({ "data-action": "revive-collect" });
+return;
+}
+const cands = reviveCandidates(planetId);
+worldShowBubble({
+x: p.x, y: p.y - 100 * s,
+iconHtml: "🌸",
+title: "Revival Bloom",
+meta: st ? "Mending a " + corpseName(st.pet) + " · " + Math.ceil((st.ms - (Date.now() - st.startAt)) / 1000) + "s" : REVIVE_COST + " " + COIN_ICON_HTML + " of nutrients · " + Math.round(REVIVE_MS / 1000) + "s to grow",
+text: st
+? "Its petals stay closed until the pet inside is mended."
+: cands.length
+? "Lay a pet's body in it (drag it in, or pick one here) and the bloom closes round it. It comes back with " + REVIVE_ENERGY + "% energy."
+: "Bring a pet's body to Kepler — carried by a pet, or in a ship's hold — and the bloom can bring it back.",
+buttons: st ? [] : cands.slice(0, 6).map(cd => ({
+label: "Revive the " + corpseName(cd.pet) + " (" + cd.where + ") · " + REVIVE_COST + " " + COIN_ICON_HTML,
+primary: true,
+disabled: getTotalAvailableCoins(planetId) < REVIVE_COST,
+action: () => worldRunAction({ "data-action": "revive-start", "data-pet": cd.pet.id })
+}))
+});
+} });
+} });
+}
+function corpseBoardCard(planetId) {
+const n = getCorpses(planetId).length;
+const r = reviveState(planetId);
+if (!n && !r)
+return "";
+return '<div class="boss-card corpse"><b>' + (n ? "💀 " + n + " pet" + (n > 1 ? "s have" : " has") + " run out of energy here" : "🌸 A pet is reviving") + '</b><span>' +
+(r ? "The Revival Bloom is mending a " + corpseName(r.pet) + ". " : "") +
+(n ? "Bodies can't eat. Carry them on a pet or in a ship's hold to Kepler — its Spore Greenhouse can bring them back." : "") + '</span></div>';
+}
+const CORPSE_BLOCKED = new Set(["feed-pet", "feed-extra", "feed-perk-food", "carry-feed", "set-pet-role", "assign-pending-pilot", "roam-pet", "train-pet-stat", "toggle-ship-pilot", "forge-powerup", "site-workers", "special-use"]);
+function r13Blocks(target) {
+if (!target)
+return false;
+const action = target.getAttribute("data-action");
+if (!CORPSE_BLOCKED.has(action))
+return false;
+const id = action === "carry-feed" ? target.getAttribute("data-target") : target.getAttribute("data-pet");
+if (!isDeadPetId(id))
+return false;
+if (bossThrottle("deadToast", 1500))
+showShipToast("💀 That pet has no energy left — it can't eat or work. Kepler's Spore Greenhouse can revive it.");
+return true;
+}
+function releaseMyClaims(exceptKey) {
+Object.keys(mp.claimedShips || {}).forEach(key => {
+const c = mp.claimedShips[key];
+if (!c || c.byId !== mp.myId || key === exceptKey)
+return;
+const i = key.indexOf(":");
+mpSend({ type: "releaseShip", ownerId: key.slice(0, i), shipId: key.slice(i + 1) });
+});
+selectedLaunchShipId = null;
+}
+function r13Intercept(target) {
+if (r13Blocks(target))
+return true;
+if (typeof mp === "undefined" || !mp.connected)
+return false;
+const action = target.getAttribute("data-action");
+if (!MP_CREW_ACTIONS.has(action))
+return false;
+const owner = activePlanetOwnerId || mp.myId;
+const shipId = target.getAttribute("data-ship");
+if (action === "join-copilot")
+releaseMyClaims(mpShipKey(owner, shipId));
+if (activePlanetOwnerId) {
+if (action === "join-copilot")
+setTimeout(() => mpSetCoPilotReady(owner, shipId, true), 250);
+return false;
+}
+if (action === "join-copilot") {
+mpJoinCoPilot(owner, shipId);
+setTimeout(() => mpSetCoPilotReady(owner, shipId, true), 250);
+}
+else if (action === "leave-copilot") {
+mpLeaveCoPilot(owner, shipId);
+}
+else {
+const mine = mpGetMyCoPilotEntry(owner, shipId);
+mpSetCoPilotReady(owner, shipId, !(mine && mine.ready));
+}
+if (planetDetailId)
+renderPlanetDetail(planetDetailId);
+return true;
+}
+function crewBubbleFor(shipId, x, y) {
+if (typeof mp === "undefined" || !mp.connected)
+return false;
+const planet = selectedStartPlanet;
+const ships = planet === "earth" ? (planetSave.ships.earth || []) : (getShips(planet) || []);
+const ship = ships.find(s => s.id === shipId);
+const claim = ship && shipClaimedByOther(ship);
+if (!claim)
+return false;
+const crew = claim.coPilots || [];
+const mine = crew.find(cp => cp.id === mp.myId);
+const run = action => worldRunAction({ "data-action": action, "data-ship": shipId });
+worldShowBubble({
+x, y,
+iconHtml: '<img src="' + shipThumbUrl(ship) + '" alt="" style="width:1.4em;height:1.4em;object-fit:contain">',
+title: claim.byName + "'s flight",
+meta: "Pilot " + claim.byName + (crew.length ? " · crew: " + crew.map(cp => (cp.ready ? "✓ " : "") + cp.name).join(", ") : " · no crew yet"),
+text: mine
+? "You're in the crew — when " + claim.byName + " launches, you fly with them."
+: "Join as co-pilot and you'll launch with " + claim.byName + " and fly the same field together. Joining puts down any ship you'd picked.",
+buttons: mine
+? [
+{ label: mine.ready ? "✓ Ready to fly" : "Ready up", primary: !mine.ready, action: () => run("toggle-copilot-ready") },
+{ label: "Leave the crew", action: () => run("leave-copilot") }
+]
+: [
+{ label: "👥 Join as co-pilot", primary: true, action: () => run("join-copilot") },
+{ label: "Ship details", action: () => { worldHideBubble(); openShipBubbleFromYard__orig(shipId, x, y); } }
+]
+});
+return true;
+}
+function openShipBubbleFromYard(shipId, x, y) {
+if (crewBubbleFor(shipId, x, y))
+return;
+return openShipBubbleFromYard__orig(shipId, x, y);
+}
+function openShipBubble(shipId, x, y) {
+if (crewBubbleFor(shipId, x, y))
+return;
+return openShipBubble__orig(shipId, x, y);
+}
+const FEATURE_ACTIONS = new Set(["revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
+if (action === "revive-start") {
+reviveStart(planetId, target.getAttribute("data-pet"));
+return;
+}
+if (action === "revive-collect") {
+reviveCollect(planetId);
+return;
+}
 if (action === "pet-combat") {
 petCombatAction(planetId, target.getAttribute("data-pet"), target.getAttribute("data-option"), target.getAttribute("data-item"));
 return;
@@ -18284,7 +19159,7 @@ hat.draw(c, size, glow);
 }
 c.restore();
 }
-function drawSpacePet(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale) {
+function drawSpacePet__orig(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale) {
 const effectiveFacingScale = facingScale === undefined
 ? 1
 : facingScale;
@@ -21601,7 +22476,7 @@ el.classList.toggle("roam-hidden", hidden);
 });
 }
 const COIN_BAG = 10;
-function worldItemInfo(d) {
+function worldItemInfo__orig(d) {
 if (!d)
 return null;
 if (d.k === "coin") {
@@ -21682,7 +22557,7 @@ sprite = { text };
 worldSpriteCache[html] = sprite;
 return sprite;
 }
-function drawWorldItem(c, d, x, y, size, opts) {
+function drawWorldItem__orig(c, d, x, y, size, opts) {
 opts = opts || {};
 const info = worldItemInfo(d);
 if (!info)
@@ -21804,7 +22679,7 @@ return out;
 function worldShipCargoRoom(ship) {
 return shipCargoRoom(ship);
 }
-function worldPlaceTake(planetId, place, d) {
+function worldPlaceTake__orig(planetId, place, d) {
 if (!place || !d)
 return null;
 if (place.t === "vault") {
@@ -21886,7 +22761,7 @@ return { k: g.k, r: g.r, n: g.n };
 }
 return null;
 }
-function worldPlacePut(planetId, place, d) {
+function worldPlacePut__orig(planetId, place, d) {
 if (!place || !d)
 return false;
 if (place.t === "vault") {
@@ -25959,6 +26834,7 @@ label("HOT SPRING · walk in for a soak", p.x, p.y + 46 * p.s, 11);
 }
 else if (def.type === "greenhouse") {
 const beds = ks.beds || {};
+roomReviveBloomFixture(c, list, planetId, def);
 list.push({ v: -2, draw: () => {
 const g = roomGeo;
 const t = performance.now() / 1000;
@@ -27122,7 +27998,7 @@ remoteSeed +=
 seedSource.
 charCodeAt(i);
 }
-drawPetOnTerrain(c, globeTerrainAt(selectedStartPlanet, roamer.presence.lat, roamer.presence.lon), remoteProj.x, remoteProj.y, Math.max(26, width * .075), performance.now() / 1000, () => withPetBack(!!roamer.presence.back, () => drawSpacePet(c, selectedStartPlanet, remoteProj.x, remoteProj.y, Math.max(26, width * .075), 100, remoteSeed +
+drawPetOnTerrain(c, globeTerrainAt(selectedStartPlanet, roamer.presence.lat, roamer.presence.lon), remoteProj.x, remoteProj.y, Math.max(26, width * .075), performance.now() / 1000, () => withPetBack(!!roamer.presence.back, () => drawSpacePet(c, selectedStartPlanet, remoteProj.x, remoteProj.y, Math.max(26, width * .075), (getPetByIdAtPlanet(selectedStartPlanet, roamer.presence.petId) || { energy: 100 }).energy, remoteSeed +
 (roamer.presence.moving
 ? performance.now() / 1000 * ROAM_WALK_ANIM_BOOST
 : 0), roamer.presence.
@@ -27160,6 +28036,7 @@ viewLat: roamViewLat, viewLon: roamViewLon
 try {
 worldDrawPlanetGround(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 bossSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+corpseSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
@@ -27675,7 +28552,7 @@ if (now >= readyAt) {
 changed = true;
 if (build.type ===
 "ship") {
-createShip(planetId, 0, 0, "emp", 1, 3, {}, null, shipBuildCargoBonus(build), !!build.dualPerk, null, build.dualPerk
+createShip(planetId, 0, 0, shipFactoryDefaultPower(planetId), 1, 3, {}, null, shipBuildCargoBonus(build), !!build.dualPerk, null, build.dualPerk
 ? 3
 : (build.petBay
 ? 2
@@ -28024,7 +28901,7 @@ ready: !!ready
 }
 function mpRenderCrewUiHtml(ship, claimedBy, isSelectedForLaunch) {
 if (!claimedBy ||
-!activePlanetOwnerId) {
+(!activePlanetOwnerId && !(typeof mp !== "undefined" && mp.connected))) {
 return "";
 }
 const coPilots = claimedBy.coPilots || [];
