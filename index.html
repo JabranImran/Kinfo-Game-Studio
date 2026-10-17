@@ -3115,7 +3115,10 @@ color:var(--ink);transition:transform .12s ease;}
 .boss-card.lush{background:linear-gradient(135deg,rgba(20,90,60,.7),rgba(8,35,28,.8));border-color:rgba(154,255,208,.55);box-shadow:0 0 18px rgba(154,255,208,.25);}
 .boss-card.lush b{color:#9affd0;}
 .boss-card.corpse{background:linear-gradient(135deg,rgba(40,45,60,.85),rgba(18,20,30,.9));border-color:rgba(190,200,230,.45);box-shadow:0 0 14px rgba(190,200,230,.15);}
-.boss-card.corpse b{color:#dfe6ff;}</style>
+.boss-card.corpse b{color:#dfe6ff;}
+.shield-heart{color:#7fd8ff;text-shadow:0 0 6px #4fd6ff;}
+#focusPlanetName{display:none !important;}
+.boss-card .boss-lore{font-size:11.5px;line-height:1.4;color:#ffd6f4;opacity:.92;font-style:italic;}</style>
 
 </head>
 
@@ -9760,7 +9763,7 @@ const claim = yardClaim(s);
 return claim && claim.byId !== mp.myId && (claim.coPilots || []).some(cp => cp.id === mp.myId);
 }) || null;
 }
-function resolvePadShip(ships) {
+function resolvePadShip__orig(ships) {
 if (!ships || !ships.length)
 return null;
 return myCrewShipHere(ships) || (selectedStartPlanet === "earth" ? resolveEarthLaunchChoice() : resolveLaunchShip(ships));
@@ -10686,7 +10689,7 @@ const BOSS_SATS = 6;
 const BOSS_SAT_HP = 3;
 const BOSS_SAT_RING = 250;
 const BOSS_PETS = 8;
-const BOSS_PET_HP = 3;
+const BOSS_PET_HP = 100;
 const BOSS_STAGE_MS = 210000;
 const BOSS_ATTACK_GAP_MS = 360000;
 const BOSS_PET_POWERS = ["incinerator-beam", "emp", "ricochet-orb", "singularity", "chrono-field"];
@@ -10726,6 +10729,11 @@ if (!Array.isArray(b.pets) || b.pets.length !== BOSS_PETS)
 b.pets = Array.from({ length: BOSS_PETS }, () => ({ hp: BOSS_PET_HP, deadAt: 0 }));
 if (!b.loot)
 b.loot = { coins: 0, mats: {}, items: {} };
+if (!b.petsEnergyV) {
+b.petsEnergyV = 1;
+b.pets.forEach(p => { if (p.hp > 0 && p.hp <= 3)
+p.hp = Math.round(p.hp / 3 * 100); });
+}
 return b;
 }
 const bossMirror = {};
@@ -10813,24 +10821,19 @@ else if (ev.t === "sat") {
 const s = b.sats[ev.i];
 if (s && s.hp > 0) {
 s.hp = Math.max(0, s.hp - n);
-if (s.hp <= 0) {
+if (s.hp <= 0)
 s.deadAt = Date.now();
-b.hp = Math.max(0, b.hp - 40);
-}
 }
 }
 else if (ev.t === "pet") {
 const p = b.pets[ev.i];
 if (p && p.hp > 0) {
 p.hp = Math.max(0, p.hp - n);
-if (p.hp <= 0) {
+if (p.hp <= 0)
 p.deadAt = Date.now();
-b.hp = Math.max(0, b.hp - 15);
-}
 }
 }
 else if (ev.t === "ship") {
-b.hp = Math.max(0, b.hp - 12);
 }
 else if (ev.t === "raidKill") {
 const a = b.attack;
@@ -10898,6 +10901,7 @@ now - (b.lastAttackAt || 0) > BOSS_ATTACK_GAP_MS &&
 b.coins >= 60 &&
 Math.random() < 1 / 30)
 bossLaunchRaid(b, now);
+enemyFleetTick(b, now);
 bossSiegeTick(b, now);
 }
 function bossRouteHops() {
@@ -11043,7 +11047,7 @@ bossMark(true);
 bossAnnounce("🛡 The raid on " + bossPlanetName(a.target) + " is repelled! +" + reward + " coins banked there, and anything stolen came back.");
 }
 function bossSiegeTick(b, now) {
-const ships = (localPlanetSave.ships || {})[NEM] || [];
+const ships = ((localPlanetSave.ships || {})[NEM] || []).filter(s => !s.enemy);
 if (!ships.length) {
 b.siegeAt = now;
 return;
@@ -11060,7 +11064,13 @@ return;
 }
 b.siegeAt = now;
 const ship = ships[Math.floor(Math.random() * ships.length)];
+if (ship.shieldHearts > 0)
+ship.shieldHearts--;
+else
 ship.lives = Math.max(0, (ship.lives || 1) - 1);
+b.lastSiege = { shipId: ship.id, at: Date.now(), lives: ship.lives, shield: ship.shieldHearts || 0, wreck: ship.lives <= 0 };
+bossMark(true);
+bossLastSync = 0;
 if (ship.lives <= 0) {
 bossWreckShip(ship);
 }
@@ -11390,6 +11400,7 @@ id: a[0], kind: a[1], tier: a[2], px: a[3], py: a[4], hp: a[5], maxHp: a[6], r: 
 aim: a[11] ? { tx: a[11], ty: a[12], kind: a[13] } : null,
 power: a[14] || null,
 ghost: !!(a[15] & 1), blade: !!(a[15] & 2), elite: !!(a[15] & 4),
+shield: a[16] || 0, maxShield: a[17] || 0,
 remote: true
 }));
 }
@@ -11459,9 +11470,9 @@ const tier = roll < t3 ? 3 : roll < t3 + t2 ? 2 : 1;
 const rank = bossRankNow();
 const eliteChance = (rank >= 19 ? .3 : rank >= 17 ? .15 : 0) + (ctx.planet === NEM && hurt > .6 ? .1 : 0);
 const elite = Math.random() < eliteChance;
-const hp = [0, 2, 3, 3][tier] + (elite ? 2 : 0);
+const hp = [0, 2, 3, 3][tier];
 const e = {
-id: bossFlight.nextId++, kind: "ship", tier, elite, hp, maxHp: hp,
+id: bossFlight.nextId++, kind: "ship", tier, elite, hp, maxHp: hp, shield: elite ? 2 : 0, maxShield: elite ? 2 : 0,
 r: [0, 16, 19, 22][tier] + (elite ? 3 : 0), age: 0, cd: 1.5 + Math.random() * 2, charge: Math.random() * .3,
 power: tier === 2 ? bossPickPower() : null,
 raid: ctx.raid, stunUntil: 0, slowUntil: 0, flash: 0,
@@ -11541,9 +11552,11 @@ const s = bossScreen(e);
 bossBreakAround(s.x, s.y, 70, 1);
 }
 if (e.charge >= 1 && !e.aim) {
-const t = bossNearestPlayer(e.px, e.py);
+let t = bossNearestPlayer(e.px, e.py);
+if (!passive && !(t && t.d < 460))
+t = bossRockTarget(e.px, e.py, e.power);
 if (passive || (t && t.d < 460)) {
-e.aim = { kind: e.power, tx: t ? t.x : e.px, ty: t ? t.y : e.py, t0: now };
+e.aim = { kind: e.power, tx: t ? t.x : e.px, ty: t ? t.y : e.py, t0: now, rock: !!(t && t.rock) };
 if (!passive)
 bossSfx("charge", bossScreen(e).x);
 e.charge = 0;
@@ -11611,7 +11624,7 @@ bossZapPlayer(p.id, "stun");
 });
 }
 else if (kind === "singularity") {
-bossFlight.holes.push({ px: a.tx, py: a.ty, r: 140, t0: now, until: now + 2600, hostile: true });
+bossFlight.holes.push({ px: a.tx, py: a.ty, r: 140, t0: now, until: now + 2600, hostile: true, eats: !!a.rock });
 bossPushFx({ k: "hole", x: a.tx, y: a.ty, ms: 2600 });
 }
 else if (kind === "ricochet-orb") {
@@ -11682,8 +11695,7 @@ blockAt = along;
 block = k;
 }
 });
-const playerAlong = bossPlayersHere().map(p => (p.x - x) * ux + (p.y - y) * uy);
-if (block >= 0 && playerAlong.some(v => v > blockAt)) {
+if (block >= 0) {
 far = blockAt;
 bossBreakAsteroid(block);
 }
@@ -11724,17 +11736,19 @@ const aim = bossFlight.ringAim[i];
 if (aim) {
 if (now - aim.t0 > bossAimDelay(power) + 200) {
 delete bossFlight.ringAim[i];
-const fake = { px: p.x, py: p.y, aim: { kind: power, tx: aim.tx, ty: aim.ty, t0: 0 }, kind: "sat", power, hp: 1, maxHp: 1, r: 16 };
+const fake = { px: p.x, py: p.y, aim: { kind: power, tx: aim.tx, ty: aim.ty, t0: 0, rock: aim.rock }, kind: "sat", power, hp: 1, maxHp: 1, r: 16 };
 bossResolveAim(ctx, fake, now);
 }
 }
 else {
 bossFlight.ringCd[i] = (bossFlight.ringCd[i] === undefined ? 2 + i * 1.3 : bossFlight.ringCd[i]) - dt;
 if (bossFlight.ringCd[i] <= 0) {
-const t = bossNearestPlayer(p.x, p.y);
+let t = bossNearestPlayer(p.x, p.y);
 const passive = BOSS_PASSIVE_POWERS[power];
+if (!passive && !(t && t.d < 400))
+t = bossRockTarget(p.x, p.y, power);
 if (passive || (t && t.d < 400)) {
-bossFlight.ringAim[i] = { tx: t ? t.x : p.x, ty: t ? t.y : p.y, t0: now, kind: power };
+bossFlight.ringAim[i] = { tx: t ? t.x : p.x, ty: t ? t.y : p.y, t0: now, kind: power, rock: !!(t && t.rock) };
 if (!passive)
 bossSfx("charge", bossToScreen(p.x, p.y).x);
 bossFlight.ringCd[i] = (9 - hurt * 3.5) + Math.random() * 3;
@@ -11775,6 +11789,10 @@ e.aim = null;
 e.charge = Math.max(0, (e.charge || 0) - .3);
 const s = bossScreen(e);
 floatingText("INTERRUPTED", s.x, s.y - 30, "#8fd8ff");
+}
+while (n > 0 && e.shield > 0) {
+e.shield--;
+n--;
 }
 e.hp -= n;
 e.flash = .25;
@@ -11851,7 +11869,8 @@ Math.round((e.face || 0) * 100) / 100, Math.round((e.charge || 0) * 100) / 100,
 e.stunUntil > now ? 1 : 0,
 e.aim ? Math.round(e.aim.tx) : 0, e.aim ? Math.round(e.aim.ty) : 0, e.aim ? e.aim.kind : 0,
 e.power || 0,
-(e.ghostUntil > now ? 1 : 0) | (e.bladeUntil > now ? 2 : 0) | (e.elite ? 4 : 0)
+(e.ghostUntil > now ? 1 : 0) | (e.bladeUntil > now ? 2 : 0) | (e.elite ? 4 : 0),
+e.shield || 0, e.maxShield || 0
 ]),
 fx: bossFlight.netFx.splice(0)
 }
@@ -11935,6 +11954,8 @@ c.stroke();
 }
 }
 bossDrawPips(c, x, y - r - 10, e.hp, e.maxHp, col);
+if (e.maxShield)
+bossDrawPips(c, x, y - r - 16, e.shield || 0, e.maxShield, "#7fd8ff");
 if (e.power)
 bossDrawPowerTag(c, x + r + 6, y - r - 6, e.power);
 }
@@ -12204,6 +12225,8 @@ a.vx += dx / d * pull;
 a.vy += dy / d * pull;
 if (!h.hostile && d < 16 && bossIsHost())
 detonateAsteroid(k, true, true);
+else if (h.eats && d < 18 && bossIsHost())
+bossBreakAsteroid(k);
 }
 });
 }
@@ -12213,7 +12236,7 @@ return false;
 if (coPilotSessionShipKey && worldState === "field")
 return false;
 explosions.push(new Explosion(W / 2, H / 2, 1.2));
-lives--;
+loseOneHeart();
 if (lives <= 0 && satLifelineSave())
 lives = 1;
 combo = 1;
@@ -12292,6 +12315,7 @@ orbitalDragging = false;
 function bossBeginOrbitArrival() {
 const auto = !currentShipPendingPilot;
 enterOrbitalSpace();
+spawnTimer = .6;
 if (worldState !== "orbital")
 return;
 orbitalX = 0;
@@ -12895,7 +12919,7 @@ bossSurf.raidShips = a.ships;
 bossSurf.raidHp = {};
 }
 for (let k = 0; k < Math.min(6, a.ships); k++)
-out.push(Object.assign({ kind: "raid", i: k, key: "r" + k, raidId: a.id, hp: bossSurf.raidHp[k] === undefined ? 2 : bossSurf.raidHp[k], maxHp: 2 }, bossRaiderInfo(k)));
+out.push(Object.assign({ kind: "raid", i: k, key: "r" + k, raidId: a.id, hp: bossSurf.raidHp[k] === undefined ? 100 : bossSurf.raidHp[k], maxHp: 100 }, bossRaiderInfo(k)));
 }
 return out;
 }
@@ -12925,11 +12949,11 @@ const size = Math.max(24, p.width * .068);
 const list = bossSurfaceEnemies(planet, b);
 list.forEach(en => {
 const guard = en.kind === "boss" ? en.i < 4 : en.i < 3;
-const ll = bossPetLatLon(en.seed, T, guard);
+const ll = plantAlertPull(bossPetLatLon(en.seed, T, guard), en.seed, now);
 const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!pr.visible)
 return;
-const ahead = bossPetLatLon(en.seed, T + .5, guard);
+const ahead = plantAlertPull(bossPetLatLon(en.seed, T + .5, guard), en.seed, now + 500);
 const pa = projectSphere(ahead.lat, ahead.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 const facing = pa.x < pr.x ? -1 : 1;
 const spot = { en, x: pr.x, y: pr.y, size, owner };
@@ -12940,18 +12964,11 @@ alpha: 1,
 draw: () => bossDrawEnemyPet(p.c, spot, facing, now)
 });
 });
-if (planet === NEM && !b.defeated) {
-const pr = projectSphere(BOSS_CORE.lat, BOSS_CORE.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
-if (pr.visible) {
-const cs = Math.max(40, p.width * .12);
-world.bossCore = { x: pr.x, y: pr.y - cs * .5, r: cs * .5, owner };
-queue.push({
-z: p.groundDepthAt(pr.x, pr.y),
-alpha: 1,
-draw: () => bossDrawCore(p.c, pr.x, pr.y, cs, b, now)
-});
-}
-}
+if (planet === NEM && !b.defeated)
+plantSurfaceEntries(queue, p, b, owner, now);
+else
+plantState.parts = [];
+bossSiegeFx(p, b, planet, now);
 queue.push({ z: 1e9, alpha: 1, draw: () => {
 bossDrawSurfFx(p.c, now);
 if (!flightProgress || flightProgress <= .001)
@@ -12959,6 +12976,40 @@ bossDrawPlanetBar(p, planet, b);
 bossSurfaceAI(dt, now);
 bossSurfBladeTick();
 } });
+}
+function bossRockTarget(px, py, power) {
+let best = null;
+asteroids.forEach(a => {
+const pl = bossToPlane(a.x, a.y);
+const d = Math.hypot(pl.x - px, pl.y - py);
+if (d < 380 && (!best || d < best.d))
+best = { x: pl.x, y: pl.y, d, rock: true };
+});
+if (best && power === "emp" && best.d > 220)
+return null;
+return best;
+}
+function bossSiegeFx(p, b, planet, now) {
+const s = b.lastSiege;
+if (planet !== NEM || !s || s.at === bossSurf.siegeSeen)
+return;
+bossSurf.siegeSeen = s.at;
+if (Date.now() - s.at > 8000)
+return;
+const pad = resolvePadShip(getShips(NEM) || []);
+const ll = (pad && pad.id === s.shipId) ? { lat: SHIP_LAT, lon: 0 } : ((world.yardLatLon || {})[s.shipId] || { lat: SHIP_LAT, lon: 0 });
+const sp = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!sp.visible)
+return;
+const tx = sp.x, ty = sp.y - 26;
+const from = (world.bossEnemyPets || []).filter(x => x.en.power)[0];
+const fx0 = from ? from.x : tx + (Math.random() < .5 ? -1 : 1) * 140, fy0 = from ? from.y - from.size * .6 : ty - 120;
+bossSurf.fx.push({ k: "siege", x1: fx0, y1: fy0, x2: tx, y2: ty, t0: now, ms: 900 });
+petHurtFx(tx, ty, 1, true);
+bossSurfText(Math.max(90, Math.min(p.width - 90, tx)), ty - 40, s.wreck ? "SHIP DESTROYED" : "−1 ♥ · " + s.lives + " left" + (s.shield ? " +" + s.shield + " shield" : ""), s.wreck ? "#ff3b3b" : "#ff7a6b");
+bossSfx("beam", tx);
+if (s.wreck)
+setTimeout(() => bossSfx("boom", tx), 300);
 }
 function bossDrawPlanetBar(p, planet, b) {
 let a = null;
@@ -13037,11 +13088,19 @@ c.ellipse(x, y - size * .25, size * .55, size * .5, 0, 0, Math.PI * 2);
 c.fill();
 c.globalAlpha = 1;
 }
-c.font = Math.round(size * .42) + "px system-ui,'Apple Color Emoji',sans-serif";
+drawWorldItem(c, en.power ? { k: "item", r: en.power, n: 1 } : { k: "coin", r: "coin", n: 1 }, x, y - size * 1.2, Math.max(18, size * .6), { glow: 1 });
+const f = Math.max(0, Math.min(1, en.hp / en.maxHp));
+const bw = size * .9, by = y - size * 1.62;
+c.fillStyle = "rgba(20,4,30,.75)";
+c.fillRect(x - bw / 2 - 1, by - 1, bw + 2, 6);
+c.fillStyle = f > .5 ? "#7dffb0" : f > .25 ? "#ffd76b" : "#ff5c7a";
+c.fillRect(x - bw / 2, by, bw * f, 4);
+if (plantAlerted()) {
+c.fillStyle = "#ff3b6b";
+c.font = "900 " + Math.round(size * .4) + "px system-ui,sans-serif";
 c.textAlign = "center";
-c.textBaseline = "middle";
-c.fillText(en.power ? getItemInfo(en.power).icon : "💰", x, y - size * 1.18);
-bossDrawPips(c, x, y - size * 1.48, en.hp, en.maxHp, "#ff3b6b");
+c.fillText("!", x + size * .55, by - 2);
+}
 if (stunned) {
 c.strokeStyle = "#8fd8ff";
 c.lineWidth = 1.5;
@@ -13072,7 +13131,7 @@ worldShowBubble({
 x: spot.x, y: spot.y - spot.size * 1.3,
 iconHtml: thief ? "💰" : getItemIconHtml(en.power),
 title: (raid ? "Raider" : "Void ") + (thief ? "thief" : "guard") + " · " + (SPECIES_DISPLAY_NAMES[en.species] || "pet"),
-meta: "♥".repeat(en.hp) + "♡".repeat(Math.max(0, en.maxHp - en.hp)) + (thief ? " · steals" : " · armed with " + getItemInfo(en.power).name),
+meta: "⚡ " + Math.round(en.hp) + "/" + en.maxHp + " energy" + (thief ? " · steals" : " · armed with " + getItemInfo(en.power).name),
 text: thief
 ? "Snatches whatever a pet is carrying and hauls it off to the Nemesis vault. Keep your loot away — or knock it out first."
 : "Attacks any pet that comes close" + (raid ? "" : ", and blasts ships left on the pad") + ". It can't be befriended or roamed — fight it with your pet's powerups.",
@@ -13133,6 +13192,26 @@ bossSurf.fx = bossSurf.fx.filter(f => now - f.t0 < (f.ms || 900));
 bossSurf.fx.forEach(f => {
 if (f.k === "hurt") {
 petHurtDraw(c, f, now);
+return;
+}
+if (f.k === "siege") {
+const k = (now - f.t0) / (f.ms || 900);
+c.save();
+c.globalAlpha = Math.max(0, 1 - k);
+c.strokeStyle = "#ff3b6b";
+c.lineWidth = 5 * (1 - k) + 1;
+c.shadowColor = "#ff3b6b";
+c.shadowBlur = 18;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(f.x1, f.y1);
+c.lineTo(f.x2, f.y2);
+c.stroke();
+c.fillStyle = "#ffd0d6";
+c.beginPath();
+c.arc(f.x2, f.y2, 22 * k + 6, 0, Math.PI * 2);
+c.fill();
+c.restore();
 return;
 }
 const k = (now - f.t0) / (f.ms || 900);
@@ -13225,7 +13304,7 @@ bossSurf.near[en.key] = 0;
 }
 return;
 }
-if (d > 210)
+if (d > (plantAlerted() ? 320 : 210))
 return;
 if (!bossSurf.cd[en.key])
 bossSurf.cd[en.key] = now + 1500 + Math.random() * 2500;
@@ -13316,14 +13395,14 @@ const now = performance.now();
 const me = bossMyRoamer();
 const fromRoamer = me && me.pet.id === pet.id;
 const effOn = {
-"emp": { dmg: 1, stun: 2500, pets: "knock" },
+"emp": { dmg: 10, stun: 2500, pets: "knock" },
 "nova-burst": { dmg: 0, pets: "knock" },
-"incinerator-beam": { dmg: 2, pets: "incinerator-beam", core: 30 },
-"ricochet-orb": { dmg: 1, pets: "ricochet-orb", core: 15 },
-"singularity": { dmg: 2, pets: "singularity", core: 25 },
-"solar-blade": { dmg: 1, pets: "solar-blade", core: 10 },
+"incinerator-beam": { dmg: 25, pets: "incinerator-beam" },
+"ricochet-orb": { dmg: 15, pets: "ricochet-orb" },
+"singularity": { dmg: 20, pets: "singularity" },
+"solar-blade": { dmg: 20, pets: "solar-blade" },
 "chrono-field": { dmg: 0, stun: 4000, pets: "chrono-field" },
-"nebula-net": { dmg: 2, stun: 3000, pets: "nebula-net", core: 20 }
+"nebula-net": { dmg: 20, stun: 3000, pets: "nebula-net" }
 }[kind];
 if (!effOn)
 return;
@@ -13333,11 +13412,7 @@ if (!hit(spot.x, spot.y - spot.size * .4, spot.size * .5) || !bossThrottle("pet:
 return;
 bossSurfHitEnemy(spot, effOn.dmg, effOn.stun || 0);
 });
-const core = world.bossCore;
-if (core && effOn.core && hit(core.x, core.y, core.r) && bossThrottle("core:" + kind, 700)) {
-bossApply(core.owner, { t: "hit", n: effOn.core });
-bossSurfText(core.x, core.y - core.r, "−" + effOn.core, "#ff9de6");
-}
+plantPowerHit(kind, shape);
 Object.values(world.petScreen || {}).forEach(ps => {
 if (!ps || !ps.pet || ps.pet.id === pet.id || (me && ps.pet.id === me.pet.id))
 return;
@@ -13386,7 +13461,7 @@ if (!n) {
 bossSurfText(spot.x, spot.y - spot.size * 1.6, "STUNNED", "#8fd8ff");
 return;
 }
-bossSurfText(spot.x, spot.y - spot.size * 1.6, "−" + n, "#ff9de6");
+bossSurfText(spot.x, spot.y - spot.size * 1.6, "−" + n + " ⚡", "#ff9de6");
 petHurtFx(spot.x, spot.y - spot.size * .4, n, false);
 if (en.kind === "boss") {
 const willDie = en.hp - n <= 0;
@@ -13397,7 +13472,7 @@ withMySave(() => addRankPoints(20, "Void pet defeated"));
 }
 }
 else {
-const hp = (bossSurf.raidHp[en.i] === undefined ? 2 : bossSurf.raidHp[en.i]) - n;
+const hp = (bossSurf.raidHp[en.i] === undefined ? 100 : bossSurf.raidHp[en.i]) - n;
 bossSurf.raidHp[en.i] = hp;
 if (hp <= 0) {
 bossSurf.raidHp = {};
@@ -13465,11 +13540,12 @@ const f = Math.max(0, b.hp / b.maxHp);
 const sats = b.sats.filter(s => s.hp > 0).length;
 const pets = b.pets.filter(p => p.hp > 0).length;
 return ('<div class="boss-card">' +
+'<span class="boss-lore">🥀 Nemesis is a viral plant. It took root in this world\'s core and infected everything — thorned roots, neon blooms, void guards, a ring of satellites and a fleet, all of it the plant reaching out. Tear at its roots and blooms, hit it from orbit, steal its ships, and set the planet free.</span>' +
 '<b>☠ Nemesis · ' + Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString() + '</b>' +
 '<i class="boss-card-bar"><i style="width:' + (f * 100) + '%"></i></i>' +
 '<span>🛰 ' + sats + '/' + BOSS_SATS + ' ring satellites · 😈 ' + pets + '/' + BOSS_PETS + ' void pets · war chest ' + Math.floor(b.coins) + ' ' + COIN_ICON_HTML + '</span>' +
 (b.attack ? '<span class="boss-warn">⚠ Raiding ' + bossPlanetName(b.attack.target) + ' with ' + b.attack.ships + ' ships — stage ' + b.attack.stage + '/3</span>' : '') +
-'<span class="boss-lock">🔒 Shop, building, ship holds and the transporter are jammed until it falls. Docked ships here come under fire.</span>' +
+'<span class="boss-lock">🔒 Shop, building, ship holds and the transporter are jammed until it falls. Your docked ships here come under fire. Its own ships sit locked with enemy pilots — seat a pilot pet in one to steal it.</span>' +
 '</div>');
 }
 const a = b.attack;
@@ -13880,6 +13956,8 @@ if (bossBlocks(target))
 return true;
 if (typeof r13Intercept === "function" && r13Intercept(target))
 return true;
+if (typeof r14Blocks === "function" && r14Blocks(target))
+return true;
 return mpInterceptPlanetAction__orig(target);
 }
 function executePlanetDetailAction(target) {
@@ -13887,7 +13965,12 @@ if (bossBlocks(target))
 return;
 if (typeof r13Blocks === "function" && r13Blocks(target))
 return;
-return executePlanetDetailAction__orig(target);
+if (typeof r14Blocks === "function" && r14Blocks(target))
+return;
+const result = executePlanetDetailAction__orig(target);
+if (typeof r14After === "function")
+r14After(target);
+return result;
 }
 function transporterSend(d, src, ship, n) {
 if (selectedStartPlanet === NEM && !bossDefeatedFor(bossSurfaceOwner())) {
@@ -14739,15 +14822,391 @@ buttons: mine
 return true;
 }
 function openShipBubbleFromYard(shipId, x, y) {
+if (typeof enemyShipBubble === "function" && enemyShipBubble(shipId, x, y))
+return;
 if (crewBubbleFor(shipId, x, y))
 return;
 return openShipBubbleFromYard__orig(shipId, x, y);
 }
 function openShipBubble(shipId, x, y) {
+if (typeof enemyShipBubble === "function" && enemyShipBubble(shipId, x, y))
+return;
 if (crewBubbleFor(shipId, x, y))
 return;
 return openShipBubble__orig(shipId, x, y);
 }
+let runShieldHearts = 0;
+const SHIELD_HEART_MAX = 3;
+function shieldHeartsHtml(n) {
+return n > 0 ? '<span class="shield-heart">' + "♥".repeat(n) + '</span>' : "";
+}
+function loseOneHeart() {
+if (runShieldHearts > 0) {
+runShieldHearts--;
+floatingText("SHIELD HEART LOST", W / 2, H / 2 - 70, "#7fd8ff");
+return;
+}
+lives--;
+}
+function createShip(...args) {
+const ship = createShip__orig(...args);
+if (ship && running && !gameOver)
+ship.shieldHearts = runShieldHearts;
+return ship;
+}
+function computeOrbitalSpawnInterval() {
+const base = computeOrbitalSpawnInterval__orig();
+if (currentPlanetId === NEM && !bossDefeatedFor(bossFlightOwner()))
+return Math.min(base, 1.05);
+return base;
+}
+const ENEMY_SHIP_DESIGN = JSON.stringify([
+{ type: "custom", x: 200, y: 0, color: "#14061f", scale: 1, rotation: 0,
+points: [[0, 62], [18, 110], [62, 188], [40, 184], [22, 166], [0, 184], [-22, 166], [-40, 184], [-62, 188], [-18, 110]],
+outlineColor: "#ff3b6b", holePoints: null },
+{ type: "custom", x: 200, y: 0, color: "#2a0838", scale: 1, rotation: 0,
+points: [[-14, 98], [-26, 70], [-8, 92]], outlineColor: "#ff3b6b", holePoints: null },
+{ type: "custom", x: 200, y: 0, color: "#2a0838", scale: 1, rotation: 0,
+points: [[14, 98], [26, 70], [8, 92]], outlineColor: "#ff3b6b", holePoints: null },
+{ type: "custom", x: 200, y: 0, color: "#3a0a4a", scale: 1, rotation: 0,
+points: [[0, 118], [12, 140], [0, 162], [-12, 140]], outlineColor: "#d02bff", holePoints: null },
+{ type: "circle", x: 200, y: 140, color: "#ff3b6b", scale: .24, rotation: 0, points: null, outlineColor: "#ff3b6b", holePoints: null }
+]);
+const ENEMY_FLEET_SIZE = 3;
+function enemyFleetShip(b) {
+const power = bossPickPower();
+const ship = createShip__orig(NEM, 0, 0, power, 1, 3);
+ship.enemy = true;
+ship.styleId = "enemy";
+ship.styleDesign = ENEMY_SHIP_DESIGN;
+ship.shieldHearts = 1 + Math.floor(Math.random() * 2);
+ship.coins = 5 + Math.floor(Math.random() * 15);
+ship.materials = { "void-ember": 1 + Math.floor(Math.random() * 3) };
+if (Math.random() < .5) {
+ship.satCargo = [{ id: "esat" + Date.now().toString(36) + Math.floor(Math.random() * 1e4), type: bossPickPower(BOSS_RING_POWERS), mode: "auto", hp: SAT_HP }];
+}
+return ship;
+}
+function enemyFleetTick(b, now) {
+if (b.defeated)
+return;
+withMySave(() => {
+const ships = getShips(NEM) || [];
+const enemies = ships.filter(s => s.enemy).length;
+if (!b.fleetSeeded) {
+b.fleetSeeded = true;
+for (let i = enemies; i < ENEMY_FLEET_SIZE; i++)
+enemyFleetShip(b);
+savePlanetProgress();
+return;
+}
+if (enemies < ENEMY_FLEET_SIZE && b.coins >= 40 && now - (b.fleetBuiltAt || 0) > 180000) {
+b.fleetBuiltAt = now;
+b.coins -= 40;
+enemyFleetShip(b);
+savePlanetProgress();
+}
+});
+}
+function isEnemyShip(planetId, shipId) {
+if (!shipId)
+return false;
+const ships = planetId === "earth" ? (planetSave.ships.earth || []) : (getShips(planetId) || []);
+const s = ships.find(x => x.id === shipId);
+return !!(s && s.enemy);
+}
+function resolvePadShip(ships) {
+return resolvePadShip__orig((ships || []).filter(s => !s.enemy));
+}
+const ENEMY_SHIP_LOCKED = new Set(["select-launch-ship", "pick-launch-ship", "launch-pending-mission", "queue-ship-service", "customize-ship", "assign-ship-style", "ship-unload-all", "sell-ship-points", "load-pet", "equip-item", "toggle-equip", "sat-load", "sat-unload", "set-pending-destination", "add-pending-stop"]);
+function r14Blocks(target) {
+if (!target)
+return false;
+const action = target.getAttribute("data-action");
+if (!ENEMY_SHIP_LOCKED.has(action))
+return false;
+if (!isEnemyShip(planetDetailId, target.getAttribute("data-ship")))
+return false;
+if (bossThrottle("enemyShipToast", 1500))
+showShipToast("😈 An enemy pilot holds this ship — seat one of your pilot pets in it to take it over");
+return true;
+}
+function r14After(target) {
+if (!target || target.getAttribute("data-action") !== "assign-pending-pilot")
+return;
+const planetId = planetDetailId;
+const ships = planetId === "earth" ? (planetSave.ships.earth || []) : (getShips(planetId) || []);
+const ship = ships.find(s => s.id === target.getAttribute("data-ship"));
+if (ship && ship.enemy && ship.pendingPilot) {
+ship.enemy = false;
+savePlanetProgress();
+showShipToast("🏴 You've taken an enemy ship! " + (3 + (ship.shieldHearts || 0)) + " hearts, its " + getItemInfo(ship.equipment).name + " and its hold are yours.");
+try {
+withMySave(() => addRankPoints(60, "Captured an enemy ship"));
+}
+catch (error) { }
+}
+}
+function enemyShipBubble(shipId, x, y) {
+const planet = selectedStartPlanet;
+const ships = planet === "earth" ? (planetSave.ships.earth || []) : (getShips(planet) || []);
+const ship = ships.find(s => s.id === shipId);
+if (!ship || !ship.enemy)
+return false;
+const pilots = petChoiceButtons(planet, pp => (pp.role || "builder") === "pilot" && pp.energy > 0, pp => "Seat " + petShortName(planet, pp) + " — take it", pp => worldRunAction({ "data-action": "assign-pending-pilot", "data-ship": ship.id, "data-pet": pp.id }));
+worldShowBubble({
+x, y,
+iconHtml: '<img src="' + shipThumbUrl(ship) + '" alt="" style="width:1.4em;height:1.4em;object-fit:contain">',
+title: "Enemy ship",
+meta: "😈 Enemy pilot · " + "♥".repeat(Math.max(0, ship.lives || 3)) + "<span class=\"shield-heart\">" + "♥".repeat(ship.shieldHearts || 0) + "</span> · " + getItemInfo(ship.equipment).name + ((ship.satCargo || []).length ? " · 🛰 " + ship.satCargo.length : ""),
+text: pilots.length
+? "Locked while its enemy pilot holds it. Seat one of your pilot pets and it's yours — hearts, shield hearts, powerup, satellites and hold."
+: "Locked while its enemy pilot holds it. Bring a licensed pilot pet here and seat it to steal the ship.",
+buttons: pilots.length ? pilots : [{ label: "Ship details", action: () => { worldHideBubble(); openShipBubbleFromYard__orig(shipId, x, y); } }]
+});
+return true;
+}
+const PLANT_ROOTS = [
+[1.32, -.42, 1.2, -.16],
+[1.16, .48, 1.04, .76],
+[.86, 2.2, .74, 2.5],
+[.7, -2.1, .86, -2.42],
+[1.0, 3.6, .88, 3.9],
+[.6, 1.36, .5, 1.7],
+[1.38, .9, 1.3, 1.18]
+];
+const PLANT_BLOOMS = [
+{ lat: .95, lon: Math.PI, s: 1.5, heart: true },
+{ lat: 1.28, lon: -.95, s: .9 },
+{ lat: 1.24, lon: 1.02, s: .85 },
+{ lat: .75, lon: Math.PI + 1.1, s: 1 },
+{ lat: .78, lon: Math.PI - 1.15, s: 1 }
+];
+const plantState = { alertUntil: 0, alertStart: 0, parts: [], shake: {}, screamAt: 0 };
+function plantColour(b) {
+const hurt = Math.max(0, Math.min(1, 1 - b.hp / b.maxHp));
+const r = Math.round(208 + 47 * hurt), g = Math.round(43 - 10 * hurt), bl = Math.round(255 - 180 * hurt);
+return { col: "rgb(" + r + "," + g + "," + bl + ")", hurt, f: 1 - hurt };
+}
+function plantSurfaceEntries(queue, p, b, owner, now) {
+plantState.parts = [];
+const look = plantColour(b);
+const t = now / 1000;
+const pulse = .5 + .5 * Math.sin(t * (1.2 + look.hurt * 4));
+PLANT_ROOTS.forEach((rt, i) => {
+const a = projectSphere(rt[0], rt[1], p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+const bb = projectSphere(rt[2], rt[3], p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!a.visible || !bb.visible)
+return;
+const d = Math.hypot(bb.x - a.x, bb.y - a.y);
+const mx = (a.x + bb.x) / 2, my = (a.y + bb.y) / 2 - Math.max(30, d * .55);
+const part = { kind: "root", i, x: mx, y: my + d * .18, r: Math.max(26, d * .3), owner };
+plantState.parts.push(part);
+queue.push({ z: p.groundDepthAt(mx, (a.y + bb.y) / 2), alpha: 1, draw: () => plantDrawRoot(p.c, a, bb, mx, my, look, pulse, i, now, part) });
+});
+PLANT_BLOOMS.forEach((bl, i) => {
+const pr = projectSphere(bl.lat, bl.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const s = Math.max(30, p.width * .085) * bl.s;
+const part = { kind: "bloom", i, heart: !!bl.heart, x: pr.x, y: pr.y - s * 1.05, r: s * .6, owner };
+plantState.parts.push(part);
+queue.push({ z: p.groundDepthAt(pr.x, pr.y), alpha: 1, draw: () => plantDrawBloom(p.c, pr.x, pr.y, s, look, pulse, i, now, part, b) });
+});
+}
+function plantShakeOff(part, now) {
+const k = (now - (plantState.shake[part.kind + part.i] || 0)) / 350;
+return k < 1 ? Math.sin(k * 40) * 6 * (1 - k) : 0;
+}
+function plantDrawRoot(c, a, b, mx, my, look, pulse, i, now, part) {
+const sx = plantShakeOff(part, now);
+c.save();
+c.translate(sx, 0);
+c.lineCap = "round";
+c.fillStyle = "rgba(30,8,30,.85)";
+[a, b].forEach(q => {
+c.beginPath();
+c.ellipse(q.x, q.y, 16, 6, 0, 0, Math.PI * 2);
+c.fill();
+});
+const path = () => {
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.quadraticCurveTo(mx, my, b.x, b.y);
+};
+c.strokeStyle = "#12041a";
+c.lineWidth = 13;
+path();
+c.stroke();
+c.strokeStyle = look.col;
+c.shadowColor = look.col;
+c.shadowBlur = 4 + 12 * look.f * pulse;
+c.lineWidth = 2.4;
+path();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = look.col;
+for (let k = 1; k < 9; k++) {
+const tt = k / 9;
+const x = (1 - tt) * (1 - tt) * a.x + 2 * (1 - tt) * tt * mx + tt * tt * b.x;
+const y = (1 - tt) * (1 - tt) * a.y + 2 * (1 - tt) * tt * my + tt * tt * b.y;
+const dx = 2 * (1 - tt) * (mx - a.x) + 2 * tt * (b.x - mx);
+const dy = 2 * (1 - tt) * (my - a.y) + 2 * tt * (b.y - my);
+const len = Math.hypot(dx, dy) || 1;
+const nx = -dy / len * (k % 2 ? 1 : -1), ny = dx / len * (k % 2 ? 1 : -1);
+c.beginPath();
+c.moveTo(x + dx / len * 3, y + dy / len * 3);
+c.lineTo(x + nx * 9, y + ny * 9);
+c.lineTo(x - dx / len * 3, y - dy / len * 3);
+c.closePath();
+c.fill();
+}
+c.restore();
+world.hits.push({ x: part.x, y: part.y, r: part.r, z: 5, passThrough: roamingActive, onTap: () => plantTap(part) });
+}
+function plantDrawBloom(c, x, y, s, look, pulse, i, now, part, b) {
+const sx = plantShakeOff(part, now);
+const t = now / 1000;
+c.save();
+c.translate(x + sx, y);
+c.strokeStyle = "#1a0624";
+c.lineWidth = s * .12;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(0, 0);
+c.quadraticCurveTo(s * .2, -s * .5, 0, -s * 1.0);
+c.stroke();
+c.strokeStyle = look.col;
+c.lineWidth = 1.5;
+c.shadowColor = look.col;
+c.shadowBlur = 6 * look.f;
+c.stroke();
+const petals = part.heart ? 9 : 7;
+const open = .75 + .25 * pulse;
+c.translate(0, -s * 1.05);
+c.shadowBlur = 6 + 22 * look.f * pulse;
+for (let k = 0; k < petals; k++) {
+const a = k / petals * Math.PI * 2 + t * .15 * (part.heart ? 1 : -1);
+c.save();
+c.rotate(a);
+c.fillStyle = "rgba(30,6,40,.85)";
+c.strokeStyle = look.col;
+c.lineWidth = 2;
+c.beginPath();
+c.ellipse(0, -s * .32 * open, s * .15, s * .34 * open, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.restore();
+}
+const g = c.createRadialGradient(0, 0, 1, 0, 0, s * .3);
+g.addColorStop(0, "#ffffff");
+g.addColorStop(.35, look.col);
+g.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = g;
+c.globalAlpha = .6 + .4 * pulse * look.f + .1;
+c.beginPath();
+c.arc(0, 0, s * .3, 0, Math.PI * 2);
+c.fill();
+c.globalAlpha = 1;
+if (part.heart) {
+c.shadowBlur = 0;
+c.fillStyle = "rgba(255,255,255,.18)";
+c.fillRect(-s * .6, -s * .95, s * 1.2, 5);
+c.fillStyle = look.col;
+c.fillRect(-s * .6, -s * .95, s * 1.2 * look.f, 5);
+}
+c.restore();
+world.hits.push({ x: part.x, y: part.y, r: part.r, z: 5, passThrough: roamingActive, onTap: () => plantTap(part) });
+}
+function plantInReach(part) {
+const me = bossMyRoamer();
+return !!me && Math.hypot(me.x - part.x, me.y - part.y) < part.r + 120;
+}
+function plantTap(part) {
+const b = bossState(part.owner);
+if (!b || b.defeated)
+return;
+if (plantInReach(part)) {
+plantDamage(part, 1, "tap");
+return;
+}
+worldShowBubble({
+x: part.x, y: part.y - part.r,
+iconHtml: "🥀",
+title: part.heart ? "The heart bloom" : part.kind === "root" ? "A thorned root" : "A void bloom",
+meta: "Nemesis · " + Math.ceil(b.hp).toLocaleString() + " / " + b.maxHp.toLocaleString(),
+text: "Nemesis is a viral plant. It took root here and infected the whole world — these " + (part.kind === "root" ? "roots punch through the crust" : "blooms feed its void guards") + ". Walk a pet up to it and tap to tear at it, or hit it with a powerup. It will call its guards.",
+buttons: []
+});
+}
+function plantDamage(part, n, how) {
+const now = performance.now();
+bossApply(part.owner, { t: "hit", n });
+plantState.shake[part.kind + part.i] = now;
+bossSurfText(part.x, part.y - part.r * .6, "−" + n, "#ff9de6");
+bossSurf.fx.push({ k: "shield", x: part.x, y: part.y, colour: "#ff9de6", t0: now, ms: 350 });
+bossSfx(how === "tap" ? "hit" : "gong", part.x);
+if (now > plantState.alertUntil - 9000) {
+plantState.alertStart = plantState.alertUntil > now ? plantState.alertStart : now;
+plantState.alertUntil = now + 12000;
+bossSfx("snarl", part.x);
+if (now - plantState.screamAt > 15000) {
+plantState.screamAt = now;
+showShipToast("🥀 The plant shrieks — its void guards are coming for you!");
+}
+}
+}
+const PLANT_POWER_DAMAGE = { "emp": 25, "incinerator-beam": 35, "ricochet-orb": 12, "singularity": 15, "solar-blade": 4, "nebula-net": 30 };
+function plantPowerHit(kind, shape) {
+const n = PLANT_POWER_DAMAGE[kind];
+if (!n)
+return;
+let landed = false;
+plantState.parts.forEach(part => {
+if (landed || !bossShapeHit(shape, part.x, part.y, part.r) || !bossThrottle("plant:" + kind, kind === "solar-blade" ? 400 : 900))
+return;
+landed = true;
+plantDamage(part, n, "power");
+});
+}
+function plantAlertPull(ll, seed, now) {
+if (now > plantState.alertUntil || !roamingActive)
+return ll;
+const rise = Math.min(1, (now - plantState.alertStart) / 3000);
+const fall = Math.min(1, (plantState.alertUntil - now) / 2000);
+const a = Math.max(0, Math.min(rise, fall));
+const ox = Math.cos(seed * 2.7) * .07, oy = Math.sin(seed * 2.7) * .05;
+let dLon = (roamingLon + ox) - ll.lon;
+dLon = ((dLon + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+return { lat: ll.lat + ((roamingLat + oy) - ll.lat) * a, lon: ll.lon + dLon * a };
+}
+function plantAlerted() {
+return performance.now() < plantState.alertUntil;
+}
+function plantStoryMaybe() {
+if (selectedStartPlanet !== NEM || running || roomState)
+return;
+const b = bossState(bossSurfaceOwner());
+if (!b || b.defeated || localPlanetSave.nemesisStorySeen)
+return;
+localPlanetSave.nemesisStorySeen = true;
+withMySave(() => savePlanetProgress());
+setTimeout(() => {
+const sc = world.scene || { W: innerWidth, H: innerHeight };
+worldShowBubble({
+x: (sc.W || innerWidth) / 2, y: (sc.H || innerHeight) * .42,
+iconHtml: "🥀",
+title: "Nemesis — the viral bloom",
+meta: "A world that was taken",
+text: "Nemesis was a living planet once. A viral plant took root in its core and spread through everything — thorned roots tear through the crust, and its neon blooms feed the void guards that steal and fight for it. Its ring of satellites, its raiders, its fleet: all of it is the plant reaching out. Tear at its roots and blooms, hit it from orbit, take its ships — and set the planet free.",
+buttons: [{ label: "Let's cut it down", primary: true, action: () => worldHideBubble() }]
+});
+}, 900);
+}
+setInterval(() => { try {
+plantStoryMaybe();
+}
+catch (error) { } }, 1500);
 const FEATURE_ACTIONS = new Set(["revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "revive-start") {
@@ -17322,7 +17781,7 @@ if (!Array.isArray(planetSave.ships[planetId])) {
 planetSave.ships[planetId] = [];
 }
 }
-function createShip(planetId, score, coins = 0, equipment = "emp", wave = 1, lives = 3, materials = null, perk = null, materialCapBonus = 0, hasDualPerk = false, perk2 = null, cargoPetCapacity = 1, cargoPets = null, styleId = "custom1") {
+function createShip__orig(planetId, score, coins = 0, equipment = "emp", wave = 1, lives = 3, materials = null, perk = null, materialCapBonus = 0, hasDualPerk = false, perk2 = null, cargoPetCapacity = 1, cargoPets = null, styleId = "custom1") {
 ensurePlanetArray(planetId);
 const ship = {
 id: "ship_" + (planetSave.nextShipId++),
@@ -28466,7 +28925,8 @@ SHOP_ITEMS[ship.equipment].name
 function getHeartsLabel(ship) {
 const n = clamp(Number(ship.lives) || 3, 1, 3);
 return ("❤".repeat(n) +
-"🖤".repeat(3 - n));
+"🖤".repeat(3 - n) +
+"💙".repeat(Math.max(0, ship.shieldHearts || 0)));
 }
 function getShipMaterialTotal(ship) {
 if (!ship.materials)
@@ -28571,7 +29031,10 @@ else if (build.type ===
 "ship-service") {
 const servedShip = getShips(planetId).find(s => s.id === build.shipId);
 if (servedShip) {
-if (build.serviceId === "restore-heart") {
+if (build.serviceId === "shield-heart") {
+servedShip.shieldHearts = Math.min(SHIELD_HEART_MAX, (servedShip.shieldHearts || 0) + 1);
+}
+else if (build.serviceId === "restore-heart") {
 servedShip.lives =
 Math.min(3, (Number(servedShip.lives) || 3) + 1);
 }
@@ -28646,6 +29109,13 @@ return Math.max(20, Math.round(base /
 (1 + pets * .6)));
 }
 const SHIP_SERVICES = {
+"shield-heart": {
+name: "+1 Shield Heart",
+cost: 15,
+energyPerPet: 6,
+baseSeconds: 90,
+requiresUpgrade: null
+},
 "restore-heart": {
 name: "Restore Heart",
 cost: 8,
@@ -28678,6 +29148,8 @@ requiresUpgrade: "ship-factory-dual-perk"
 function isShipServiceApplicable(ship, serviceId) {
 if (serviceId === "restore-heart")
 return (Number(ship.lives) || 3) < 3;
+if (serviceId === "shield-heart")
+return (ship.shieldHearts || 0) < SHIELD_HEART_MAX;
 if (serviceId === "cargo-hold")
 return (ship.materialCapBonus || 0) < CARGO_TIER_BONUS.cargoHold;
 if (serviceId === "pet-bay")
@@ -31466,7 +31938,7 @@ dockedShip.id +
 '♥'.repeat(shipLives) +
 '<span style="color:#5c7ba0;">' +
 '♡'.repeat(3 - shipLives) +
-'</span></span>' +
+'</span>' + shieldHeartsHtml(dockedShip.shieldHearts || 0) + '</span>' +
 '<span>📦 ' +
 getShipCargoUsed(dockedShip) + '/' +
 getShipCargoCapacity(dockedShip.materialCapBonus) + '</span>' +
@@ -35489,7 +35961,7 @@ clamp(asteroids.length /
 14, 0, 1);
 aiWindow.hitAngles.push(Math.atan2(a.vy, a.vx));
 explosions.push(new Explosion(player.x, player.y, 1.3));
-lives--;
+loseOneHeart();
 if (lives <= 0 &&
 satLifelineSave()) {
 lives = 1;
@@ -38435,7 +38907,7 @@ ORBITAL_KILL_PRESSURE_MAX_BONUS;
 return clamp(baseDensity +
 pressureBonus, 0, 1);
 }
-function computeOrbitalSpawnInterval() {
+function computeOrbitalSpawnInterval__orig() {
 const density = getOrbitalDensity();
 return (1 / (1 + .12 * (getOrbitalWave() - 1))) * (ORBITAL_SPAWN_INTERVAL_MAX -
 (ORBITAL_SPAWN_INTERVAL_MAX -
@@ -40039,9 +40511,10 @@ levelEl.textContent =
 worldState === "orbital"
 ? getOrbitalWave()
 : wave;
-livesEl.textContent =
+livesEl.innerHTML =
 "♥".repeat(Math.max(0, lives)) +
-"♡".repeat(Math.max(0, 3 - lives));
+"♡".repeat(Math.max(0, 3 - lives)) +
+shieldHeartsHtml(runShieldHearts);
 const styleIndicatorEl = document.getElementById("musicStyleIndicator");
 if (styleIndicatorEl) {
 if (musicState.active &&
@@ -40527,6 +41000,7 @@ currentShipPendingRouteStops =
 launchPendingRouteStops;
 currentShipCargoPetCapacity =
 launchCargoPetCapacity;
+runShieldHearts = (satLaunchShip && satLaunchShip.shieldHearts) || 0;
 satBeginRun(satLaunchShip);
 satLaunchShip = null;
 combo = 1;
@@ -41607,7 +42081,7 @@ ROCKET_ICON_HTML + ' Current Ship</div>' +
 '♥'.repeat(Math.max(0, lives)) +
 '<span style="color:#5c7ba0;">' +
 '♡'.repeat(Math.max(0, 3 - lives)) +
-'</span></span>' +
+'</span>' + shieldHeartsHtml(runShieldHearts) + '</span>' +
 '<span style="font-size:10px;color:#8fa7c7;">' +
 Math.max(0, lives) + ' of 3</span>' +
 '</div></div>' +
