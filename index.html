@@ -12964,10 +12964,13 @@ alpha: 1,
 draw: () => bossDrawEnemyPet(p.c, spot, facing, now)
 });
 });
-if (planet === NEM && !b.defeated)
+if (planet === NEM) {
 plantSurfaceEntries(queue, p, b, owner, now);
-else
+nemesisVineEntries(queue, p, b);
+}
+else {
 plantState.parts = [];
+}
 bossSiegeFx(p, b, planet, now);
 queue.push({ z: 1e9, alpha: 1, draw: () => {
 bossDrawSurfFx(p.c, now);
@@ -13636,7 +13639,8 @@ const BOSS_BLOCKED = new Set([
 "build-structure", "buy", "buy-perk", "buy-pet", "buy-snacks", "buy-upgrade",
 "deposit-all-ship-coins", "deposit-all-ship-material", "unload-pet", "ship-unload-all",
 "equip-item", "toggle-equip", "load-pet", "sat-load", "sat-unload", "sat-build",
-"sell-ship-points", "design-structure", "repair-station", "forge-powerup", "kitchen-add"
+"sell-ship-points", "design-structure", "repair-station", "forge-powerup", "kitchen-add",
+"queue-ship", "queue-ship-service", "toggle-ship-build-option"
 ]);
 function bossBlocks(target) {
 if (!target || planetDetailId !== NEM)
@@ -14300,7 +14304,7 @@ catch (error) { }
 p.carry = null;
 }
 getCorpses(planetId).push(p);
-showShipToast("💀 A " + corpseName(p) + " on " + bossPlanetName(planetId) + " ran out of energy. Carry it to Kepler's Spore Greenhouse to bring it back.");
+showShipToast("💀 A " + corpseName(p) + " on " + bossPlanetName(planetId) + " ran out of energy. Feed it to a snapjaw plant — or take it to Kepler, where a snapjaw fed a Chrono Crystal can bring it back.");
 }
 function corpseForEachPet(fn) {
 const s = planetSave;
@@ -14450,8 +14454,8 @@ iconHtml: "💀",
 title: corpseName(cp) + " · out of energy",
 meta: "Can't eat, walk or work",
 text: planet === "kepler"
-? "Drag it into the Spore Greenhouse here — its Revival Bloom can bring it back."
-: "Drag it onto a pet to carry it, or onto a ship to load it into the hold. The Spore Greenhouse on Kepler can bring it back to life.",
+? "Feed the snapjaw here a Chrono Crystal, then this body — its lily will bring the pet back."
+: "Drag it onto a pet to carry it, onto a ship to load it, or feed it to the snapjaw plant. On Kepler, a snapjaw fed a Chrono Crystal can bring it back to life.",
 buttons
 });
 }
@@ -14520,7 +14524,7 @@ return {
 name: "A " + name + "'s body",
 iconHtml: "💀",
 colour: "#aab3c8",
-text: "Out of energy for good — unless you get it to Kepler. Load it into a ship's hold to fly it there, and lay it in the Spore Greenhouse's Revival Bloom."
+text: "Out of energy for good — unless you get it to Kepler. Fly it there in a ship's hold and feed it to the snapjaw after a Chrono Crystal — or feed it to any snapjaw for a reward."
 };
 }
 return worldItemInfo__orig(d);
@@ -14731,7 +14735,7 @@ if (!n && !r)
 return "";
 return '<div class="boss-card corpse"><b>' + (n ? "💀 " + n + " pet" + (n > 1 ? "s have" : " has") + " run out of energy here" : "🌸 A pet is reviving") + '</b><span>' +
 (r ? "The Revival Bloom is mending a " + corpseName(r.pet) + ". " : "") +
-(n ? "Bodies can't eat. Carry them on a pet or in a ship's hold to Kepler — its Spore Greenhouse can bring them back." : "") + '</span></div>';
+(n ? "Bodies can't eat. Feed one to the snapjaw plant for a reward — or take it to Kepler, where a snapjaw fed a Chrono Crystal brings pets back." : "") + '</span></div>';
 }
 const CORPSE_BLOCKED = new Set(["feed-pet", "feed-extra", "feed-perk-food", "carry-feed", "set-pet-role", "assign-pending-pilot", "roam-pet", "train-pet-stat", "toggle-ship-pilot", "forge-powerup", "site-workers", "special-use"]);
 function r13Blocks(target) {
@@ -14744,7 +14748,7 @@ const id = action === "carry-feed" ? target.getAttribute("data-target") : target
 if (!isDeadPetId(id))
 return false;
 if (bossThrottle("deadToast", 1500))
-showShipToast("💀 That pet has no energy left — it can't eat or work. Kepler's Spore Greenhouse can revive it.");
+showShipToast("💀 That pet has no energy left — it can't eat or work. A snapjaw on Kepler, fed a Chrono Crystal, can revive it.");
 return true;
 }
 function releaseMyClaims(exceptKey) {
@@ -14893,6 +14897,14 @@ return;
 withMySave(() => {
 const ships = getShips(NEM) || [];
 const enemies = ships.filter(s => s.enemy).length;
+if (!b.factoryGiven) {
+b.factoryGiven = true;
+if (!planetSave.structures[NEM])
+planetSave.structures[NEM] = {};
+if (!planetSave.structures[NEM]["ship-factory"])
+planetSave.structures[NEM]["ship-factory"] = { level: 1 };
+savePlanetProgress();
+}
 if (!b.fleetSeeded) {
 b.fleetSeeded = true;
 for (let i = enemies; i < ENEMY_FLEET_SIZE; i++)
@@ -14984,6 +14996,8 @@ const PLANT_BLOOMS = [
 ];
 const plantState = { alertUntil: 0, alertStart: 0, parts: [], shake: {}, screamAt: 0 };
 function plantColour(b) {
+if (b.defeated)
+return { col: "#6e5f5a", hurt: 0, f: 0, dead: true };
 const hurt = Math.max(0, Math.min(1, 1 - b.hp / b.maxHp));
 const r = Math.round(208 + 47 * hurt), g = Math.round(43 - 10 * hurt), bl = Math.round(255 - 180 * hurt);
 return { col: "rgb(" + r + "," + g + "," + bl + ")", hurt, f: 1 - hurt };
@@ -15062,6 +15076,7 @@ c.closePath();
 c.fill();
 }
 c.restore();
+if (!look.dead)
 world.hits.push({ x: part.x, y: part.y, r: part.r, z: 5, passThrough: roamingActive, onTap: () => plantTap(part) });
 }
 function plantDrawBloom(c, x, y, s, look, pulse, i, now, part, b) {
@@ -15082,9 +15097,14 @@ c.shadowColor = look.col;
 c.shadowBlur = 6 * look.f;
 c.stroke();
 const petals = part.heart ? 9 : 7;
-const open = .75 + .25 * pulse;
+const open = look.dead ? .55 : .75 + .25 * pulse;
 c.translate(0, -s * 1.05);
-c.shadowBlur = 6 + 22 * look.f * pulse;
+if (look.dead) {
+c.rotate(.6);
+c.scale(.8, .55);
+c.shadowBlur = 0;
+}
+c.shadowBlur = look.dead ? 0 : 6 + 22 * look.f * pulse;
 for (let k = 0; k < petals; k++) {
 const a = k / petals * Math.PI * 2 + t * .15 * (part.heart ? 1 : -1);
 c.save();
@@ -15108,7 +15128,7 @@ c.beginPath();
 c.arc(0, 0, s * .3, 0, Math.PI * 2);
 c.fill();
 c.globalAlpha = 1;
-if (part.heart) {
+if (part.heart && !look.dead) {
 c.shadowBlur = 0;
 c.fillStyle = "rgba(255,255,255,.18)";
 c.fillRect(-s * .6, -s * .95, s * 1.2, 5);
@@ -15116,6 +15136,7 @@ c.fillStyle = look.col;
 c.fillRect(-s * .6, -s * .95, s * 1.2 * look.f, 5);
 }
 c.restore();
+if (!look.dead)
 world.hits.push({ x: part.x, y: part.y, r: part.r, z: 5, passThrough: roamingActive, onTap: () => plantTap(part) });
 }
 function plantInReach(part) {
@@ -15140,6 +15161,9 @@ buttons: []
 });
 }
 function plantDamage(part, n, how) {
+const pb = bossState(part.owner);
+if (!pb || pb.defeated)
+return;
 const now = performance.now();
 bossApply(part.owner, { t: "hit", n });
 plantState.shake[part.kind + part.i] = now;
@@ -15207,8 +15231,518 @@ setInterval(() => { try {
 plantStoryMaybe();
 }
 catch (error) { } }, 1500);
-const FEATURE_ACTIONS = new Set(["revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
+const TRAP_SPOT = { lat: 1.06, lon: .62 };
+const TRAP_GROW_MS = 90000;
+const TRAP_REVIVE_MS = 75000;
+function trapState(planetId) {
+if (!planetSave.snapjaws || typeof planetSave.snapjaws !== "object")
+planetSave.snapjaws = {};
+if (!planetSave.snapjaws[planetId])
+planetSave.snapjaws[planetId] = { stage: "hungry" };
+return planetSave.snapjaws[planetId];
+}
+function trapStage(st) {
+if (st.stage === "growing" && Date.now() - st.startAt >= st.ms)
+return "ripe";
+return st.stage || "hungry";
+}
+function trapReward(pet) {
+const level = Math.max(1, pet.perkLevel || 1);
+const options = [];
+const foods = Object.values(PERKS).filter(p => p.species && p.species === pet.species);
+if (foods.length) {
+const f = foods[Math.floor(Math.random() * foods.length)];
+options.push({ k: "food", r: f.id, n: 1 + Math.floor(level / 2) });
+}
+options.push({ k: "coin", r: "coin", n: 5 + 5 * level });
+if (pet.pilotLicensed) {
+const range = Math.max(1, pet.rangeLevel || 1);
+const mats = Object.values(MATERIAL_BY_SPECIAL_KIND).filter(id => {
+const m = MATERIALS[id];
+const planet = m && getPlanet(m.planetId);
+return planet && (planet.tier || 0) <= range;
+});
+if (mats.length)
+options.push({ k: "mat", r: mats[Math.floor(Math.random() * mats.length)], n: 1 + Math.floor(range / 3) });
+}
+return options[Math.floor(Math.random() * options.length)];
+}
+function trapFeed(planetId, src, d) {
+const st = trapState(planetId);
+if (trapStage(st) !== "hungry") {
+showShipToast("🌱 The plant is still digesting");
+return;
+}
+if (d && d.k === "mat" && d.r === "chrono-crystal") {
+if (planetId !== "kepler" || st.lily)
+return;
+if (!worldPlaceTake(planetId, src, d))
+return;
+st.lily = true;
+savePlanetProgress();
+showShipToast("🌸 The plant curls round the crystal — a pink lily bud forms. Feed it a body and it will bring the pet back.");
+return;
+}
+if (!d || d.k !== "corpse")
+return;
+const f = findCorpse(d.r);
+if (!f)
+return;
+const taken = worldPlaceTake(planetId, src, d);
+if (!taken)
+return;
+const pet = f.pet;
+const i = f.list.indexOf(pet);
+if (i >= 0)
+f.list.splice(i, 1);
+pet.carriedBy = null;
+if (st.lily) {
+st.stage = "growing";
+st.startAt = Date.now();
+st.ms = TRAP_REVIVE_MS;
+st.revive = pet;
+st.reward = null;
+showShipToast("🌸 The lily closes round the " + corpseName(pet) + "… something is stirring.");
+}
+else {
+st.stage = "growing";
+st.startAt = Date.now();
+st.ms = TRAP_GROW_MS;
+st.reward = trapReward(pet);
+st.ate = pet.species || "pet";
+st.revive = null;
+showShipToast("🌱 Snap! The plant swallows the " + corpseName(pet) + " whole — it's starting to bloom.");
+}
+savePlanetProgress();
+}
+function trapCollect(planetId) {
+const st = trapState(planetId);
+if (trapStage(st) !== "ripe")
+return;
+if (st.revive) {
+const pet = st.revive;
+pet.dead = false;
+pet.diedAt = null;
+pet.energy = REVIVE_ENERGY;
+pet.lastEnergyCheck = Date.now();
+pet.revived = (pet.revived || 0) + 1;
+pet.lily = true;
+pet.homePlanetId = "kepler";
+pet.at = null;
+pet.carry = null;
+if (!planetSave.pets[planetId])
+planetSave.pets[planetId] = [];
+planetSave.pets[planetId].push(pet);
+addRankPoints(30, "Revived a pet");
+showShipToast("🌸 The lily opens — the " + corpseName(pet) + " steps out alive, with a little lily of its own! It's weak: feed it.");
+bossSfx("revive");
+st.lily = false;
+}
+else if (st.reward) {
+worldPlacePut(planetId, { t: "vault" }, st.reward);
+showShipToast("🌺 The plant offers up " + (st.reward.n > 1 ? st.reward.n + "× " : "") + worldItemInfo(st.reward).name + " — sent to the vault");
+bossSfx("heal");
+}
+st.stage = "hungry";
+st.revive = null;
+st.reward = null;
+savePlanetProgress();
+}
+function trapSurfaceEntries(queue, p) {
+if (roomState)
+return;
+const planetId = selectedStartPlanet;
+const pr = projectSphere(TRAP_SPOT.lat, TRAP_SPOT.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const st = trapState(planetId);
+const s = Math.max(46, p.width * .13);
+queue.push({
+z: p.groundDepthAt(pr.x, pr.y),
+alpha: 1,
+draw: () => trapDraw(p.c, pr.x, pr.y, s, st, planetId)
+});
+}
+function drawLily(c, x, y, size) {
+c.save();
+c.translate(x, y);
+c.fillStyle = "#ffc6ec";
+c.strokeStyle = "#ff7ad9";
+c.lineWidth = 1.2;
+c.shadowColor = "#ff9de6";
+c.shadowBlur = 8;
+for (let k = 0; k < 6; k++) {
+c.save();
+c.rotate(k / 6 * Math.PI * 2);
+c.beginPath();
+c.ellipse(0, -size * .32, size * .13, size * .3, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.restore();
+}
+c.shadowBlur = 0;
+c.fillStyle = "#ffe680";
+c.beginPath();
+c.arc(0, 0, size * .12, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function trapDraw(c, x, y, s, st, planetId) {
+const now = performance.now();
+const t = now / 1000;
+const stage = trapStage(st);
+const lily = !!st.lily || !!st.revive;
+const rim = lily ? "#ff9de6" : "#5cff9a";
+const body = lily ? "rgba(70,16,52,.95)" : "rgba(10,48,30,.95)";
+const k = stage === "growing" ? Math.min(1, (Date.now() - st.startAt) / st.ms) : stage === "ripe" ? 1 : 0;
+c.save();
+c.translate(x, y);
+c.fillStyle = lily ? "rgba(120,30,90,.9)" : "rgba(20,90,50,.9)";
+c.strokeStyle = rim;
+c.lineWidth = 1.5;
+for (let i = 0; i < 5; i++) {
+const a = Math.PI + (i / 4) * Math.PI;
+c.save();
+c.rotate(a + Math.PI / 2);
+c.beginPath();
+c.ellipse(0, -s * .28, s * .1, s * .28, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.restore();
+}
+c.shadowColor = rim;
+if (stage === "hungry") {
+const breathe = 1 + .035 * Math.sin(t * 1.6);
+c.save();
+c.translate(0, -s * .55);
+c.scale(breathe, breathe);
+c.shadowBlur = 14;
+c.fillStyle = body;
+c.strokeStyle = rim;
+c.lineWidth = 2.4;
+[-1, 1].forEach(side => {
+c.beginPath();
+c.moveTo(0, -s * .55);
+c.bezierCurveTo(side * s * .62, -s * .5, side * s * .6, s * .32, 0, s * .42);
+c.closePath();
+c.fill();
+c.stroke();
+});
+c.shadowBlur = 0;
+c.fillStyle = "#f6fff0";
+for (let i = 0; i < 7; i++) {
+const yy = -s * .45 + i * s * .13;
+const side = i % 2 ? 1 : -1;
+c.beginPath();
+c.moveTo(0, yy);
+c.lineTo(side * s * .1, yy + s * .05);
+c.lineTo(0, yy + s * .09);
+c.closePath();
+c.fill();
+}
+const drip = (t * .4) % 1;
+c.globalAlpha = 1 - drip;
+c.fillStyle = rim;
+c.beginPath();
+c.arc(0, s * .42 + drip * s * .3, s * .04, 0, Math.PI * 2);
+c.fill();
+c.globalAlpha = 1;
+c.restore();
+if (lily)
+drawLily(c, 0, -s * 1.18, s * .32);
+}
+else {
+c.save();
+c.translate(0, -s * .3);
+c.shadowBlur = 10 + 8 * Math.sin(t * 2);
+for (let i = 0; i < 6; i++) {
+c.save();
+c.rotate((i - 2.5) * .46);
+c.fillStyle = body;
+c.strokeStyle = rim;
+c.lineWidth = 2;
+c.beginPath();
+c.ellipse(0, -s * .34, s * .15, s * .36, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.restore();
+}
+const stemH = s * (.35 + .75 * k);
+c.strokeStyle = lily ? "#ff9de6" : "#7dff8c";
+c.lineWidth = s * .06;
+c.lineCap = "round";
+c.shadowBlur = 10;
+c.beginPath();
+c.moveTo(0, 0);
+c.quadraticCurveTo(s * .12 * Math.sin(t), -stemH * .5, 0, -stemH);
+c.stroke();
+c.shadowBlur = 0;
+if (stage === "ripe") {
+const bob = Math.sin(t * 2.4) * 3;
+const g = c.createRadialGradient(0, -stemH + bob, 2, 0, -stemH + bob, s * .45);
+g.addColorStop(0, "rgba(255,255,220,.75)");
+g.addColorStop(1, "rgba(255,255,220,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(0, -stemH + bob, s * .45, 0, Math.PI * 2);
+c.fill();
+if (st.revive) {
+try {
+drawSpacePet(c, planetId, 0, -stemH + bob, s * .42, 60, t * 3, st.revive.species, false, "builder", 1);
+}
+catch (error) { }
+drawLily(c, s * .1, -stemH + bob - s * .3, s * .16);
+}
+else if (st.reward) {
+drawWorldItem(c, st.reward, 0, -stemH + bob, s * .42, { glow: 1 });
+}
+for (let i = 0; i < 6; i++) {
+const a = t * 1.5 + i;
+c.fillStyle = "rgba(255,255,255," + (.5 + .5 * Math.sin(a * 3)) + ")";
+c.beginPath();
+c.arc(Math.cos(a) * s * .32, -stemH + bob + Math.sin(a) * s * .32, 1.6, 0, Math.PI * 2);
+c.fill();
+}
+}
+else {
+c.fillStyle = lily ? "#ff9de6" : "#b6ffcb";
+c.beginPath();
+c.ellipse(0, -stemH, s * (.07 + .06 * k), s * (.1 + .08 * k), 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = rim;
+c.lineWidth = 3;
+c.beginPath();
+c.arc(0, -stemH, s * .24, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+c.stroke();
+}
+c.restore();
+}
+c.restore();
+const hit = { x, y: y - s * .6, r: s * .55 };
+world.hits.push({ x: hit.x, y: hit.y, r: hit.r, z: 6, passThrough: roamingActive, onTap: () => trapBubble(planetId, hit, stage, st) });
+world.drops.push({
+x: hit.x, y: hit.y, r: hit.r * 1.2,
+kind: "trap",
+accept: d => !!d && stage === "hungry" && (d.k === "corpse" || (planetId === "kepler" && d.k === "mat" && d.r === "chrono-crystal" && !st.lily)),
+drop: (d, src) => {
+bossSfx("snarl", x);
+worldRunAction({ "data-action": "trap-feed", "data-target": JSON.stringify(src || {}), "data-item": JSON.stringify(d) });
+}
+});
+}
+function trapBubble(planetId, hit, stage, st) {
+if (stage === "ripe") {
+worldRunAction({ "data-action": "trap-collect" });
+return;
+}
+const left = stage === "growing" ? Math.ceil((st.ms - (Date.now() - st.startAt)) / 1000) : 0;
+const kepler = planetId === "kepler";
+worldShowBubble({
+x: hit.x, y: hit.y - hit.r,
+iconHtml: st.lily || st.revive ? "🌸" : "🌱",
+title: st.lily || st.revive ? "Lily snapjaw" : "Snapjaw",
+meta: stage === "growing" ? (st.revive ? "Mending a " + corpseName(st.revive) : "Digesting a " + (SPECIES_DISPLAY_NAMES[st.ate] || "pet")) + " · " + left + "s" : "Hungry",
+text: stage === "growing"
+? (st.revive ? "The lily has closed round the body. When it opens, the pet comes back with " + REVIVE_ENERGY + "% energy — a Kepler native now." : "It's growing something on its stem. Tap it when it's ripe.")
+: st.lily
+? "A lily bud has grown on it. Drag a pet's body onto it and the lily will bring the pet back to life."
+: "A carnivorous plant. It only eats one thing: drag a pet's body onto it and it'll bloom, then grow something on its stem — the pet's favourite food, coins, or for a licensed pilot, an asteroid material." + (kepler ? " Feed this one a Chrono Crystal first and it grows a lily that revives the pet instead." : ""),
+buttons: []
+});
+}
+function worldDrawCarried(c, pet, x, y, size, isRoamer) {
+const r = worldDrawCarried__orig(c, pet, x, y, size, isRoamer);
+if (pet && pet.lily) {
+try {
+drawLily(c, x - size * .3, y - size * .74, size * .26);
+}
+catch (error) { }
+}
+return r;
+}
+setInterval(() => {
+try {
+if (!localPlanetSave)
+return;
+const rv = localPlanetSave.revival || {};
+Object.keys(rv).forEach(pid => {
+if (rv[pid] && Date.now() - rv[pid].startAt >= rv[pid].ms)
+withMySave(() => reviveCollect(pid));
+});
+}
+catch (error) { }
+}, 5000);
+function nemesisVineEntries(queue, p, b) {
+if (selectedStartPlanet !== NEM || !b || b.defeated || roomState)
+return;
+const pos = world.structureLatLon || {};
+Object.keys(pos).forEach(id => {
+const ll = pos[id];
+const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const h = Math.max(30, p.width * .11);
+queue.push({
+z: p.groundDepthAt(pr.x, pr.y) + .002,
+alpha: 1,
+draw: () => nemesisDrawVines(p.c, pr.x, pr.y, h, b, id)
+});
+});
+}
+function nemesisDrawVines(c, x, y, h, b, id) {
+const look = plantColour(b);
+const t = performance.now() / 1000;
+let seed = 0;
+for (let i = 0; i < id.length; i++)
+seed += id.charCodeAt(i);
+c.save();
+c.lineCap = "round";
+for (let v = 0; v < 3; v++) {
+const a0 = (seed + v * 2.1) % 6.28;
+const path = () => {
+c.beginPath();
+for (let k = 0; k <= 18; k++) {
+const tt = k / 18;
+const ang = a0 + tt * Math.PI * 2.2;
+const px = x + Math.cos(ang) * h * (.42 + .06 * Math.sin(t + v)) * (.8 + .2 * tt);
+const py = y - h * (.08 + tt * .8) + Math.sin(ang) * h * .12;
+if (k)
+c.lineTo(px, py);
+else
+c.moveTo(px, py);
+}
+};
+c.strokeStyle = "#14041c";
+c.lineWidth = 5;
+path();
+c.stroke();
+c.strokeStyle = look.col;
+c.shadowColor = look.col;
+c.shadowBlur = 6 * look.f + 2;
+c.lineWidth = 1.6;
+path();
+c.stroke();
+}
+c.shadowBlur = 8;
+c.fillStyle = look.col;
+c.beginPath();
+c.arc(x + h * .18, y - h * .55, h * .07, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r15LaunchOverride(launchBtn, planet) {
+const ships = planet.id === "earth" ? getEarthLaunchCandidates() : (getShips(planet.id) || []);
+if (typeof mp !== "undefined" && mp.connected && !activePlanetOwnerId) {
+const crewShip = mpFindMyCoPilotShip(mp.myId, ships);
+const entry = crewShip && mpGetMyCoPilotEntry(mp.myId, crewShip.id);
+if (entry) {
+launchBtn.dataset.mode = "toggle-ready";
+launchBtn.dataset.shipId = crewShip.id;
+launchBtn.innerHTML = entry.ready ? "✅ Ready — waiting on the pilot" : "⏳ Tap When Ready";
+launchBtn.classList.remove("orbital-ready");
+return true;
+}
+}
+if (planet.id !== "earth" && ships.length && ships.every(s => s.enemy)) {
+launchBtn.dataset.mode = "select-ship";
+launchBtn.innerHTML = "😈 Enemy ships only — Ships";
+launchBtn.classList.remove("orbital-ready");
+return true;
+}
+return false;
+}
+function resolveLaunchShip(ships) {
+return resolveLaunchShip__orig((ships || []).filter(s => !s.enemy));
+}
+function mpFieldShift(obj, dx, dy, depth) {
+if (!obj || typeof obj !== "object" || depth > 4)
+return;
+if (Array.isArray(obj)) {
+obj.forEach(o => mpFieldShift(o, dx, dy, depth + 1));
+return;
+}
+["x", "x1", "x2", "tx", "cx"].forEach(k => { if (typeof obj[k] === "number")
+obj[k] += dx; });
+["y", "y1", "y2", "ty", "cy"].forEach(k => { if (typeof obj[k] === "number")
+obj[k] += dy; });
+Object.keys(obj).forEach(k => {
+if (obj[k] && typeof obj[k] === "object")
+mpFieldShift(obj[k], dx, dy, depth + 1);
+});
+}
+function mpApplyFieldSnapshot(event) {
+if (event && event.cw && event.ch && (event.cw !== W || event.ch !== H) && !event._shifted) {
+const dx = (W - event.cw) / 2, dy = (H - event.ch) / 2;
+["asteroids", "coinPickups", "coins", "materialPickups", "vis"].forEach(k => {
+if (event[k])
+mpFieldShift(event[k], dx, dy, 0);
+});
+event._shifted = true;
+}
+return mpApplyFieldSnapshot__orig(event);
+}
+function mpResolveRemoteTap(fromId, event) {
+if (event && event.cw && event.ch) {
+event.x += (W - event.cw) / 2;
+event.y += (H - event.ch) / 2;
+}
+if (event && event.ownerId === (flyingShipOwnerId || mp.myId))
+event.ownerId = mp.myId;
+return mpResolveRemoteTap__orig(fromId, event);
+}
+let smSnap = null;
+let smSnapAt = 0;
+let smWasZoom = false;
+function drawMultiplayerStarMap() {
+const zooming = typeof mp !== "undefined" && mp.connected && zoomProgress > .01;
+const r = drawMultiplayerStarMap__orig();
+const cv = document.getElementById("starMapCanvas");
+if (!cv || typeof mp === "undefined" || !mp.connected)
+return r;
+if (zooming) {
+if (!smSnap)
+smSnap = document.createElement("canvas");
+if (smSnap.width !== cv.width || smSnap.height !== cv.height) {
+smSnap.width = cv.width;
+smSnap.height = cv.height;
+}
+const sc = smSnap.getContext("2d");
+sc.clearRect(0, 0, smSnap.width, smSnap.height);
+sc.drawImage(cv, 0, 0);
+smWasZoom = true;
+return r;
+}
+if (smWasZoom) {
+smWasZoom = false;
+smSnapAt = performance.now();
+}
+const k = (performance.now() - smSnapAt) / 500;
+if (smSnap && k < 1) {
+const c = cv.getContext("2d");
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.globalAlpha = 1 - k * k;
+c.drawImage(smSnap, 0, 0);
+c.restore();
+}
+return r;
+}
+const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
+if (action === "trap-feed") {
+let src = null, d = null;
+try {
+src = JSON.parse(target.getAttribute("data-target") || "null");
+d = JSON.parse(target.getAttribute("data-item") || "null");
+}
+catch (error) { }
+trapFeed(planetId, src, d);
+return;
+}
+if (action === "trap-collect") {
+trapCollect(planetId);
+return;
+}
 if (action === "revive-start") {
 reviveStart(planetId, target.getAttribute("data-pet"));
 return;
@@ -15614,11 +16148,13 @@ materialId: m.materialId
 lives,
 score,
 wave,
+cw: W,
+ch: H,
 vis: mpFieldVisuals()
 }
 });
 }
-function mpApplyFieldSnapshot(event) {
+function mpApplyFieldSnapshot__orig(event) {
 if (coPilotSessionShipKey !==
 mpShipKey(event.ownerId, event.shipId)) {
 return;
@@ -15900,7 +16436,7 @@ Math.round(entry.points || 0) +
 }).join("");
 el.classList.remove("hidden");
 }
-function mpResolveRemoteTap(fromId, event) {
+function mpResolveRemoteTap__orig(fromId, event) {
 if (event.ownerId !== mp.myId ||
 event.shipId !== currentShipId ||
 !running ||
@@ -22202,7 +22738,7 @@ c.fillText("you", x + 6, y + 3);
 });
 c.restore();
 }
-function drawMultiplayerStarMap() {
+function drawMultiplayerStarMap__orig() {
 if (!mp.connected) {
 drawStarMapScene();
 return;
@@ -23461,7 +23997,7 @@ if (now >= until)
 return 1;
 return Math.max(0, 1 - (until - now) / POWERUP_COOLDOWN_MS) * .35;
 }
-function worldDrawCarried(c, pet, x, y, size, isRoamer) {
+function worldDrawCarried__orig(c, pet, x, y, size, isRoamer) {
 if (!pet)
 return;
 const headY = y - size * .78;
@@ -27293,7 +27829,6 @@ label("HOT SPRING · walk in for a soak", p.x, p.y + 46 * p.s, 11);
 }
 else if (def.type === "greenhouse") {
 const beds = ks.beds || {};
-roomReviveBloomFixture(c, list, planetId, def);
 list.push({ v: -2, draw: () => {
 const g = roomGeo;
 const t = performance.now() / 1000;
@@ -28496,6 +29031,7 @@ try {
 worldDrawPlanetGround(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 bossSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 corpseSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+trapSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
@@ -28738,6 +29274,8 @@ launchBtn.innerHTML =
 "🚀 Select Ship";
 }
 }
+}
+else if (planetHasShip && r15LaunchOverride(launchBtn, planet)) {
 }
 else if (planetHasShip) {
 launchBtn.dataset.mode = "launch";
@@ -29664,7 +30202,7 @@ planetId;
 }
 return bestPlanetId || "earth";
 }
-function resolveLaunchShip(allShips) {
+function resolveLaunchShip__orig(allShips) {
 if (!allShips.length)
 return null;
 const readyShips = allShips.filter(s => !isShipInService(s));
@@ -41172,7 +41710,9 @@ kind: "tap",
 ownerId: coPilotFollowingOwnerId,
 shipId: coPilotFollowingShipId,
 x: copilotTapPos.x,
-y: copilotTapPos.y
+y: copilotTapPos.y,
+cw: W,
+ch: H
 }
 });
 return;
@@ -41374,8 +41914,8 @@ return;
 if (mode === "toggle-ready") {
 const shipId = event.currentTarget.
 dataset.shipId;
-const entry = mpGetMyCoPilotEntry(activePlanetOwnerId, shipId);
-mpSetCoPilotReady(activePlanetOwnerId, shipId, !(entry && entry.ready));
+const entry = mpGetMyCoPilotEntry(activePlanetOwnerId || mp.myId, shipId);
+mpSetCoPilotReady(activePlanetOwnerId || mp.myId, shipId, !(entry && entry.ready));
 renderPlanetFocus();
 return;
 }
