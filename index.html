@@ -6407,6 +6407,53 @@ unlockMaterials: [
 buyCost: 30,
 effectType: "shipToggle",
 toggleId: "pet-bay"
+},
+{
+id: "ship-factory-shield-1",
+structureId: "ship-factory",
+name: "Shield Hearts I",
+icon: "🛡",
+description: "Ships built here can carry a shield heart — an " +
+"extra heart that's lost first and never heals " +
+"back. Also unlocks the +1 Shield Heart retrofit " +
+"for docked ships.",
+unlockMaterials: [
+{ materialId: "solar-plating", amount: 4 },
+{ materialId: "cryo-shard", amount: 4 }
+],
+buyCost: 25,
+effectType: "shipToggle",
+toggleId: "shield-1"
+},
+{
+id: "ship-factory-shield-2",
+structureId: "ship-factory",
+name: "Shield Hearts II",
+icon: "🛡",
+description: "A second shield heart for ships built (or " +
+"retrofitted) here.",
+unlockMaterials: [
+{ materialId: "shadow-vapor", amount: 5 },
+{ materialId: "chrono-crystal", amount: 5 }
+],
+buyCost: 40,
+effectType: "shipToggle",
+toggleId: "shield-2"
+},
+{
+id: "ship-factory-shield-3",
+structureId: "ship-factory",
+name: "Shield Hearts III",
+icon: "🛡",
+description: "The full set: a third shield heart for ships " +
+"built (or retrofitted) here.",
+unlockMaterials: [
+{ materialId: "prime-core", amount: 6 },
+{ materialId: "mirror-alloy", amount: 6 }
+],
+buyCost: 60,
+effectType: "shipToggle",
+toggleId: "shield-3"
 }
 ],
 "bio-dome": [
@@ -14901,6 +14948,10 @@ function createShip(...args) {
 const ship = createShip__orig(...args);
 if (ship && running && !gameOver)
 ship.shieldHearts = runShieldHearts;
+if (ship && typeof r17BuildShield !== "undefined" && r17BuildShield > 0) {
+ship.shieldHearts = r17BuildShield;
+r17BuildShield = 0;
+}
 return ship;
 }
 function computeOrbitalSpawnInterval() {
@@ -16037,7 +16088,7 @@ titles.forEach(t => t.remove());
 if (ai)
 ai.remove();
 card.innerHTML = "";
-[head, rank, board, planets].forEach(el => card.appendChild(el));
+[head, rank, planets, board].forEach(el => card.appendChild(el));
 }
 function goRenderRank() {
 const el = document.getElementById("goRank");
@@ -16130,6 +16181,322 @@ container.appendChild(grid);
 goBuild();
 goRenderRank();
 }
+const SHIELD_UPGRADE_IDS = ["ship-factory-shield-1", "ship-factory-shield-2", "ship-factory-shield-3"];
+const SHIELD_BUILD_COST = 6;
+let r17BuildShield = 0;
+function shieldUnlocked(planetId) {
+return SHIELD_UPGRADE_IDS.filter(id => isUpgradePurchased(planetId, id)).length;
+}
+function shieldUnlockedHere() {
+return shieldUnlocked(planetDetailId || selectedStartPlanet);
+}
+function shieldBuildCount(planetId) {
+return Math.min(shieldUnlocked(planetId), shipBuildToggles.shield || 0);
+}
+function shieldBuildToggleHtml(planetId) {
+const max = shieldUnlocked(planetId);
+if (!max)
+return "";
+const n = shieldBuildCount(planetId);
+return ('<button class="shape-btn' + (n ? ' selected' : '') + '" style="width:100%;padding:6px 8px;font-size:10px;" ' +
+'data-action="toggle-ship-build-option" data-option="shield">' +
+'🛡 Shield hearts: ' + n + '/' + max + (n ? ' (+' + (n * SHIELD_BUILD_COST) + ' ' + COIN_ICON_HTML + ')' : ' · tap to add') +
+'</button>');
+}
+function shieldBuildPreviewHtml(planetId) {
+const n = shieldBuildCount(planetId);
+return n ? '<span class="shield-heart">' + "♥".repeat(n) + '</span>' : "";
+}
+function queueShipBuild(planetId, options) {
+const want = Math.min(shieldUnlocked(planetId), (options && options.shield) || 0);
+const queue = ((planetSave.buildQueue || {})[planetId] || []);
+const before = queue.length;
+const r = queueShipBuild__orig(planetId, options);
+const after = ((planetSave.buildQueue || {})[planetId] || []);
+if (want > 0 && after.length > before) {
+const job = after[after.length - 1];
+if (spendCoins(planetId, want * SHIELD_BUILD_COST)) {
+job.shield = want;
+savePlanetProgress();
+}
+else {
+showShipToast("Not enough coins for the shield hearts — the ship is being built without them");
+}
+}
+return r;
+}
+const bg = {
+rocks: [],
+last: 0,
+lastScore: 0,
+rate: 0,
+space: null,
+planet: null,
+peers: {},
+sendAt: 0
+};
+function bgAsteroidColour() {
+const planet = getPlanet(currentPlanetId);
+const type = ASTEROID_TYPES[(planet && planet.asteroid) || "earth"] || ASTEROID_TYPES.earth;
+return type.color || "#4ee5ff";
+}
+function bgSpecialColour() {
+const sp = getPlanetSpecial(currentPlanetId);
+const map = { explosive: "#ff2e9a", sticky: "#4fd6ff", shatter: "#5cffb0", durable: "#9fd8ff", "coin-rich": "#ffd76b", elite: "#ffd23f", cloak: "#8a7fff", twin: "#ff9de6", rift: "#6ee7c8", voidrock: "#d02bff" };
+return sp ? map[sp.kind] : null;
+}
+function bgMakeRock(x, y, space) {
+const depth = .25 + Math.random() * .6;
+const special = Math.random() < .12 ? bgSpecialColour() : null;
+const n = 6 + Math.floor(Math.random() * 4);
+const pts = [];
+for (let i = 0; i < n; i++)
+pts.push(.7 + Math.random() * .45);
+return {
+x, y, depth,
+size: (3 + Math.random() * 7) * (.6 + depth * .8),
+rot: Math.random() * 6.28,
+vr: (Math.random() - .5) * .8,
+pts,
+colour: special || bg.colour,
+drift: space === "orbital" ? { vx: (Math.random() - .5) * 6, vy: (Math.random() - .5) * 6 } : null,
+orbit: space === "orbital" && Math.random() < .3 ? { w: (Math.random() < .5 ? -1 : 1) * (.015 + Math.random() * .02) } : null
+};
+}
+function bgTarget() {
+if (worldState === "field") {
+const leg = Math.max(1, currentFieldLegPoints());
+const p = clamp((score - fieldStartScore) / leg, 0, 1);
+const env = Math.max(.08, Math.pow(Math.sin(Math.PI * Math.min(1, p * 1.05 + .02)), .8));
+let pace = 1;
+try {
+pace = clamp((aiModel.pace || 1) * (aiModel.difficulty || 1), .6, 2.4);
+}
+catch (error) { }
+const crowd = clamp(asteroids.length / 14, 0, 1);
+return Math.round(clamp(55 * env * (.55 + .45 * pace) * (.7 + .6 * crowd), 3, 95));
+}
+const d = Math.hypot(orbitalX, orbitalY);
+const k = clamp((d - ORBITAL_RETURN_RADIUS) / (ORBITAL_ESCAPE_RADIUS - ORBITAL_RETURN_RADIUS), 0, 1);
+return Math.round(2 + 70 * Math.pow(k, 1.25));
+}
+function bgUpdate(now) {
+const dt = Math.min(.05, (now - (bg.last || now)) / 1000);
+bg.last = now;
+if (!running || (worldState !== "field" && worldState !== "orbital")) {
+bg.rocks = [];
+bg.space = null;
+return;
+}
+if (bg.space !== worldState || bg.planet !== currentPlanetId) {
+bg.space = worldState;
+bg.planet = currentPlanetId;
+bg.colour = bgAsteroidColour();
+bg.rocks = [];
+bg.lastScore = score;
+bg.rate = 0;
+}
+const gained = Math.max(0, score - bg.lastScore);
+bg.lastScore = score;
+if (dt > 0)
+bg.rate = bg.rate * .97 + (gained / dt) * .03;
+const target = bgTarget();
+if (worldState === "field") {
+const speed = clamp(26 + bg.rate * .11, 26, 280) * (timeSlowActive ? .5 : 1);
+bg.rocks.forEach(r => {
+r.y += speed * (.35 + r.depth * .9) * dt;
+r.rot += r.vr * dt;
+});
+bg.rocks = bg.rocks.filter(r => r.y < H + 20);
+if (!bg.rocks.length && target > 0)
+for (let i = 0; i < Math.ceil(target * .4); i++)
+bg.rocks.push(bgMakeRock(Math.random() * W, Math.random() * H, "field"));
+let spawn = Math.min(3, target - bg.rocks.length);
+while (spawn-- > 0)
+bg.rocks.push(bgMakeRock(Math.random() * W, -12 - Math.random() * 40, "field"));
+if (bg.rocks.length > target * 1.3 + 2) {
+const i = bg.rocks.findIndex(r => r.y < H * .35);
+if (i >= 0)
+bg.rocks.splice(i, 1);
+}
+}
+else {
+bg.rocks.forEach(r => {
+if (r.orbit) {
+const a = Math.atan2(r.y, r.x) + r.orbit.w * dt;
+const rr = Math.hypot(r.x, r.y);
+r.x = Math.cos(a) * rr;
+r.y = Math.sin(a) * rr;
+}
+else {
+r.x += r.drift.vx * dt;
+r.y += r.drift.vy * dt;
+}
+r.rot += r.vr * dt;
+});
+const view = r => {
+const s = bgScreen(r);
+return s.x > -80 && s.x < W + 80 && s.y > -80 && s.y < H + 80;
+};
+bg.rocks = bg.rocks.filter(view);
+if (bg.rocks.length > target)
+bg.rocks.splice(0, Math.min(2, bg.rocks.length - target));
+let spawn = Math.min(4, target - bg.rocks.length);
+while (spawn-- > 0) {
+const r = bgMakeRock(0, 0, "orbital");
+const sx = Math.random() * (W + 120) - 60, sy = Math.random() * (H + 120) - 60;
+r.x = sx - W / 2 + orbitalX * r.depth * .5;
+r.y = sy - H / 2 + orbitalY * r.depth * .5;
+bg.rocks.push(r);
+}
+}
+}
+function bgScreen(r) {
+if (bg.space !== "orbital")
+return { x: r.x, y: r.y };
+return { x: W / 2 + r.x - orbitalX * r.depth * .5, y: H / 2 + r.y - orbitalY * r.depth * .5 };
+}
+function bgDraw(c) {
+const now = performance.now();
+bgUpdate(now);
+if (!bg.rocks.length && !Object.keys(bg.peers).length)
+return;
+c.save();
+bg.rocks.forEach(r => {
+const s = bgScreen(r);
+c.save();
+c.translate(s.x, s.y);
+c.rotate(r.rot);
+c.globalAlpha = .18 + r.depth * .42;
+c.strokeStyle = r.colour;
+c.fillStyle = "rgba(4,8,20,.85)";
+c.lineWidth = 1;
+c.beginPath();
+r.pts.forEach((k, i) => {
+const a = i / r.pts.length * Math.PI * 2;
+const x = Math.cos(a) * r.size * k, y = Math.sin(a) * r.size * k;
+if (i)
+c.lineTo(x, y);
+else
+c.moveTo(x, y);
+});
+c.closePath();
+c.fill();
+c.stroke();
+c.restore();
+});
+c.restore();
+bgDrawPeers(c, now);
+}
+function drawStars() {
+const r = drawStars__orig();
+try {
+bgDraw(ctx);
+}
+catch (error) {
+console.error("Background draw failed:", error);
+}
+return r;
+}
+function bgRouteKey() {
+if (worldState !== "field" || !running)
+return null;
+const owner = (typeof mp !== "undefined" && mp.connected) ? (orbitalLocaleOwnerId || mp.myId) : "me";
+return owner + ":" + currentPlanetId + ":" + (planetPhasePending ? "in" : "out");
+}
+function bgLegProgress() {
+return clamp((score - fieldStartScore) / Math.max(1, currentFieldLegPoints()), 0, 1);
+}
+function bgPresenceTick(now) {
+if (typeof mp === "undefined" || !mp.connected || coPilotSessionShipKey)
+return;
+const key = bgRouteKey();
+if (!key) {
+if (bg.sentKey) {
+bg.sentKey = null;
+mpSend({ type: "fieldEvent", event: { kind: "bgRoute", key: null } });
+}
+return;
+}
+if (now - bg.sendAt < 450)
+return;
+bg.sendAt = now;
+bg.sentKey = key;
+const ship = currentShipId && ((getShips(currentPlanetId) || []).find(s => s.id === currentShipId) || null);
+mpSend({ type: "fieldEvent", event: {
+kind: "bgRoute",
+key,
+p: Math.round(bgLegProgress() * 1000) / 1000,
+styleId: currentShipStyleId || "custom1",
+styleOwner: (ship && ship.styleOwnerId) || flyingShipOwnerId || mp.myId,
+shipKey: currentShipId ? mpShipKey(flyingShipOwnerId || mp.myId, currentShipId) : null
+} });
+}
+function bgOnNet(fromId, event) {
+if (!event || event.kind !== "bgRoute")
+return false;
+if (!event.key) {
+delete bg.peers[fromId];
+return true;
+}
+const prev = bg.peers[fromId];
+bg.peers[fromId] = {
+key: event.key,
+p: event.p,
+shown: prev ? prev.shown : event.p,
+styleId: event.styleId,
+styleOwner: event.styleOwner,
+shipKey: event.shipKey,
+at: performance.now()
+};
+return true;
+}
+function bgDrawPeers(c, now) {
+const key = bgRouteKey();
+if (!key || coPilotSessionShipKey)
+return;
+const mine = bgLegProgress();
+const myShipKey = currentShipId && typeof mp !== "undefined" ? mpShipKey(flyingShipOwnerId || mp.myId, currentShipId) : null;
+Object.keys(bg.peers).forEach((id, index) => {
+const pr = bg.peers[id];
+if (!pr || now - pr.at > 3000 || pr.key !== key)
+return;
+pr.shown += (pr.p - pr.shown) * .06;
+const diff = pr.shown - mine;
+const y = clamp(H / 2 - diff * H * 1.6, -40, H + 40);
+let h = 0;
+for (let i = 0; i < id.length; i++)
+h = (h * 31 + id.charCodeAt(i)) >>> 0;
+const x = W / 2 + ((h % 3) - 1) * Math.min(70, W * .16) + Math.sin(now / 1400 + h) * 10;
+if (y < -30 || y > H + 30)
+return;
+const info = (mp.remotePlayerInfo || {})[id] || {};
+c.save();
+c.globalAlpha = .55;
+c.translate(x, y);
+c.scale(.3, .3);
+c.translate(-200, -140);
+try {
+for (const shape of getShipStyleShapes(pr.styleId || "custom1", pr.styleOwner || id))
+shape.draw(c, true, null, null);
+}
+catch (error) { }
+c.restore();
+c.save();
+c.globalAlpha = .8;
+c.font = "700 9px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = info.colour || "#9fdcff";
+c.shadowColor = "rgba(0,0,0,.8)";
+c.shadowBlur = 4;
+c.fillText((info.name || "Player") + (Math.abs(diff) < .02 ? "" : diff > 0 ? " ▲" : " ▼"), x, y + 30);
+c.restore();
+});
+}
+setInterval(() => { try {
+bgPresenceTick(performance.now());
+}
+catch (error) { } }, 150);
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "trap-feed") {
@@ -16625,6 +16992,8 @@ updateHUD();
 function mpHandleRemoteFieldEvent(message) {
 const event = message.event || {};
 if (typeof bossOnNet === "function" && bossOnNet(message.id, event))
+return;
+if (typeof bgOnNet === "function" && bgOnNet(message.id, event))
 return;
 if (event.kind === "snapshot") {
 mpApplyFieldSnapshot(event);
@@ -29953,6 +30322,7 @@ if (now >= readyAt) {
 changed = true;
 if (build.type ===
 "ship") {
+r17BuildShield = build.shield || 0;
 createShip(planetId, 0, 0, shipFactoryDefaultPower(planetId), 1, 3, {}, null, shipBuildCargoBonus(build), !!build.dualPerk, null, build.dualPerk
 ? 3
 : (build.petBay
@@ -30055,7 +30425,7 @@ name: "+1 Shield Heart",
 cost: 15,
 energyPerPet: 6,
 baseSeconds: 90,
-requiresUpgrade: null
+requiresUpgrade: "ship-factory-shield-1"
 },
 "restore-heart": {
 name: "Restore Heart",
@@ -30090,7 +30460,7 @@ function isShipServiceApplicable(ship, serviceId) {
 if (serviceId === "restore-heart")
 return (Number(ship.lives) || 3) < 3;
 if (serviceId === "shield-heart")
-return (ship.shieldHearts || 0) < SHIELD_HEART_MAX;
+return (ship.shieldHearts || 0) < Math.min(SHIELD_HEART_MAX, shieldUnlockedHere());
 if (serviceId === "cargo-hold")
 return (ship.materialCapBonus || 0) < CARGO_TIER_BONUS.cargoHold;
 if (serviceId === "pet-bay")
@@ -30163,7 +30533,7 @@ savePlanetProgress();
 showShipToast(service.name + " started.");
 renderPlanetDetail(planetId);
 }
-function queueShipBuild(planetId, options) {
+function queueShipBuild__orig(planetId, options) {
 options = options || {};
 if (!hasStructure(planetId, "ship-factory"))
 return;
@@ -32792,7 +33162,7 @@ html +=
 '<div class="item-shop-card-name">New Ship</div>' +
 '<div class="item-shop-card-meta">' +
 '<span style="color:#ff8d8d;letter-spacing:2px;">' +
-'♥♥♥</span> 3 hearts<br>' +
+'♥♥♥</span>' + shieldBuildPreviewHtml(id) + ' ' + (3 + shieldBuildCount(id)) + ' hearts<br>' +
 '📦 Cargo ' + previewCargo + '<br>' +
 '<span style="opacity:.7;">🐾 ' + PET_CARGO_SLOTS + ' · 🛰 ' + SAT_CARGO_SLOTS + ' slots each</span><br>' +
 'Ready in ' + shipDuration + 's' +
@@ -32800,7 +33170,8 @@ html +=
 '</div>' +
 (hasCargoHoldUpgrade ||
 hasPetBayUpgrade ||
-hasDualPerkUpgrade
+hasDualPerkUpgrade ||
+shieldUnlocked(id) > 0
 ? '<div class="item-shop-card-btn-wrap" ' +
 'style="display:flex;flex-direction:column;' +
 'gap:6px;padding-top:0;">' +
@@ -32813,6 +33184,7 @@ hasDualPerkUpgrade
 (hasDualPerkUpgrade
 ? toggleBtn("dualPerk", shipBuildToggles.dualPerk, '📦 Cargo Hold III: 65 (+5 ' + COIN_ICON_HTML + ')')
 : '') +
+shieldBuildToggleHtml(id) +
 '</div>'
 : '') +
 '<div class="item-shop-card-btn-wrap">' +
@@ -33604,6 +33976,10 @@ queueShipService(planetDetailId, target.getAttribute("data-ship"), target.getAtt
 }
 else if (action === "toggle-ship-build-option") {
 const optionKey = target.getAttribute("data-option");
+if (optionKey === "shield") {
+shipBuildToggles.shield = ((shipBuildToggles.shield || 0) + 1) % (shieldUnlocked(planetDetailId) + 1);
+renderPlanetDetail(planetDetailId);
+}
 if (optionKey === "cargoHold" ||
 optionKey === "petBay" ||
 optionKey === "dualPerk") {
@@ -34922,7 +35298,7 @@ s.twinkle +=
 dt * 1.5;
 }
 }
-function drawStars() {
+function drawStars__orig() {
 for (const s of stars) {
 const alpha = s.alpha +
 Math.sin(s.twinkle) * .12;
