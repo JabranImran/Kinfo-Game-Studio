@@ -4412,7 +4412,7 @@ const SURFACE_ITEM_LAT_OFFSET = .55;
 const SURFACE_ROW_LAT_OFFSETS = [.45, .68];
 const WANDER_CYCLE_SECONDS = 14;
 const WANDER_WALK_FRACTION = .55;
-const ROAM_CAMERA_TILT = SURFACE_ITEM_LAT_OFFSET;
+const ROAM_CAMERA_TILT = .78;
 const SHIP_LAT = Math.PI / 2 -
 SURFACE_ITEM_LAT_OFFSET;
 const ROAM_START_LAT_OFFSET = .42;
@@ -9967,7 +9967,7 @@ const up = Math.atan2(proj.y - o.cy, proj.x - o.cx) + Math.PI / 2;
 c.save();
 c.globalAlpha *= appear;
 c.translate(proj.x, proj.y - (1 - appear) * 14);
-c.rotate(up);
+r20Orient(c, proj.x, proj.y, "radial");
 c.save();
 c.fillStyle = "rgba(0,0,0,.35)";
 c.beginPath();
@@ -13041,6 +13041,7 @@ const facing = pa.x < pr.x ? -1 : 1;
 const spot = { en, x: pr.x, y: pr.y, size, owner };
 world.bossEnemyPets.push(spot);
 queue.push({
+anchor: pr,
 z: p.groundDepthAt(pr.x, pr.y + size * .45),
 alpha: 1,
 draw: () => bossDrawEnemyPet(p.c, spot, facing, now)
@@ -14513,6 +14514,7 @@ if (!pr.visible)
 return;
 const size = Math.max(22, p.width * .062);
 queue.push({
+anchor: pr,
 z: p.groundDepthAt(pr.x, pr.y),
 alpha: 1,
 draw: () => {
@@ -15110,7 +15112,7 @@ const d = Math.hypot(bb.x - a.x, bb.y - a.y);
 const mx = (a.x + bb.x) / 2, my = (a.y + bb.y) / 2 - Math.max(30, d * .55);
 const part = { kind: "root", i, x: mx, y: my + d * .18, r: Math.max(26, d * .3), owner };
 plantState.parts.push(part);
-queue.push({ z: p.groundDepthAt(mx, (a.y + bb.y) / 2), alpha: 1, draw: () => plantDrawRoot(p.c, a, bb, mx, my, look, pulse, i, now, part) });
+queue.push({ r20Fade: 1, z: p.groundDepthAt(mx, (a.y + bb.y) / 2), alpha: 1, draw: () => plantDrawRoot(p.c, a, bb, mx, my, look, pulse, i, now, part) });
 });
 PLANT_BLOOMS.forEach((bl, i) => {
 const pr = projectSphere(bl.lat, bl.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
@@ -15119,7 +15121,7 @@ return;
 const s = Math.max(30, p.width * .085) * bl.s;
 const part = { kind: "bloom", i, heart: !!bl.heart, x: pr.x, y: pr.y - s * 1.05, r: s * .6, owner };
 plantState.parts.push(part);
-queue.push({ z: p.groundDepthAt(pr.x, pr.y), alpha: 1, draw: () => plantDrawBloom(p.c, pr.x, pr.y, s, look, pulse, i, now, part, b) });
+queue.push({ anchor: pr, z: p.groundDepthAt(pr.x, pr.y), alpha: 1, draw: () => plantDrawBloom(p.c, pr.x, pr.y, s, look, pulse, i, now, part, b) });
 });
 }
 function plantShakeOff(part, now) {
@@ -15477,6 +15479,7 @@ const s = Math.max(46, p.width * .13);
 queue.push({
 z: p.groundDepthAt(pr.x, pr.y),
 alpha: 1,
+anchor: pr,
 draw: () => trapDraw(p.c, pr.x, pr.y, s, st, planetId, i)
 });
 });
@@ -15713,6 +15716,7 @@ const h = Math.max(30, p.width * .11);
 queue.push({
 z: p.groundDepthAt(pr.x, pr.y) + .002,
 alpha: 1,
+anchor: pr,
 draw: () => nemesisDrawVines(p.c, pr.x, pr.y, h, b, id)
 });
 });
@@ -16759,66 +16763,153 @@ x.globalCompositeOperation = "source-over";
 }
 return out;
 }
-function r19Cutout(c, item, S, lat, lon, vLat, vLon, cx, cy, R, upAngle, paint) {
+function r19Cutout(c, item, S, M, paint) {
 const card = r19PaintCard(item, S, paint);
 const { front, edge, back, W, H, ox, oy } = card;
-const eps = .02, cl = Math.max(.05, Math.cos(lat));
-const p0 = projectSphere(lat, lon, vLat, vLon, cx, cy, R);
-const pE = projectSphere(lat, lon + eps, vLat, vLon, cx, cy, R);
-const pN = projectSphere(lat + eps, lon, vLat, vLon, cx, cy, R);
-const ex = (pE.x - p0.x) / (eps * cl * R), ey = (pE.y - p0.y) / (eps * cl * R);
-const nx = (pN.x - p0.x) / (eps * R), ny = (pN.y - p0.y) / (eps * R), nz = (pN.z - p0.z) / eps;
-const th = upAngle + Math.PI / 2, co = Math.cos(th), si = Math.sin(th);
-const toL = (x, y) => [x * co + y * si, -x * si + y * co];
-let [ax, ay] = toL(ex, ey);
-ax = Math.max(.3, Math.abs(ax));
-ay = Math.max(-.3, Math.min(.3, ay));
-const s = nz >= 0 ? 1 : -1;
-let vx = cx - p0.x, vy = (cy - R * 1.02) - p0.y;
-const vm = Math.hypot(vx, vy) || 1;
-vx /= vm;
-vy /= vm;
-const nm = Math.hypot(nx, ny) || 1;
-let dx = vx * .7 + (-s * nx / nm) * .3, dy = vy * .7 + (-s * ny / nm) * .3;
-const dm = Math.hypot(dx, dy) || 1;
-let [bx, by] = toL(dx / dm, dy / dm);
-const side = 1 + (1 - ax) * 1.2;
-const T = Math.max(2.5, S * .07) * side;
-const steps = Math.min(10, Math.max(3, Math.ceil(T * .9)));
+const inv = M.inv;
+const toLocal = (x, y) => [inv[0] * x + inv[2] * y, inv[1] * x + inv[3] * y];
 c.save();
 c.save();
-c.transform(ax, ay, 0, 1, 0, 0);
-c.fillStyle = "rgba(0,0,0,.24)";
+c.transform(inv[0], inv[1], inv[2], inv[3], 0, 0);
+c.transform(M.a, M.b, M.g2[0], M.g2[1], 0, 0);
+c.fillStyle = "rgba(0,0,0,.26)";
 c.beginPath();
-c.ellipse(bx * T * .5, S * .03, S * .85, S * .12, 0, 0, Math.PI * 2);
+c.ellipse(0, 0, S * .7, S * .2, 0, 0, Math.PI * 2);
 c.fill();
 c.restore();
+const T = Math.max(2, S * .045);
+const [lx, ly] = toLocal(M.away[0], M.away[1]);
+const steps = Math.min(6, Math.max(2, Math.ceil(T * Math.hypot(M.away[0], M.away[1]))));
 c.save();
-c.translate(bx * (T + 1), by * (T + 1));
-c.transform(ax, ay, 0, 1, 0, 0);
+c.translate(lx * (T + 1), ly * (T + 1));
 c.drawImage(back, -ox, -oy, W, H);
 c.restore();
 for (let k = steps; k >= 1; k--) {
 const f = k / steps * T;
 c.save();
-c.translate(bx * f, by * f);
-c.transform(ax, ay, 0, 1, 0, 0);
-c.globalAlpha *= .9 + .1 * (1 - k / steps);
+c.translate(lx * f, ly * f);
 c.drawImage(edge, -ox, -oy, W, H);
 c.restore();
 }
+if (M.back) {
+c.drawImage(edge, -ox, -oy, W, H);
 c.save();
-c.transform(ax, ay, 0, 1, 0, 0);
+c.globalAlpha *= .18;
 c.drawImage(front, -ox, -oy, W, H);
-c.strokeStyle = "rgba(0,0,0,.3)";
-c.lineWidth = Math.max(1.2, S * .025);
-c.lineCap = "round";
-c.beginPath();
-c.moveTo(-S * .45, S * .015);
-c.lineTo(S * .45, S * .015);
-c.stroke();
 c.restore();
+}
+else {
+c.drawImage(front, -ox, -oy, W, H);
+}
 c.restore();
+}
+var r20S = { cx: 0, cy: 0, R: 1, vLat: 0 };
+var r20K = 0;
+var r20Last = 0;
+var r19FadeNow = 1;
+function r20SetScene(cx, cy, R, vLat) {
+r20S.cx = cx;
+r20S.cy = cy;
+r20S.R = R;
+r20S.vLat = vLat;
+const now = performance.now();
+const dt = r20Last ? Math.min(.1, (now - r20Last) / 1000) : 0;
+r20Last = now;
+const target = roamingActive && !roomState ? 1 : 0;
+r20K += (target - r20K) * Math.min(1, dt * 4);
+if (Math.abs(target - r20K) < .003)
+r20K = target;
+}
+function r20Matrix(x, y, mode) {
+const { cx, cy, R, vLat } = r20S;
+let nx = (x - cx) / R, ny = (cy - y) / R;
+let q = nx * nx + ny * ny;
+if (q > 1) {
+const s = 1 / Math.sqrt(q);
+nx *= s;
+ny *= s;
+q = 1;
+}
+const nz = Math.sqrt(Math.max(0, 1 - q));
+const Py = Math.cos(vLat), Pz = Math.sin(vLat);
+let ex = Py * nz - Pz * ny, ey = Pz * nx, ez = -Py * nx;
+let el = Math.hypot(ex, ey, ez);
+if (el < 1e-4) {
+ex = 1;
+ey = 0;
+ez = 0;
+el = 1;
+}
+ex /= el;
+ey /= el;
+ez /= el;
+const fx = ey * nz - ez * ny, fy = ez * nx - ex * nz, fz = ex * ny - ey * nx;
+const out = Math.atan2(y - cy, x - cx);
+let hx, hy, vx, vy;
+if (mode === "radial") {
+hx = -Math.sin(out);
+hy = Math.cos(out);
+vx = -Math.cos(out);
+vy = -Math.sin(out);
+}
+else {
+hx = 1;
+hy = 0;
+vx = 0;
+vy = 1;
+}
+let X3x = ex, X3y = -ey;
+const xl = Math.hypot(X3x, X3y);
+if (xl < .22) {
+if (xl < 1e-4) {
+X3x = hx;
+X3y = hy;
+}
+else {
+X3x *= .22 / xl;
+X3y *= .22 / xl;
+}
+}
+const ul = Math.sqrt(q);
+let Y3x, Y3y;
+if (ul < 1e-3) {
+Y3x = vx;
+Y3y = vy;
+}
+else {
+const len = .5 + .5 * ul;
+Y3x = -nx / ul * len;
+Y3y = ny / ul * len;
+}
+const k = r20K;
+const a = hx + (X3x - hx) * k, b = hy + (X3y - hy) * k;
+const c = vx + (Y3x - vx) * k, d = vy + (Y3y - vy) * k;
+let det = a * d - b * c;
+if (Math.abs(det) < 1e-4)
+det = det < 0 ? -1e-4 : 1e-4;
+const sgn = fz >= 0 ? -1 : 1;
+const away = [sgn * fx, -sgn * fy];
+const g2 = [vx * .6 + (fx - vx * .6) * k, vy * .6 + (-fy - vy * .6) * k];
+return {
+a, b, c, d,
+inv: [d / det, -b / det, -c / det, a / det],
+away,
+g2,
+back: k > .5 && fz < -.05
+};
+}
+function r20Orient(ctx, x, y, mode) {
+const M = r20Matrix(x, y, mode);
+ctx.transform(M.a, M.b, M.c, M.d, 0, 0);
+return M;
+}
+function r20Around(ctx, x, y, mode, scale) {
+ctx.translate(x, y);
+const M = r20Orient(ctx, x, y, mode);
+if (scale && scale !== 1)
+ctx.scale(scale, scale);
+ctx.translate(-x, -y);
+return M;
 }
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
@@ -25582,6 +25673,7 @@ return;
 const size = Math.max(20, p.width * .058);
 const depth = p.groundDepthAt(proj.x, proj.y);
 composeQueue.push({
+anchor: proj,
 z: depth,
 alpha: 1,
 draw: () => {
@@ -28055,7 +28147,7 @@ alpha: 1,
 draw: () => {
 p.c.save();
 p.c.translate(proj.x, proj.y);
-p.c.rotate(up);
+r20Orient(p.c, proj.x, proj.y, "radial");
 try {
 draw(p.c);
 }
@@ -29313,6 +29405,7 @@ lastDrawnPlanetCx = cx;
 lastDrawnPlanetCy = cy;
 lastDrawnPlanetRadius = radius;
 r19SurfScale = Math.max(.12, Math.min(1, radius / homeRadius));
+r19FadeNow = r19SurfaceFade(flight);
 if (!roamingActive &&
 typeof mpBroadcastHomePresence ===
 "function") {
@@ -29340,6 +29433,7 @@ cy +=
 height / 2 -
 petNaturalProj.y;
 }
+r20SetScene(cx, cy, radius, roamViewLat);
 if (roamingActive) {
 const shipLat = SHIP_LAT;
 const angularDistance = Math.acos(clamp(Math.sin(shipLat) *
@@ -29579,7 +29673,7 @@ return;
 c.save();
 c.translate(ix, iy);
 const upAngle = Math.atan2(iy - cy, ix - cx);
-c.rotate(upAngle + Math.PI / 2);
+const r20M = r20Orient(c, ix, iy, "radial");
 const iconSize = r19SurfScale *
 Math.max(item.kind === "ship"
 ? 40
@@ -29648,7 +29742,7 @@ rc.fillText(item.icon, 0, -iconSize * .18);
 }
 };
 if (item.kind !== "ship" && typeof r19Cutout === "function")
-r19Cutout(c, item, iconSize, itemLat, itemLon, roamViewLat, roamViewLon, cx, cy, radius, upAngle, oc => {
+r19Cutout(c, item, iconSize, r20M, oc => {
 if (item.site)
 drawSiteBody(oc, item, iconSize, () => renderBody(oc));
 else
@@ -29815,6 +29909,8 @@ Math.max(22, width * .065);
 const isPetWorking = role === "builder" &&
 !!petJob &&
 targetPosition !== null;
+c.save();
+r20Around(c, px, py, "upright", 1);
 try {
 drawSpacePet(c, selectedStartPlanet, px, py, petSize, pet.energy, seed, pet.species, isPetWorking, "builder");
 }
@@ -29828,6 +29924,7 @@ r: petSize * .9,
 tab: "pets"
 });
 worldDrawCarried(c, pet, px, py, petSize, false);
+c.restore();
 world.hits.push({
 x: px, y: py, r: petSize * .7, z: 6,
 onTap: () => worldPetBubble(pet, px, py - petSize * .9)
@@ -29873,8 +29970,9 @@ try {
 if (shipVisible) {
 c.save();
 c.translate(shipProj.x, shipProj.y);
-c.rotate(Math.atan2(shipProj.y - cy, shipProj.x - cx) + Math.PI / 2);
-drawLaunchPad(c, SHIP_GROUND_AT_SCALE, Math.max(0, 1 - flight * 1.6), !!padShip, flightProgress);
+r20Orient(c, shipProj.x, shipProj.y, "radial");
+c.scale(r19SurfScale, r19SurfScale);
+drawLaunchPad(c, SHIP_GROUND_AT_SCALE, r19SurfaceFade(flight), !!padShip, flightProgress);
 c.restore();
 }
 if (padShip &&
@@ -29908,9 +30006,10 @@ r: Math.max(38, width * .11)
 c.save();
 c.translate(shipX, shipY);
 const shipUpAngle = Math.atan2(surfaceY - cy, surfaceX - cx);
-c.rotate((shipUpAngle +
-Math.PI / 2) *
-(1 - shipEase));
+if (flightProgress <= .001)
+r20Orient(c, surfaceX, surfaceY, "radial");
+else
+c.rotate((shipUpAngle + Math.PI / 2) * (1 - shipEase));
 const swapK = world.padSwapAt
 ? Math.min(1, (performance.now() - world.padSwapAt) / 520)
 : 1;
@@ -30001,6 +30100,7 @@ c.translate(roamPetProj.x, roamPetProj.y);
 c.scale(roamPetScale, roamPetScale);
 c.translate(-roamPetProj.x, -roamPetProj.y);
 }
+r20Around(c, roamPetProj.x, roamPetProj.y, "upright", 1);
 drawPetOnTerrain(c, globeTerrainAt(selectedStartPlanet, roamingLat, roamingLon), roamPetProj.x, roamPetProj.y, roamPetSize, performance.now() / 1000, () => withPetBack(roamingHeadingUp, () => drawSpacePet(c, selectedStartPlanet, roamPetProj.x, roamPetProj.y, roamPetSize, pet.energy, roamAnimSeed, pet.species, false, "builder", roamingFacingScale)));
 worldDrawCarried(c, pet, roamPetProj.x, roamPetProj.y, roamPetSize, true);
 world.hits.push({
@@ -30089,6 +30189,7 @@ const remoteProj = projectSphere(roamer.presence.lat, roamer.presence.lon, roamV
 const remoteDepth = groundDepthAt(remoteProj.x, remoteProj.y +
 Math.max(26, width * .075) * .45);
 composeQueue.push({
+anchor: remoteProj,
 z: remoteDepth,
 alpha: 1,
 draw: () => {
@@ -30152,7 +30253,9 @@ composeQueue.sort((a, b) => a.z - b.z);
 composeQueue.forEach(entry => {
 c.save();
 c.globalAlpha =
-entry.alpha;
+entry.alpha * (entry.anchor || entry.r20Fade ? r19FadeNow : 1);
+if (entry.anchor)
+r20Around(c, entry.anchor.x, entry.anchor.y, "upright", r19SurfScale);
 try {
 entry.draw();
 }
