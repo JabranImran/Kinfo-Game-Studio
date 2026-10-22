@@ -9962,7 +9962,7 @@ draw: () => {
 const c = o.c;
 const appear = Math.min(1, (performance.now() - yardSeen[ship.id]) / 450);
 const claim = shipClaimedByOther(ship);
-const scale = YARD_SHIP_SCALE * (.85 + .15 * Math.min(1, proj.z * 1.4));
+const scale = r19SurfScale * YARD_SHIP_SCALE * (.85 + .15 * Math.min(1, proj.z * 1.4));
 const up = Math.atan2(proj.y - o.cy, proj.x - o.cx) + Math.PI / 2;
 c.save();
 c.globalAlpha *= appear;
@@ -16656,6 +16656,169 @@ return true;
 }
 function getShipStyleUnlockCount() {
 return Math.max(1, shipFactoryCount()) + Math.max(0, getShipStyleUnlockCount__orig() - 1);
+}
+function getNextTierPlanets(planetId) {
+if (planetId === "nemesis")
+return PLANETS.filter(p => p.id === "zenith");
+return getNextTierPlanets__orig(planetId);
+}
+var r19SurfScale = 1;
+function r19SurfaceFade(flight) {
+return Math.max(0, 1 - Math.max(0, flight - .5) * 2.3);
+}
+const r19Pool = {};
+function r19Canvas(key) {
+return r19Pool[key] || (r19Pool[key] = document.createElement("canvas"));
+}
+const R19_EDGE_LIGHT = [188, 142, 94], R19_EDGE_DARK = [74, 50, 34];
+function r19PaintCard(item, S, paint) {
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+const W = Math.ceil(S * 2.8), H = Math.ceil(S * 2.7);
+const ox = S * 1.4, oy = S * 1.95;
+const key = item.structureId || item.kind || "x";
+const cacheable = !item.site && r19SurfScale >= .999;
+let sig = null;
+if (cacheable) {
+let saved = "";
+try {
+const dk = item.designKey || (item.kind === "structure" ? getStructureDesignKey(item.structureId) : "");
+saved = dk ? (localStorage.getItem(dk) || "") : "";
+}
+catch (error) { }
+sig = Math.round(S * 4) + "|" + dpr + "|" + (item.icon || "") + "|" + saved;
+}
+const card = r19Pool["c:" + key] || (r19Pool["c:" + key] = { sig: null });
+const front = r19Canvas("f:" + key), edge = r19Canvas("e:" + key), back = r19Canvas("b:" + key);
+const out = { front, edge, back, W, H, ox, oy };
+if (cacheable && card.sig === sig)
+return out;
+const pw = Math.ceil(W * dpr), ph = Math.ceil(H * dpr);
+[front, edge, back].forEach(cv => {
+if (cv.width !== pw || cv.height !== ph) {
+cv.width = pw;
+cv.height = ph;
+}
+});
+const fc = front.getContext("2d");
+fc.setTransform(1, 0, 0, 1, 0, 0);
+fc.globalAlpha = 1;
+fc.globalCompositeOperation = "source-over";
+fc.clearRect(0, 0, pw, ph);
+fc.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+fc.save();
+try {
+paint(fc);
+}
+finally {
+fc.restore();
+}
+let crisp = false;
+if (cacheable) {
+try {
+const src = fc.getImageData(0, 0, pw, ph).data;
+const ec = edge.getContext("2d"), bc = back.getContext("2d");
+const ei = ec.createImageData(pw, ph), bi = bc.createImageData(pw, ph);
+const ed = ei.data, bd = bi.data;
+for (let i = 3; i < src.length; i += 4) {
+if (src[i] > 110) {
+ed[i - 3] = R19_EDGE_LIGHT[0];
+ed[i - 2] = R19_EDGE_LIGHT[1];
+ed[i - 1] = R19_EDGE_LIGHT[2];
+ed[i] = 255;
+bd[i - 3] = R19_EDGE_DARK[0];
+bd[i - 2] = R19_EDGE_DARK[1];
+bd[i - 1] = R19_EDGE_DARK[2];
+bd[i] = 255;
+}
+}
+ec.putImageData(ei, 0, 0);
+bc.putImageData(bi, 0, 0);
+crisp = true;
+card.sig = sig;
+}
+catch (error) {
+card.sig = null;
+}
+}
+else {
+card.sig = null;
+}
+if (!crisp) {
+[[edge, R19_EDGE_LIGHT, .9], [back, R19_EDGE_DARK, .95]].forEach(([cv, col, a]) => {
+const x = cv.getContext("2d");
+x.setTransform(1, 0, 0, 1, 0, 0);
+x.globalAlpha = 1;
+x.globalCompositeOperation = "source-over";
+x.clearRect(0, 0, pw, ph);
+x.drawImage(front, 0, 0);
+x.globalCompositeOperation = "source-atop";
+x.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + a + ")";
+x.fillRect(0, 0, pw, ph);
+x.globalCompositeOperation = "source-over";
+});
+}
+return out;
+}
+function r19Cutout(c, item, S, lat, lon, vLat, vLon, cx, cy, R, upAngle, paint) {
+const card = r19PaintCard(item, S, paint);
+const { front, edge, back, W, H, ox, oy } = card;
+const eps = .02, cl = Math.max(.05, Math.cos(lat));
+const p0 = projectSphere(lat, lon, vLat, vLon, cx, cy, R);
+const pE = projectSphere(lat, lon + eps, vLat, vLon, cx, cy, R);
+const pN = projectSphere(lat + eps, lon, vLat, vLon, cx, cy, R);
+const ex = (pE.x - p0.x) / (eps * cl * R), ey = (pE.y - p0.y) / (eps * cl * R);
+const nx = (pN.x - p0.x) / (eps * R), ny = (pN.y - p0.y) / (eps * R), nz = (pN.z - p0.z) / eps;
+const th = upAngle + Math.PI / 2, co = Math.cos(th), si = Math.sin(th);
+const toL = (x, y) => [x * co + y * si, -x * si + y * co];
+let [ax, ay] = toL(ex, ey);
+ax = Math.max(.3, Math.abs(ax));
+ay = Math.max(-.3, Math.min(.3, ay));
+const s = nz >= 0 ? 1 : -1;
+let vx = cx - p0.x, vy = (cy - R * 1.02) - p0.y;
+const vm = Math.hypot(vx, vy) || 1;
+vx /= vm;
+vy /= vm;
+const nm = Math.hypot(nx, ny) || 1;
+let dx = vx * .7 + (-s * nx / nm) * .3, dy = vy * .7 + (-s * ny / nm) * .3;
+const dm = Math.hypot(dx, dy) || 1;
+let [bx, by] = toL(dx / dm, dy / dm);
+const side = 1 + (1 - ax) * 1.2;
+const T = Math.max(2.5, S * .07) * side;
+const steps = Math.min(10, Math.max(3, Math.ceil(T * .9)));
+c.save();
+c.save();
+c.transform(ax, ay, 0, 1, 0, 0);
+c.fillStyle = "rgba(0,0,0,.24)";
+c.beginPath();
+c.ellipse(bx * T * .5, S * .03, S * .85, S * .12, 0, 0, Math.PI * 2);
+c.fill();
+c.restore();
+c.save();
+c.translate(bx * (T + 1), by * (T + 1));
+c.transform(ax, ay, 0, 1, 0, 0);
+c.drawImage(back, -ox, -oy, W, H);
+c.restore();
+for (let k = steps; k >= 1; k--) {
+const f = k / steps * T;
+c.save();
+c.translate(bx * f, by * f);
+c.transform(ax, ay, 0, 1, 0, 0);
+c.globalAlpha *= .9 + .1 * (1 - k / steps);
+c.drawImage(edge, -ox, -oy, W, H);
+c.restore();
+}
+c.save();
+c.transform(ax, ay, 0, 1, 0, 0);
+c.drawImage(front, -ox, -oy, W, H);
+c.strokeStyle = "rgba(0,0,0,.3)";
+c.lineWidth = Math.max(1.2, S * .025);
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(-S * .45, S * .015);
+c.lineTo(S * .45, S * .015);
+c.stroke();
+c.restore();
+c.restore();
 }
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
@@ -24073,7 +24236,7 @@ const el = document.getElementById("startScreen");
 return (el &&
 !el.classList.contains("hidden"));
 }
-function getNextTierPlanets(planetId) {
+function getNextTierPlanets__orig(planetId) {
 const planet = getPlanet(planetId);
 if (!planet)
 return [];
@@ -29106,10 +29269,10 @@ nextTier.forEach((p, index) => {
 const spread = nextTier.length > 1
 ? index / (nextTier.length - 1)
 : .5;
-const px = width * (.2 + spread * .6);
-const py = height * .46 +
+const px = width * (selectedStartPlanet === "nemesis" ? .8 : .2 + spread * .6);
+const py = height * (selectedStartPlanet === "nemesis" ? .395 : .46) +
 Math.sin(time * .35 + index) * 6;
-const pr = Math.max(13, width * .038);
+const pr = Math.max(13, width * .038) * (selectedStartPlanet === "nemesis" ? 1.5 : 1);
 const unlockedNext = p.requirement <= highScore;
 lc.save();
 lc.globalAlpha =
@@ -29149,6 +29312,7 @@ planetParallaxY;
 lastDrawnPlanetCx = cx;
 lastDrawnPlanetCy = cy;
 lastDrawnPlanetRadius = radius;
+r19SurfScale = Math.max(.12, Math.min(1, radius / homeRadius));
 if (!roamingActive &&
 typeof mpBroadcastHomePresence ===
 "function") {
@@ -29354,7 +29518,7 @@ if (surfaceItems.length &&
 flight < .95) {
 c.save();
 c.globalAlpha =
-Math.max(0, 1 - flight * 1.6);
+r19SurfaceFade(flight);
 const arcSpan = Math.min(.55, .16 * surfaceItems.length);
 const CENTRE_GAP = .235;
 const structurePositions = {};
@@ -29416,13 +29580,14 @@ c.save();
 c.translate(ix, iy);
 const upAngle = Math.atan2(iy - cy, ix - cx);
 c.rotate(upAngle + Math.PI / 2);
-const iconSize = Math.max(item.kind === "ship"
+const iconSize = r19SurfScale *
+Math.max(item.kind === "ship"
 ? 40
 : 68, width *
 (item.kind === "ship"
 ? .115
 : .19));
-const renderBody = () => {
+const renderBody = (rc = c) => {
 let drewCustomDesign = false;
 const designKey = item.designKey ||
 (item.kind === "structure"
@@ -29437,15 +29602,15 @@ try {
 const shapeData = JSON.parse(saved);
 if (shapeData.length) {
 const designScale = (iconSize * 2.4) / 400;
-c.save();
-c.scale(designScale, designScale);
-c.translate(-200, -140 -
+rc.save();
+rc.scale(designScale, designScale);
+rc.translate(-200, -140 -
 iconSize * .35 /
 designScale);
 shapeData.forEach(s => {
-new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints).draw(c);
+new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints).draw(rc);
 });
-c.restore();
+rc.restore();
 drewCustomDesign = true;
 }
 }
@@ -29460,29 +29625,36 @@ DEFAULT_STRUCTURE_SHAPES[item.structureId] &&
 typeof ShapeObject !==
 "undefined") {
 const designScale = (iconSize * 2.4) / 400;
-c.save();
-c.scale(designScale, designScale);
-c.translate(-200, -140 -
+rc.save();
+rc.scale(designScale, designScale);
+rc.translate(-200, -140 -
 iconSize * .35 /
 designScale);
 DEFAULT_STRUCTURE_SHAPES[item.structureId].forEach(s => {
-new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints).draw(c);
+new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints).draw(rc);
 });
-c.restore();
+rc.restore();
 drewCustomDesign = true;
 }
 if (!drewCustomDesign) {
-c.fillStyle =
+rc.fillStyle =
 "#ffffff";
-c.font =
+rc.font =
 iconSize +
 "px system-ui";
-c.textAlign = "center";
-c.textBaseline = "alphabetic";
-c.fillText(item.icon, 0, -iconSize * .18);
+rc.textAlign = "center";
+rc.textBaseline = "alphabetic";
+rc.fillText(item.icon, 0, -iconSize * .18);
 }
 };
+if (item.kind !== "ship" && typeof r19Cutout === "function")
+r19Cutout(c, item, iconSize, itemLat, itemLon, roamViewLat, roamViewLon, cx, cy, radius, upAngle, oc => {
 if (item.site)
+drawSiteBody(oc, item, iconSize, () => renderBody(oc));
+else
+renderBody(oc);
+});
+else if (item.site)
 drawSiteBody(c, item, iconSize, renderBody);
 else
 renderBody();
@@ -29638,7 +29810,8 @@ groundDepthAt(px, py +
 Math.max(22, width * .065) * .45);
 return;
 }
-const petSize = Math.max(22, width * .065);
+const petSize = r19SurfScale *
+Math.max(22, width * .065);
 const isPetWorking = role === "builder" &&
 !!petJob &&
 targetPosition !== null;
@@ -29687,7 +29860,7 @@ draw: () => drawFocusPet(pet, petIndex, "draw")
 surfaceQueue =
 drawQueue;
 surfaceAlpha =
-Math.max(0, 1 - flight * 1.6);
+r19SurfaceFade(flight);
 c.restore();
 }
 const shipProj = projectSphere(SHIP_LAT, 0, roamViewLat, roamViewLon, cx, cy, radius);
@@ -29883,7 +30056,7 @@ viewLat: roamViewLat,
 viewLon: roamViewLon,
 ships: focusShips,
 padShipId: padShip ? padShip.id : null,
-alpha: Math.max(0, 1 - flight * 1.6),
+alpha: r19SurfaceFade(flight),
 groundDepthAt
 }).forEach(e => composeQueue.push(e));
 }
