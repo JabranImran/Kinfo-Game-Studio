@@ -4199,7 +4199,7 @@ y: 3,
 asteroid: "nemesis"
 }
 ];
-function isPlanetUnlocked(planetId) {
+function isPlanetUnlocked__orig(planetId) {
 const planet = getPlanet(planetId);
 if (!planet)
 return false;
@@ -7315,7 +7315,7 @@ holePoints: null
 ]
 };
 const SHIP_STYLE_BASE_COST = 40;
-function getShipStyleUnlockCount() {
+function getShipStyleUnlockCount__orig() {
 return ((localPlanetSave || planetSave).shipStyleUnlockCount ||
 1);
 }
@@ -7357,9 +7357,7 @@ return list;
 }
 function mpCollectLocalStyleDesigns() {
 const designs = {};
-const count = ((localPlanetSave ||
-planetSave ||
-{}).shipStyleUnlockCount || 1) + 1;
+const count = (getShipStyleUnlockCount()) + 1;
 for (let i = 1; i <= count; i++) {
 const styleId = "custom" + i;
 try {
@@ -15800,7 +15798,7 @@ if (obj[k] && typeof obj[k] === "object")
 mpFieldShift(obj[k], dx, dy, depth + 1);
 });
 }
-function mpApplyFieldSnapshot(event) {
+function mpApplyFieldSnapshot__r15(event) {
 if (event && event.cw && event.ch && (event.cw !== W || event.ch !== H) && !event._shifted) {
 const dx = (W - event.cw) / 2, dy = (H - event.ch) / 2;
 ["asteroids", "coinPickups", "coins", "materialPickups", "vis"].forEach(k => {
@@ -16497,6 +16495,168 @@ setInterval(() => { try {
 bgPresenceTick(performance.now());
 }
 catch (error) { } }, 150);
+var r18AllowPlanet = null;
+function isPlanetUnlocked(planetId) {
+if (r18AllowPlanet && planetId === r18AllowPlanet)
+return true;
+return isPlanetUnlocked__orig(planetId);
+}
+function chooseDestination(id, ownerId) {
+const current = getCurrentSystemOwnerId();
+let owner = ownerId || current;
+if (typeof mp !== "undefined" && mp.connected &&
+owner !== current &&
+!(isBridgeHub(currentPlanetId) && isBridgeHub(id)) &&
+isRoute(currentPlanetId, id))
+owner = current;
+const remote = typeof mp !== "undefined" && mp.connected && owner && owner !== mp.myId ? mp.remotePlanetSaves[owner] : null;
+if (remote && typeof isPlanetUnlockedInSave === "function" && isPlanetUnlockedInSave(remote, id))
+r18AllowPlanet = id;
+try {
+chooseDestination__orig(id, owner);
+}
+finally {
+r18AllowPlanet = null;
+}
+if (!destinationPlanetId && worldState === "interplanetary" && running) {
+showShipToast("That world isn't on a route from here — pick another");
+setTimeout(() => {
+if (worldState === "interplanetary" && !destinationPlanetId && running)
+openStarMap("destination");
+}, 400);
+}
+}
+let r18ClaimAt = 0;
+function r18ClaimPad() {
+if (typeof mp === "undefined" || !mp.connected || running || activePlanetOwnerId)
+return;
+const now = performance.now();
+if (now - r18ClaimAt < 2500)
+return;
+r18ClaimAt = now;
+const planet = selectedStartPlanet;
+const ships = planet === "earth" ? getEarthLaunchCandidates() : (getShips(planet) || []);
+if (myCrewShipHere(ships))
+return;
+const pad = resolvePadShip(ships);
+if (!pad)
+return;
+const key = mpShipKey(mp.myId, pad.id);
+const claim = mp.claimedShips[key];
+if (claim)
+return;
+mpSend({ type: "claimShip", ownerId: mp.myId, shipId: pad.id });
+}
+setInterval(() => { try {
+r18ClaimPad();
+}
+catch (error) { } }, 1000);
+function r18PowerState() {
+return {
+eq: currentShipEquipment || "emp",
+charge: Math.round(empCharge * 10) / 10,
+max: EMP_MAX,
+cd: Math.round(empCooldown * 10) / 10,
+armed: !!(beamArmed || ricochetArmed || bladeArmed || singularityArmed || (typeof forgedAimParts !== "undefined" && forgedAimParts))
+};
+}
+function mpApplyFieldSnapshot(event) {
+const r = mpApplyFieldSnapshot__r15(event);
+if (event && event.pw && coPilotSessionShipKey && coPilotSessionShipKey === mpShipKey(event.ownerId, event.shipId)) {
+currentShipEquipment = event.pw.eq;
+empCharge = event.pw.charge;
+empCooldown = event.pw.cd;
+r18CoArmed = !!event.pw.armed;
+try {
+updateHUD();
+}
+catch (error) { }
+}
+return r;
+}
+let r18CoArmed = false;
+setTimeout(() => {
+const btn = document.getElementById("empButton");
+if (!btn)
+return;
+btn.addEventListener("pointerdown", event => {
+if (!(coPilotSessionShipKey && running && worldState === "field"))
+return;
+event.stopImmediatePropagation();
+event.preventDefault();
+if (empCharge < EMP_MAX || empCooldown > 0) {
+floatingText("CHARGING", W / 2, H / 2 - 60, "#8fd8ff");
+return;
+}
+mpSend({ type: "fieldEvent", event: { kind: "coPower", ownerId: coPilotFollowingOwnerId, shipId: coPilotFollowingShipId, from: bossMyName() } });
+floatingText(AIMED_RUN_POWERUPS.includes(currentShipEquipment) || isForgedItemId(currentShipEquipment) ? "ARMED — TAP TO AIM" : "FIRED", W / 2, H / 2 - 60, "#ffe45c");
+}, { capture: true });
+}, 0);
+function r18OnNet(fromId, event) {
+if (!event || event.kind !== "coPower")
+return false;
+if (running && worldState === "field" &&
+event.ownerId === (flyingShipOwnerId || mp.myId) &&
+event.shipId === currentShipId) {
+const btn = document.getElementById("empButton");
+if (btn) {
+floatingText((event.from || "Co-pilot") + " used the powerup", W / 2, H * .3, "#ffe45c");
+btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+}
+}
+return true;
+}
+function enemyDesignFor(ship) {
+const col = (ship.shieldHearts || 0) >= 2 ? "#ffd23f" : (ship.satCargo || []).length ? "#ff8a1a" : BOSS_PASSIVE_POWERS[ship.equipment] ? "#ff3b6b" : "#c03bff";
+const r = 78;
+const P = (x, y) => [Math.round(x * r * 10) / 10, Math.round((140 + y * r) * 10) / 10];
+const shapes = [
+{ type: "custom", x: 200, y: 0, color: "#160822", scale: 1, rotation: 0,
+points: [P(0, -1), P(.9, .75), P(.32, .42), P(0, .7), P(-.32, .42), P(-.9, .75)],
+outlineColor: col, holePoints: null },
+{ type: "circle", x: 200, y: 146, color: col, scale: .36, rotation: 0, points: null, outlineColor: col, holePoints: null }
+];
+if ((ship.satCargo || []).length)
+shapes.push({ type: "custom", x: 200, y: 0, color: "#1a0a10", scale: 1, rotation: 0,
+points: [P(-.3, .55), P(.3, .55), P(.3, .97), P(-.3, .97)], outlineColor: "#ffb46b", holePoints: null });
+return JSON.stringify(shapes);
+}
+setInterval(() => {
+try {
+if (!localPlanetSave)
+return;
+let changed = false;
+withMySave(() => {
+(getShips(NEM) || []).forEach(s => {
+if (!s.enemy)
+return;
+const d = enemyDesignFor(s);
+if (s.styleDesign !== d) {
+s.styleDesign = d;
+changed = true;
+}
+});
+if (changed)
+savePlanetProgress();
+});
+}
+catch (error) { }
+}, 4000);
+function shipFactoryCount() {
+const s = localPlanetSave || planetSave;
+return Object.keys(s.structures || {}).filter(pid => {
+if (!(s.structures[pid] || {})["ship-factory"])
+return false;
+if (pid === "nemesis") {
+const b = s.boss;
+return !!(b && b.defeated);
+}
+return true;
+}).length;
+}
+function getShipStyleUnlockCount() {
+return Math.max(1, shipFactoryCount()) + Math.max(0, getShipStyleUnlockCount__orig() - 1);
+}
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "trap-feed") {
@@ -16920,6 +17080,7 @@ score,
 wave,
 cw: W,
 ch: H,
+pw: r18PowerState(),
 vis: mpFieldVisuals()
 }
 });
@@ -16994,6 +17155,8 @@ const event = message.event || {};
 if (typeof bossOnNet === "function" && bossOnNet(message.id, event))
 return;
 if (typeof bgOnNet === "function" && bgOnNet(message.id, event))
+return;
+if (typeof r18OnNet === "function" && r18OnNet(message.id, event))
 return;
 if (event.kind === "snapshot") {
 mpApplyFieldSnapshot(event);
@@ -34029,7 +34192,7 @@ showShipToast("Not enough coins to unlock " +
 }
 else {
 planetSave.shipStyleUnlockCount =
-unlockCount + 1;
+(planetSave.shipStyleUnlockCount || 1) + 1;
 selectedGalleryStyleId =
 "custom" +
 (unlockCount + 1);
@@ -36995,13 +37158,7 @@ const basePoints = asteroid.size === 3
 ? 50
 : 24;
 let earned;
-if (isEMP) {
-earned =
-Math.min(6, empBurstRemaining);
-empBurstRemaining -=
-earned;
-}
-else {
+{
 const speedRatio = clamp((asteroid.speed || 0) /
 getAsteroidSpeedCap(), 0, 1);
 const speedBonus = 1 + speedRatio * .5;
@@ -37017,6 +37174,8 @@ speedBonus *
 ? 2
 : 1));
 }
+if (isEMP)
+earned = Math.round(earned * .5);
 score +=
 earned;
 if (score >= ECHO_ROCK_UNLOCK_SCORE) {
@@ -40879,7 +41038,7 @@ finally {
 planetSave = previous;
 }
 }
-function chooseDestination(id, ownerId) {
+function chooseDestination__orig(id, ownerId) {
 const destination = getPlanet(id);
 if (!destination)
 return;
