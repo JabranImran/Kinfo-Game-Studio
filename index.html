@@ -16261,6 +16261,8 @@ rot: Math.random() * 6.28,
 vr: (Math.random() - .5) * .8,
 pts,
 colour: special || bg.colour,
+kind: r21BgKind(),
+seed: Math.floor(Math.random() * 1e9),
 drift: space === "orbital" ? { vx: (Math.random() - .5) * 6, vy: (Math.random() - .5) * 6 } : null,
 orbit: space === "orbital" && Math.random() < .3 ? { w: (Math.random() < .5 ? -1 : 1) * (.015 + Math.random() * .02) } : null
 };
@@ -16370,21 +16372,12 @@ c.save();
 c.translate(s.x, s.y);
 c.rotate(r.rot);
 c.globalAlpha = .18 + r.depth * .42;
-c.strokeStyle = r.colour;
-c.fillStyle = "rgba(4,8,20,.85)";
-c.lineWidth = 1;
-c.beginPath();
-r.pts.forEach((k, i) => {
-const a = i / r.pts.length * Math.PI * 2;
-const x = Math.cos(a) * r.size * k, y = Math.sin(a) * r.size * k;
-if (i)
-c.lineTo(x, y);
-else
-c.moveTo(x, y);
+r21DrawRock(c, r.model || (r.model = r21Model(r.kind || r21BgKind(), r.seed || 1)), r.size, r.colour, {
+lite: true,
+angle: r.rot,
+vx: r.drift ? r.drift.vx : 0,
+vy: r.drift ? r.drift.vy : 1
 });
-c.closePath();
-c.fill();
-c.stroke();
 c.restore();
 });
 c.restore();
@@ -16910,6 +16903,626 @@ if (scale && scale !== 1)
 ctx.scale(scale, scale);
 ctx.translate(-x, -y);
 return M;
+}
+function r21PadDrop(homeRadius) {
+return SHIP_GROUND_AT_SCALE / (Math.max(100, homeRadius) * Math.cos(HOME_VIEW_TILT));
+}
+const R21_TAU = Math.PI * 2;
+const R21_KIND = {
+earth: "rock",
+mars: "mars",
+ice: "ice",
+toxic: "toxic",
+electric: "electric",
+crystal: "crystal",
+void: "void",
+solar: "solar",
+quantum: "quantum",
+cosmic: "cosmic",
+nemesis: "nemesis"
+};
+function r21KindFor(typeId) {
+return R21_KIND[typeId] || "rock";
+}
+function r21Hash(v) {
+const s = String(v);
+let h = 2166136261;
+for (let i = 0; i < s.length; i++) {
+h ^= s.charCodeAt(i);
+h = Math.imul(h, 16777619);
+}
+return h >>> 0 || 1;
+}
+function r21Rng(seed) {
+let s = r21Hash(seed);
+return () => {
+s ^= s << 13;
+s >>>= 0;
+s ^= s >>> 17;
+s ^= s << 5;
+s >>>= 0;
+return s / 4294967296;
+};
+}
+const r21AlphaCache = {};
+function r21A(col, a) {
+const key = col + a;
+if (r21AlphaCache[key])
+return r21AlphaCache[key];
+let h = String(col || "#ffffff").replace("#", "");
+if (h.length === 3)
+h = h.split("").map(x => x + x).join("");
+const n = parseInt(h.slice(0, 6), 16) || 0;
+return (r21AlphaCache[key] = "rgba(" + (n >> 16 & 255) + "," + (n >> 8 & 255) + "," + (n & 255) + "," + a + ")");
+}
+function r21Model(kind, seed) {
+const R = r21Rng(kind + ":" + seed);
+const m = { kind, seed: r21Hash(seed) % 1000, outline: [], craters: [], arcs: [], x: {} };
+const lobes = [];
+for (let i = 0, k = 3 + Math.floor(R() * 3); i < k; i++)
+lobes.push({ c: R() * R21_TAU, w: .3 + R() * .45, h: .1 + R() * .16 });
+for (let i = 0, k = 1 + Math.floor(R() * 2); i < k; i++)
+lobes.push({ c: R() * R21_TAU, w: .18 + R() * .15, h: -(.08 + R() * .1) });
+const stretch = kind === "toxic" ? 1 + R() * .08 : 1.08 + R() * .25, tilt = R() * R21_TAU;
+const n = kind === "mars" ? 7 + Math.floor(R() * 3) : kind === "nemesis" ? 11 : 15;
+let max = 0;
+for (let i = 0; i < n; i++) {
+let a = i / n * R21_TAU;
+let r;
+if (kind === "mars") {
+a += (R() - .5) * .5 * R21_TAU / n;
+r = .74 + R() * .32;
+}
+else {
+r = .8;
+lobes.forEach(l => {
+const d = Math.atan2(Math.sin(a - l.c), Math.cos(a - l.c));
+r += l.h * Math.exp(-(d * d) / (l.w * l.w));
+});
+r += (R() - .5) * (kind === "toxic" ? .02 : .07);
+}
+if (kind === "crystal")
+r *= .8;
+let px = Math.cos(a) * r, py = Math.sin(a) * r;
+if (kind !== "mars") {
+const ca = Math.cos(tilt), sa = Math.sin(tilt);
+const u = (px * ca + py * sa) * stretch, v = (-px * sa + py * ca) / Math.sqrt(stretch);
+px = u * ca - v * sa;
+py = u * sa + v * ca;
+}
+max = Math.max(max, Math.hypot(px, py));
+m.outline.push([px, py]);
+}
+const lim = kind === "crystal" ? .84 : 1.08;
+if (max > lim)
+m.outline = m.outline.map(p => [p[0] * lim / max, p[1] * lim / max]);
+const nc = kind === "toxic" || kind === "ice" ? 0 : kind === "mars" || kind === "void" || kind === "cosmic" ? 1 : 2 + Math.floor(R() * 2);
+for (let i = 0, tries = 0; m.craters.length < nc && tries < 30; tries++) {
+const cr = .11 + R() * .15, a = R() * R21_TAU, d = R() * Math.max(.05, .55 - cr);
+const x = Math.cos(a) * d, y = Math.sin(a) * d;
+if (m.craters.some(o => Math.hypot(o.x - x, o.y - y) < (o.r + cr) * 1.25))
+continue;
+m.craters.push({ x, y, r: cr, sq: .65 + R() * .3, rot: R() * R21_TAU });
+}
+for (let i = 0, k = 1 + Math.floor(R() * 2); i < k; i++)
+m.arcs.push({ x: (R() - .5) * .5, y: (R() - .5) * .5, r: .3 + R() * .3, a0: R() * R21_TAU, span: .7 + R() * 1.1 });
+m.lit = Math.floor(R() * m.outline.length);
+const X = m.x;
+if (kind === "ice") {
+X.shards = [];
+const k = 3 + Math.floor(R() * 2), base = R() * R21_TAU;
+for (let i = 0; i < k; i++)
+X.shards.push({ a: base + i * R21_TAU / k + (R() - .5) * .7, len: .72 + R() * .4, w: .16 + R() * .12, off: .12 + R() * .12 });
+X.shards.sort((p, q) => p.len - q.len);
+}
+else if (kind === "crystal") {
+X.spikes = [];
+for (let i = 0, k = 4 + Math.floor(R() * 3); i < k; i++)
+X.spikes.push({ a: i / k * R21_TAU + (R() - .5) * .6, len: .3 + R() * .3, w: .1 + R() * .07 });
+}
+else if (kind === "toxic") {
+X.bubbles = [];
+for (let i = 0, k = 3 + Math.floor(R() * 3); i < k; i++) {
+const a = i * 2.4 + R(), d = .15 + R() * .4;
+X.bubbles.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, r: .08 + R() * .13, ph: R() * 6 });
+}
+X.pustules = [];
+for (let i = 0; i < 2; i++)
+X.pustules.push({ i: Math.floor(R() * m.outline.length), r: .14 + R() * .1 });
+}
+else if (kind === "mars") {
+X.cracks = [];
+for (let i = 0, k = 2 + Math.floor(R() * 2); i < k; i++) {
+const p = m.outline[Math.floor(R() * m.outline.length)];
+const pts = [[p[0] * .95, p[1] * .95]];
+for (let j = 1; j < 4; j++) {
+const f = 1 - j * .24;
+pts.push([p[0] * f + (R() - .5) * .25, p[1] * f + (R() - .5) * .25]);
+}
+X.cracks.push(pts);
+}
+}
+else if (kind === "solar" || kind === "nemesis") {
+X.veins = [];
+for (let i = 0, k = 3; i < k; i++) {
+let a = R() * R21_TAU, x = 0, y = 0;
+const pts = [[x, y]];
+for (let j = 0; j < 4; j++) {
+a += (R() - .5) * 1.1;
+x += Math.cos(a) * .2;
+y += Math.sin(a) * .2;
+pts.push([x, y]);
+}
+X.veins.push(pts);
+}
+if (kind === "nemesis") {
+X.thorns = [];
+for (let i = 0, k = 7 + Math.floor(R() * 3); i < k; i++)
+X.thorns.push({ i: Math.floor(i / k * m.outline.length), len: .22 + R() * .2, w: .1 + R() * .05, bend: (R() - .5) * .5 });
+}
+}
+else if (kind === "quantum") {
+X.pixels = [];
+for (let i = 0, k = 5; i < k; i++)
+X.pixels.push({ x: (R() - .5) * 1.6, y: (R() - .5) * 1.6, s: .08 + R() * .08, ph: R() * 6 });
+}
+else if (kind === "void") {
+X.dir = R() < .5 ? -1 : 1;
+}
+return m;
+}
+function r21Path(c, pts, r, smooth, scale) {
+const s = (scale || 1) * r;
+c.beginPath();
+if (!smooth) {
+pts.forEach((p, i) => i ? c.lineTo(p[0] * s, p[1] * s) : c.moveTo(p[0] * s, p[1] * s));
+c.closePath();
+return;
+}
+const n = pts.length;
+const mid = i => {
+const a = pts[(i + n) % n], b = pts[(i + 1 + n) % n];
+return [(a[0] + b[0]) / 2 * s, (a[1] + b[1]) / 2 * s];
+};
+const m0 = mid(-1);
+c.moveTo(m0[0], m0[1]);
+for (let i = 0; i < n; i++) {
+const p = pts[i], m1 = mid(i);
+c.quadraticCurveTo(p[0] * s, p[1] * s, m1[0], m1[1]);
+}
+c.closePath();
+}
+function r21Poly(c, pts, s, closed) {
+c.beginPath();
+pts.forEach((p, i) => i ? c.lineTo(p[0] * s, p[1] * s) : c.moveTo(p[0] * s, p[1] * s));
+if (closed)
+c.closePath();
+}
+function r21Tail(c, m, r, col, o, t) {
+const vx = o.vx || 0, vy = o.vy || 0;
+if (Math.hypot(vx, vy) < .01)
+return;
+c.save();
+c.rotate(-(o.angle || 0) + Math.atan2(-vy, -vx));
+const flick = 1 + Math.sin(t * 23 + m.seed) * .08 + Math.sin(t * 37 + m.seed * 2) * .05;
+const L = r * (m.kind === "cosmic" ? 3.4 : 2.5) * flick * (o.lite ? .7 : 1);
+const g = c.createLinearGradient(0, 0, L, 0);
+g.addColorStop(0, r21A(col, o.lite ? .35 : .55));
+g.addColorStop(1, r21A(col, 0));
+c.fillStyle = g;
+c.beginPath();
+c.moveTo(r * .2, -r * .85);
+c.quadraticCurveTo(L * .45, -r * .55, L, 0);
+c.quadraticCurveTo(L * .45, r * .55, r * .2, r * .85);
+c.closePath();
+c.fill();
+if (!o.lite) {
+const inner = m.kind === "solar" ? "#ffe45c" : "#ffffff";
+const g2 = c.createLinearGradient(0, 0, L * .7, 0);
+g2.addColorStop(0, r21A(inner, .7));
+g2.addColorStop(1, r21A(inner, 0));
+c.fillStyle = g2;
+c.beginPath();
+c.moveTo(r * .3, -r * .4);
+c.quadraticCurveTo(L * .3, -r * .22, L * .7, 0);
+c.quadraticCurveTo(L * .3, r * .22, r * .3, r * .4);
+c.closePath();
+c.fill();
+c.strokeStyle = r21A(col, .55);
+c.lineWidth = 1.2;
+c.lineCap = "round";
+for (let i = -1; i <= 1; i++) {
+const y = i * r * .5, len = L * (.55 + .25 * Math.abs(Math.sin(t * 3 + i + m.seed)));
+c.beginPath();
+c.moveTo(r * .9, y);
+c.lineTo(len, y * .4);
+c.stroke();
+}
+}
+c.restore();
+}
+function r21DrawRock(c, m, r, col, o) {
+o = o || {};
+const t = performance.now() / 1000;
+const lite = !!o.lite;
+const lw = o.lw || (lite ? 1 : 2);
+const flash = !!o.flash;
+const dark = flash ? "#ffffff" : "rgba(7,12,26,.95)";
+const line = flash ? "#ffffff" : col;
+const kind = m.kind;
+const X = m.x;
+const smooth = kind !== "mars" && kind !== "nemesis";
+c.save();
+c.lineJoin = "round";
+c.lineCap = "round";
+if ((kind === "solar" || kind === "cosmic") && !o.static)
+r21Tail(c, m, r, col, o, t);
+if (X.spikes) {
+X.spikes.forEach(sp => {
+c.save();
+c.rotate(sp.a);
+const b = .55 * r, tip = (.6 + sp.len) * r, w = sp.w * r;
+c.beginPath();
+c.moveTo(b, -w);
+c.lineTo(tip * .86, -w * .7);
+c.lineTo(tip, 0);
+c.lineTo(tip * .86, w * .7);
+c.lineTo(b, w);
+c.closePath();
+c.fillStyle = flash ? "#fff" : r21A(col, .22);
+c.fill();
+c.strokeStyle = line;
+c.lineWidth = lw * .8;
+c.stroke();
+if (!lite) {
+c.lineWidth = .9;
+c.strokeStyle = r21A("#ffffff", .6);
+c.beginPath();
+c.moveTo(b, 0);
+c.lineTo(tip, 0);
+c.stroke();
+}
+c.restore();
+});
+}
+if (X.thorns) {
+X.thorns.forEach(th => {
+const p = m.outline[th.i];
+const a = Math.atan2(p[1], p[0]), d = Math.hypot(p[0], p[1]);
+c.save();
+c.rotate(a);
+c.beginPath();
+c.moveTo(d * r * .85, -th.w * r);
+c.quadraticCurveTo((d + th.len * .6) * r, th.bend * r * .3, (d + th.len) * r, th.bend * th.len * r);
+c.quadraticCurveTo((d + th.len * .5) * r, th.w * r * .4, d * r * .85, th.w * r);
+c.closePath();
+c.fillStyle = dark;
+c.fill();
+c.strokeStyle = line;
+c.lineWidth = lw * .8;
+c.stroke();
+c.restore();
+});
+}
+if (X.shards) {
+X.shards.forEach((sh, i) => {
+c.save();
+c.rotate(sh.a);
+const L = sh.len * r, w = sh.w * r, b = -sh.off * r;
+c.beginPath();
+c.moveTo(b, 0);
+c.lineTo(b + w * .5, -w);
+c.lineTo(L * .8, -w * .75);
+c.lineTo(L, 0);
+c.lineTo(L * .8, w * .75);
+c.lineTo(b + w * .5, w);
+c.closePath();
+if (!lite) {
+c.shadowBlur = 10;
+c.shadowColor = col;
+}
+const g = lite || flash ? null : c.createLinearGradient(b, 0, L, 0);
+if (g) {
+g.addColorStop(0, "rgba(8,22,44,.95)");
+g.addColorStop(1, r21A(col, .28));
+}
+c.fillStyle = flash ? "#fff" : (g || "rgba(8,22,44,.95)");
+c.fill();
+c.shadowBlur = 0;
+c.strokeStyle = line;
+c.lineWidth = lw;
+c.stroke();
+if (!lite) {
+c.strokeStyle = r21A("#ffffff", .55);
+c.lineWidth = .9;
+c.beginPath();
+c.moveTo(b + w * .5, 0);
+c.lineTo(L, 0);
+c.moveTo(b + w * .5, -w);
+c.lineTo(L * .8, -w * .75);
+c.stroke();
+}
+c.restore();
+});
+if (!lite) {
+const sh = X.shards[Math.floor(t * .7 + m.seed) % X.shards.length];
+const k = Math.max(0, Math.sin(t * 4 + m.seed));
+const gx = Math.cos(sh.a) * sh.len * r * .85, gy = Math.sin(sh.a) * sh.len * r * .85;
+c.strokeStyle = r21A("#ffffff", .9 * k);
+c.lineWidth = 1.2;
+const s = r * .18 * k;
+c.beginPath();
+c.moveTo(gx - s, gy);
+c.lineTo(gx + s, gy);
+c.moveTo(gx, gy - s);
+c.lineTo(gx, gy + s);
+c.stroke();
+}
+c.restore();
+return;
+}
+if (kind === "quantum" && !flash) {
+const g = Math.sin(t * 9 + m.seed) > .35 ? 1 : 0;
+const dx = (1.5 + Math.sin(t * 31 + m.seed) * 1.5) * g * (lite ? .4 : 1);
+if (dx > .3) {
+c.lineWidth = lw * .8;
+c.strokeStyle = r21A("#ff4fd8", .5);
+r21Path(c, m.outline, r, smooth);
+c.save();
+c.translate(-dx, 0);
+c.stroke();
+c.restore();
+c.strokeStyle = r21A("#58fff1", .5);
+c.save();
+c.translate(dx, 0);
+c.stroke();
+c.restore();
+}
+}
+r21Path(c, m.outline, r, smooth);
+if (!lite) {
+c.shadowBlur = 12;
+c.shadowColor = col;
+}
+c.fillStyle = dark;
+c.fill();
+c.shadowBlur = 0;
+if (!flash) {
+c.save();
+c.clip();
+if (!lite) {
+c.lineWidth = r * .42;
+c.strokeStyle = r21A(col, .13);
+c.stroke();
+}
+const crR = Math.min(m.craters.length, lite ? (r >= 5 ? 1 : 0) : 9);
+c.lineWidth = lite ? .8 : 1.3;
+for (let i = 0; i < crR; i++) {
+const cr = m.craters[i];
+c.save();
+c.translate(cr.x * r, cr.y * r);
+c.rotate(cr.rot);
+c.strokeStyle = r21A(col, .85);
+c.beginPath();
+c.ellipse(0, 0, cr.r * r, cr.r * r * cr.sq, 0, 0, R21_TAU);
+c.stroke();
+if (!lite) {
+c.strokeStyle = r21A(col, .5);
+c.beginPath();
+c.ellipse(cr.r * r * .18, cr.r * r * .12, cr.r * r * .6, cr.r * r * cr.sq * .55, 0, .2, Math.PI - .2);
+c.stroke();
+}
+c.restore();
+}
+if (!lite) {
+c.strokeStyle = r21A(col, .5);
+c.lineWidth = 1.2;
+m.arcs.forEach(a => {
+c.beginPath();
+c.arc(a.x * r, a.y * r, a.r * r, a.a0, a.a0 + a.span);
+c.stroke();
+});
+if (X.bubbles) {
+X.bubbles.forEach(b => {
+const k = 1 + Math.sin(t * 3 + b.ph) * .12;
+c.strokeStyle = r21A("#eaff9a", .8);
+c.lineWidth = 1.2;
+c.beginPath();
+c.arc(b.x * r, b.y * r, b.r * r * k, 0, R21_TAU);
+c.stroke();
+c.fillStyle = r21A("#ffffff", .5);
+c.beginPath();
+c.arc((b.x - b.r * .35) * r, (b.y - b.r * .35) * r, Math.max(.6, b.r * r * .22), 0, R21_TAU);
+c.fill();
+});
+}
+if (X.cracks) {
+c.strokeStyle = r21A("#ffd0a0", .7);
+c.lineWidth = 1.2;
+X.cracks.forEach(pts => { r21Poly(c, pts, r); c.stroke(); });
+}
+if (X.veins) {
+const glow = kind === "solar" ? "#ffe45c" : "#ff4fd8";
+const k = .6 + .4 * Math.sin(t * (kind === "solar" ? 5 : 2.5) + m.seed);
+c.shadowBlur = 8;
+c.shadowColor = glow;
+c.strokeStyle = r21A(glow, .55 + .4 * k);
+c.lineWidth = kind === "solar" ? 1.8 : 1.3;
+X.veins.forEach(pts => { r21Poly(c, pts, r); c.stroke(); });
+c.shadowBlur = 0;
+}
+if (kind === "electric") {
+const step = Math.floor(t * 9);
+const R = r21Rng(m.seed + ":" + step);
+c.shadowBlur = 8;
+c.shadowColor = "#e6e6ff";
+c.strokeStyle = r21A("#f0f0ff", .9);
+c.lineWidth = 1.3;
+for (let b = 0; b < 2; b++) {
+let a = R() * R21_TAU;
+let x = Math.cos(a) * r * .85, y = Math.sin(a) * r * .85;
+const tx = -x * (.3 + R() * .6), ty = -y * (.3 + R() * .6);
+c.beginPath();
+c.moveTo(x, y);
+for (let j = 1; j <= 4; j++) {
+const f = j / 4;
+c.lineTo(x + (tx - x) * f + (R() - .5) * r * .35, y + (ty - y) * f + (R() - .5) * r * .35);
+}
+c.stroke();
+}
+c.shadowBlur = 0;
+}
+if (kind === "void") {
+const spin = t * 1.6 * X.dir;
+c.strokeStyle = r21A(col, .75);
+c.lineWidth = 1.2;
+for (let arm = 0; arm < 3; arm++) {
+c.beginPath();
+for (let j = 0; j <= 14; j++) {
+const f = j / 14;
+const a = spin + arm * R21_TAU / 3 + f * 2.6 * X.dir;
+const d = r * (.08 + .5 * f);
+j ? c.lineTo(Math.cos(a) * d, Math.sin(a) * d) : c.moveTo(Math.cos(a) * d, Math.sin(a) * d);
+}
+c.stroke();
+}
+c.fillStyle = "#000";
+c.beginPath();
+c.arc(0, 0, r * .12, 0, R21_TAU);
+c.fill();
+}
+if (kind === "cosmic") {
+const g = c.createRadialGradient(0, 0, 0, 0, 0, r * .7);
+g.addColorStop(0, "rgba(255,255,255,.75)");
+g.addColorStop(.5, r21A("#bfe6ff", .25));
+g.addColorStop(1, "rgba(191,230,255,0)");
+c.fillStyle = g;
+c.fillRect(-r, -r, r * 2, r * 2);
+}
+const sp = o.special;
+if (sp === "explosive") {
+const k = .5 + .5 * Math.sin(t * 8);
+c.shadowBlur = 10;
+c.shadowColor = "#ff2e9a";
+c.strokeStyle = r21A("#ff7ac8", .5 + .5 * k);
+c.lineWidth = 1.6;
+for (let i = 0; i < 4; i++) {
+const a = i * 1.7 + m.seed;
+c.beginPath();
+c.moveTo(0, 0);
+c.lineTo(Math.cos(a) * r * .35, Math.sin(a) * r * .35 + r * .06);
+c.lineTo(Math.cos(a + .3) * r * .8, Math.sin(a + .3) * r * .8);
+c.stroke();
+}
+c.shadowBlur = 0;
+}
+else if (sp === "coin-rich") {
+c.fillStyle = "#ffd76b";
+c.shadowBlur = 6;
+c.shadowColor = "#ffd76b";
+for (let i = 0; i < 3; i++) {
+const a = i * 2.1 + m.seed, d = r * .45;
+c.save();
+c.translate(Math.cos(a) * d, Math.sin(a) * d);
+c.rotate(a);
+c.beginPath();
+c.moveTo(-r * .1, -r * .06);
+c.lineTo(r * .06, -r * .1);
+c.lineTo(r * .11, r * .04);
+c.lineTo(-r * .04, r * .09);
+c.closePath();
+c.fill();
+c.restore();
+}
+c.shadowBlur = 0;
+}
+else if (sp === "durable" || sp === "voidrock" || sp === "elite") {
+c.strokeStyle = r21A(col, .8);
+c.lineWidth = 1.6;
+for (let i = -1; i <= 1; i += 2) {
+c.beginPath();
+c.moveTo(-r, i * r * .32);
+c.quadraticCurveTo(0, i * r * .42, r, i * r * .32);
+c.stroke();
+}
+c.fillStyle = r21A(col, .9);
+for (let i = -2; i <= 2; i++) {
+c.beginPath();
+c.arc(i * r * .32, r * .37, 1.2, 0, R21_TAU);
+c.arc(i * r * .32, -r * .37, 1.2, 0, R21_TAU);
+c.fill();
+}
+}
+}
+c.restore();
+}
+r21Path(c, m.outline, r, smooth);
+c.strokeStyle = line;
+c.lineWidth = lw;
+c.stroke();
+if (!lite && !flash) {
+const n = m.outline.length, span = Math.ceil(n * .4);
+const pts = [];
+for (let i = 0; i <= span; i++)
+pts.push(m.outline[(m.lit + i) % n]);
+c.strokeStyle = r21A(col, .55);
+c.lineWidth = 1;
+r21Poly(c, pts, r * .8);
+c.stroke();
+}
+if (X.pustules && !lite) {
+X.pustules.forEach(pu => {
+const p = m.outline[pu.i];
+c.beginPath();
+c.arc(p[0] * r, p[1] * r, pu.r * r, 0, R21_TAU);
+c.fillStyle = dark;
+c.fill();
+c.strokeStyle = line;
+c.lineWidth = lw * .8;
+c.stroke();
+c.fillStyle = r21A("#eaff9a", .6);
+c.beginPath();
+c.arc(p[0] * r, p[1] * r, pu.r * r * .35, 0, R21_TAU);
+c.fill();
+});
+}
+if (kind === "quantum" && X.pixels && !lite) {
+c.fillStyle = r21A(col, .8);
+X.pixels.forEach(px => {
+if (Math.sin(t * 5 + px.ph) > .2)
+c.fillRect(px.x * r, px.y * r, px.s * r, px.s * r);
+});
+}
+if (o.special === "sticky" && !lite) {
+c.fillStyle = r21A("#7ee0ff", .85);
+for (let i = 0; i < 3; i++) {
+const p = m.outline[(m.lit + i * 4) % m.outline.length];
+const drip = .6 + .4 * Math.sin(t * 2 + i);
+c.beginPath();
+c.ellipse(p[0] * r, p[1] * r + r * .1 * drip, r * .09, r * .16 * drip + r * .06, 0, 0, R21_TAU);
+c.fill();
+}
+}
+c.restore();
+}
+function r21AsteroidModel(a) {
+const kind = r21KindFor(a.typeId);
+if (!a._r21 || a._r21.kind !== kind)
+a._r21 = r21Model(kind, a.id);
+return a._r21;
+}
+function r21DrawAsteroidBody(c, a) {
+r21DrawRock(c, r21AsteroidModel(a), a.radius, a.color || "#4ee5ff", {
+flash: a.hitFlash > 0,
+angle: a.angle,
+vx: a.vx,
+vy: a.vy,
+special: a.special
+});
+}
+function r21BgKind() {
+const planet = getPlanet(currentPlanetId);
+return r21KindFor((planet && planet.asteroid) || "earth");
 }
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
@@ -28079,6 +28692,7 @@ c.fill();
 }
 c.restore();
 }
+const r21ExploreModels = {};
 function exploreDrawRock(c, rock, size, time, shake) {
 const m = MATERIALS[rock.mat] || { color: "#7fd8ff" };
 const rng = exploreRng(rock.id);
@@ -28090,17 +28704,14 @@ pts.push([Math.cos(a) * r, Math.sin(a) * r * .82]);
 }
 c.save();
 c.translate(shake ? (Math.random() - .5) * 4 : 0, -size * .32);
-c.beginPath();
-pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]));
-c.closePath();
-c.fillStyle = "rgba(20,18,30,.96)";
-c.shadowColor = m.color;
-c.shadowBlur = 10;
-c.fill();
-c.lineWidth = Math.max(1.5, size * .05);
-c.strokeStyle = m.color;
-c.stroke();
-c.shadowBlur = 0;
+const r21Planet = getPlanet(selectedStartPlanet);
+const r21Kind = r21KindFor((r21Planet && r21Planet.asteroid) || "earth");
+const r21Key = rock.id + ":" + r21Kind;
+const r21M = r21ExploreModels[r21Key] || (r21ExploreModels[r21Key] = r21Model(r21Kind, rock.id));
+c.save();
+c.scale(1, .82);
+r21DrawRock(c, r21M, size * .46, m.color, { static: true, lw: Math.max(1.5, size * .035) });
+c.restore();
 const damage = 1 - rock.hp / rock.max;
 c.strokeStyle = "rgba(255,240,220," + (.3 + .5 * damage) + ")";
 c.lineWidth = 1.2;
@@ -29961,6 +30572,7 @@ r19SurfaceFade(flight);
 c.restore();
 }
 const shipProj = projectSphere(SHIP_LAT, 0, roamViewLat, roamViewLon, cx, cy, radius);
+const r21Feet = projectSphere(SHIP_LAT - r21PadDrop(homeRadius), 0, roamViewLat, roamViewLon, cx, cy, radius);
 const shipVisible = !roamingActive ||
 shipProj.visible;
 const padShip = resolvePadShip(focusShips);
@@ -29969,9 +30581,10 @@ c.save();
 try {
 if (shipVisible) {
 c.save();
-c.translate(shipProj.x, shipProj.y);
-r20Orient(c, shipProj.x, shipProj.y, "radial");
+c.translate(r21Feet.x, r21Feet.y);
+r20Orient(c, r21Feet.x, r21Feet.y, "radial");
 c.scale(r19SurfScale, r19SurfScale);
+c.translate(0, -SHIP_GROUND_AT_SCALE);
 drawLaunchPad(c, SHIP_GROUND_AT_SCALE, r19SurfaceFade(flight), !!padShip, flightProgress);
 c.restore();
 }
@@ -30006,8 +30619,11 @@ r: Math.max(38, width * .11)
 c.save();
 c.translate(shipX, shipY);
 const shipUpAngle = Math.atan2(surfaceY - cy, surfaceX - cx);
-if (flightProgress <= .001)
-r20Orient(c, surfaceX, surfaceY, "radial");
+if (flightProgress <= .001) {
+c.translate(r21Feet.x - surfaceX, r21Feet.y - surfaceY);
+r20Orient(c, r21Feet.x, r21Feet.y, "radial");
+c.translate(0, -SHIP_GROUND_AT_SCALE);
+}
 else
 c.rotate((shipUpAngle + Math.PI / 2) * (1 - shipEase));
 const swapK = world.padSwapAt
@@ -36099,35 +36715,7 @@ ctx.globalAlpha =
 .75 +
 Math.sin(performance.now() * .02) * .25;
 }
-ctx.beginPath();
-this.vertices.forEach((v, i) => {
-const x = Math.cos(v.a) *
-this.radius *
-v.r;
-const y = Math.sin(v.a) *
-this.radius *
-v.r;
-if (i === 0)
-ctx.moveTo(x, y);
-else
-ctx.lineTo(x, y);
-});
-ctx.closePath();
-ctx.shadowBlur = 12;
-ctx.shadowColor =
-this.color;
-ctx.fillStyle =
-this.hitFlash > 0
-? "#ffffff"
-: "rgba(8,15,30,.95)";
-ctx.fill();
-ctx.shadowBlur = 0;
-ctx.lineWidth = 2;
-ctx.strokeStyle =
-this.hitFlash > 0
-? "#ffffff"
-: this.color;
-ctx.stroke();
+r21DrawAsteroidBody(ctx, this);
 if (this.special) {
 ctx.lineWidth = 1.5;
 if (this.special ===
