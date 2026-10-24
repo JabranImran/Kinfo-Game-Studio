@@ -3184,7 +3184,17 @@ color:var(--ink);transition:transform .12s ease;}
 .pv-buy{width:100%;padding:10px 4px !important;font-size:12px !important;}
 .pv-coin-slot{width:8px;height:26px;border-radius:4px;background:#04081a;border:1px solid rgba(255,94,196,.6);}
 .pv-note{font-size:9px;color:#8fa7c7;text-align:center;}
-.pv-tray{height:16px;margin-top:8px;border-radius:6px;background:#04081a;border:1px solid rgba(255,94,196,.35);}</style>
+.pv-tray{height:16px;margin-top:8px;border-radius:6px;background:#04081a;border:1px solid rgba(255,94,196,.35);}
+.pv-cell{cursor:pointer;}
+.pv-pop{position:fixed;z-index:100000;min-width:170px;max-width:240px;padding:10px 12px;border-radius:14px;background:rgba(10,8,26,.97);border:1.5px solid #ff5ec4;box-shadow:0 0 18px rgba(255,94,196,.35);color:#eafcff;font-size:11px;pointer-events:auto;}
+.pvp-name{font-weight:900;font-size:13px;margin-bottom:6px;color:#ffb3e6;}
+.pvp-row{display:flex;align-items:center;gap:8px;margin-top:5px;}
+.pvp-label{flex:0 0 52px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8fa7c7;}
+.pvp-icon{display:inline-flex;align-items:center;gap:2px;font-size:16px;}
+.pvp-icon img{height:20px;width:20px;}
+.pvp-icon i{font-style:normal;font-size:10px;color:#8fa7c7;}
+.pvp-row small{color:#c9b3e6;}
+.pvp-none{color:#5c7ba0;}</style>
 
 </head>
 
@@ -19339,7 +19349,7 @@ const rows = "ABCDEFGH";
 const cells = roster.map((speciesId, i) => {
 const unlocked = isPetStyleUnlocked(planetId, i);
 const name = speciesId === "procedural" ? "Native" : (SPECIES_DISPLAY_NAMES[speciesId] || speciesId);
-return ('<div class="pv-cell' + (unlocked ? '' : ' locked') + '">' +
+return ('<div class="pv-cell' + (unlocked ? '' : ' locked') + '" data-species="' + speciesId + '" data-planet="' + planetId + '">' +
 '<canvas id="petSpeciesPreview_' + planetId + '_' + i + '" width="64" height="64"></canvas>' +
 '<div class="pv-tag"><span class="pv-code">' + rows[Math.floor(i / 3) % 8] + (i % 3 + 1) + '</span>' +
 (unlocked ? name : '🔒 Rank ' + getPetStyleUnlockRank(planetId, i)) + '</div>' +
@@ -19472,6 +19482,7 @@ c.fillText(label, mx, my - h * .35);
 c.restore();
 } });
 }
+r27PenProps(queue, p, cen);
 const ringR = Math.max(20, Math.hypot(pts[0].x - centre.x, pts[0].y - centre.y));
 if (!roamingActive) {
 const fc = document.getElementById("planetFocusCanvas");
@@ -19513,16 +19524,19 @@ c.restore();
 } });
 roomTerminal(c, list, .13, "PET BOARD", st.colour, "pets");
 list.push({ v: .38, draw: () => r26DrawVending(c, planetId, st) });
+r26PenPets(c, list, planetId, time);
+}
+function r26PenPets(c, list, planetId, time) {
 const pets = getPets(planetId).filter(pet => !isPetOutRoaming(pet.id));
 pets.forEach((pet, i) => {
 let seed = 0;
 for (let k = 0; k < pet.id.length; k++)
 seed += pet.id.charCodeAt(k);
 const u = .14 + .72 * (.5 + .5 * Math.sin(time * .16 + seed * 1.3));
-const v = .5 + .36 * (.5 + .5 * Math.sin(time * .11 + seed * .7 + i));
+const v = .42 + .5 * (.5 + .5 * Math.sin(time * .11 + seed * .7 + i));
 list.push({ v, draw: () => {
 const p = roomFloorPt(u, v);
-const size = Math.max(28, roomGeo.W * .085) * p.s;
+const size = Math.max(30, roomGeo.W * .1) * p.s;
 const facing = Math.cos(time * .16 + seed * 1.3) > 0 ? 1 : -1;
 const held = world.drag && world.drag.active && world.drag.src && world.drag.src.t === "petfig" && world.drag.src.p === pet.id;
 if (held)
@@ -19554,8 +19568,8 @@ onTap: () => worldPetBubble(pet, p.x, py - size * .6)
 } });
 });
 }
-function r26DrawVending(c, planetId, st) {
-const box = roomDrawBox(c, .85, .4, 92, 150, "#ff5ec4", "PET-O-MATIC", "rgba(26,12,44,.96)");
+function r26DrawVending(c, planetId, st, u, v) {
+const box = roomDrawBox(c, u === undefined ? .85 : u, v === undefined ? .4 : v, 92, 150, "#ff5ec4", "PET-O-MATIC", "rgba(26,12,44,.96)");
 const t = performance.now() / 1000;
 const roster = getPetRosterForPlanet(planetId);
 const gx = box.x - box.w * .4, gy = box.top + box.h * .08, gw = box.w * .56, gh = box.h * .62;
@@ -19626,6 +19640,458 @@ action: () => worldRunAction({ "data-action": "buy-pet" })
 });
 } });
 }
+function r27Smooth(t) {
+t = Math.max(0, Math.min(1, t));
+return t * t * (3 - 2 * t);
+}
+function r27PetSpot(pet, seed, index, working, lat, lon, time) {
+if (working)
+return { lat, lon };
+const cen = r26PenCentre();
+const R = R26_PEN.r;
+const tired = (pet.energy || 0) < 40;
+const inFrac = tired ? .92 : .55;
+const P = 34, walk = .09;
+const ph = ((time + seed * 5.3 + index * 7.1) % P) / P;
+const a = time * .12 * (seed % 2 ? 1 : -1) + seed;
+const rr = R * .6 * (.3 + .7 * Math.abs(Math.sin(time * .07 + seed)));
+const pen = { lat: cen.lat + Math.cos(a) * rr * .8, lon: Math.sin(a) * rr / Math.cos(cen.lat) };
+const out = { lat, lon };
+const mix = (t) => ({ lat: pen.lat + (out.lat - pen.lat) * t, lon: pen.lon + (out.lon - pen.lon) * t });
+if (ph < inFrac - walk)
+return pen;
+if (ph < inFrac)
+return mix(r27Smooth((ph - (inFrac - walk)) / walk));
+if (ph < 1 - walk)
+return out;
+return mix(1 - r27Smooth((ph - (1 - walk)) / walk));
+}
+function r27PenProps(queue, p, cen) {
+const R = R26_PEN.r, c = p.c;
+const spot = (dl, dx) => projectSphere(cen.lat + dl * R, dx * R / Math.cos(cen.lat), p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+const u = Math.max(9, p.width * .05);
+const props = [
+{ pr: spot(.5, -.52), draw: (x, y) => {
+c.strokeStyle = "#ffcf6b";
+c.lineWidth = 2;
+c.beginPath();
+c.moveTo(x, y);
+c.lineTo(x, y - u * .7);
+c.stroke();
+c.fillStyle = "rgba(8,14,36,.95)";
+c.fillRect(x - u * .55, y - u * 1.3, u * 1.1, u * .7);
+c.strokeStyle = "#8dffb0";
+c.lineWidth = 1.4;
+c.strokeRect(x - u * .55, y - u * 1.3, u * 1.1, u * .7);
+c.fillStyle = "#8dffb0";
+for (let i = 0; i < 3; i++)
+c.fillRect(x - u * .4, y - u * 1.18 + i * u * .18, u * (.5 + .25 * (i % 2)), 1.5);
+} },
+{ pr: spot(.66, 0), draw: (x, y) => {
+c.strokeStyle = "#ffcf6b";
+c.lineWidth = 2;
+c.beginPath();
+c.moveTo(x - u * .8, y);
+c.lineTo(x - u * .8, y - u * .9);
+c.moveTo(x + u * .8, y);
+c.lineTo(x + u * .8, y - u * .9);
+c.moveTo(x - u * .9, y - u * .45);
+c.lineTo(x + u * .9, y - u * .45);
+c.moveTo(x - u * .9, y - u * .9);
+c.lineTo(x + u * .9, y - u * .9);
+c.stroke();
+c.fillStyle = "#7a8cff";
+for (let i = 0; i < 4; i++) {
+c.beginPath();
+c.arc(x - u * .55 + i * u * .36, y - u * .56, u * .1, 0, Math.PI * 2);
+c.fill();
+}
+c.fillStyle = "#ffd76b";
+for (let i = 0; i < 3; i++) {
+c.beginPath();
+c.arc(x - u * .4 + i * u * .4, y - u * 1.01, u * .09, 0, Math.PI * 2);
+c.fill();
+}
+} },
+{ pr: spot(.5, .52), draw: (x, y) => {
+const w = u * .95, h = u * 1.6;
+c.fillStyle = "rgba(26,12,44,.96)";
+c.fillRect(x - w / 2, y - h, w, h);
+c.strokeStyle = "#ff5ec4";
+c.lineWidth = 1.6;
+c.shadowColor = "#ff5ec4";
+c.shadowBlur = 8;
+c.strokeRect(x - w / 2, y - h, w, h);
+c.shadowBlur = 0;
+c.fillStyle = "rgba(140,210,255,.18)";
+c.fillRect(x - w * .38, y - h * .86, w * .5, h * .6);
+const cols = ["#7fd8ff", "#ff9de6", "#ffd76b", "#8dffb0", "#ff9a3a", "#c9a6ff"];
+for (let i = 0; i < 6; i++) {
+c.fillStyle = cols[i];
+c.beginPath();
+c.arc(x - w * .25 + (i % 2) * w * .24, y - h * .76 + Math.floor(i / 2) * h * .19, u * .08, 0, Math.PI * 2);
+c.fill();
+}
+c.fillStyle = "#ffd76b";
+c.fillRect(x + w * .18, y - h * .82, w * .14, h * .1);
+} }
+];
+if (!roamingActive) {
+queue.push({ z: 1e9, alpha: 1, draw: () => {
+const fc = document.getElementById("planetFocusCanvas");
+if (!fc || !fc._focusHitAreas)
+return;
+props.forEach(o => {
+if (o.pr.visible) {
+fc._focusHitAreas.push({ x: o.pr.x, y: o.pr.y - u * .8 * r19SurfScale, r: u * .9 * r19SurfScale + 6, tab: "pets", structureId: "pet-pen" });
+world.hits.push({ x: o.pr.x, y: o.pr.y - u * .8 * r19SurfScale, r: u * .9 * r19SurfScale + 6, z: 9, onTap: () => enterRoomView("structure", "pet-pen") });
+}
+});
+const gate = projectSphere(cen.lat - R * 1.02, 0, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (gate.visible) {
+fc._focusHitAreas.push({ x: gate.x, y: gate.y - u * 1.2 * r19SurfScale, r: u * 1.1 * r19SurfScale + 8, tab: "pets", structureId: "pet-pen" });
+world.hits.push({ x: gate.x, y: gate.y - u * 1.2 * r19SurfScale, r: u * 1.1 * r19SurfScale + 8, z: 9, onTap: () => enterRoomView("structure", "pet-pen") });
+}
+} });
+}
+props.forEach(o => {
+if (!o.pr.visible)
+return;
+queue.push({ z: p.groundDepthAt(o.pr.x, o.pr.y), alpha: 1, r20Fade: 1, draw: () => {
+c.save();
+r20Around(c, o.pr.x, o.pr.y, "radial", r19SurfScale);
+o.draw(o.pr.x, o.pr.y);
+c.restore();
+} });
+});
+}
+function r27PenGeometry(W, H) {
+const g = roomGeometry(W, H);
+const cen = r26PenCentre();
+const tilt = .78;
+const R = W * .47 / R26_PEN.r;
+g.pen = true;
+g.cen = cen;
+g.R = R;
+g.viewLat = cen.lat - tilt;
+g.viewLon = 0;
+g.gcx = W / 2;
+g.gcy = H * .55 + R * Math.sin(tilt);
+return g;
+}
+function r27PenProject(lat, lon) {
+const g = roomGeo;
+return projectSphere(lat, lon, g.viewLat, g.viewLon, g.gcx, g.gcy, g.R);
+}
+function r27PenFloorPt(u, v) {
+const cen = roomGeo.cen, rr = R26_PEN.r * .86;
+const y = 1 - 2 * v, x = 2 * u - 1;
+const w = Math.max(.3, Math.sqrt(Math.max(0, 1 - y * y)));
+const q = r27PenProject(cen.lat + y * rr, x * w * rr / Math.cos(cen.lat));
+return { x: q.x, y: q.y, s: .62 + .42 * v };
+}
+function r27PenScreenToFloor(x, y) {
+let best = { u: .5, v: .5 }, bd = Infinity;
+for (let i = 0; i <= 20; i++)
+for (let j = 0; j <= 20; j++) {
+const u = i / 20, v = j / 20;
+const p = r27PenFloorPt(u, v);
+const d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+if (d < bd) {
+bd = d;
+best = { u, v };
+}
+}
+return { u: Math.max(.05, Math.min(.95, best.u)), v: Math.max(.05, Math.min(.95, best.v)) };
+}
+const r27Stars = [];
+for (let i = 0; i < 70; i++)
+r27Stars.push({ x: Math.random(), y: Math.random() * .45, r: Math.random() * 1.3 + .3, ph: Math.random() * 6 });
+function r27DrawPenShell(c, W, H, st, time) {
+const g = roomGeo;
+const planetId = selectedStartPlanet;
+c.fillStyle = "#03050f";
+c.fillRect(0, 0, W, H);
+c.save();
+r27Stars.forEach(s => { c.globalAlpha = .35 + .35 * Math.sin(time * 1.5 + s.ph); c.fillStyle = "#d5e9ff"; c.beginPath(); c.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); c.fill(); });
+c.restore();
+try {
+renderGlobe(c, planetId, g.gcx, g.gcy, g.R, g.viewLat, g.viewLon, {
+scale: .5,
+bounds: { x0: 0, y0: 0, x1: W, y1: H },
+time,
+fps: 4,
+tightSpecular: true,
+lines: "direct",
+lineWidth: 2.6,
+cacheKey: "pen"
+});
+}
+catch (error) {
+const pal = getPlanetPalette(planetId);
+c.fillStyle = pal.mid;
+c.beginPath();
+c.arc(g.gcx, g.gcy, g.R, 0, Math.PI * 2);
+c.fill();
+}
+try {
+drawGlobeNeonRim(c, g.gcx, g.gcy, g.R, getPlanetLook(planetId).atmosphere, 2.4);
+}
+catch (error) { }
+try {
+const pad = r27PenProject(SHIP_LAT - .06, 0);
+if (pad.visible) {
+const k = .9;
+c.save();
+c.translate(pad.x, pad.y);
+c.scale(k, k * .8);
+c.translate(0, -SHIP_GROUND_AT_SCALE);
+const ships = planetId === "earth" ? (getShips("earth") || []) : (getShips(planetId) || []);
+const padShip = ships.length ? resolvePadShip(ships) : null;
+drawLaunchPad(c, SHIP_GROUND_AT_SCALE, .85, !!padShip, 0);
+if (padShip) {
+c.translate(0, -PAD_HEIGHT);
+c.save();
+c.scale(.55, .55);
+c.translate(-200, -140);
+getShipShapesForShip(padShip).forEach(sh => { try {
+sh.draw(c, false, null, null);
+}
+catch (e) { } });
+c.restore();
+}
+c.restore();
+}
+}
+catch (error) { }
+const ring = [];
+for (let i = 0; i < 40; i++) {
+const a = i / 40 * Math.PI * 2;
+ring.push(r27PenProject(g.cen.lat + Math.cos(a) * R26_PEN.r, Math.sin(a) * R26_PEN.r / Math.cos(g.cen.lat)));
+}
+c.save();
+c.beginPath();
+ring.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+c.fillStyle = "rgba(141,255,176,.08)";
+c.fill();
+c.restore();
+c.save();
+c.font = "900 15px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = "#eafcff";
+c.shadowColor = st.colour;
+c.shadowBlur = 14;
+c.fillText("PET PEN", W / 2, H * .09);
+c.restore();
+}
+function r27PenFence(c, list) {
+const g = roomGeo;
+const N = 30, rr = R26_PEN.r;
+const gateHalf = .2;
+const posts = [];
+for (let i = 0; i < N; i++) {
+const a = i / N * Math.PI * 2;
+const gap = Math.abs(Math.atan2(Math.sin(a - Math.PI), Math.cos(a - Math.PI)));
+if (gap < gateHalf)
+continue;
+posts.push({ a, gate: gap < gateHalf + Math.PI * 2 / N, q: r27PenProject(g.cen.lat + Math.cos(a) * rr, Math.sin(a) * rr / Math.cos(g.cen.lat)), v: (1 - Math.cos(a)) / 2 });
+}
+const height = v => (26 + 30 * v) * (g.W / 420);
+const top = (q, h) => { const dx = q.x - g.gcx, dy = q.y - g.gcy, l = Math.hypot(dx, dy) || 1; return { x: q.x + dx / l * h, y: q.y + dy / l * h }; };
+posts.forEach((pt, i) => {
+const next = posts[(i + 1) % posts.length];
+const joined = Math.abs(Math.atan2(Math.sin(next.a - pt.a), Math.cos(next.a - pt.a))) < Math.PI * 2 / N * 1.5;
+list.push({ v: pt.v * 1.04 + .02, draw: () => {
+const h = height(pt.v) * (pt.gate ? 1.5 : 1);
+const t = top(pt.q, h);
+c.save();
+c.lineCap = "round";
+if (joined) {
+const h2 = height(next.v);
+const t2 = top(next.q, h2);
+[.42, .84].forEach(f => {
+c.strokeStyle = "#8dffb0";
+c.shadowColor = "#8dffb0";
+c.shadowBlur = 8;
+c.lineWidth = 2 + pt.v * 1.5;
+c.beginPath();
+c.moveTo(pt.q.x + (top(pt.q, height(pt.v)).x - pt.q.x) * f, pt.q.y + (top(pt.q, height(pt.v)).y - pt.q.y) * f);
+c.lineTo(next.q.x + (t2.x - next.q.x) * f, next.q.y + (t2.y - next.q.y) * f);
+c.stroke();
+});
+}
+c.strokeStyle = "#ffcf6b";
+c.shadowColor = "#ffcf6b";
+c.shadowBlur = 10;
+c.lineWidth = 3 + pt.v * 3;
+c.beginPath();
+c.moveTo(pt.q.x, pt.q.y);
+c.lineTo(t.x, t.y);
+c.stroke();
+c.fillStyle = "#ffcf6b";
+c.beginPath();
+c.arc(t.x, t.y, 2 + pt.v * 2, 0, Math.PI * 2);
+c.fill();
+c.restore();
+} });
+});
+const gl = posts.find(pt => pt.gate && pt.a < Math.PI), gr = posts.find(pt => pt.gate && pt.a > Math.PI);
+if (gl && gr) {
+list.push({ v: 1.08, draw: () => {
+const lt = top(gl.q, height(gl.v) * 1.5), rt = top(gr.q, height(gr.v) * 1.5);
+const mx = (lt.x + rt.x) / 2, my = (lt.y + rt.y) / 2 - 12;
+const pulse = .6 + .4 * Math.sin(performance.now() / 1000 * 3);
+c.save();
+c.strokeStyle = "#ffcf6b";
+c.shadowColor = "#ffcf6b";
+c.shadowBlur = 10;
+c.lineWidth = 4;
+c.beginPath();
+c.moveTo(lt.x, lt.y);
+c.quadraticCurveTo(mx, my - 18, rt.x, rt.y);
+c.stroke();
+const sw = 96, sh = 30, sx = mx - sw / 2, sy = my - 4;
+c.strokeStyle = "#bfffd9";
+c.lineWidth = 1.5;
+c.shadowBlur = 0;
+c.beginPath();
+c.moveTo(sx + 16, my - 10);
+c.lineTo(sx + 16, sy);
+c.moveTo(sx + sw - 16, my - 10);
+c.lineTo(sx + sw - 16, sy);
+c.stroke();
+c.fillStyle = "rgba(6,30,20,.95)";
+c.fillRect(sx, sy, sw, sh);
+c.strokeStyle = "#7dffb0";
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 8 + 6 * pulse;
+c.lineWidth = 2;
+c.strokeRect(sx, sy, sw, sh);
+c.shadowBlur = 0;
+c.fillStyle = "#bfffd9";
+c.font = "900 14px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("▼ EXIT ▼", mx, sy + sh / 2 + 1);
+c.restore();
+world.hits.push({ x: mx, y: sy + sh / 2, r: Math.max(54, sw * .6), z: 40, onTap: () => leaveRoom() });
+} });
+}
+}
+function r27PenFixtures(c, list, planetId, st, time) {
+r27PenFence(c, list);
+list.push({ v: .04, draw: () => {
+const box = roomDrawBox(c, .5, .04, 140, 40, "#ffcf6b", "FOOD SHELF", "rgba(46,30,12,.95)");
+const items = r26FoodItems(planetId);
+const n = Math.max(1, items.length);
+const size = Math.min(34 * box.s, box.w * .8 / n);
+if (!items.length) {
+c.save();
+c.fillStyle = "rgba(234,252,255,.6)";
+c.font = "700 10px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("No food — buy berries in the Shop", box.x, box.top - 8);
+c.restore();
+}
+items.forEach((d, i) => {
+const p = { x: box.x - box.w * .4 + box.w * .8 * (i + .5) / n, y: box.top - size * .5 };
+const dragging = world.drag && world.drag.active && worldSameItem(world.drag.desc, d) && world.drag.src && world.drag.src.t === "vault";
+drawWorldItem(c, d, p.x, p.y, size, { dim: dragging, count: d.n });
+world.hits.push({ x: p.x, y: p.y, r: size * .65, z: 8, desc: { k: d.k, r: d.r, n: 1 }, src: { t: "vault" }, draggable: true, onTap: () => worldStockBubble(d, { t: "vault" }, p) });
+});
+} });
+list.push({ v: .32, draw: () => {
+const p = roomFloorPt(.1, .32);
+const w = 84 * p.s, h = 56 * p.s;
+c.save();
+c.strokeStyle = "#ffcf6b";
+c.lineWidth = 4 * p.s;
+c.shadowColor = "#ffcf6b";
+c.shadowBlur = 8;
+c.beginPath();
+c.moveTo(p.x, p.y);
+c.lineTo(p.x, p.y - h * .9);
+c.stroke();
+c.fillStyle = "rgba(8,14,36,.96)";
+c.fillRect(p.x - w / 2, p.y - h * 1.9, w, h);
+c.restore();
+roomNeonPath(c, st.colour, 2, () => c.rect(p.x - w / 2, p.y - h * 1.9, w, h));
+c.save();
+c.fillStyle = "#8dffb0";
+for (let i = 0; i < 3; i++)
+c.fillRect(p.x - w * .36, p.y - h * 1.7 + i * h * .22, w * (.5 + .2 * (i % 2)), 2);
+c.fillStyle = "#eafcff";
+c.font = "800 " + Math.round(9 * p.s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("PET BOARD", p.x, p.y - h * 1.9 - 6);
+c.restore();
+world.hits.push({ x: p.x, y: p.y - h * 1.4, r: Math.max(w, h) * .75, z: 5, onTap: () => worldOpenHolo("pets", { title: "PET BOARD" }) });
+} });
+list.push({ v: .32, draw: () => r26DrawVending(c, planetId, st, .9, .32) });
+r26PenPets(c, list, planetId, time);
+}
+const R27_PERK_SHORT = {
+coinMultiplier: v => "+" + Math.round(v * 100) + "% coins per level",
+materialDropBoost: () => "More material drops",
+chargeRateBoost: v => "+" + Math.round(v * 100) + "% charge speed per level"
+};
+function r27PetInfoHtml(planetId, species) {
+const name = species === "procedural" ? "Native" : (SPECIES_DISPLAY_NAMES[species] || species);
+const key = species === "procedural" ? "native:" + planetId : species;
+const recipe = FORGE_RECIPES[key] || null;
+const perk = getPerkForSpecies(species);
+let perkHtml = '<span class="pvp-none">None yet</span>';
+if (perk) {
+const short = (R27_PERK_SHORT[perk.effectType] || (() => ""))(perk.effectValue);
+perkHtml = '<span class="pvp-icon">' + getFoodIconHtml(perk.id) + '</span><span><b>' + perk.name + '</b>' + (short ? '<br><small>' + short + '</small>' : '') + '</span>';
+}
+let forgeHtml = '<span class="pvp-none">—</span>';
+if (recipe) {
+const out = forgedItemId(recipe[0], recipe[1]);
+forgeHtml = '<span class="pvp-icon">' + getItemIconHtml(recipe[0]) + '<i>+</i>' + getItemIconHtml(recipe[1]) + '</span><span><b>' + getForgedInfo(out).name + '</b></span>';
+}
+return ('<div class="pvp-name">' + name + '</div>' +
+'<div class="pvp-row"><span class="pvp-label">⚒ Forge</span>' + forgeHtml + '</div>' +
+'<div class="pvp-row"><span class="pvp-label">✨ Perk</span>' + perkHtml + '</div>');
+}
+let r27Pop = null;
+function r27HidePop() {
+if (r27Pop) {
+r27Pop.remove();
+r27Pop = null;
+}
+}
+document.addEventListener("click", event => {
+const cell = event.target && event.target.closest && event.target.closest(".pv-cell");
+if (!cell) {
+if (r27Pop && !(event.target.closest && event.target.closest(".pv-pop")))
+r27HidePop();
+return;
+}
+const species = cell.getAttribute("data-species"), planetId = cell.getAttribute("data-planet");
+if (!species)
+return;
+const again = r27Pop && r27Pop.getAttribute("data-for") === species;
+r27HidePop();
+if (again)
+return;
+const pop = document.createElement("div");
+pop.className = "pv-pop";
+pop.setAttribute("data-for", species);
+pop.innerHTML = r27PetInfoHtml(planetId, species);
+document.body.appendChild(pop);
+const r = cell.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+let left = r.left + r.width / 2 - pw / 2;
+left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+let top = r.top - ph - 8;
+if (top < 8)
+top = r.bottom + 8;
+pop.style.left = left + "px";
+pop.style.top = top + "px";
+r27Pop = pop;
+}, true);
+window.addEventListener("scroll", r27HidePop, true);
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "trap-feed") {
@@ -27354,12 +27820,12 @@ if (hint) {
 const pet = getRoamingPet();
 hint.textContent =
 roomState
-? "DRAG TO WALK · EXIT AT THE FRONT"
+? "DRAG TO WALK · TAP THE EXIT SIGN TO LEAVE"
 : "DRAG TO WALK · WALK INTO A BUILDING OR THE SHIP TO GO INSIDE";
 }
 const leave = document.getElementById("roomLeaveBtn");
 if (leave)
-leave.classList.toggle("hidden", !roomState);
+leave.classList.add("hidden");
 const visiting = !!(roomState && roomState.viewOnly);
 const exitBtn = document.getElementById("roamExitBtn");
 if (exitBtn)
@@ -27367,7 +27833,7 @@ exitBtn.classList.toggle("hidden", visiting);
 if (pauseBtn && visiting)
 pauseBtn.classList.add("hidden");
 if (hint && visiting)
-hint.textContent = "TAP THINGS TO USE THEM · DRAG ITEMS TO MOVE THEM";
+hint.textContent = "TAP THINGS TO USE THEM · TAP EXIT TO LEAVE";
 const planetName = document.getElementById("focusPlanetName");
 if (planetName)
 planetName.classList.toggle("roam-hidden", !!roomState);
@@ -28923,6 +29389,8 @@ return { W, H, wallTop, backY, frontY, backW, frontW, cx: W / 2 };
 }
 let roomGeo = null;
 function roomFloorPt(u, v) {
+if (roomGeo && roomGeo.pen)
+return r27PenFloorPt(u, v);
 const g = roomGeo;
 const w = g.backW + (g.frontW - g.backW) * v;
 return {
@@ -28939,6 +29407,8 @@ y: g.wallTop + (g.backY - g.wallTop) * wy
 };
 }
 function roomScreenToFloor(x, y) {
+if (roomGeo && roomGeo.pen)
+return r27PenScreenToFloor(x, y);
 const g = roomGeo;
 let v = (y - g.backY) / (g.frontY - g.backY);
 v = Math.max(0, Math.min(1, v));
@@ -29060,8 +29530,25 @@ c.fillStyle = "#bfffd9";
 c.font = "800 11px system-ui,sans-serif";
 c.textAlign = "center";
 c.globalAlpha = .6 + .4 * pulse;
-c.fillText("▼  EXIT  ▼", (d0.x + d1.x) / 2, Math.min(H - 10, d0.y + 22));
 c.restore();
+{
+const ex = (d0.x + d1.x) / 2, ey = Math.min(H - 28, d0.y + 16);
+const sw = 110, sh = 30;
+c.save();
+c.fillStyle = "rgba(6,30,20,.95)";
+c.fillRect(ex - sw / 2, ey, sw, sh);
+c.restore();
+roomNeonPath(c, "#7dffb0", 2, () => c.rect(ex - sw / 2, ey, sw, sh));
+c.save();
+c.fillStyle = "#bfffd9";
+c.font = "900 14px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.globalAlpha = .75 + .25 * pulse;
+c.fillText("▼ EXIT ▼", ex, ey + sh / 2 + 1);
+c.restore();
+world.hits.push({ x: ex, y: ey + sh / 2, r: Math.max(56, sw * .6), z: 40, onTap: () => leaveRoom() });
+}
 c.save();
 c.font = "900 15px system-ui,sans-serif";
 c.textAlign = "center";
@@ -29145,7 +29632,7 @@ else if (roomState.kind === "special") {
 roomSpecialFixtures(c, list, planetId, st, time);
 }
 else if (roomState.id === "pet-pen") {
-r26PenFixtures(c, list, planetId, st, time);
+r27PenFixtures(c, list, planetId, st, time);
 }
 else if (roomState.id === "stock") {
 roomVaultFixtures(c, list, planetId, st, time);
@@ -29986,11 +30473,14 @@ c.restore();
 });
 }
 function drawRoomScene(c, W, H, time) {
-roomGeo = roomGeometry(W, H);
+roomGeo = roomState && roomState.id === "pet-pen" ? r27PenGeometry(W, H) : roomGeometry(W, H);
 world.scene = { mode: "room", W, H };
 const st = roomStyle();
 c.fillStyle = "#03050f";
 c.fillRect(0, 0, W, H);
+if (roomGeo.pen)
+r27DrawPenShell(c, W, H, st, time);
+else
 roomDrawShell(c, W, H, st, time);
 const list = roomFixtures(c, time);
 if (!roomState)
@@ -32605,8 +33095,9 @@ latWander * .3
 : Math.PI / 2 -
 SURFACE_ITEM_LAT_OFFSET) +
 latWander;
-(world.petSpots || (world.petSpots = {}))[pet.id] = { lat: petLat, lon: petLon, at: Date.now(), planet: selectedStartPlanet };
-const petProj = projectSphere(petLat, petLon, roamViewLat, roamViewLon, cx, cy, radius);
+const r27Spot = r27PetSpot(pet, seed, petIndex, !!targetPosition, petLat, petLon, time);
+(world.petSpots || (world.petSpots = {}))[pet.id] = { lat: r27Spot.lat, lon: r27Spot.lon, at: Date.now(), planet: selectedStartPlanet };
+const petProj = projectSphere(r27Spot.lat, r27Spot.lon, roamViewLat, roamViewLon, cx, cy, radius);
 if (!petProj.visible) {
 if (petProj.z <= HORIZON_SINK_Z)
 return;
