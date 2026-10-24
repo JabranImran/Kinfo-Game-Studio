@@ -18596,32 +18596,64 @@ k.poly([[-.1, -.08], [.1, -.08], [.1, -.04], [-.1, -.04]], "#ffd25c", .3, .02);
 c.restore();
 c.restore();
 };
+function r25Flame(k, x, y, a, len, w, phase) {
+const c = k.c, size = k.s;
+const f = 1 + Math.sin(k.t * 13 + (phase || 0) + k.seed) * .18 + Math.sin(k.t * 21 + (phase || 0) * 2) * .08;
+const L = len * size * f, W = w * size;
+c.save();
+c.translate(x * size, y * size);
+c.rotate(a);
+c.shadowBlur = k.glow * .7 + 4;
+c.shadowColor = "#ff5c2e";
+c.fillStyle = "#ff7a2e";
+c.beginPath();
+c.moveTo(0, -W);
+c.quadraticCurveTo(L * .55, -W * 1.1, L, 0);
+c.quadraticCurveTo(L * .55, W * 1.1, 0, W);
+c.closePath();
+c.fill();
+c.shadowBlur = 0;
+c.fillStyle = "#ffd25c";
+c.beginPath();
+c.moveTo(0, -W * .5);
+c.quadraticCurveTo(L * .4, -W * .5, L * .62, 0);
+c.quadraticCurveTo(L * .4, W * .5, 0, W * .5);
+c.closePath();
+c.fill();
+c.restore();
+}
+function r25UBody(k, fill, w, top, mid) {
+const c = k.c, size = k.s;
+k.paint(() => {
+const W = w * size, T = top * size, M = mid * size, r = size * .08;
+c.moveTo(-W + r, T);
+c.lineTo(W - r, T);
+c.quadraticCurveTo(W, T, W, T + r);
+c.lineTo(W, M);
+c.arc(0, M, W, 0, Math.PI);
+c.lineTo(-W, T + r);
+c.quadraticCurveTo(-W, T, -W + r, T);
+c.closePath();
+}, fill, 1);
+}
 R23_PETS.winji = (c, x, y, size, energy, seed) => {
 const k = r23Kit(c, size, energy, "#ff7a3a", seed);
 c.save();
 r23Walk(c, x, y, size, seed);
-r24Feet(k, "#3a3550");
-c.save();
-c.translate(size * .42, size * .05);
-c.rotate(-.55 + Math.sin(k.t * 2.6 + seed) * .08);
-const fl = Math.sin(k.t * 14 + seed) * .03;
-k.paint(() => { c.moveTo(-size * .03, 0); c.quadraticCurveTo(-size * (.1 + fl), -size * .3, -size * .02, -size * .75); c.quadraticCurveTo(size * (.1 - fl), -size * .4, size * .04, 0); c.closePath(); }, "#ffb347", 1, .025, "#ff5c2e");
-k.poly([[-.1, 0], [.1, 0], [.1, .04], [-.1, .04]], "#3a3550", .2, .02);
-c.restore();
-r24Blob(k, "#d8d2e6");
-c.save();
-c.beginPath();
-c.ellipse(0, 0, size * .5, size * .52, 0, 0, Math.PI * 2);
-c.clip();
-c.shadowBlur = 0;
-c.fillStyle = "#3a3550";
-[[-.3, -.35, .16], [.05, -.42, .12], [.32, -.25, .14], [-.38, .25, .14], [.36, .3, .12]].forEach(([px, py, pr]) => { c.beginPath(); c.ellipse(px * size, py * size, pr * size, pr * size * 1.3, .4, 0, Math.PI * 2); c.fill(); });
-c.restore();
-const f = Math.sin(k.t * 11 + seed) * .04;
-k.paint(() => { c.moveTo(-size * .08, -size * .48); c.quadraticCurveTo(-size * (.1 + f), -size * .65, size * f, -size * .78); c.quadraticCurveTo(size * .1, -size * .62, size * .08, -size * .48); c.closePath(); }, "#ffd25c", .9, .025, "#ff7a3a");
+for (let i = 0; i < 14; i++) {
+const a = -Math.PI / 2 + (i - 7) / 14 * Math.PI * 2 * .95;
+const up = Math.max(0, -Math.sin(a));
+r25Flame(k, Math.cos(a) * .44, Math.sin(a) * .46, a - (Math.PI / 2 + a) * .35, .16 + up * .22, .07, i * 1.7);
+}
+r24Feet(k, "#1c1a26");
+r24Blob(k, "#1c1a26");
 if (!k.back) {
 k.paint(() => { c.moveTo(-size * .5, -size * .14); c.quadraticCurveTo(0, -size * .24, size * .5, -size * .14); c.lineTo(size * .49, size * .02); c.quadraticCurveTo(0, -size * .06, -size * .49, size * .02); c.closePath(); }, "#ff7a3a", .4, .02, "#ffb347");
-k.eyes(.14, -.08, .04, "#2a1d2e");
+[-1, 1].forEach(s => { k.ell(s * .14, -.07, .05, .04, "#ffffff", 0, 0, .01, "#ffe0c0"); });
+c.save();
+c.fillStyle = "#1a1020";
+[-1, 1].forEach(s => { c.beginPath(); c.arc(s * size * .14, -size * .065, size * .022, 0, Math.PI * 2); c.fill(); });
+c.restore();
 c.save();
 c.translate(0, size * .25);
 c.shadowBlur = 6;
@@ -18642,6 +18674,23 @@ c.restore();
 else {
 k.paint(() => { c.moveTo(-size * .1, -size * .1); c.quadraticCurveTo(-size * .3, size * .2, -size * .2, size * .35); c.lineTo(-size * .12, size * .32); c.quadraticCurveTo(-size * .2, size * .1, -size * .02, -size * .08); c.closePath(); }, "#ff7a3a", .3, .02);
 }
+[-1, 1].forEach(s => {
+const hx = s * .66, hy = .1 + Math.sin(k.t * 3 + seed + s) * .05;
+if (s > 0) {
+c.save();
+c.translate(hx * size, hy * size);
+c.rotate(.45 + Math.sin(k.t * 2.6 + seed) * .08);
+const fl = Math.sin(k.t * 14 + seed) * .03;
+k.paint(() => { c.moveTo(-size * .03, 0); c.quadraticCurveTo(-size * (.1 + fl), -size * .3, -size * .02, -size * .75); c.quadraticCurveTo(size * (.1 - fl), -size * .4, size * .04, 0); c.closePath(); }, "#ffb347", 1, .025, "#ff5c2e");
+k.poly([[-.1, 0], [.1, 0], [.1, .04], [-.1, .04]], "#1c1a26", .2, .02);
+c.restore();
+}
+for (let i = 0; i < 6; i++) {
+const a = i / 6 * Math.PI * 2 + k.t * 2;
+r25Flame(k, hx + Math.cos(a) * .08, hy + Math.sin(a) * .08, a - (Math.PI / 2 + a) * .55, .15, .04, i + s);
+}
+k.ell(hx, hy, .1, .1, "#1c1a26", .6, 0, .03, "#ff7a3a");
+});
 c.restore();
 };
 R23_PETS.fishguy = (c, x, y, size, energy, seed) => {
@@ -18700,36 +18749,56 @@ k.ell(ox / size, oy / size, .07, .07, col, .6, 0, .03);
 }
 R23_PETS.magnet = (c, x, y, size, energy, seed) => {
 const k = r23Kit(c, size, energy, "#ff5c5c", seed);
-c.save();
-r23Walk(c, x, y, size, seed);
-r24Orbiters(k, "#b8c4d8", 2, .78, 1.6);
-r24Feet(k, "#d84a4a");
-r24Blob(k, "#ff7a7a");
-if (!k.back) {
+const horseshoe = (mx, my, r, lw) => {
 c.save();
 c.lineCap = "butt";
-c.shadowBlur = k.glow * .5;
+c.shadowBlur = k.glow * .4;
 c.shadowColor = "#ff5c5c";
-const r = size * .27, cy = size * .02, leg = size * .26;
-c.lineWidth = size * .13;
+const R = r * size, X = mx * size, Y = my * size, leg = R * .9;
+c.lineWidth = lw * size;
 c.strokeStyle = "#c03030";
 c.beginPath();
-c.moveTo(-r, cy - leg * .55);
-c.lineTo(-r, cy);
-c.arc(0, cy, r, Math.PI, 0, true);
-c.lineTo(r, cy - leg * .55);
+c.moveTo(X - R, Y - leg * .5);
+c.lineTo(X - R, Y);
+c.arc(X, Y, R, Math.PI, 0, true);
+c.lineTo(X + R, Y - leg * .5);
 c.stroke();
 c.strokeStyle = "#e8eef8";
 c.beginPath();
-c.moveTo(-r, cy - leg);
-c.lineTo(-r, cy - leg * .55);
-c.moveTo(r, cy - leg);
-c.lineTo(r, cy - leg * .55);
+c.moveTo(X - R, Y - leg);
+c.lineTo(X - R, Y - leg * .5);
+c.moveTo(X + R, Y - leg);
+c.lineTo(X + R, Y - leg * .5);
 c.stroke();
 c.restore();
-k.eyes(.1, -.04, .05);
-k.smile(.1, .04);
+};
+c.save();
+r23Walk(c, x, y, size, seed);
+r24Feet(k, "#d84a4a");
+r24Blob(k, "#ff7a7a");
+horseshoe(0, -.32, .15, .08);
+if (!k.back) {
+k.eyes(.15, .02, .055);
+k.cheeks(.28, .16, .05, "#ffb3c6");
+k.smile(.16, .05);
 }
+[-1, 1].forEach(s => {
+const hx = s * .68, hy = .12 + Math.sin(k.t * 3 + seed + s * 1.3) * .06;
+k.ell(hx, hy, .12, .12, "#dfe7f3", .5, 0, .03, "#ff8a8a");
+horseshoe(hx, hy + .02, .055, .035);
+});
+c.save();
+c.globalAlpha *= .35 + .25 * Math.sin(k.t * 4 + seed);
+c.strokeStyle = "#ff9a9a";
+c.lineWidth = 1;
+c.setLineDash([3, 4]);
+c.lineDashOffset = -k.t * 20;
+c.beginPath();
+c.moveTo(-size * .66, size * .0);
+c.quadraticCurveTo(0, -size * .95, size * .66, size * .0);
+c.stroke();
+c.setLineDash([]);
+c.restore();
 c.restore();
 };
 R23_PETS.electro = (c, x, y, size, energy, seed) => {
@@ -18867,46 +18936,51 @@ c.restore();
 c.restore();
 };
 R23_PETS.dishe = (c, x, y, size, energy, seed) => {
-const k = r23Kit(c, size, energy, "#ffb347", seed);
+const k = r23Kit(c, size, energy, "#ff5c3a", seed);
+const rock = "#7a1e22", dark = "#4a0e14";
 c.save();
 r23Walk(c, x, y, size, seed, 1.3);
 c.save();
-c.strokeStyle = "rgba(255,200,120,.55)";
+c.strokeStyle = "rgba(255,140,90,.55)";
 c.lineWidth = Math.max(1, size * .03);
 c.lineCap = "round";
 for (let i = 0; i < 3; i++) {
 const ph = (k.t * 3 + i * .33 + seed) % 1;
 c.globalAlpha = 1 - ph;
 c.beginPath();
-c.moveTo(size * (.55 + ph * .3), -size * .2 + i * size * .2);
-c.lineTo(size * (.85 + ph * .3), -size * .2 + i * size * .2);
+c.moveTo(size * (.6 + ph * .3), -size * .2 + i * size * .2);
+c.lineTo(size * (.9 + ph * .3), -size * .2 + i * size * .2);
 c.stroke();
 }
 c.restore();
-r24Feet(k, "#a87a50");
-[-.2, 0, .2].forEach((fx, i) => {
-const f = Math.sin(k.t * 12 + i * 2 + seed) * .04;
-k.paint(() => { c.moveTo((fx - .08) * size, -size * .4); c.quadraticCurveTo((fx - .06 + f) * size, -size * .62, (fx + f) * size, -size * (.74 - (i === 1 ? 0 : .06))); c.quadraticCurveTo((fx + .08) * size, -size * .55, (fx + .08) * size, -size * .4); c.closePath(); }, "#ffd25c", .9, .025, "#ff7a3a");
-});
-[-1, 1].forEach(s => { c.save(); c.translate(s * size * .48, -size * .05); c.rotate(s * (.4 + Math.sin(k.t * 8 + seed) * .2)); k.poly([[0, 0], [s * .22, -.14], [s * .12, 0], [s * .22, .1]], "#ff9a3a", .5, .03); c.restore(); });
+const vents = [-2.4, -1.57, -.75, 2.9];
+vents.forEach((a, i) => r25Flame(k, Math.cos(a) * .46, Math.sin(a) * .46, a, .28, .08, i * 2.3));
+r24Feet(k, dark);
 k.paint(() => {
-const n = 12;
+const n = 13;
 for (let i = 0; i < n; i++) {
-const a = i / n * Math.PI * 2, r = (.48 + ((i * 7) % 3) * .025) * size;
+const a = i / n * Math.PI * 2, r = (.47 + ((i * 7) % 3) * .03) * size;
 i ? c.lineTo(Math.cos(a) * r, Math.sin(a) * r) : c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
 }
 c.closePath();
-}, "#d8a870", 1);
+}, rock, 1);
+vents.forEach(a => k.ell(Math.cos(a) * .38, Math.sin(a) * .38, .09, .06, dark, 0, a + Math.PI / 2, .02, "#ff8a5c"));
 c.save();
 c.shadowBlur = 0;
-c.strokeStyle = "#a87a50";
+c.strokeStyle = "#a83a3a";
 c.lineWidth = 1.2;
-[[.28, .22, .07], [-.3, .26, .05], [.3, -.2, .05]].forEach(([cx2, cy2, cr]) => { c.beginPath(); c.arc(cx2 * size, cy2 * size, cr * size, 0, Math.PI * 2); c.stroke(); });
+[[.28, .24, .07], [-.3, .26, .05]].forEach(([cx2, cy2, cr]) => { c.beginPath(); c.arc(cx2 * size, cy2 * size, cr * size, 0, Math.PI * 2); c.stroke(); });
 c.restore();
 if (!k.back) {
-[-1, 1].forEach(s => { k.ell(s * .17, -.08, .12, .13, "#2a1d2e", 0, 0, .02, "#5a3a2a"); c.save(); c.fillStyle = "#fff"; c.beginPath(); c.arc(s * size * .17 - size * .04, -size * .13, size * .035, 0, Math.PI * 2); c.fill(); c.restore(); });
-k.smile(.16, .05);
+[-1, 1].forEach(s => { k.ell(s * .16, -.04, .12, .13, "#1a0a0e", 0, 0, .02, "#ff8a5c"); c.save(); c.fillStyle = "#fff"; c.beginPath(); c.arc(s * size * .16 - size * .04, -size * .09, size * .035, 0, Math.PI * 2); c.fill(); c.restore(); });
+k.smile(.2, .05, "#ffb3a0");
 }
+[-1, 1].forEach(s => {
+const hx = s * .68, hy = .12 + Math.sin(k.t * 3.4 + seed + s) * .05;
+r25Flame(k, hx + .04, hy + .06, Math.PI * .6, .18, .05, s * 3);
+k.poly([[hx - .1, hy - .05], [hx - .03, hy - .11], [hx + .07, hy - .08], [hx + .11, hy + .02], [hx + .04, hy + .1], [hx - .08, hy + .07]], rock, .5, .03);
+k.ell(hx - .01, hy, .03, .025, dark, 0, 0, .01, "#ff8a5c");
+});
 c.restore();
 };
 R23_PETS.light = (c, x, y, size, energy, seed) => {
@@ -18920,39 +18994,38 @@ c.lineWidth = Math.max(1, size * .03);
 c.shadowBlur = 12;
 c.shadowColor = "#fff2b3";
 c.beginPath();
-c.ellipse(0, -size * .66, size * .22, size * .06, 0, 0, Math.PI * 2);
+c.ellipse(0, -size * .6, size * .24, size * .06, 0, 0, Math.PI * 2);
 c.stroke();
 c.restore();
 r24Feet(k, "#e8dcb8");
-[-1, 1].forEach(s => k.poly([[s * .42, .0], [s * .62, -.12], [s * .5, .12]], "#fffaf0", .3));
-r24Blob(k, "#fffaf0", .46, .44, .06);
-k.paint(() => { c.moveTo(-size * .46, -size * .18); c.lineTo(size * .46, -size * .18); c.lineTo(size * .42, -size * .3); c.lineTo(-size * .42, -size * .3); c.closePath(); }, "#f0e4c0", .3, .025);
+[-1, 1].forEach(s => k.poly([[s * .42, -.05], [s * .62, -.18], [s * .5, .08]], "#fffaf0", .3));
+r25UBody(k, "#fffaf0", .44, -.42, .1);
 if (!k.back) {
-[-1, 1].forEach(s => { k.ell(s * .16, .04, .1, .11, "#3a3550", 0, 0, .02); c.save(); c.fillStyle = "#fff"; c.beginPath(); c.arc(s * size * .16 - size * .03, 0, size * .03, 0, Math.PI * 2); c.fill(); c.restore(); });
-k.cheeks(.28, .18, .05);
-k.smile(.22, .04);
+[-1, 1].forEach(s => { k.ell(s * .16, -.06, .1, .11, "#3a3550", 0, 0, .02); c.save(); c.fillStyle = "#fff"; c.beginPath(); c.arc(s * size * .16 - size * .03, -size * .1, size * .03, 0, Math.PI * 2); c.fill(); c.restore(); });
+k.cheeks(.28, .1, .05);
+k.smile(.16, .04);
 }
-r24Orbiters(k, "#fffbe0", 2, .7, 1.3);
+r24Orbiters(k, "#fffbe0", 2, .72, 1.3);
 c.restore();
 };
 R23_PETS.dark = (c, x, y, size, energy, seed) => {
 const k = r23Kit(c, size, energy, "#b06bff", seed);
 c.save();
 r23Walk(c, x, y, size, seed);
-r24Orbiters(k, "#3a2a5a", 2, .72, -1.1);
+r24Orbiters(k, "#3a2a5a", 2, .74, -1.1);
 r24Feet(k, "#1a1430");
-[-1, 1].forEach(s => k.poly([[s * .42, .05], [s * .66, -.08], [s * .5, .16]], "#2a2440", .3));
-r24Blob(k, "#2a2440", .46, .44, .08);
+[-1, 1].forEach(s => k.poly([[s * .42, -.02], [s * .64, -.16], [s * .5, .12]], "#2a2440", .3));
 for (let i = -2; i <= 2; i++) {
 const f = Math.sin(k.t * 9 + i + seed) * .03;
-k.paint(() => { c.moveTo((i * .12 - .05) * size, -size * .42); c.quadraticCurveTo((i * .14 + f) * size, -size * .62, (i * .12 + f) * size, -size * (.72 - Math.abs(i) * .06)); c.quadraticCurveTo((i * .12 + .06) * size, -size * .55, (i * .12 + .05) * size, -size * .42); c.closePath(); }, "#7a4aff", .8, .02, "#c99bff");
+k.paint(() => { c.moveTo((i * .12 - .05) * size, -size * .6); c.quadraticCurveTo((i * .14 + f) * size, -size * .8, (i * .12 + f) * size, -size * (.9 - Math.abs(i) * .06)); c.quadraticCurveTo((i * .12 + .06) * size, -size * .72, (i * .12 + .05) * size, -size * .6); c.closePath(); }, "#7a4aff", .8, .02, "#c99bff");
 }
-k.poly([[-.48, -.06], [0, -.5], [.48, -.06]], "#3a3060", .5);
+k.poly([[-.5, -.36], [0, -.68], [.5, -.36]], "#3a3060", .5);
+r25UBody(k, "#2a2440", .44, -.38, .1);
 if (!k.back) {
-[-1, 1].forEach(s => { k.paint(() => { c.moveTo((s * .16 - .1) * size, size * .04); c.lineTo((s * .16 + .1) * size, size * .04); c.quadraticCurveTo(s * .16 * size, size * .16, (s * .16 - .1) * size, size * .04); c.closePath(); }, "#ffe0ff", .4, .015, "#ff9de6"); });
+[-1, 1].forEach(s => { k.paint(() => { c.moveTo((s * .16 - .1) * size, -size * .08); c.lineTo((s * .16 + .1) * size, -size * .08); c.quadraticCurveTo(s * .16 * size, size * .04, (s * .16 - .1) * size, -size * .08); c.closePath(); }, "#ffe0ff", .4, .015, "#ff9de6"); });
 c.save();
 c.fillStyle = "#1a1020";
-[-1, 1].forEach(s => { c.beginPath(); c.arc(s * size * .16, size * .08, size * .025, 0, Math.PI * 2); c.fill(); });
+[-1, 1].forEach(s => { c.beginPath(); c.arc(s * size * .16, -size * .04, size * .025, 0, Math.PI * 2); c.fill(); });
 c.restore();
 }
 c.restore();
@@ -18982,6 +19055,13 @@ c.stroke();
 c.setLineDash([]);
 c.restore();
 };
+const uPts = [];
+for (let i = 0; i <= 10; i++) {
+const a = Math.PI - i / 10 * Math.PI;
+uPts.push([Math.cos(a) * size * .2, -size * .36 + Math.sin(a) * size * .14]);
+}
+uPts.unshift([-size * .2, -size * .5]);
+uPts.push([size * .2, -size * .5]);
 c.save();
 r23Walk(c, x, y, size, seed);
 [-1, 1].forEach(s => {
@@ -18989,7 +19069,7 @@ const pts = [];
 for (let i = 0; i <= 12; i++) {
 const f = i / 12;
 const wave = Math.sin(k.t * 2.4 + f * 4 + seed + s) * size * .12 * f;
-pts.push([s * (size * .2 + f * size * .55) + wave * .5, -size * .35 - f * size * .45 + Math.sin(f * Math.PI) * -size * .1 + wave]);
+pts.push([s * (size * .2 + f * size * .5) + wave * .5, -size * .5 - f * size * .38 + Math.sin(f * Math.PI) * -size * .1 + wave]);
 }
 tread(pts, size * .09);
 const end = pts[pts.length - 1];
@@ -18997,15 +19077,34 @@ k.ell(end[0] / size, end[1] / size, .07, .07, "#3a3a48", .6, 0, .03, "#ffd25c");
 });
 r24Feet(k, "#d8b25c");
 r24Blob(k, "#f5e2b8");
+tread(uPts, size * .07);
+tread([[-size * .46, -size * .12], [0, size * .2], [size * .46, -size * .12]], size * .07);
+tread([[0, size * .2], [0, size * .5]], size * .07);
+k.ell(0, .2, .09, .09, "#ffd25c", .6, 0, .025, "#ffb347");
+c.save();
+c.shadowBlur = 0;
+c.strokeStyle = "#8a6a1a";
+c.lineWidth = Math.max(1, size * .02);
+c.strokeRect(-size * .04, size * .16, size * .08, size * .08);
+c.restore();
 if (!k.back) {
-tread([[-size * .45, -size * .2], [0, size * .18], [size * .45, -size * .2]], size * .07);
-tread([[0, size * .18], [0, size * .5]], size * .07);
-k.ell(0, .18, .09, .09, "#ffd25c", .6, 0, .025, "#ffb347");
-[-1, 1].forEach(s => { k.ell(s * .17, -.22, .07, .11, "#ffffff", 0, 0, .02, "#3a3a48"); c.save(); c.fillStyle = "#1a1020"; c.beginPath(); c.ellipse(s * size * .17, -size * .2, size * .03, size * .06, 0, 0, Math.PI * 2); c.fill(); c.restore(); });
+[-1, 1].forEach(s => { k.ell(s * .26, -.12, .07, .11, "#ffffff", 0, 0, .02, "#3a3a48"); c.save(); c.fillStyle = "#1a1020"; c.beginPath(); c.ellipse(s * size * .26, -size * .1, size * .03, size * .06, 0, 0, Math.PI * 2); c.fill(); c.restore(); });
 }
-else {
-tread([[-size * .45, -size * .15], [size * .45, size * .2]], size * .07);
-}
+[-1, 1].forEach(s => {
+const hx = s * .7, hy = .1 + Math.sin(k.t * 2.8 + seed + s) * .06;
+k.ell(hx, hy, .13, .13, "#4a4a5a", .5, 0, .03, "#ffd25c");
+c.save();
+c.beginPath();
+c.arc(hx * size, hy * size, size * .13, 0, Math.PI * 2);
+c.clip();
+c.strokeStyle = "#8a8aa0";
+c.lineWidth = size * .04;
+c.setLineDash([size * .025, size * .03]);
+c.lineDashOffset = -k.t * size * .2 * s;
+[-.05, .05].forEach(o => { c.beginPath(); c.moveTo((hx - .15) * size, (hy + o) * size); c.lineTo((hx + .15) * size, (hy + o) * size); c.stroke(); });
+c.setLineDash([]);
+c.restore();
+});
 c.restore();
 };
 R23_PETS.spaceity = (c, x, y, size, energy, seed) => {
