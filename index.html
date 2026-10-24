@@ -5670,7 +5670,7 @@ const existing = getPetCount(planetId);
 return Math.max(1, Math.round(1.2 *
 Math.pow(1.8, existing)));
 }
-function getPetStyleUnlockRank(planetId, styleIndex) {
+function getPetStyleUnlockRank__orig(planetId, styleIndex) {
 if (styleIndex < 3)
 return null;
 const planet = getPlanet(planetId);
@@ -7019,8 +7019,15 @@ sectionHtml +=
 return sectionHtml;
 }
 const PET_ROSTER_BY_PLANET = {
-earth: ["penguin", "cat", "gorilla", "koala"],
-kepler: ["rex"]
+earth: ["penguin", "cat", "gorilla", "koala", "fox"],
+mars: ["rover", "alien", "procedural"],
+europa: ["yeti", "procedural"],
+titan: ["slime", "procedural"],
+kepler: ["rex", "trike", "procedural"],
+aurora: ["unicorn", "procedural"],
+helios: ["dragon", "phoenix", "procedural"],
+nova: ["robot", "procedural"],
+zenith: ["starling", "procedural"]
 };
 const SPECIES_DISPLAY_NAMES = {
 penguin: "Penguin",
@@ -17779,6 +17786,723 @@ s.radius = Math.max(s.baseRadius * .7, s.radius - 28 * dt);
 if (s.life >= s.maxLife)
 singularity = null;
 }
+function r23Kit(c, size, energy, neon, seed) {
+const ratio = Math.max(0, Math.min(1, (energy || 0) / 100));
+const glow = 3 + ratio * 16;
+const t = performance.now() / 1000;
+const lw = Math.max(1, size * .045);
+const k = {
+c, s: size, t, seed, glow, neon, lw,
+back: typeof petDrawBack !== "undefined" && petDrawBack
+};
+k.paint = (draw, fill, glowMul, width, line) => {
+c.beginPath();
+draw();
+c.fillStyle = fill;
+c.strokeStyle = line || neon;
+c.lineWidth = (width || .045) * size > 1 ? (width || .045) * size : 1;
+c.shadowBlur = glow * (glowMul === undefined ? .4 : glowMul);
+c.shadowColor = line || neon;
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+};
+k.ell = (x, y, rx, ry, fill, glowMul, rot, width, line) => k.paint(() => c.ellipse(x * size, y * size, rx * size, ry * size, rot || 0, 0, Math.PI * 2), fill, glowMul, width, line);
+k.poly = (pts, fill, glowMul, width, line) => k.paint(() => {
+pts.forEach((p, i) => i ? c.lineTo(p[0] * size, p[1] * size) : c.moveTo(p[0] * size, p[1] * size));
+c.closePath();
+}, fill, glowMul, width, line);
+k.eyes = (dx, y, r, col) => {
+const blinkCycle = (t + seed * 1.3) % (3.6 + (seed % 3) * .4);
+const shut = blinkCycle < .12;
+c.save();
+c.shadowBlur = 0;
+[-1, 1].forEach(side => {
+const ex = side * dx * size, ey = y * size;
+if (shut) {
+c.strokeStyle = col || "#2a1d2e";
+c.lineWidth = Math.max(1, size * .035);
+c.beginPath();
+c.moveTo(ex - r * size, ey);
+c.lineTo(ex + r * size, ey);
+c.stroke();
+return;
+}
+c.fillStyle = col || "#2a1d2e";
+c.beginPath();
+c.ellipse(ex, ey, r * size, r * size * 1.15, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#ffffff";
+c.beginPath();
+c.arc(ex - r * size * .35, ey - r * size * .4, r * size * .38, 0, Math.PI * 2);
+c.arc(ex + r * size * .3, ey + r * size * .35, r * size * .16, 0, Math.PI * 2);
+c.fill();
+});
+c.restore();
+};
+k.happyEyes = (dx, y, r, col) => {
+c.save();
+c.shadowBlur = 0;
+c.strokeStyle = col || "#2a1d2e";
+c.lineWidth = Math.max(1, size * .04);
+c.lineCap = "round";
+[-1, 1].forEach(side => {
+c.beginPath();
+c.arc(side * dx * size, y * size + r * size * .4, r * size, Math.PI * 1.15, Math.PI * 1.85);
+c.stroke();
+});
+c.restore();
+};
+k.cheeks = (dx, y, r, col) => {
+c.save();
+c.shadowBlur = 0;
+c.globalAlpha *= .7;
+c.fillStyle = col || "#ffa3c4";
+c.beginPath();
+c.arc(-dx * size, y * size, r * size, 0, Math.PI * 2);
+c.arc(dx * size, y * size, r * size, 0, Math.PI * 2);
+c.fill();
+c.restore();
+};
+k.smile = (y, w, col, catMouth) => {
+c.save();
+c.shadowBlur = 0;
+c.strokeStyle = col || "#2a1d2e";
+c.lineWidth = Math.max(1, size * .03);
+c.lineCap = "round";
+c.beginPath();
+if (catMouth) {
+c.arc(-w * .5 * size, y * size, w * .5 * size, 0, Math.PI);
+c.arc(w * .5 * size, y * size, w * .5 * size, 0, Math.PI);
+}
+else {
+c.arc(0, y * size - w * size * .4, w * size, Math.PI * .2, Math.PI * .8);
+}
+c.stroke();
+c.restore();
+};
+return k;
+}
+function r23Walk(c, x, y, size, seed, amt) {
+const t = performance.now() / 1000;
+c.translate(x, y + Math.sin(t * 4 + seed) * size * .05 * (amt === undefined ? 1 : amt));
+c.rotate(Math.sin(t * 5 + seed) * .07 * (amt === undefined ? 1 : amt));
+}
+const R23_PETS = {};
+R23_PETS.fox = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#ffb347", seed);
+const body = "#ff9a4d", cream = "#fff2e0";
+c.save();
+r23Walk(c, x, y, size, seed);
+c.save();
+c.translate(size * .32, size * .3);
+c.rotate(-.5 + Math.sin(k.t * 2.4 + seed) * .18);
+k.paint(() => { c.moveTo(0, 0); c.quadraticCurveTo(size * .5, -size * .15, size * .55, -size * .55); c.quadraticCurveTo(size * .25, -size * .35, 0, -size * .12); c.closePath(); }, body, .35);
+k.paint(() => { c.moveTo(size * .42, -size * .38); c.quadraticCurveTo(size * .55, -size * .45, size * .55, -size * .55); c.quadraticCurveTo(size * .42, -size * .5, size * .36, -size * .44); c.closePath(); }, cream, .2);
+c.restore();
+k.ell(-.17, .56, .11, .07, body, .3);
+k.ell(.17, .56, .11, .07, body, .3);
+k.ell(0, .22, .36, .36, body, .6);
+[-1, 1].forEach(s => k.poly([[s * .18, -.42], [s * .42, -.78], [s * .46, -.32]], body, .4));
+k.ell(0, -.18, .46, .36, body, 1);
+if (!k.back) {
+[-1, 1].forEach(s => k.poly([[s * .24, -.44], [s * .39, -.66], [s * .41, -.4]], "#5a2c1a", 0, .02));
+k.paint(() => { c.moveTo(-size * .42, -size * .1); c.quadraticCurveTo(-size * .2, size * .2, 0, size * .04); c.quadraticCurveTo(size * .2, size * .2, size * .42, -size * .1); c.quadraticCurveTo(size * .2, size * .12, 0, size * .08); c.quadraticCurveTo(-size * .2, size * .12, -size * .42, -size * .1); c.closePath(); }, cream, 0, .02);
+k.ell(0, .28, .2, .22, cream, 0, 0, .02);
+k.eyes(.17, -.2, .065);
+k.cheeks(.3, -.04, .06);
+c.fillStyle = "#2a1d2e";
+c.beginPath();
+c.ellipse(0, -size * .04, size * .05, size * .035, 0, 0, Math.PI * 2);
+c.fill();
+k.smile(.02, .05, null, true);
+}
+else {
+k.ell(0, .15, .18, .2, "#e8813a", 0, 0, .02);
+}
+c.restore();
+};
+R23_PETS.rover = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#ffb347", seed);
+const body = "#ffbe6b", dark = "#3a4255";
+c.save();
+c.translate(x, y + Math.abs(Math.sin(k.t * 6 + seed)) * -size * .03);
+c.strokeStyle = "#6b4a3a";
+c.lineWidth = Math.max(1, size * .05);
+c.beginPath();
+c.moveTo(-size * .45, size * .48);
+c.lineTo(-size * .2, size * .26);
+c.lineTo(size * .05, size * .48);
+c.moveTo(size * .45, size * .48);
+c.lineTo(size * .2, size * .26);
+c.stroke();
+const spin = k.t * 4 + seed;
+[-.45, 0.02, .45].forEach(wx => {
+k.ell(wx, .5, .13, .13, dark, .3, 0, .04, "#9fb4d0");
+c.save();
+c.translate(wx * size, .5 * size);
+c.rotate(spin);
+c.strokeStyle = "#9fb4d0";
+c.lineWidth = Math.max(1, size * .025);
+c.beginPath();
+for (let i = 0; i < 3; i++) {
+c.moveTo(0, 0);
+c.lineTo(Math.cos(i * 2.1) * size * .1, Math.sin(i * 2.1) * size * .1);
+}
+c.stroke();
+c.restore();
+});
+c.strokeStyle = "#6b4a3a";
+c.lineWidth = Math.max(1, size * .04);
+c.beginPath();
+c.moveTo(-size * .36, -size * .05);
+c.lineTo(-size * .5, -size * .5);
+c.moveTo(size * .36, -size * .05);
+c.lineTo(size * .46, -size * .55);
+c.stroke();
+c.save();
+c.translate(-size * .52, -size * .56);
+c.rotate(-.5 + Math.sin(k.t * .8 + seed) * .3);
+k.paint(() => { c.ellipse(0, 0, size * .15, size * .07, 0, 0, Math.PI); c.closePath(); }, "#e8eef8", .3);
+c.restore();
+k.ell(.46, -.6, .08, .08, "#ffd76b", .4);
+c.save();
+c.translate(0, -size * .38);
+c.rotate(Math.sin(k.t * .6 + seed) * .12);
+k.poly([[-.16, -.06], [.16, -.06], [.13, .06], [-.13, .06]], "#ff8a2b", .3);
+c.strokeStyle = "#ffd0a0";
+c.lineWidth = 1;
+c.beginPath();
+c.moveTo(0, -size * .06);
+c.lineTo(0, size * .06);
+c.stroke();
+c.restore();
+k.paint(() => {
+const w = size * .42, h = size * .3, r = size * .08;
+c.moveTo(-w + r, -h);
+c.lineTo(w - r, -h);
+c.quadraticCurveTo(w, -h, w, -h + r);
+c.lineTo(w, h * .9 - r);
+c.quadraticCurveTo(w, h * .9, w - r, h * .9);
+c.lineTo(-w + r, h * .9);
+c.quadraticCurveTo(-w, h * .9, -w, h * .9 - r);
+c.lineTo(-w, -h + r);
+c.quadraticCurveTo(-w, -h, -w + r, -h);
+c.closePath();
+}, body, 1);
+if (!k.back) {
+k.eyes(.14, -.04, .06);
+k.smile(.08, .07);
+k.cheeks(.27, .08, .05, "#ff8a5c");
+}
+else {
+c.strokeStyle = "#e8954a";
+c.lineWidth = Math.max(1, size * .025);
+c.strokeRect(-size * .25, -size * .15, size * .5, size * .3);
+}
+c.restore();
+};
+R23_PETS.alien = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#5cffb0", seed);
+const body = "#8dffc4";
+c.save();
+r23Walk(c, x, y, size, seed);
+[-1, 1].forEach(s => {
+const sway = Math.sin(k.t * 3 + seed + s) * .08;
+c.strokeStyle = "#5cffb0";
+c.lineWidth = Math.max(1, size * .035);
+c.beginPath();
+c.moveTo(s * size * .15, -size * .48);
+c.quadraticCurveTo(s * size * (.22 + sway), -size * .75, s * size * (.3 + sway), -size * .82);
+c.stroke();
+k.ell(s * (.3 + sway), -.84, .07, .07, "#ff6bd6", .8, 0, .03, "#ff9de6");
+});
+k.ell(-.16, .56, .1, .06, body, .3);
+k.ell(.16, .56, .1, .06, body, .3);
+[-1, 1].forEach(s => {
+c.save();
+c.translate(s * size * .36, size * .15);
+c.rotate(s * (.4 + Math.sin(k.t * 3.4 + seed) * .25));
+k.ell(0, .08, .06, .14, body, .3);
+c.restore();
+});
+k.paint(() => { c.moveTo(0, -size * .52); c.bezierCurveTo(size * .5, -size * .52, size * .52, size * .1, size * .4, size * .4); c.quadraticCurveTo(0, size * .62, -size * .4, size * .4); c.bezierCurveTo(-size * .52, size * .1, -size * .5, -size * .52, 0, -size * .52); c.closePath(); }, body, 1);
+if (!k.back) {
+k.ell(0, -.12, .2, .2, "#ffffff", 0, 0, .03, "#2a1d2e");
+c.save();
+c.shadowBlur = 0;
+const look = Math.sin(k.t * .9 + seed) * size * .05;
+c.fillStyle = "#2a1d2e";
+c.beginPath();
+c.arc(look, -size * .1, size * .11, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#fff";
+c.beginPath();
+c.arc(look - size * .04, -size * .15, size * .04, 0, Math.PI * 2);
+c.fill();
+c.restore();
+k.smile(.18, .08);
+k.cheeks(.26, .12, .05);
+}
+else {
+[[-.15, .05], [.12, -.15], [.05, .22]].forEach(([sx, sy]) => k.ell(sx, sy, .05, .05, "#5cdca0", 0, 0, .02));
+}
+c.restore();
+};
+R23_PETS.yeti = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#9fe8ff", seed);
+const fur = "#f4fbff", face = "#9fd0ff";
+c.save();
+r23Walk(c, x, y, size, seed, .8);
+k.ell(-.2, .56, .13, .08, "#cfe9ff", .3);
+k.ell(.2, .56, .13, .08, "#cfe9ff", .3);
+[-1, 1].forEach(s => {
+c.save();
+c.translate(s * size * .42, size * .1);
+c.rotate(s * (.25 + Math.sin(k.t * 2.6 + seed) * .12));
+k.ell(0, .12, .1, .2, fur, .3);
+c.restore();
+});
+k.paint(() => {
+const n = 14;
+for (let i = 0; i <= n; i++) {
+const a = i / n * Math.PI * 2 - Math.PI / 2;
+const r = .52 + (i % 2 ? .06 : 0);
+const px = Math.cos(a) * r * size, py = Math.sin(a) * r * 1.1 * size;
+i ? c.lineTo(px, py) : c.moveTo(px, py);
+}
+c.closePath();
+}, fur, 1);
+[-1, 1].forEach(s => k.poly([[s * .2, -.5], [s * .34, -.78], [s * .36, -.46]], "#bff6ff", .5));
+if (!k.back) {
+k.ell(0, -.1, .32, .28, face, 0, 0, .025);
+k.eyes(.13, -.14, .06);
+k.smile(.0, .07);
+k.cheeks(.22, -.02, .05, "#ff9ec7");
+}
+else {
+c.strokeStyle = "#cfe9ff";
+c.lineWidth = Math.max(1, size * .025);
+c.beginPath();
+c.moveTo(-size * .2, -size * .1);
+c.quadraticCurveTo(0, size * .05, size * .2, -size * .1);
+c.moveTo(-size * .18, size * .15);
+c.quadraticCurveTo(0, size * .3, size * .18, size * .15);
+c.stroke();
+}
+c.restore();
+};
+R23_PETS.slime = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#c7ff54", seed);
+c.save();
+const sq = Math.sin(k.t * 4.5 + seed);
+c.translate(x, y + size * .1);
+c.scale(1 + sq * .07, 1 - sq * .07);
+k.paint(() => {
+const w = size * .52;
+c.moveTo(-w, size * .42);
+c.bezierCurveTo(-w * 1.05, -size * .2, -w * .5, -size * .62, 0, -size * .62);
+c.bezierCurveTo(w * .5, -size * .62, w * 1.05, -size * .2, w, size * .42);
+for (let i = 3; i >= -3; i--) {
+const px = i / 3 * w;
+const drip = i % 2 === 0 ? size * .05 : size * .12 + Math.sin(k.t * 2 + i + seed) * size * .03;
+c.quadraticCurveTo(px + w / 6, size * .46 + drip * .5, px, size * .42 + drip * .3);
+}
+c.closePath();
+}, "rgba(170,255,90,.75)", 1);
+if (!k.back) {
+c.save();
+c.shadowBlur = 0;
+c.fillStyle = "rgba(255,255,255,.55)";
+c.beginPath();
+c.ellipse(-size * .24, -size * .36, size * .1, size * .05, -.6, 0, Math.PI * 2);
+c.fill();
+c.restore();
+k.eyes(.15, -.08, .07);
+k.smile(.08, .08);
+k.cheeks(.28, .06, .05, "#ff9ec7");
+}
+c.save();
+c.shadowBlur = 0;
+c.strokeStyle = "rgba(240,255,200,.8)";
+c.lineWidth = 1;
+for (let i = 0; i < 3; i++) {
+const ph = (k.t * .35 + i / 3 + seed * .1) % 1;
+c.beginPath();
+c.arc((i - 1) * size * .22, size * .35 - ph * size * .7, size * (.03 + .02 * i), 0, Math.PI * 2);
+c.stroke();
+}
+c.restore();
+c.restore();
+};
+R23_PETS.trike = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#7dffd0", seed);
+const body = "#8fc9a8", frill = "#f5c48a", horn = "#fff2d6";
+c.save();
+r23Walk(c, x, y, size, seed, .8);
+c.save();
+c.translate(size * .38, size * .3);
+c.rotate(.6 + Math.sin(k.t * 2.4 + seed) * .15);
+k.poly([[0, -.08], [.26, .06], [0, .08]], body, .3);
+c.restore();
+[-.22, .22].forEach(fx => k.ell(fx, .55, .12, .08, body, .3));
+k.ell(0, .25, .42, .33, body, .6);
+k.paint(() => {
+const n = 9, R = size * .5;
+c.moveTo(-R, -size * .02);
+for (let i = 0; i < n; i++) {
+const a0 = Math.PI + i / n * Math.PI, a1 = Math.PI + (i + 1) / n * Math.PI, am = (a0 + a1) / 2;
+c.quadraticCurveTo(Math.cos(am) * R * 1.18, -size * .14 + Math.sin(am) * R * 1.05, Math.cos(a1) * R, -size * .14 + Math.sin(a1) * R * .92 + (i === n - 1 ? size * .12 : 0));
+}
+c.closePath();
+}, frill, .6);
+c.save();
+c.shadowBlur = 0;
+c.fillStyle = "#e8956a";
+for (let i = 1; i < 6; i++) {
+const a = Math.PI + i / 6 * Math.PI;
+c.beginPath();
+c.arc(Math.cos(a) * size * .42, -size * .14 + Math.sin(a) * size * .38, size * .035, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+k.ell(0, -.12, .38, .32, body, 1);
+if (!k.back) {
+k.poly([[-.24, -.32], [-.3, -.62], [-.14, -.36]], horn, .3);
+k.poly([[.24, -.32], [.3, -.62], [.14, -.36]], horn, .3);
+k.poly([[-.05, .02], [0, -.14], [.05, .02]], horn, .2, .02);
+k.eyes(.17, -.18, .06);
+k.cheeks(.29, -.04, .055);
+k.smile(.06, .07);
+k.ell(0, .33, .24, .18, "#d8f0c8", 0, 0, .02);
+}
+else {
+[[-.2, .05], [0, .12], [.2, .05]].forEach(([sx, sy]) => k.poly([[sx - .05, sy], [sx, sy - .08], [sx + .05, sy]], frill, 0, .02));
+}
+c.restore();
+};
+R23_PETS.unicorn = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#ff9de6", seed);
+const coat = "#fdfbff", pink = "#ffa3cf", lilac = "#c9a6ff", mint = "#8ff0d6";
+c.save();
+r23Walk(c, x, y, size, seed);
+c.save();
+c.translate(size * .34, size * .2);
+c.rotate(-.2 + Math.sin(k.t * 3 + seed) * .15);
+[[mint, .0], [lilac, .05], [pink, .1]].forEach(([col, o]) => k.paint(() => { c.moveTo(0, -size * .05 + o * size); c.quadraticCurveTo(size * .4, -size * .25 + o * size, size * .45, size * .15 + o * size); c.quadraticCurveTo(size * .25, size * .02 + o * size, 0, size * .08 + o * size); c.closePath(); }, col, .3, .03));
+c.restore();
+const prance = Math.sin(k.t * 6 + seed) * .03;
+[-.2, -.06, .08, .22].forEach((hx, i) => k.ell(hx, .55 + (i % 2 ? prance : -prance) * .6, .07, .08, pink, .3, 0, .03));
+k.ell(0, .26, .4, .3, coat, .6);
+k.ell(0, -.14, .42, .36, coat, 1);
+[-1, 1].forEach(s => k.poly([[s * .18, -.42], [s * .32, -.64], [s * .38, -.36]], coat, .3));
+k.poly([[-.07, -.46], [0, -.86], [.07, -.46]], "#ffe08a", .8, .035, "#ffd25c");
+c.save();
+c.strokeStyle = "#d9a43a";
+c.lineWidth = 1;
+c.beginPath();
+c.moveTo(-size * .05, -size * .56);
+c.lineTo(size * .04, -size * .6);
+c.moveTo(-size * .03, -size * .68);
+c.lineTo(size * .03, -size * .71);
+c.stroke();
+c.restore();
+k.paint(() => { c.moveTo(-size * .1, -size * .5); c.quadraticCurveTo(size * .35, -size * .58, size * .42, -size * .15); c.quadraticCurveTo(size * .25, -size * .32, size * .05, -size * .36); c.closePath(); }, pink, .4, .03);
+k.paint(() => { c.moveTo(size * .3, -size * .4); c.quadraticCurveTo(size * .55, -size * .1, size * .4, size * .1); c.quadraticCurveTo(size * .4, -size * .15, size * .3, -size * .4); c.closePath(); }, mint, .3, .03);
+if (!k.back) {
+k.paint(() => { c.moveTo(-size * .12, -size * .5); c.quadraticCurveTo(-size * .38, -size * .42, -size * .3, -size * .18); c.quadraticCurveTo(-size * .2, -size * .36, -size * .02, -size * .38); c.closePath(); }, lilac, .3, .03);
+k.happyEyes(.15, -.14, .07);
+k.cheeks(.25, -.02, .065);
+k.smile(.0, .04, null, true);
+c.save();
+c.fillStyle = pink;
+c.translate(-size * .18, size * .28);
+c.scale(size * .004, size * .004);
+c.beginPath();
+c.moveTo(0, 4);
+c.bezierCurveTo(-9, -4, -4, -10, 0, -5);
+c.bezierCurveTo(4, -10, 9, -4, 0, 4);
+c.fill();
+c.restore();
+}
+else {
+k.paint(() => { c.moveTo(-size * .3, -size * .4); c.quadraticCurveTo(0, -size * .1, size * .3, -size * .4); c.quadraticCurveTo(0, -size * .25, -size * .3, -size * .4); c.closePath(); }, lilac, .3, .03);
+}
+const sp = (k.t * .5 + seed) % 1;
+c.save();
+c.globalAlpha *= 1 - sp;
+c.strokeStyle = "#fff2b3";
+c.lineWidth = 1.2;
+const sx = -size * .55, sy = -size * .4 - sp * size * .3, ss = size * .06;
+c.beginPath();
+c.moveTo(sx - ss, sy);
+c.lineTo(sx + ss, sy);
+c.moveTo(sx, sy - ss);
+c.lineTo(sx, sy + ss);
+c.stroke();
+c.restore();
+c.restore();
+};
+R23_PETS.dragon = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#ffb347", seed);
+const body = "#6fcf6a", belly = "#ffe0a3", wing = "#ff9a3a";
+c.save();
+r23Walk(c, x, y, size, seed, .8);
+c.save();
+c.translate(size * .3, size * .4);
+c.rotate(Math.sin(k.t * 2.2 + seed) * .12);
+k.paint(() => { c.moveTo(0, -size * .1); c.quadraticCurveTo(size * .45, -size * .05, size * .48, -size * .3); c.quadraticCurveTo(size * .38, size * .05, 0, size * .08); c.closePath(); }, body, .3);
+k.poly([[.44, -.28], [.56, -.4], [.5, -.22]], wing, .3, .025);
+c.restore();
+c.save();
+c.translate(size * .28, -size * .05);
+c.rotate(-.3 + Math.sin(k.t * 5 + seed) * .25);
+k.paint(() => { c.moveTo(0, 0); c.lineTo(size * .42, -size * .32); c.quadraticCurveTo(size * .36, -size * .1, size * .4, size * .04); c.quadraticCurveTo(size * .25, 0, size * .22, size * .12); c.quadraticCurveTo(size * .12, size * .04, 0, size * .12); c.closePath(); }, wing, .5, .035);
+c.restore();
+[-.2, .2].forEach(fx => k.ell(fx, .56, .12, .08, body, .3));
+k.ell(0, .26, .38, .32, body, .6);
+k.ell(0, -.14, .4, .36, body, 1);
+[-1, 1].forEach(s => k.poly([[s * .16, -.44], [s * .26, -.68], [s * .3, -.4]], "#4fa84a", .3));
+if (!k.back) {
+k.ell(0, .3, .22, .22, belly, 0, 0, .02);
+c.save();
+c.strokeStyle = "#e3b46a";
+c.lineWidth = 1;
+[.22, .3, .38].forEach(by => { c.beginPath(); c.moveTo(-size * .15, by * size); c.lineTo(size * .15, by * size); c.stroke(); });
+c.restore();
+k.eyes(.16, -.14, .075);
+k.cheeks(.28, 0, .06, "#ffab7a");
+k.smile(.06, .06);
+const puff = (k.t + seed * 1.7) % 6;
+if (puff < .6) {
+const f = puff / .6;
+c.save();
+c.globalAlpha *= 1 - f;
+c.fillStyle = "#ffd25c";
+c.shadowBlur = 12;
+c.shadowColor = "#ff9a3a";
+c.beginPath();
+c.arc(-size * (.2 + f * .3), size * .04 - f * size * .1, size * (.05 + f * .06), 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+}
+else {
+[[0, -.3], [0, -.1], [0, .1], [0, .3]].forEach(([sx, sy]) => k.poly([[sx - .06, sy], [sx, sy - .09], [sx + .06, sy]], wing, 0, .02));
+}
+c.restore();
+};
+R23_PETS.phoenix = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#ffd25c", seed);
+const body = "#ff7a3a", belly = "#ffd28a";
+c.save();
+c.translate(x, y + Math.sin(k.t * 3 + seed) * size * .08);
+for (let i = -1; i <= 1; i++) {
+const f = Math.sin(k.t * 9 + i * 2 + seed) * .06;
+c.save();
+c.translate(size * .2, size * .25);
+c.rotate(.5 + i * .35 + f);
+k.paint(() => { c.moveTo(0, -size * .06); c.quadraticCurveTo(size * .35, -size * .1, size * .48, 0); c.quadraticCurveTo(size * .35, size * .1, 0, size * .06); c.closePath(); }, i ? "#ffb347" : "#ffe45c", .6, .03, "#ff9a3a");
+c.restore();
+}
+[-1, 1].forEach(s => {
+c.save();
+c.translate(s * size * .36, size * .05);
+c.rotate(s * (.4 + Math.sin(k.t * 7 + seed) * .3));
+k.ell(0, .1, .1, .2, "#ff9a3a", .4, 0, .035);
+c.restore();
+});
+k.ell(-.1, .5, .06, .05, "#ffd25c", .2);
+k.ell(.1, .5, .06, .05, "#ffd25c", .2);
+k.ell(0, 0, .42, .46, body, 1);
+for (let i = -1; i <= 1; i++) {
+const f = Math.sin(k.t * 10 + i + seed) * .04;
+k.paint(() => { c.moveTo((i * .12 - .06) * size, -size * .4); c.quadraticCurveTo((i * .18 + f) * size, -size * .75, (i * .16 + f) * size, -size * .72); c.quadraticCurveTo((i * .1 + .06) * size, -size * .55, (i * .12 + .06) * size, -size * .4); c.closePath(); }, "#ffe45c", .6, .03, "#ff9a3a");
+}
+if (!k.back) {
+k.ell(0, .15, .25, .25, belly, 0, 0, .02);
+k.eyes(.15, -.1, .065);
+k.poly([[-.06, .0], [.06, .0], [0, .1]], "#ffd25c", 0, .02);
+k.cheeks(.27, .02, .05, "#ff5c7a");
+}
+c.restore();
+};
+R23_PETS.robot = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#58fff1", seed);
+const body = "#a9b8d6", screen = "#0b1a2e";
+c.save();
+r23Walk(c, x, y, size, seed, .6);
+c.strokeStyle = "#58fff1";
+c.lineWidth = Math.max(1, size * .035);
+c.beginPath();
+c.moveTo(0, -size * .5);
+c.lineTo(0, -size * .72);
+c.stroke();
+const blink = (Math.sin(k.t * 4 + seed) > 0) ? "#ff6bd6" : "#58fff1";
+k.ell(0, -.76, .06, .06, blink, .9, 0, .03, blink);
+k.ell(-.18, .56, .12, .07, "#7f8db0", .3);
+k.ell(.18, .56, .12, .07, "#7f8db0", .3);
+[-1, 1].forEach(s => {
+c.save();
+c.translate(s * size * .42, size * .12);
+c.rotate(s * (.2 + Math.sin(k.t * 3 + seed + s) * .3));
+k.paint(() => c.rect(-size * .05, 0, size * .1, size * .24), "#7f8db0", .3);
+k.ell(0, .28, .07, .07, "#58fff1", .4);
+c.restore();
+});
+k.paint(() => c.rect(-size * .3, size * .1, size * .6, size * .4), body, .5);
+k.paint(() => {
+const w = size * .42, h = size * .3, r = size * .1;
+c.moveTo(-w + r, -h - size * .2);
+c.lineTo(w - r, -h - size * .2);
+c.quadraticCurveTo(w, -h - size * .2, w, -h + r - size * .2);
+c.lineTo(w, h - r - size * .2);
+c.quadraticCurveTo(w, h - size * .2, w - r, h - size * .2);
+c.lineTo(-w + r, h - size * .2);
+c.quadraticCurveTo(-w, h - size * .2, -w, h - r - size * .2);
+c.lineTo(-w, -h + r - size * .2);
+c.quadraticCurveTo(-w, -h - size * .2, -w + r, -h - size * .2);
+c.closePath();
+}, body, 1);
+if (!k.back) {
+k.paint(() => c.rect(-size * .32, -size * .42, size * .64, size * .42), screen, 0, .025);
+c.save();
+c.shadowBlur = 8;
+c.shadowColor = "#58fff1";
+c.fillStyle = "#58fff1";
+const p = size * .06;
+const shut = (k.t + seed) % 4 < .15;
+[-1, 1].forEach(s => { if (shut)
+c.fillRect(s * size * .13 - p, -size * .24, p * 2, p * .5);
+else
+c.fillRect(s * size * .13 - p * .6, -size * .3, p * 1.2, p * 1.4); });
+c.fillRect(-p * 1.5, -size * .1, p * 3, p * .5);
+c.fillRect(-p * 2, -size * .12, p * .5, p * .5);
+c.fillRect(p * 1.5, -size * .12, p * .5, p * .5);
+c.restore();
+k.ell(0, .3, .08, .08, "#ffd76b", .5);
+}
+else {
+c.save();
+c.strokeStyle = "#7f8db0";
+c.lineWidth = 1;
+for (let i = 0; i < 3; i++) {
+c.beginPath();
+c.moveTo(-size * .2, (-size * .35) + i * size * .1);
+c.lineTo(size * .2, (-size * .35) + i * size * .1);
+c.stroke();
+}
+c.restore();
+}
+c.restore();
+};
+R23_PETS.starling = (c, x, y, size, energy, seed) => {
+const k = r23Kit(c, size, energy, "#fff2b3", seed);
+c.save();
+c.translate(x, y - size * .05 + Math.sin(k.t * 2.5 + seed) * size * .07);
+c.rotate(Math.sin(k.t * 1.5 + seed) * .12);
+k.paint(() => {
+for (let i = 0; i < 10; i++) {
+const a = -Math.PI / 2 + i * Math.PI / 5;
+const r = (i % 2 ? .3 : .62) * size;
+const px = Math.cos(a) * r, py = Math.sin(a) * r + size * .05;
+if (i === 0)
+c.moveTo(px, py);
+else {
+const pa = -Math.PI / 2 + (i - .5) * Math.PI / 5, pr = (i % 2 ? .48 : .4) * size;
+c.quadraticCurveTo(Math.cos(pa) * pr, Math.sin(pa) * pr + size * .05, px, py);
+}
+}
+const pa = -Math.PI / 2 - .5 * Math.PI / 5;
+c.quadraticCurveTo(Math.cos(pa) * .4 * size, Math.sin(pa) * .4 * size + size * .05, 0, -.62 * size + size * .05);
+c.closePath();
+}, "#fff6c8", 1, .045, "#ffd25c");
+if (!k.back) {
+k.eyes(.12, .02, .06);
+k.cheeks(.21, .13, .045, "#ffb3c6");
+k.smile(.14, .05);
+}
+c.save();
+c.shadowBlur = 8;
+c.shadowColor = "#c9a6ff";
+c.fillStyle = "#e0cfff";
+for (let i = 0; i < 3; i++) {
+const a = k.t * 1.4 + i * 2.1 + seed;
+const ox = Math.cos(a) * size * .7, oy = Math.sin(a) * size * .25 - size * .1;
+c.beginPath();
+c.arc(ox, oy, size * .035, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+c.restore();
+};
+const R23_INFO = {
+fox: { name: "Fox", icon: "🦊", pace: 1.3, forge: ["ricochet-orb", "solar-blade"] },
+rover: { name: "Rover", icon: "🚙", pace: .9, forge: ["return-capsule", "incinerator-beam"] },
+alien: { name: "Martian", icon: "👽", pace: 1.05, forge: ["ghost-shield", "emp"] },
+yeti: { name: "Yeti", icon: "❄️", pace: .8, forge: ["chrono-field", "ricochet-orb"] },
+slime: { name: "Slime", icon: "🫧", pace: .62, forge: ["regen-coil", "singularity"] },
+trike: { name: "Triceratops", icon: "🦕", pace: .85, forge: ["solar-blade", "ghost-shield"] },
+unicorn: { name: "Unicorn", icon: "🦄", pace: 1.3, forge: ["ricochet-orb", "regen-coil"] },
+dragon: { name: "Dragon", icon: "🐉", pace: 1, forge: ["incinerator-beam", "nova-burst"] },
+phoenix: { name: "Phoenix", icon: "🔥", pace: 1.2, forge: ["nova-burst", "regen-coil"] },
+robot: { name: "Robot", icon: "🤖", pace: .9, forge: ["emp", "return-capsule"] },
+starling: { name: "Starling", icon: "⭐", pace: 1.25, forge: ["chrono-field", "solar-blade"] }
+};
+Object.keys(R23_INFO).forEach(id => {
+const info = R23_INFO[id];
+SPECIES_DISPLAY_NAMES[id] = info.name;
+SPECIES_FLOURISH_ICONS[id] = info.icon;
+PET_SPECIES_PACE[id] = info.pace;
+FORGE_RECIPES[id] = info.forge;
+});
+let r23RankCache = null;
+function r23LockedRanks() {
+if (r23RankCache)
+return r23RankCache;
+const planets = PLANETS.slice().sort((a, b) => (a.unlockRank || 0) - (b.unlockRank || 0));
+const entries = [];
+for (let layer = 0; layer < 20; layer++) {
+planets.forEach(p => {
+const roster = PET_ROSTER_BY_PLANET[p.id] || [];
+if (roster.length > 3 + layer)
+entries.push({ planet: p, index: 3 + layer });
+});
+}
+const lowest = 2, highest = RANK_TIERS.length;
+const step = entries.length ? Math.max(1, Math.min(3, Math.floor((highest - lowest) / entries.length))) : 1;
+const map = {};
+let last = lowest;
+entries.forEach((e, i) => {
+const floor = (e.planet.unlockRank || 0) + 1;
+const want = i === 0 ? 3 : last + step;
+const rank = Math.min(highest, Math.max(want, floor, last + 1));
+map[e.planet.id + ":" + e.index] = rank;
+last = rank;
+});
+r23RankCache = map;
+return map;
+}
+function getPetStyleUnlockRank(planetId, styleIndex) {
+if (styleIndex < 3)
+return null;
+const r = r23LockedRanks()[planetId + ":" + styleIndex];
+return r === undefined ? getPetStyleUnlockRank__orig(planetId, styleIndex) : r;
+}
+function r23PetStart(petId) {
+const spot = world.petSpots && world.petSpots[petId];
+if (!spot || Date.now() - spot.at > 4000 || spot.planet !== selectedStartPlanet)
+return null;
+let lat = spot.lat, lon = spot.lon;
+const blockers = Object.values(world.structureLatLon || {}).concat([{ lat: SHIP_LAT, lon: 0 }]);
+for (let i = 0; i < 6; i++) {
+const near = blockers.some(b => Math.hypot(b.lat - lat, (b.lon - lon) * Math.cos(lat)) < .13);
+if (!near)
+break;
+lat -= .045;
+}
+return { lat, lon };
+}
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "trap-feed") {
@@ -22236,6 +22960,9 @@ drawGorillaPet(c, x, y, size, energy, walkSeed);
 else if (species === "rex") {
 drawRexPet(c, x, y, size, energy, walkSeed);
 }
+else if (typeof R23_PETS !== "undefined" && R23_PETS[species]) {
+R23_PETS[species](c, x, y, size, energy, walkSeed);
+}
 else {
 const speciesInfo = getPetSpeciesForPlanet(planetId);
 const time = performance.now() / 1000;
@@ -25327,6 +26054,13 @@ roamingHeadingUp = false;
 roamingTerrainPace = 1;
 roamingLat = SHIP_LAT - ROAM_START_LAT_OFFSET * 1.6;
 roamingLon = .12;
+{
+const r23Start = r23PetStart(petId);
+if (r23Start) {
+roamingLat = r23Start.lat;
+roamingLon = r23Start.lon;
+}
+}
 if (pet.workingAt) {
 const site = exploreLayout(planetId).ruins.find(r => r.id === pet.workingAt);
 if (site) {
@@ -30742,6 +31476,7 @@ latWander * .3
 : Math.PI / 2 -
 SURFACE_ITEM_LAT_OFFSET) +
 latWander;
+(world.petSpots || (world.petSpots = {}))[pet.id] = { lat: petLat, lon: petLon, at: Date.now(), planet: selectedStartPlanet };
 const petProj = projectSphere(petLat, petLon, roamViewLat, roamViewLon, cx, cy, radius);
 if (!petProj.visible) {
 if (petProj.z <= HORIZON_SINK_Z)
