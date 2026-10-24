@@ -3194,7 +3194,10 @@ color:var(--ink);transition:transform .12s ease;}
 .pvp-icon img{height:20px;width:20px;}
 .pvp-icon i{font-style:normal;font-size:10px;color:#8fa7c7;}
 .pvp-row small{color:#c9b3e6;}
-.pvp-none{color:#5c7ba0;}</style>
+.pvp-none{color:#5c7ba0;}
+.go-planet.go-recommended{border-color:#7dffb0 !important;box-shadow:0 0 0 2px rgba(125,255,176,.55),0 0 22px rgba(125,255,176,.45) !important;animation:goRecPulse 1.6s ease-in-out infinite;position:relative;}
+@keyframes goRecPulse{50%{box-shadow:0 0 0 2px rgba(125,255,176,.25),0 0 10px rgba(125,255,176,.2);}}
+.go-rec-badge{display:block;margin-top:4px;font-size:10px;font-weight:900;letter-spacing:.04em;color:#7dffb0;text-transform:uppercase;}</style>
 
 </head>
 
@@ -10822,7 +10825,7 @@ const BOSS_SAT_RING = 250;
 const BOSS_PETS = 8;
 const BOSS_PET_HP = 100;
 const BOSS_STAGE_MS = 210000;
-const BOSS_ATTACK_GAP_MS = 360000;
+const BOSS_ATTACK_GAP_MS = 240000;
 const BOSS_PET_POWERS = ["incinerator-beam", "emp", "ricochet-orb", "singularity", "chrono-field"];
 const BOSS_PET_SPECIES = ["cat", "penguin", "gorilla", "koala", "rex"];
 const BOSS_STAGE_TEXT = ["", "massing in the asteroid field", "fighting in orbit", "on the ground, stealing"];
@@ -10956,6 +10959,16 @@ if (s.hp <= 0)
 s.deadAt = Date.now();
 }
 }
+else if (ev.t === "plant") {
+if (!b.plant)
+b.plant = {};
+const key = String(ev.key || "");
+const max = Math.max(1, Number(ev.max) || 1);
+const before = b.plant[key] || 0;
+const dealt = Math.max(0, Math.min(n, max - before));
+b.plant[key] = before + dealt;
+b.hp = Math.max(0, b.hp - dealt * (Number(ev.v) || 0));
+}
 else if (ev.t === "pet") {
 const p = b.pets[ev.i];
 if (p && p.hp > 0) {
@@ -11027,10 +11040,10 @@ bossMark();
 });
 if (b.attack)
 bossRaidTick(b, now);
-else if (b.hp < b.maxHp * .85 &&
+else if (b.hp < b.maxHp * .995 &&
 now - (b.lastAttackAt || 0) > BOSS_ATTACK_GAP_MS &&
 b.coins >= 60 &&
-Math.random() < 1 / 30)
+Math.random() < 1 / 12)
 bossLaunchRaid(b, now);
 enemyFleetTick(b, now);
 bossSiegeTick(b, now);
@@ -11150,6 +11163,7 @@ function bossRaidSucceeded(b) {
 const a = b.attack;
 const heal = a.ships * 150;
 b.hp = Math.min(b.maxHp, b.hp + heal);
+r28Regrow(b, heal);
 b.coins += a.cost + (a.loot.coins || 0) + a.ships * 10;
 Object.keys(a.loot.mats).forEach(id => b.loot.mats[id] = (b.loot.mats[id] || 0) + a.loot.mats[id]);
 b.raidsWon = (b.raidsWon || 0) + 1;
@@ -13080,11 +13094,11 @@ const size = Math.max(24, p.width * .068);
 const list = bossSurfaceEnemies(planet, b);
 list.forEach(en => {
 const guard = en.kind === "boss" ? en.i < 4 : en.i < 3;
-const ll = plantAlertPull(bossPetLatLon(en.seed, T, guard), en.seed, now);
+const ll = r28EnemyPos(en, bossPetLatLon(en.seed, T, guard), now);
 const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!pr.visible)
 return;
-const ahead = plantAlertPull(bossPetLatLon(en.seed, T + .5, guard), en.seed, now + 500);
+const ahead = r28EnemyAhead(en, ll);
 const pa = projectSphere(ahead.lat, ahead.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 const facing = pa.x < pr.x ? -1 : 1;
 const spot = { en, x: pr.x, y: pr.y, size, owner };
@@ -15124,22 +15138,8 @@ buttons: pilots.length ? pilots : [{ label: "Ship details", action: () => { worl
 });
 return true;
 }
-const PLANT_ROOTS = [
-[1.32, -.42, 1.2, -.16],
-[1.16, .48, 1.04, .76],
-[.86, 2.2, .74, 2.5],
-[.7, -2.1, .86, -2.42],
-[1.0, 3.6, .88, 3.9],
-[.6, 1.36, .5, 1.7],
-[1.38, .9, 1.3, 1.18]
-];
-const PLANT_BLOOMS = [
-{ lat: .95, lon: Math.PI, s: 1.5, heart: true },
-{ lat: 1.28, lon: -.95, s: .9 },
-{ lat: 1.24, lon: 1.02, s: .85 },
-{ lat: .75, lon: Math.PI + 1.1, s: 1 },
-{ lat: .78, lon: Math.PI - 1.15, s: 1 }
-];
+const PLANT_ROOTS = r28PlantRoots();
+const PLANT_BLOOMS = r28PlantBlooms();
 const plantState = { alertUntil: 0, alertStart: 0, parts: [], shake: {}, screamAt: 0 };
 function plantColour(b) {
 if (b.defeated)
@@ -15154,24 +15154,28 @@ const look = plantColour(b);
 const t = now / 1000;
 const pulse = .5 + .5 * Math.sin(t * (1.2 + look.hurt * 4));
 PLANT_ROOTS.forEach((rt, i) => {
+if (r28PartDead(b, "root", i))
+return;
 const a = projectSphere(rt[0], rt[1], p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 const bb = projectSphere(rt[2], rt[3], p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!a.visible || !bb.visible)
 return;
 const d = Math.hypot(bb.x - a.x, bb.y - a.y);
 const mx = (a.x + bb.x) / 2, my = (a.y + bb.y) / 2 - Math.max(30, d * .55);
-const part = { kind: "root", i, x: mx, y: my + d * .18, r: Math.max(26, d * .3), owner };
+const part = { kind: "root", i, x: mx, y: my + d * .18, r: Math.max(26, d * .3), owner, lat: (rt[0] + rt[2]) / 2, lon: (rt[1] + rt[3]) / 2 };
 plantState.parts.push(part);
-queue.push({ r20Fade: 1, z: p.groundDepthAt(mx, (a.y + bb.y) / 2), alpha: 1, draw: () => plantDrawRoot(p.c, a, bb, mx, my, look, pulse, i, now, part) });
+queue.push({ r20Fade: 1, z: p.groundDepthAt(mx, (a.y + bb.y) / 2), alpha: 1, draw: () => { plantDrawRoot(p.c, a, bb, mx, my, look, pulse, i, now, part); r28PartBar(p.c, part, b); } });
 });
 PLANT_BLOOMS.forEach((bl, i) => {
+if (r28PartDead(b, "bloom", i))
+return;
 const pr = projectSphere(bl.lat, bl.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!pr.visible)
 return;
 const s = Math.max(30, p.width * .085) * bl.s;
-const part = { kind: "bloom", i, heart: !!bl.heart, x: pr.x, y: pr.y - s * 1.05, r: s * .6, owner };
+const part = { kind: "bloom", i, heart: !!bl.heart, x: pr.x, y: pr.y - s * 1.05, r: s * .6, owner, lat: bl.lat, lon: bl.lon };
 plantState.parts.push(part);
-queue.push({ anchor: pr, z: p.groundDepthAt(pr.x, pr.y), alpha: 1, draw: () => plantDrawBloom(p.c, pr.x, pr.y, s, look, pulse, i, now, part, b) });
+queue.push({ anchor: pr, z: p.groundDepthAt(pr.x, pr.y), alpha: 1, draw: () => { plantDrawBloom(p.c, pr.x, pr.y, s, look, pulse, i, now, part, b); r28PartBar(p.c, part, b); } });
 });
 }
 function plantShakeOff(part, now) {
@@ -15306,7 +15310,7 @@ text: "Nemesis is a viral plant. It took root here and infected the whole world 
 buttons: []
 });
 }
-function plantDamage(part, n, how) {
+function plantDamage__old(part, n, how) {
 const pb = bossState(part.owner);
 if (!pb || pb.defeated)
 return;
@@ -16230,6 +16234,7 @@ grid.className = "go-planet-grid";
 tiles.forEach(t => grid.appendChild(t));
 originals.forEach(btn => btn.style.display = "none");
 container.appendChild(grid);
+r28RecommendTile();
 goBuild();
 goRenderRank();
 }
@@ -16639,7 +16644,7 @@ mpSend({ type: "fieldEvent", event: { kind: "coPower", ownerId: coPilotFollowing
 floatingText(AIMED_RUN_POWERUPS.includes(currentShipEquipment) || isForgedItemId(currentShipEquipment) ? "ARMED — TAP TO AIM" : "FIRED", W / 2, H / 2 - 60, "#ffe45c");
 }, { capture: true });
 }, 0);
-function r18OnNet(fromId, event) {
+function r18OnNet__r28(fromId, event) {
 if (!event || event.kind !== "coPower")
 return false;
 if (running && worldState === "field" &&
@@ -19644,7 +19649,7 @@ function r27Smooth(t) {
 t = Math.max(0, Math.min(1, t));
 return t * t * (3 - 2 * t);
 }
-function r27PetSpot(pet, seed, index, working, lat, lon, time) {
+function r27PetSpot__old(pet, seed, index, working, lat, lon, time) {
 if (working)
 return { lat, lon };
 const cen = r26PenCentre();
@@ -20092,6 +20097,329 @@ pop.style.top = top + "px";
 r27Pop = pop;
 }, true);
 window.addEventListener("scroll", r27HidePop, true);
+function r28PathPoint(pts, f) {
+const lens = [];
+let total = 0;
+for (let i = 1; i < pts.length; i++) {
+const d = Math.hypot(pts[i].lat - pts[i - 1].lat, (pts[i].lon - pts[i - 1].lon) * Math.cos(pts[i].lat));
+lens.push(d);
+total += d;
+}
+let want = Math.max(0, Math.min(1, f)) * total;
+for (let i = 0; i < lens.length; i++) {
+if (want <= lens[i] || i === lens.length - 1) {
+const t = lens[i] ? Math.min(1, want / lens[i]) : 1;
+return { lat: pts[i].lat + (pts[i + 1].lat - pts[i].lat) * t, lon: pts[i].lon + (pts[i + 1].lon - pts[i].lon) * t };
+}
+want -= lens[i];
+}
+return pts[pts.length - 1];
+}
+function r27PetSpot(pet, seed, index, working, lat, lon, time) {
+if (working)
+return { lat, lon };
+const cen = r26PenCentre();
+const R = R26_PEN.r;
+const cosL = Math.cos(cen.lat);
+const tired = (pet.energy || 0) < 40;
+const inT = tired ? 40 : 26, outT = tired ? 2 : 16, walkT = 11;
+const P = inT + outT + walkT * 2;
+const t = (time + seed * 5.3 + index * 7.1) % P;
+const a = time * .05 * (seed % 2 ? 1 : -1) + seed;
+const rr = R * .55 * (.35 + .65 * Math.abs(Math.sin(time * .03 + seed)));
+const pen = { lat: cen.lat + Math.cos(a) * rr * .85, lon: Math.sin(a) * rr / cosL };
+const out = { lat, lon };
+if (t < inT)
+return pen;
+if (t >= inT + walkT && t < inT + walkT + outT)
+return out;
+const side = Math.abs(out.lon) > .05 ? Math.sign(out.lon) : (seed % 2 ? 1 : -1);
+const path = [
+pen,
+{ lat: cen.lat - R * .72, lon: 0 },
+{ lat: cen.lat - R * 1.3, lon: 0 },
+{ lat: cen.lat - R * .15, lon: side * R * 1.5 / cosL },
+out
+];
+const f = t < inT + walkT ? (t - inT) / walkT : 1 - (t - (inT + walkT + outT)) / walkT;
+return r28PathPoint(path, f);
+}
+const R28_PLANT_HITS = { root: 5, bloom: 8, heart: 20 };
+function r28Spread(n, offset, latMin, latMax) {
+const out = [];
+const s0 = Math.sin(latMin), s1 = Math.sin(latMax);
+for (let i = 0; i < n; i++) {
+const lat = Math.asin(s0 + (s1 - s0) * (i + .5) / n);
+let lon = ((i * 2.39996 + offset) % (Math.PI * 2)) - Math.PI;
+if (lat > .7 && Math.abs(lon) < .95)
+lon += lon < 0 ? -1.3 : 1.3;
+out.push({ lat, lon });
+}
+return out;
+}
+function r28PlantRoots() {
+return r28Spread(16, 2.1, -1.3, 1.38).map((p, i) => {
+const a = i * 1.7;
+return [p.lat, p.lon, p.lat + Math.cos(a) * .12, p.lon + Math.sin(a) * .3];
+});
+}
+function r28PlantBlooms() {
+const list = [{ lat: .95, lon: Math.PI, s: 1.5, heart: true }];
+r28Spread(9, .7, -1.25, 1.3).forEach((p, i) => list.push({ lat: p.lat, lon: p.lon, s: .82 + ((i * 37) % 30) / 100 }));
+return list;
+}
+function r28PartKey(kind, i) {
+return (kind === "root" ? "r" : "b") + i;
+}
+function r28PartMax(kind, i) {
+if (kind === "root")
+return R28_PLANT_HITS.root;
+return PLANT_BLOOMS[i] && PLANT_BLOOMS[i].heart ? R28_PLANT_HITS.heart : R28_PLANT_HITS.bloom;
+}
+function r28TotalHits() {
+let n = PLANT_ROOTS.length * R28_PLANT_HITS.root;
+PLANT_BLOOMS.forEach(bl => n += bl.heart ? R28_PLANT_HITS.heart : R28_PLANT_HITS.bloom);
+return n;
+}
+function r28HitValue(b) {
+return (b && b.maxHp || BOSS_MAX_HP) / r28TotalHits();
+}
+function r28PartHits(b, kind, i) {
+return ((b && b.plant) || {})[r28PartKey(kind, i)] || 0;
+}
+function r28PartDead(b, kind, i) {
+return r28PartHits(b, kind, i) >= r28PartMax(kind, i);
+}
+function r28Regrow(b, heal) {
+if (!b || !b.plant)
+return;
+let hits = Math.round(heal / r28HitValue(b));
+const keys = Object.keys(b.plant).sort(() => Math.random() - .5);
+while (hits > 0 && keys.length) {
+const k = keys[0];
+if (b.plant[k] > 0) {
+b.plant[k]--;
+hits--;
+}
+if (!b.plant[k])
+keys.shift();
+}
+}
+const r28Alerts = [];
+function r28AddAlert(lat, lon) {
+const now = performance.now();
+const near = r28Alerts.find(a => Math.hypot(a.lat - lat, a.lon - lon) < .05);
+if (near)
+near.until = now + 12000;
+else
+r28Alerts.push({ lat, lon, until: now + 12000 });
+}
+const R28_DROPS = ["emp", "incinerator-beam", "ricochet-orb", "singularity", "solar-blade", "chrono-field", "regen-coil", "ghost-shield", "nova-burst"];
+function plantDamage(part, n, how) {
+const pb = bossState(part.owner);
+if (!pb || pb.defeated)
+return;
+if (r28PartDead(pb, part.kind, part.i))
+return;
+const now = performance.now();
+const hits = how === "tap" ? 1 : Math.max(1, Math.round(n / 8));
+const before = r28PartHits(pb, part.kind, part.i);
+const max = r28PartMax(part.kind, part.i);
+const dealt = Math.min(hits, max - before);
+bossApply(part.owner, { t: "plant", key: r28PartKey(part.kind, part.i), max, n: dealt, v: r28HitValue(pb) });
+plantState.shake[part.kind + part.i] = now;
+bossSurfText(part.x, part.y - part.r * .6, "−" + Math.round(dealt * r28HitValue(pb)), "#ff9de6");
+bossSurf.fx.push({ k: "shield", x: part.x, y: part.y, colour: "#ff9de6", t0: now, ms: 350 });
+bossSfx(how === "tap" ? "hit" : "gong", part.x);
+if (before + dealt >= max) {
+const drops = part.heart ? 3 : 1;
+for (let i = 0; i < drops; i++) {
+const id = R28_DROPS[Math.floor(Math.random() * R28_DROPS.length)];
+try {
+worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat - .05 + i * .02, lon: part.lon + (i - 1) * .05 } }, { k: "item", r: id, n: 1 });
+}
+catch (error) { }
+}
+if (part.heart) {
+try {
+worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat - .08, lon: part.lon } }, { k: "coin", r: "coin", n: 25 });
+}
+catch (error) { }
+}
+bossSurf.fx.push({ k: "shield", x: part.x, y: part.y, colour: "#ffd76b", t0: now, ms: 900 });
+showShipToast(part.heart ? "💥 The heart bloom bursts — it dropped a stash of powerups!" : part.kind === "root" ? "🥀 A thorned root rots away — it left something behind" : "🥀 A void bloom wilts — it left something behind");
+}
+r28AddAlert(part.lat, part.lon);
+if (typeof mp !== "undefined" && mp.connected)
+mpSend({ type: "fieldEvent", event: { kind: "plantAlert", owner: part.owner, lat: part.lat, lon: part.lon } });
+if (now > plantState.alertUntil - 9000) {
+plantState.alertStart = plantState.alertUntil > now ? plantState.alertStart : now;
+plantState.alertUntil = now + 12000;
+bossSfx("snarl", part.x);
+if (now - plantState.screamAt > 15000) {
+plantState.screamAt = now;
+showShipToast("🥀 The plant shrieks — its void guards are coming!");
+}
+}
+else
+plantState.alertUntil = Math.max(plantState.alertUntil, now + 12000);
+}
+function r28PartBar(c, part, b) {
+const hits = r28PartHits(b, part.kind, part.i);
+if (!hits)
+return;
+const max = r28PartMax(part.kind, part.i);
+const w = Math.max(26, part.r * 1.1), h = 4;
+const x = part.x - w / 2, y = part.y - part.r - 10;
+c.save();
+c.fillStyle = "rgba(10,4,16,.85)";
+c.fillRect(x - 1, y - 1, w + 2, h + 2);
+c.fillStyle = "#ff4fd8";
+c.shadowColor = "#ff4fd8";
+c.shadowBlur = 6;
+c.fillRect(x, y, w * (1 - hits / max), h);
+c.restore();
+}
+const r28Guards = {};
+function r28Wrap(d) {
+return ((d + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
+function r28NearestAlert(g, now) {
+let best = null, bd = Infinity;
+for (let i = r28Alerts.length - 1; i >= 0; i--) {
+const a = r28Alerts[i];
+if (a.until < now) {
+r28Alerts.splice(i, 1);
+continue;
+}
+const d = Math.hypot(a.lat - g.lat, r28Wrap(a.lon - g.lon) * Math.cos(g.lat));
+if (d < bd) {
+bd = d;
+best = a;
+}
+}
+return best;
+}
+function r28NearestRoamer(g) {
+const list = [];
+if (roamingActive && selectedStartPlanet === NEM && !roomState)
+list.push({ lat: roamingLat, lon: roamingLon });
+try {
+if (typeof mpGetRemoteRoamersHere === "function")
+mpGetRemoteRoamersHere().forEach(r => r.presence && list.push({ lat: r.presence.lat, lon: r.presence.lon }));
+}
+catch (error) { }
+let best = null, bd = Infinity;
+list.forEach(p => {
+const d = Math.hypot(p.lat - g.lat, r28Wrap(p.lon - g.lon) * Math.cos(g.lat));
+if (d < bd) {
+bd = d;
+best = p;
+}
+});
+return best ? { lat: best.lat, lon: best.lon, d: bd } : null;
+}
+function r28EnemyPos(en, patrol, now) {
+const key = (en.kind || "e") + ":" + en.i;
+let g = r28Guards[key];
+if (!g || now - g.at > 4000)
+g = r28Guards[key] = { lat: patrol.lat, lon: patrol.lon, at: now, dLat: 0, dLon: 0 };
+const dt = Math.min(.1, Math.max(0, (now - g.at) / 1000));
+g.at = now;
+let target = patrol, speed = .05;
+const alert = r28NearestAlert(g, now);
+if (alert) {
+speed = .075;
+target = { lat: alert.lat + Math.sin(en.seed * 2.7) * .035, lon: alert.lon + Math.cos(en.seed * 2.7) * .06 };
+const prey = r28NearestRoamer(g);
+if (prey && prey.d < .16)
+target = { lat: prey.lat + Math.sin(en.seed * 2.7) * .025, lon: prey.lon + Math.cos(en.seed * 2.7) * .04 };
+}
+const dLat = target.lat - g.lat, dLon = r28Wrap(target.lon - g.lon);
+const dist = Math.hypot(dLat, dLon * Math.cos(g.lat));
+if (!alert && dist < .015) {
+g.dLat = patrol.lat - g.lat;
+g.dLon = r28Wrap(patrol.lon - g.lon);
+g.lat = patrol.lat;
+g.lon = patrol.lon;
+}
+else if (dist > 1e-4) {
+const step = Math.min(dist, speed * dt);
+g.dLat = dLat / dist * step;
+g.dLon = dLon / dist * step;
+g.lat += g.dLat;
+g.lon = r28Wrap(g.lon + g.dLon);
+}
+return { lat: g.lat, lon: g.lon };
+}
+function r28EnemyAhead(en, ll) {
+const g = r28Guards[(en.kind || "e") + ":" + en.i];
+if (!g)
+return ll;
+return { lat: ll.lat + g.dLat * 20, lon: ll.lon + g.dLon * 20 };
+}
+function r18OnNet(fromId, event) {
+if (event && event.kind === "plantAlert") {
+r28AddAlert(Number(event.lat) || 0, Number(event.lon) || 0);
+return true;
+}
+return r18OnNet__r28(fromId, event);
+}
+function r28StructureLabel(item) {
+if (item.structureId === "shop")
+return "Shop";
+if (item.structureId === "stock")
+return "Vault";
+if (item.structureId === "board")
+return "Boards";
+return (STRUCTURES[item.structureId] || {}).name || "";
+}
+function r28DrawLabel(c, item, ix, iy, iconSize) {
+if (item.kind !== "structure" || roomState)
+return;
+const name = r28StructureLabel(item);
+if (!name)
+return;
+const M = r20Matrix(ix, iy, "radial");
+const h = iconSize * 1.32;
+const x = ix - M.c * h, y = iy - M.d * h;
+const fs = Math.max(8, Math.round(iconSize * .14));
+c.save();
+c.font = "800 " + fs + "px system-ui,sans-serif";
+const tw = c.measureText(name).width + 10;
+c.fillStyle = "rgba(6,10,26,.78)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - tw / 2, y - fs * .75, tw, fs * 1.5, fs * .75);
+else
+c.rect(x - tw / 2, y - fs * .75, tw, fs * 1.5);
+c.fill();
+c.strokeStyle = "rgba(127,216,255,.45)";
+c.lineWidth = 1;
+c.stroke();
+c.fillStyle = "#eafcff";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(name, x, y + .5);
+c.restore();
+}
+function r28RecommendTile() {
+const grid = document.querySelector("#gameOverReturnButtons .go-planet-grid");
+if (!grid)
+return;
+const withShip = [...grid.querySelectorAll(".go-planet.has-ship")];
+if (!withShip.length)
+return;
+const pick = withShip[Math.floor(Math.random() * withShip.length)];
+pick.classList.add("go-recommended");
+if (!pick.querySelector(".go-rec-badge")) {
+const badge = document.createElement("span");
+badge.className = "go-rec-badge";
+badge.textContent = "▶ Fly from here";
+pick.appendChild(badge);
+}
+grid.insertBefore(pick, grid.firstChild);
+}
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
 if (action === "trap-feed") {
@@ -32983,6 +33311,8 @@ c.font =
 c.fillText("×" + item.badge, iconSize * .5, -iconSize * .9);
 }
 c.restore();
+if (mode === "draw" || mode === "draw-sinking")
+r28DrawLabel(c, item, ix, iy, iconSize);
 canvas._focusHitAreas.push({
 x: ix,
 y: iy - iconSize * .4,
