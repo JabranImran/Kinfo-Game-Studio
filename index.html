@@ -14103,7 +14103,7 @@ console.error("Pet combat failed:", error);
 }
 return result;
 }
-function roamingPaceNow() {
+function roamingPaceNow__r31() {
 const base = roamingPaceNow__orig();
 const slow = roamingPetId && bossPetSlow[roamingPetId];
 if (slow && slow.until > performance.now())
@@ -21630,7 +21630,7 @@ return;
 }
 return enterRoomView__r30(kind, id);
 }
-function r29StructPowerHit(kind, shape, pet) {
+function r29StructPowerHit__r31(kind, shape, pet) {
 if (selectedStartPlanet === NEM)
 return r29StructPowerHit__r30(kind, shape);
 const n = PLANT_POWER_DAMAGE[kind];
@@ -21954,6 +21954,1461 @@ return;
 }
 return featureExecuteAction__r30(action, target, planetId);
 }
+const R31_DEFS = {
+mars: { boss: "keeper", name: "The Keeper", tag: "blind · hunts by sound", col: "#ff8a5c", lat: -.22, lon: Math.PI + .35,
+hint: "It can't see you — but it hears every running step. Creep, and it walks right past." },
+neptune: { boss: "watcher", name: "The Watcher", tag: "one great eye · hunts by sight", col: "#ffe27a", lat: -.3, lon: Math.PI - .4,
+hint: "Stay out of its lantern-light. Behind it, or under cover, you're invisible." },
+titan: { boss: "gourmand", name: "The Gourmand", tag: "always hungry · follows your scent", col: "#9dff7a", lat: -.18, lon: Math.PI + .1,
+hint: "Everywhere you walk leaves a scent trail. Hide and stay still, and the trail goes cold." }
+};
+const R31_GLYPHS = ["☾", "✦", "◆", "▲", "●"];
+const R31 = {
+puddle: .05,
+arena: 1.0,
+hide: .055,
+lantern: .055,
+pile: .05,
+sneak: 1.6,
+catchR: .045,
+pace: .3
+};
+const R31_SPEED = {
+keeper: { patrol: .07, look: .16, chase: .3 },
+watcher: { patrol: .06, look: .15, chase: .28 },
+gourmand: { patrol: .05, look: .12, chase: .15, charge: .55 }
+};
+let r31Run = null;
+let r31Screen = null;
+let r31Off = null;
+let r31Seen = {};
+function r31V(lat, lon) {
+const c = Math.cos(lat);
+return [c * Math.sin(lon), Math.sin(lat), c * Math.cos(lon)];
+}
+function r31LL(v) {
+return { lat: Math.asin(Math.max(-1, Math.min(1, v[1]))), lon: Math.atan2(v[0], v[2]) };
+}
+function r31Dot(a, b) {
+return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+function r31Norm(a) {
+const l = Math.hypot(a[0], a[1], a[2]) || 1;
+return [a[0] / l, a[1] / l, a[2] / l];
+}
+function r31Cross(a, b) {
+return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+function r31Ang(a, b) {
+return Math.acos(Math.max(-1, Math.min(1, r31Dot(a, b))));
+}
+function r31Tan(n, t) {
+const d = r31Dot(n, t);
+return r31Norm([t[0] - n[0] * d, t[1] - n[1] * d, t[2] - n[2] * d]);
+}
+function r31Flat(n, f) {
+const d = r31Dot(n, f);
+return r31Norm([f[0] - n[0] * d, f[1] - n[1] * d, f[2] - n[2] * d]);
+}
+function r31Go(n, dir, d) {
+const c = Math.cos(d), s = Math.sin(d);
+return r31Norm([n[0] * c + dir[0] * s, n[1] * c + dir[1] * s, n[2] * c + dir[2] * s]);
+}
+function r31Turn(n, dir, a) {
+const side = r31Cross(n, dir);
+const c = Math.cos(a), s = Math.sin(a);
+return r31Norm([dir[0] * c + side[0] * s, dir[1] * c + side[1] * s, dir[2] * c + side[2] * s]);
+}
+function r31At(n, bearing, d) {
+let e = r31Cross([0, 1, 0], n);
+if (Math.hypot(e[0], e[1], e[2]) < 1e-3)
+e = [1, 0, 0];
+e = r31Norm(e);
+const nn = r31Cross(n, e);
+const dir = r31Norm([e[0] * Math.cos(bearing) + nn[0] * Math.sin(bearing), e[1] * Math.cos(bearing) + nn[1] * Math.sin(bearing), e[2] * Math.cos(bearing) + nn[2] * Math.sin(bearing)]);
+return r31Go(n, dir, d);
+}
+function r31Step(o, t, step) {
+const a = r31Ang(o.v, t);
+if (a < 1e-5)
+return 0;
+const dir = r31Tan(o.v, t);
+if (step >= a) {
+o.v = t.slice();
+o.f = dir;
+return 0;
+}
+o.v = r31Go(o.v, dir, step);
+o.f = r31Flat(o.v, dir);
+return a - step;
+}
+function r31P(v, p) {
+const ll = r31LL(v);
+return projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+}
+function r31PetV() {
+return r31V(roamingLat, roamingLon);
+}
+function r31SetPet(v) {
+const ll = r31LL(v);
+const a = { lat: ll.lat, lon: ll.lon };
+const b = { lat: wrapAngle(Math.PI - ll.lat), lon: wrapAngle(ll.lon + Math.PI) };
+const cost = o => Math.abs(wrapAngle(o.lat - roamingLat)) + Math.abs(wrapAngle(o.lon - roamingLon));
+const best = cost(a) <= cost(b) ? a : b;
+roamingLat = best.lat;
+roamingLon = best.lon;
+}
+function r31Rand(seed) {
+let s = seed >>> 0 || 1;
+return () => {
+s ^= s << 13;
+s >>>= 0;
+s ^= s >> 17;
+s ^= s << 5;
+s >>>= 0;
+return s / 4294967296;
+};
+}
+function r31PuddleV(planetId) {
+const d = R31_DEFS[planetId];
+return d ? r31V(d.lat, d.lon) : null;
+}
+function r31Tone(f0, f1, dur, type, vol, delay) {
+if (!audioContext)
+return;
+try {
+const t = audioContext.currentTime + (delay || 0);
+const o = audioContext.createOscillator(), g = audioContext.createGain();
+o.type = type || "sine";
+o.frequency.setValueAtTime(f0, t);
+o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+g.gain.setValueAtTime(.0001, t);
+g.gain.exponentialRampToValueAtTime(vol || .12, t + .015);
+g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+o.connect(g);
+g.connect(audioContext.destination);
+o.start(t);
+o.stop(t + dur + .05);
+}
+catch (error) { }
+}
+const r31Sfx = {
+beat: () => { r31Tone(70, 40, .16, "sine", .32); r31Tone(62, 38, .14, "sine", .22, .2); },
+screech: () => { r31Tone(1100, 280, .6, "sawtooth", .06); r31Tone(760, 210, .7, "square", .035, .05); },
+chime: () => { r31Tone(660, 880, .35, "sine", .12); r31Tone(990, 1320, .5, "sine", .07, .12); },
+wrong: () => { r31Tone(240, 55, .7, "square", .08); },
+pebble: () => { r31Tone(1800, 900, .06, "triangle", .09); r31Tone(1500, 700, .05, "triangle", .06, .09); },
+drone: () => { r31Tone(55, 48, 2.6, "sawtooth", .025); r31Tone(82, 74, 2.6, "sine", .05); },
+win: () => { [523, 659, 784, 1046].forEach((f, i) => r31Tone(f, f * 1.01, .5, "sine", .1, i * .12)); },
+caught: () => { r31Tone(300, 40, 1.1, "sawtooth", .1); }
+};
+function r31Start(planetId) {
+const def = R31_DEFS[planetId];
+const P = r31PuddleV(planetId);
+const rnd = r31Rand(Date.now());
+const rot = rnd() * Math.PI * 2;
+const order = R31_GLYPHS.slice().sort(() => rnd() - .5).slice(0, 3);
+const glyphs = order.slice().sort(() => rnd() - .5);
+const lanterns = glyphs.map((g, i) => ({
+v: r31At(P, rot + i * Math.PI * 2 / 3 + (rnd() - .5) * .5, .48 + rnd() * .22),
+glyph: g,
+lit: false,
+prog: 0
+}));
+const hides = [];
+let tries = 0;
+while (hides.length < 9 && tries++ < 200) {
+const v = r31At(P, rnd() * Math.PI * 2, .14 + rnd() * .72);
+const clash = lanterns.some(l => r31Ang(l.v, v) < .14) || hides.some(h => r31Ang(h.v, v) < .16) || r31Ang(P, v) < .13;
+if (!clash)
+hides.push({ v, kind: hides.length % 3 === 2 ? "crate" : "table", seed: rnd() });
+}
+const piles = [0, 1, 2].map(i => ({ v: r31At(P, rot + Math.PI / 3 + i * Math.PI * 2 / 3, .3 + rnd() * .25), cool: 0 }));
+const lair = r31At(P, rot + Math.PI + (rnd() - .5) * .6, .82);
+r31Run = {
+planet: planetId,
+def,
+P,
+startAt: performance.now(),
+phase: "intro",
+order,
+next: 0,
+lanterns,
+hides,
+piles,
+boss: { v: lair, f: r31Tan(lair, P), state: "rise", rise: 0, timer: 0, spot: 0, lastSense: 0, known: null, stunUntil: 0, charge: 0, look: 0, wp: null, sawHide: false },
+pebbles: 3,
+noise: [],
+crumbs: [],
+flights: [],
+stones: [],
+lastPet: r31PetV(),
+lastDir: null,
+noiseAt: 0,
+crumbAt: 0,
+beatAt: 0,
+msg: "",
+msgAt: 0,
+hidden: false,
+endAt: 0,
+result: null
+};
+r31Sfx.drone();
+r31Sfx.screech();
+r31Say("The planet goes dark… " + def.name + " is waking. Drag gently to sneak.");
+r31Hud(true);
+}
+function r31Say(msg) {
+if (!r31Run)
+return;
+r31Run.msg = msg;
+r31Run.msgAt = performance.now();
+}
+function r31Stats(planetId) {
+return withMySave(() => ((planetSave.nightmares || {})[planetId]) || { clears: 0, best: 0, tries: 0 });
+}
+function r31End(result) {
+const run = r31Run;
+if (!run)
+return;
+r31Run = null;
+r31Hud(false);
+const planetId = run.planet;
+const pet = getRoamingPet();
+const petName = pet ? petShortName(planetId, pet) : "Your pet";
+withMySave(() => {
+if (!planetSave.nightmares)
+planetSave.nightmares = {};
+const st = planetSave.nightmares[planetId] || (planetSave.nightmares[planetId] = { clears: 0, best: 0, tries: 0 });
+st.tries = (st.tries || 0) + 1;
+if (result === "won") {
+const secs = Math.round((performance.now() - run.startAt) / 1000);
+const first = !st.clears;
+st.clears = (st.clears || 0) + 1;
+if (!st.best || secs < st.best)
+st.best = secs;
+const coins = first ? 150 : 40;
+addToBank(planetId, coins);
+const pool = Object.keys(SHOP_ITEMS || {}).filter(isBasePowerupId);
+const got = [];
+for (let i = 0; i < (first ? 3 : 1) && pool.length; i++) {
+const id = pool[Math.floor(Math.random() * pool.length)];
+addItemStock(planetId, id, 1);
+got.push(id);
+}
+addRankPoints(first ? 400 : 120, "Escaped " + run.def.name);
+showMilestoneFlourish("🌙", (first ? "Nightmare escaped!" : "Escaped again!"), run.def.name + " · " + r31Time(secs) + (st.best === secs ? " · best!" : "") + " · +" + coins + " coins, " + got.length + " powerup" + (got.length === 1 ? "" : "s"));
+}
+savePlanetProgress();
+});
+if (result === "caught") {
+if (pet)
+pet.energy = Math.max(0, (pet.energy || 0) - 15);
+r31SetPet(r31Go(run.P, r31Tan(run.P, r31At(run.P, Math.random() * 6.28, .1)), .1));
+r31Rearm = performance.now() + 2500;
+showShipToast("😱 " + run.def.name + " caught " + petName + "… you wake up beside the puddle, shaking (−15 energy)");
+}
+else if (result === "woke") {
+r31Rearm = performance.now() + 2500;
+showShipToast("You forced yourself awake. The puddle ripples, waiting.");
+}
+else if (result === "won") {
+r31Rearm = performance.now() + 4000;
+}
+}
+let r31Rearm = 0;
+let r31Armed = true;
+function r31Time(s) {
+return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+function r31Noise(v, r, kind) {
+const run = r31Run;
+if (!run)
+return;
+const n = { v, r, t0: performance.now(), kind: kind || "step" };
+run.noise.push(n);
+r31Hear(n);
+}
+function r31Hear(n) {
+const run = r31Run, b = run.boss;
+if (!b || b.state === "rise" || run.phase !== "hunt")
+return;
+const mul = run.def.boss === "keeper" ? 1 : run.def.boss === "watcher" ? .55 : .7;
+const d = r31Ang(b.v, n.v);
+if (d > n.r * mul)
+return;
+if (b.state === "chase") {
+if (n.kind === "step") {
+b.lastSense = performance.now();
+b.known = n.v;
+}
+return;
+}
+if (run.def.boss === "keeper" && n.kind !== "pebble" && d < .22) {
+r31Chase();
+return;
+}
+b.state = "look";
+b.known = n.v;
+b.look = 0;
+if (n.kind === "pebble")
+r31Say("It heard the pebble…");
+}
+function r31Chase() {
+const run = r31Run, b = run.boss;
+if (b.state !== "chase")
+r31Sfx.screech();
+b.state = "chase";
+b.lastSense = performance.now();
+b.known = r31PetV();
+b.sawHide = false;
+}
+function r31Tick(dt, now) {
+const run = r31Run;
+if (!run)
+return;
+const b = run.boss;
+const pv = r31PetV();
+const sf = roamingIsMoving ? roamingSpeedFraction : 0;
+const def = run.def;
+const spd = R31_SPEED[def.boss];
+const moved = r31Ang(run.lastPet, pv);
+if (moved > 1e-4)
+run.lastDir = r31Tan(run.lastPet, pv);
+run.lastPet = pv;
+if (r31Ang(run.P, pv) > R31.arena) {
+r31SetPet(r31Go(run.P, r31Tan(run.P, pv), R31.arena - .004));
+if (now - (run.fenceAt || 0) > 2500) {
+run.fenceAt = now;
+r31Say("The dark thickens — there's no way out but the door.");
+}
+}
+if (run.phase === "caught" || run.phase === "won") {
+if (now >= run.endAt)
+r31End(run.phase);
+return;
+}
+if (run.phase === "intro") {
+b.rise = Math.min(1, (now - run.startAt - 1800) / 2200);
+if (b.rise >= 1) {
+run.phase = "hunt";
+b.state = "patrol";
+}
+}
+const hide = run.hides.find(h => r31Ang(h.v, pv) < R31.hide);
+const wasHidden = run.hidden;
+run.hidden = !!hide && sf < R31.sneak;
+if (run.hidden && !wasHidden && b.state === "chase" && r31Ang(b.v, pv) < .16)
+b.sawHide = true;
+if (!run.hidden && sf > R31.sneak && now - run.noiseAt > 380) {
+run.noiseAt = now;
+r31Noise(pv, .12 + .07 * (sf - R31.sneak), "step");
+}
+if (def.boss === "gourmand" && !run.hidden && sf > .15 && now - run.crumbAt > 260) {
+run.crumbAt = now;
+run.crumbs.push({ v: pv, t0: now });
+}
+run.crumbs = run.crumbs.filter(cb => now - cb.t0 < 10000);
+run.noise = run.noise.filter(n => now - n.t0 < 900);
+run.piles.forEach(pl => {
+if (run.pebbles < 3 && now > pl.cool && r31Ang(pl.v, pv) < R31.pile) {
+run.pebbles = 3;
+pl.cool = now + 20000;
+r31Say("🪨 Pebbles ×3 — throw one to lure it away.");
+sound("click");
+}
+});
+for (let i = run.flights.length - 1; i >= 0; i--) {
+const fl = run.flights[i];
+if (now - fl.t0 >= 600) {
+run.flights.splice(i, 1);
+run.stones.push({ v: fl.to, t0: now });
+r31Sfx.pebble();
+r31Noise(fl.to, .5, "pebble");
+}
+}
+run.stones = run.stones.filter(s => now - s.t0 < 6000);
+if (run.phase === "hunt") {
+const lan = run.lanterns.find(l => !l.lit && r31Ang(l.v, pv) < R31.lantern);
+run.lanterns.forEach(l => {
+if (l !== lan && !l.lit)
+l.prog = Math.max(0, l.prog - dt * .8);
+});
+if (lan && sf < R31.sneak) {
+lan.prog += dt / 2;
+if (lan.prog >= 1) {
+lan.prog = 0;
+if (lan.glyph === run.order[run.next]) {
+lan.lit = true;
+run.next++;
+r31Sfx.chime();
+r31Noise(lan.v, .3, "crackle");
+if (run.next >= 3) {
+r31Escape();
+}
+else {
+r31Say("The " + lan.glyph + " lantern catches. " + (3 - run.next) + " to go.");
+}
+}
+else {
+run.lanterns.forEach(l => {
+l.lit = false;
+l.prog = 0;
+});
+run.next = 0;
+r31Sfx.wrong();
+r31Noise(pv, .55, "wrong");
+r31Say("Wrong order! The lanterns gutter out — and it heard that. Check the door's symbols.");
+}
+}
+}
+const door = r31Ang(run.P, pv) < R31.puddle;
+if (door && !run.doorNoted && now - run.startAt > 6000) {
+run.doorNoted = true;
+r31Say("The door is locked. Its symbols show the order: " + run.order.join(" → "));
+}
+if (!door)
+run.doorNoted = false;
+}
+if (run.phase === "escape" && r31Ang(run.P, pv) < R31.puddle) {
+run.phase = "won";
+run.endAt = now + 1600;
+r31Sfx.win();
+return;
+}
+r31Boss(dt, now, pv);
+const d = r31Ang(b.v, pv);
+if (b.state !== "rise" && (b.state === "chase" || d < .35)) {
+const gap = b.state === "chase" ? 380 : Math.max(420, 1300 * d / .35);
+if (now - run.beatAt > gap) {
+run.beatAt = now;
+r31Sfx.beat();
+}
+}
+}
+function r31Escape() {
+const run = r31Run, b = run.boss;
+run.phase = "escape";
+const pv = r31PetV();
+if (r31Ang(b.v, pv) > .4) {
+const away = r31Tan(pv, run.P).map(x => -x);
+b.v = r31Go(pv, r31Turn(pv, r31Flat(pv, away), (Math.random() - .5) * .8), .38);
+}
+b.stunUntil = 0;
+b.roarUntil = performance.now() + 1400;
+r31Chase();
+r31Say("The door opens! RUN for the puddle!");
+}
+function r31Boss(dt, now, pv) {
+const run = r31Run, b = run.boss, def = run.def, kind = def.boss;
+const spd = R31_SPEED[kind];
+if (b.state === "rise")
+return;
+if (now < b.stunUntil || now < (b.roarUntil || 0))
+return;
+const d = r31Ang(b.v, pv);
+const esc = run.phase === "escape";
+const hidden = run.hidden && !esc;
+if (kind === "watcher" && b.state !== "chase" && !hidden) {
+const lit = run.lanterns.some(l => l.lit && r31Ang(l.v, pv) < .16);
+const range = lit ? .5 : .32;
+const facing = r31Flat(b.v, b.f);
+const to = r31Tan(b.v, pv);
+if (d < range && r31Dot(facing, to) > Math.cos(.55)) {
+b.spot += dt;
+if (b.spot > .45) {
+b.spot = 0;
+r31Chase();
+r31Say("👁 It SEES you — hide!");
+}
+}
+else {
+b.spot = Math.max(0, b.spot - dt);
+}
+}
+if (kind === "gourmand" && b.state !== "chase") {
+if (!hidden && d < .13) {
+r31Chase();
+r31Say("It smells you right there — run or hide!");
+}
+else {
+let best = null;
+run.crumbs.forEach(cb => {
+if (r31Ang(cb.v, b.v) < .16 && (!best || cb.t0 > best.t0))
+best = cb;
+});
+if (best && (b.state !== "look" || !b.trail || best.t0 > b.trail.t0)) {
+b.state = "look";
+b.known = best.v;
+b.trail = best;
+b.look = 0;
+}
+}
+}
+if (kind === "keeper" && b.state !== "chase" && !hidden && d < .07 && sf31(run)) {
+r31Chase();
+}
+if (b.state === "chase") {
+let still = esc;
+if (!hidden) {
+if (kind === "watcher" && d < .45)
+still = true;
+if (kind === "gourmand" && d < .3)
+still = true;
+if (kind === "keeper" && d < .09)
+still = true;
+}
+if (hidden && b.sawHide && d < .12)
+still = true;
+if (still) {
+b.lastSense = now;
+b.known = pv;
+}
+const lose = kind === "watcher" ? 2200 : kind === "keeper" ? 1800 : 2600;
+if (now - b.lastSense > lose) {
+b.state = "look";
+b.look = 0;
+r31Say(hidden ? "It lost you. Stay still…" : "It lost your trail.");
+}
+else {
+let sp = spd.chase * (esc ? 1.15 : 1);
+if (kind === "gourmand") {
+b.charge = (b.charge + dt) % 2.6;
+sp = b.charge < 1.3 ? spd.charge * (esc ? 1.1 : 1) : .05;
+}
+r31Step(b, b.known || pv, sp * dt);
+}
+const reach = kind === "keeper" ? .075 : R31.catchR;
+if (d < reach && (!run.hidden || b.sawHide || esc)) {
+run.phase = "caught";
+run.endAt = now + 1700;
+r31Sfx.caught();
+}
+return;
+}
+if (b.state === "look") {
+const left = r31Step(b, b.known || b.v, spd.look * dt);
+if (left < .01) {
+b.look += dt;
+if (kind === "watcher")
+b.f = r31Turn(b.v, r31Flat(b.v, b.f), Math.sin(now / 500) * dt * 2);
+if (b.look > (kind === "gourmand" ? 1.2 : 2.5)) {
+b.state = "patrol";
+b.wp = null;
+b.trail = null;
+}
+}
+return;
+}
+if (!b.wp || b.pause > 0) {
+if (b.pause > 0) {
+b.pause -= dt;
+if (kind === "watcher")
+b.f = r31Turn(b.v, r31Flat(b.v, b.f), Math.sin(now / 700) * dt * 1.6);
+return;
+}
+b.wp = r31At(run.P, Math.random() * Math.PI * 2, .15 + Math.random() * .7);
+}
+if (r31Step(b, b.wp, spd.patrol * dt) < .01) {
+b.wp = null;
+b.pause = kind === "watcher" ? 3 : 1.2;
+}
+}
+function sf31(run) {
+return (roamingIsMoving ? roamingSpeedFraction : 0) > .2;
+}
+function r31Throw() {
+const run = r31Run;
+if (!run || (run.phase !== "hunt" && run.phase !== "escape"))
+return;
+if (run.pebbles <= 0) {
+r31Say("No pebbles — find a pile of stones.");
+return;
+}
+const pv = r31PetV();
+let dir = run.lastDir;
+if (!dir)
+dir = r31Tan(pv, run.boss.v);
+const to = r31Go(pv, r31Flat(pv, dir), .24);
+run.pebbles--;
+run.flights.push({ from: pv, to, t0: performance.now() });
+sound("click");
+}
+function r29StructPowerHit(kind, shape, pet) {
+r29StructPowerHit__r31(kind, shape, pet);
+const run = r31Run;
+if (!run || !r31Screen || run.boss.state === "rise")
+return;
+if (bossShapeHit(shape, r31Screen.x, r31Screen.y - r31Screen.h * .5, r31Screen.h * .4) && performance.now() > run.boss.stunUntil + 800) {
+run.boss.stunUntil = performance.now() + 2500;
+r31Say("It staggers — nightmares can't be killed, but that bought you a moment.");
+}
+}
+function roamingPaceNow() {
+const v = roamingPaceNow__r31();
+if (!r31Run)
+return v;
+if (r31Run.phase === "caught" || r31Run.phase === "won")
+return 0;
+return v * R31.pace;
+}
+function r31Poly(c, pts) {
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+}
+function r31Ring(v, r, p, n) {
+const pts = [];
+const e = r31At(v, 0, .001);
+const dir0 = r31Tan(v, e);
+for (let i = 0; i < (n || 28); i++) {
+const q = r31P(r31Go(v, r31Turn(v, dir0, i / (n || 28) * Math.PI * 2), r), p);
+if (!q.visible)
+return null;
+pts.push(q);
+}
+return pts;
+}
+function r31Place(queue, p, v, drawFn, zAdd) {
+const q = r31P(v, p);
+if (!q.visible)
+return null;
+queue.push({ z: p.groundDepthAt(q.x, q.y) + (zAdd || 0), alpha: 1, r20Fade: 1, draw: () => {
+p.c.save();
+p.c.translate(q.x, q.y);
+r20Orient(p.c, q.x, q.y, "radial");
+const S = r19SurfScale || 1;
+if (S !== 1)
+p.c.scale(S, S);
+try {
+drawFn(p.c, q);
+}
+finally {
+p.c.restore();
+}
+} });
+return q;
+}
+function r31DrawPuddle(c, pts, t, col, open) {
+c.save();
+r31Poly(c, pts);
+const cx = pts.reduce((s, q) => s + q.x, 0) / pts.length, cy = pts.reduce((s, q) => s + q.y, 0) / pts.length;
+const g = c.createRadialGradient(cx, cy, 2, cx, cy, Math.max(10, Math.abs(pts[0].x - cx) * 1.1));
+g.addColorStop(0, "#000");
+g.addColorStop(.7, "#07020f");
+g.addColorStop(1, "rgba(40,10,60,.85)");
+c.fillStyle = g;
+c.fill();
+c.strokeStyle = open ? "#fff1b8" : col;
+c.globalAlpha = .55 + .25 * Math.sin(t * 1.7);
+c.lineWidth = 2;
+c.shadowColor = open ? "#fff1b8" : col;
+c.shadowBlur = 12;
+c.stroke();
+c.restore();
+}
+function r31DrawDoor(c, u, run, t) {
+const h = u * 1.7, w = u * .95;
+const open = run.phase === "escape" || run.phase === "won";
+c.save();
+c.fillStyle = "#120a14";
+c.strokeStyle = open ? "#fff1b8" : run.def.col;
+c.lineWidth = 2;
+c.shadowColor = c.strokeStyle;
+c.shadowBlur = open ? 18 : 6;
+c.beginPath();
+c.moveTo(-w / 2, 0);
+c.lineTo(-w / 2, -h * .82);
+c.quadraticCurveTo(0, -h * 1.05, w / 2, -h * .82);
+c.lineTo(w / 2, 0);
+c.closePath();
+c.fill();
+c.stroke();
+if (open) {
+const g = c.createLinearGradient(0, -h, 0, 0);
+g.addColorStop(0, "#fffbe6");
+g.addColorStop(1, "#ffd27a");
+c.fillStyle = g;
+c.globalAlpha = .75 + .25 * Math.sin(t * 6);
+c.fill();
+c.globalAlpha = 1;
+c.fillStyle = "#3a2418";
+c.beginPath();
+c.moveTo(-w / 2, 0);
+c.lineTo(-w / 2, -h * .82);
+c.lineTo(-w * .2, -h * .78);
+c.lineTo(-w * .2, -h * .04);
+c.closePath();
+c.fill();
+}
+else {
+c.fillStyle = "#2b1a14";
+c.fillRect(-w * .42, -h * .8, w * .84, h * .8);
+c.fillStyle = "#c9a24a";
+c.beginPath();
+c.arc(w * .28, -h * .4, u * .05, 0, Math.PI * 2);
+c.fill();
+}
+c.shadowBlur = 0;
+c.font = "900 " + Math.round(u * .32) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+const py = -h * 1.12;
+c.fillStyle = "rgba(10,4,16,.85)";
+c.fillRect(-w * .85, py - u * .24, w * 1.7, u * .48);
+run.order.forEach((g, i) => {
+const lit = i < run.next;
+c.fillStyle = lit ? "#fff1b8" : run.def.col;
+c.shadowColor = c.fillStyle;
+c.shadowBlur = lit ? 10 : 4;
+c.fillText(g, (i - 1) * w * .55, py + 1);
+});
+c.restore();
+}
+function r31DrawLantern(c, u0, l, t, col) {
+const u = u0 * 1.45;
+const h = u * 1.35;
+c.save();
+c.strokeStyle = "#2a2030";
+c.lineWidth = Math.max(2, u * .08);
+c.beginPath();
+c.moveTo(0, 0);
+c.lineTo(0, -h);
+c.lineTo(u * .22, -h);
+c.stroke();
+const lx = u * .22, ly = -h + u * .32;
+c.strokeStyle = "#4a3a50";
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(lx, -h);
+c.lineTo(lx, ly - u * .22);
+c.stroke();
+c.fillStyle = l.lit ? "rgba(255,214,120,.95)" : "rgba(30,20,40,.9)";
+c.shadowColor = "#ffcc66";
+c.shadowBlur = l.lit ? 24 : 0;
+c.fillRect(lx - u * .17, ly - u * .22, u * .34, u * .42);
+c.strokeStyle = l.lit ? "#fff1b8" : col;
+c.strokeRect(lx - u * .17, ly - u * .22, u * .34, u * .42);
+c.shadowBlur = 0;
+if (l.lit) {
+c.fillStyle = "#fff7d6";
+c.beginPath();
+c.ellipse(lx, ly + u * .02 + Math.sin(t * 9) * u * .01, u * .05, u * .11, 0, 0, Math.PI * 2);
+c.fill();
+}
+c.font = "900 " + Math.round(u * .3) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillStyle = l.lit ? "#fff1b8" : col;
+c.shadowColor = c.fillStyle;
+c.shadowBlur = 6;
+c.fillText(l.glyph, 0, -h * .45);
+c.shadowBlur = 0;
+if (l.prog > 0 && !l.lit) {
+c.strokeStyle = "#ffd27a";
+c.lineWidth = 3;
+c.beginPath();
+c.arc(lx, ly, u * .34, -Math.PI / 2, -Math.PI / 2 + l.prog * Math.PI * 2);
+c.stroke();
+}
+c.restore();
+}
+function r31DrawHide(c, u, h, front, hidden) {
+c.save();
+if (h.kind === "crate") {
+const w = u * 1.05, ht = u * .85;
+if (!front) {
+c.fillStyle = "#1a120c";
+c.fillRect(-w / 2, -ht, w, ht);
+}
+c.globalAlpha = front ? (hidden ? .86 : 0) : 1;
+if (c.globalAlpha > 0) {
+c.fillStyle = "#3a2616";
+c.strokeStyle = "#6b4a2a";
+c.lineWidth = 2;
+c.fillRect(-w / 2, -ht * .62, w, ht * .62);
+c.strokeRect(-w / 2, -ht * .62, w, ht * .62);
+c.beginPath();
+c.moveTo(-w / 2, -ht * .62);
+c.lineTo(w / 2, 0);
+c.moveTo(w / 2, -ht * .62);
+c.lineTo(-w / 2, 0);
+c.stroke();
+}
+}
+else {
+const w = u * 1.5, ht = u * .95;
+if (!front) {
+c.strokeStyle = "#2a1c14";
+c.lineWidth = Math.max(2, u * .07);
+c.beginPath();
+c.moveTo(-w * .42, 0);
+c.lineTo(-w * .42, -ht);
+c.moveTo(w * .42, 0);
+c.lineTo(w * .42, -ht);
+c.stroke();
+c.fillStyle = "#3b2a20";
+c.fillRect(-w / 2, -ht - u * .1, w, u * .12);
+}
+c.globalAlpha = front ? (hidden ? .9 : 0) : .88;
+if (c.globalAlpha > 0) {
+c.fillStyle = "#5a1f2a";
+c.beginPath();
+c.moveTo(-w / 2, -ht);
+c.lineTo(w / 2, -ht);
+c.lineTo(w / 2, -u * .12);
+for (let i = 6; i >= 0; i--)
+c.quadraticCurveTo(-w / 2 + w * (i + .5) / 6, -u * .02, -w / 2 + w * i / 6, -u * .12 + (i % 2) * u * .05);
+c.closePath();
+c.fill();
+c.strokeStyle = "rgba(255,180,190,.25)";
+c.lineWidth = 1;
+c.stroke();
+}
+}
+c.restore();
+}
+function r31DrawPile(c, u, ready) {
+c.save();
+c.globalAlpha = ready ? 1 : .4;
+[[-.18, 0, .13], [.12, 0, .11], [0, -.1, .12], [.24, -.04, .08]].forEach(s => {
+c.fillStyle = "#8a8f99";
+c.strokeStyle = "#cfd6e2";
+c.lineWidth = 1;
+c.beginPath();
+c.ellipse(s[0] * u, s[1] * u - s[2] * u * .5, s[2] * u, s[2] * u * .75, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+});
+c.restore();
+}
+function r31DrawKeeper(c, H, t, b, flip, grab) {
+const sway = Math.sin(t * 2.2);
+const chase = b.state === "chase";
+c.save();
+c.scale(flip, 1);
+c.strokeStyle = "#15121b";
+c.lineWidth = H * .05;
+c.lineCap = "round";
+const step = chase ? Math.sin(t * 9) * H * .06 : Math.sin(t * 3) * H * .03;
+c.beginPath();
+c.moveTo(-H * .06, -H * .3);
+c.lineTo(-H * .08 + step, 0);
+c.moveTo(H * .06, -H * .3);
+c.lineTo(H * .08 - step, 0);
+c.stroke();
+c.fillStyle = "#1d1a24";
+c.strokeStyle = "#ff8a5c";
+c.lineWidth = 1.6;
+c.shadowColor = "#ff8a5c";
+c.shadowBlur = 6;
+c.beginPath();
+c.moveTo(-H * .16, -H * .28);
+c.quadraticCurveTo(-H * .22, -H * .7, -H * .02, -H * .86);
+c.quadraticCurveTo(H * .2, -H * .82, H * .2, -H * .62);
+c.lineTo(H * .15, -H * .28);
+c.closePath();
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+const hx = H * .14, hy = -H * .86;
+c.fillStyle = "#d8cbb0";
+c.beginPath();
+c.ellipse(hx, hy, H * .09, H * .11, .35, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#a8987a";
+c.lineWidth = 1.4;
+for (let i = -2; i <= 2; i++) {
+c.beginPath();
+c.moveTo(hx - H * .08, hy + i * H * .035);
+c.lineTo(hx + H * .08, hy + i * H * .035 - H * .02);
+c.stroke();
+}
+c.fillStyle = "#3a0f12";
+c.fillRect(hx + H * .01, hy + H * .05, H * .06, H * .012);
+c.strokeStyle = "#4a3c52";
+c.shadowColor = "#ff8a5c";
+c.shadowBlur = 5;
+c.lineWidth = H * .035;
+const sx = H * .12, sy = -H * .7;
+const arm = (dx) => {
+let ex, ey;
+if (chase || grab) {
+const r = grab ? 1.15 : .85;
+ex = sx + H * r * Math.cos(.15 + dx * .08);
+ey = sy + H * .25 + Math.sin(t * 6 + dx) * H * .04;
+}
+else {
+ex = sx + H * .1 + dx * H * .05 + sway * H * .05;
+ey = -H * .04;
+}
+c.beginPath();
+c.moveTo(sx + dx * H * .04, sy);
+c.quadraticCurveTo(sx + H * .18, (sy + ey) / 2 + H * .08, ex, ey);
+c.stroke();
+c.lineWidth = H * .012;
+for (let f = -1; f <= 1; f++) {
+c.beginPath();
+c.moveTo(ex, ey);
+c.lineTo(ex + H * .07, ey + f * H * .03 + H * .02);
+c.stroke();
+}
+c.lineWidth = H * .035;
+};
+arm(-1);
+arm(1);
+c.restore();
+}
+function r31DrawWatcher(c, H, t, b, flip, lookX) {
+c.save();
+c.scale(flip, 1);
+const chase = b.state === "chase";
+const step = chase ? Math.sin(t * 8) * H * .05 : Math.sin(t * 2.5) * H * .025;
+c.strokeStyle = "#1a1830";
+c.lineWidth = H * .03;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(-H * .04, -H * .45);
+c.lineTo(-H * .07 + step, 0);
+c.moveTo(H * .04, -H * .45);
+c.lineTo(H * .07 - step, 0);
+c.stroke();
+c.fillStyle = "#24203a";
+c.strokeStyle = "#ffe27a";
+c.lineWidth = 1.5;
+c.shadowColor = "#ffe27a";
+c.shadowBlur = 5;
+c.beginPath();
+c.moveTo(-H * .1, -H * .42);
+c.lineTo(-H * .07, -H * .78);
+c.lineTo(H * .07, -H * .78);
+c.lineTo(H * .1, -H * .42);
+c.closePath();
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.strokeStyle = "#1a1830";
+c.lineWidth = H * .02;
+c.beginPath();
+c.moveTo(-H * .07, -H * .75);
+c.lineTo(-H * .12, -H * .42 + Math.sin(t * 2) * H * .02);
+c.moveTo(H * .07, -H * .75);
+c.lineTo(H * .12, -H * .42 - Math.sin(t * 2) * H * .02);
+c.stroke();
+const hx = 0, hy = -H * .88, hw = H * .13, hh = H * .15;
+c.fillStyle = "rgba(255,226,122,.18)";
+c.fillRect(hx - hw, hy - hh, hw * 2, hh * 2);
+c.strokeStyle = "#c9a24a";
+c.lineWidth = 1.6;
+c.strokeRect(hx - hw, hy - hh, hw * 2, hh * 2);
+for (let i = -1; i <= 1; i++) {
+c.beginPath();
+c.moveTo(hx + i * hw * .66, hy - hh);
+c.lineTo(hx + i * hw * .66, hy + hh);
+c.stroke();
+}
+c.beginPath();
+c.moveTo(hx - hw * .6, hy - hh);
+c.lineTo(hx, hy - hh * 1.5);
+c.lineTo(hx + hw * .6, hy - hh);
+c.stroke();
+c.restore();
+}
+function r31DrawGourmand(c, H, t, b, flip) {
+c.save();
+c.scale(flip, 1);
+const chase = b.state === "chase";
+const bob = Math.abs(Math.sin(t * (chase ? 8 : 3))) * H * .03;
+c.translate(0, -bob);
+c.fillStyle = "#2a3320";
+c.fillRect(-H * .2, -H * .16, H * .12, H * .16 + bob);
+c.fillRect(H * .08, -H * .16, H * .12, H * .16 + bob);
+c.fillStyle = "#3f4f2a";
+c.strokeStyle = "#9dff7a";
+c.lineWidth = 1.6;
+c.shadowColor = "#9dff7a";
+c.shadowBlur = 6;
+c.beginPath();
+c.ellipse(0, -H * .42, H * .36, H * .3, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#e8e2d0";
+c.beginPath();
+c.moveTo(-H * .13, -H * .64);
+c.lineTo(H * .13, -H * .64);
+c.lineTo(H * .09, -H * .42);
+c.lineTo(-H * .09, -H * .42);
+c.closePath();
+c.fill();
+const hy = -H * .78;
+c.fillStyle = "#56683a";
+c.beginPath();
+c.ellipse(0, hy, H * .14, H * .12, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+const sniff = Math.sin(t * 14) * H * .008;
+c.fillStyle = "#7a9a4a";
+c.beginPath();
+c.ellipse(H * .15, hy + sniff, H * .07, H * .045, .2, 0, Math.PI * 2);
+c.fill();
+const open = chase ? .5 + .5 * Math.sin(t * 12) : .15;
+c.fillStyle = "#1a0608";
+c.beginPath();
+c.ellipse(H * .04, hy + H * .06, H * .09, H * .025 + open * H * .035, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#f4ecd8";
+for (let i = -2; i <= 2; i++)
+c.fillRect(H * .04 + i * H * .03 - H * .008, hy + H * .06 - H * .025 - open * H * .03, H * .016, H * .02);
+c.fillStyle = "#ffe27a";
+c.beginPath();
+c.arc(H * .07, hy - H * .05, H * .018, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#3f4f2a";
+c.lineWidth = H * .045;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(H * .3, -H * .5);
+c.lineTo(H * .42, -H * .42 + (chase ? -Math.sin(t * 12) * H * .06 : 0));
+c.stroke();
+c.restore();
+}
+function r31DrawBoss(c, H, run, t, flip) {
+const b = run.boss;
+const grab = run.phase === "caught";
+c.save();
+if (b.state === "rise" || run.phase === "intro") {
+c.beginPath();
+c.rect(-H, -H * 1.6, H * 2, H * 1.6);
+c.clip();
+c.translate(0, (1 - Math.max(0, b.rise)) * H * 1.1);
+}
+if (performance.now() < b.stunUntil)
+c.rotate(Math.sin(t * 20) * .08);
+if (run.def.boss === "keeper")
+r31DrawKeeper(c, H, t, b, flip, grab);
+else if (run.def.boss === "watcher")
+r31DrawWatcher(c, H, t, b, flip);
+else
+r31DrawGourmand(c, H, t, b, flip);
+c.restore();
+}
+function r31DrawEye(c, x, y, H, run, t, flip) {
+const b = run.boss;
+if (run.def.boss === "watcher") {
+const ex = x, ey = y - H * .88;
+c.save();
+c.fillStyle = "#fffbe8";
+c.shadowColor = "#ffe27a";
+c.shadowBlur = 18;
+c.beginPath();
+c.ellipse(ex, ey, H * .09, H * .07, 0, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+c.fillStyle = b.state === "chase" ? "#ff3b3b" : "#d9a400";
+c.beginPath();
+c.arc(ex + flip * H * .035, ey, H * .04, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#000";
+c.beginPath();
+c.arc(ex + flip * H * .042, ey, H * .018, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+const mark = b.state === "chase" ? "!" : b.state === "look" ? "?" : performance.now() < b.stunUntil ? "✶" : "";
+if (mark && run.phase !== "intro") {
+c.save();
+c.font = "900 " + Math.round(H * .28) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = mark === "!" ? "#ff3b3b" : "#ffe27a";
+c.shadowColor = c.fillStyle;
+c.shadowBlur = 12;
+c.fillText(mark, x, y - H * 1.15 + Math.sin(t * 6) * 3);
+c.restore();
+}
+}
+function r31Dark(c, lights, alpha) {
+const W = c.canvas.width, H = c.canvas.height;
+const m = c.getTransform();
+if (!r31Off || r31Off.width !== W || r31Off.height !== H) {
+r31Off = document.createElement("canvas");
+r31Off.width = W;
+r31Off.height = H;
+}
+const o = r31Off.getContext("2d");
+o.setTransform(1, 0, 0, 1, 0, 0);
+o.globalCompositeOperation = "source-over";
+o.clearRect(0, 0, W, H);
+o.fillStyle = "rgba(3,1,9," + alpha + ")";
+o.fillRect(0, 0, W, H);
+o.globalCompositeOperation = "destination-out";
+const sc = Math.hypot(m.a, m.b);
+lights.forEach(L => {
+const x = m.a * L.x + m.c * L.y + m.e, y = m.b * L.x + m.d * L.y + m.f, r = L.r * sc;
+const g = o.createRadialGradient(x, y, 0, x, y, r);
+g.addColorStop(0, "rgba(0,0,0," + L.k + ")");
+g.addColorStop(.55, "rgba(0,0,0," + L.k * .7 + ")");
+g.addColorStop(1, "rgba(0,0,0,0)");
+o.fillStyle = g;
+o.fillRect(x - r, y - r, r * 2, r * 2);
+});
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.drawImage(r31Off, 0, 0);
+c.globalCompositeOperation = "lighter";
+lights.forEach(L => {
+if (!L.warm)
+return;
+const x = m.a * L.x + m.c * L.y + m.e, y = m.b * L.x + m.d * L.y + m.f, r = L.r * sc * .8;
+const g = c.createRadialGradient(x, y, 0, x, y, r);
+g.addColorStop(0, "rgba(255,170,70," + L.warm + ")");
+g.addColorStop(1, "rgba(255,170,70,0)");
+c.fillStyle = g;
+c.fillRect(x - r, y - r, r * 2, r * 2);
+});
+c.restore();
+}
+let r31LastFrame = 0;
+function r31Entries(queue, p) {
+const planetId = selectedStartPlanet;
+const def = R31_DEFS[planetId];
+const now = performance.now();
+const dt = Math.min(.1, Math.max(0, (now - (r31LastFrame || now)) / 1000));
+r31LastFrame = now;
+let run = r31Run;
+if (run && (!roamingActive || planetId !== run.planet || roomState)) {
+r31End("woke");
+run = null;
+}
+if (!def)
+return;
+const c = p.c, t = now / 1000;
+const u = Math.max(26, p.width * .075);
+const P = r31PuddleV(planetId);
+const pv = roamingActive ? r31PetV() : null;
+if (!run && roamingActive && !roomState && pv) {
+const d = r31Ang(P, pv);
+if (d > .09)
+r31Armed = true;
+if (!r31Seen[planetId] && d < .7) {
+r31Seen[planetId] = true;
+showShipToast("🌑 A puddle of ink on the far side of " + (getPlanet(planetId) || { name: planetId }).name + "… walk in, if you dare.");
+}
+if (d < R31.puddle && r31Armed && now > r31Rearm) {
+r31Armed = false;
+r31Start(planetId);
+run = r31Run;
+}
+}
+if (run)
+r31Tick(dt, now);
+run = r31Run;
+{
+const pts = r31Ring(P, R31.puddle, p, 24);
+if (pts) {
+const q = r31P(P, p);
+queue.push({ z: -.5, alpha: 1, draw: () => r31DrawPuddle(c, pts, t, def.col, run && (run.phase === "escape" || run.phase === "won")) });
+if (!run) {
+queue.push({ z: -.49, alpha: 1, draw: () => {
+const k = Math.max(0, Math.sin(t * .7) * 3 - 2);
+if (k <= 0)
+return;
+c.save();
+c.globalAlpha = k;
+c.fillStyle = "#f4f1ff";
+c.shadowColor = def.col;
+c.shadowBlur = 8;
+[-1, 1].forEach(s => {
+c.beginPath();
+c.ellipse(q.x + s * u * .13, q.y - u * .03, u * .06, u * .025 * k, 0, 0, Math.PI * 2);
+c.fill();
+});
+c.restore();
+} });
+world.hits.push({ x: q.x, y: q.y, r: u * .9, z: 4, onTap: () => r31PuddleBubble(planetId, q.x, q.y - u) });
+}
+else {
+r31Place(queue, p, P, cc => r31DrawDoor(cc, u, run, t), .0005);
+}
+}
+}
+if (!run)
+return;
+const b = run.boss;
+queue.push({ z: -.48, alpha: 1, draw: () => {
+c.save();
+if (def.boss === "gourmand") {
+run.crumbs.forEach(cb => {
+const q = r31P(cb.v, p);
+if (!q.visible)
+return;
+const a = 1 - (now - cb.t0) / 10000;
+c.globalAlpha = a * .55;
+c.fillStyle = "#9dff7a";
+c.beginPath();
+c.arc(q.x + Math.sin(t * 2 + cb.t0) * 3, q.y - 4 - ((now - cb.t0) / 400 % 6), 2.5, 0, Math.PI * 2);
+c.fill();
+});
+}
+run.noise.forEach(n => {
+const k = (now - n.t0) / 900;
+const pts = r31Ring(n.v, n.r * Math.min(1, k * 1.4), p, 24);
+if (!pts)
+return;
+c.globalAlpha = (1 - k) * (n.kind === "step" ? .5 : .85);
+c.strokeStyle = n.kind === "wrong" ? "#ff5c5c" : n.kind === "crackle" ? "#ffd27a" : "#eaf0ff";
+c.lineWidth = n.kind === "step" ? 1.5 : 2.5;
+r31Poly(c, pts);
+c.stroke();
+});
+if (def.boss === "watcher" && b.state !== "rise" && run.phase !== "intro") {
+const lit = run.lanterns.some(l => l.lit && pv && r31Ang(l.v, pv) < .16);
+const range = b.state === "chase" ? .45 : lit ? .5 : .32;
+const f = r31Flat(b.v, b.f);
+const pts = [r31P(b.v, p)];
+let ok = pts[0].visible;
+for (let i = 0; i <= 12 && ok; i++) {
+const q = r31P(r31Go(b.v, r31Turn(b.v, f, -.55 + 1.1 * i / 12), range), p);
+ok = q.visible;
+pts.push(q);
+}
+if (ok) {
+const g = c.createRadialGradient(pts[0].x, pts[0].y, 0, pts[0].x, pts[0].y, Math.hypot(pts[6].x - pts[0].x, pts[6].y - pts[0].y));
+const col = b.state === "chase" ? "255,80,80" : "255,226,122";
+g.addColorStop(0, "rgba(" + col + ",.35)");
+g.addColorStop(1, "rgba(" + col + ",.05)");
+c.globalAlpha = 1;
+c.fillStyle = g;
+r31Poly(c, pts);
+c.fill();
+}
+}
+c.restore();
+} });
+run.lanterns.forEach(l => r31Place(queue, p, l.v, cc => r31DrawLantern(cc, u, l, t, def.col)));
+run.hides.forEach(h => {
+const inside = run.hidden && pv && r31Ang(h.v, pv) < R31.hide;
+r31Place(queue, p, h.v, cc => r31DrawHide(cc, u, h, false, inside), -.0004);
+if (inside)
+r31Place(queue, p, h.v, cc => r31DrawHide(cc, u, h, true, true), .002);
+});
+run.piles.forEach(pl => r31Place(queue, p, pl.v, cc => r31DrawPile(cc, u, now > pl.cool)));
+run.stones.forEach(s => r31Place(queue, p, s.v, cc => {
+cc.fillStyle = "#8a8f99";
+cc.beginPath();
+cc.ellipse(0, -u * .05, u * .08, u * .06, 0, 0, Math.PI * 2);
+cc.fill();
+}));
+const bq = r31P(b.v, p);
+const H = u * 3.8;
+let flip = 1;
+if (bq.visible) {
+const ahead = r31P(r31Go(b.v, r31Flat(b.v, b.f), .02), p);
+flip = ahead.x < bq.x ? -1 : 1;
+r31Place(queue, p, b.v, cc => r31DrawBoss(cc, H * (r19SurfScale || 1) / (r19SurfScale || 1), run, t, flip));
+r31Screen = { x: bq.x, y: bq.y, h: H };
+}
+else {
+r31Screen = null;
+}
+queue.push({ z: 1e9, alpha: 1, draw: () => {
+const lights = [];
+const head = world.roamHead;
+if (head)
+lights.push({ x: head.x, y: head.y + head.size * .9, r: u * (run.hidden ? 2.2 : 3.4), k: .92 });
+run.lanterns.forEach(l => {
+if (!l.lit)
+return;
+const q = r31P(l.v, p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y - u * .9, r: u * 4.2, k: 1, warm: .22 });
+});
+if (run.phase === "escape" || run.phase === "won") {
+const q = r31P(P, p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y - u * .8, r: u * 5, k: 1, warm: .3 });
+}
+if (bq.visible && def.boss === "watcher" && b.state !== "rise")
+lights.push({ x: bq.x, y: bq.y - H * .88, r: u * 1.6, k: .8, warm: .15 });
+run.flights.forEach(fl => {
+const k = (now - fl.t0) / 600;
+const a = r31P(fl.from, p), z = r31P(fl.to, p);
+if (a.visible && z.visible)
+lights.push({ x: a.x + (z.x - a.x) * k, y: a.y + (z.y - a.y) * k - Math.sin(k * Math.PI) * u * 1.4, r: u * .7, k: .6 });
+});
+const flick = .02 * Math.sin(now / 90) + .015 * Math.sin(now / 37);
+r31Dark(c, lights, .8 + flick);
+} });
+queue.push({ z: 1e9 + 1, alpha: 1, draw: () => {
+if (bq.visible)
+r31DrawEye(c, bq.x, bq.y, H, run, t, flip);
+run.flights.forEach(fl => {
+const k = (now - fl.t0) / 600;
+const a = r31P(fl.from, p), z = r31P(fl.to, p);
+if (!a.visible || !z.visible)
+return;
+c.fillStyle = "#cfd6e2";
+c.beginPath();
+c.arc(a.x + (z.x - a.x) * k, a.y + (z.y - a.y) * k - Math.sin(k * Math.PI) * u * 1.4 - u * .5, 3.5, 0, Math.PI * 2);
+c.fill();
+});
+const head = world.roamHead;
+if (head && run.hidden) {
+c.save();
+c.font = "900 " + Math.round(u * .42) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.globalAlpha = .85;
+c.fillText("🫣", head.x, head.y - u * .35);
+c.restore();
+}
+const W = p.width, Hh = c.canvas.height / (c.getTransform().d || 1);
+if (b.state === "chase" || run.phase === "caught") {
+const k = run.phase === "caught" ? 1 : .35 + .25 * Math.sin(now / 120);
+const g = c.createRadialGradient(W / 2, Hh / 2, Math.min(W, Hh) * .3, W / 2, Hh / 2, Math.max(W, Hh) * .7);
+g.addColorStop(0, "rgba(120,0,10,0)");
+g.addColorStop(1, "rgba(150,0,15," + k + ")");
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.scale(c.canvas.width / W, c.canvas.width / W);
+c.fillStyle = g;
+c.fillRect(0, 0, W, Hh);
+c.restore();
+}
+if (run.phase === "caught" || run.phase === "won") {
+const k = 1 - Math.max(0, (run.endAt - now) / 1600);
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.fillStyle = run.phase === "caught" ? "rgba(0,0,0," + Math.min(1, k * 1.3) + ")" : "rgba(255,251,232," + Math.min(1, k * 1.2) + ")";
+c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+c.restore();
+}
+const age = (now - run.startAt) / 1000;
+if (age < 4.5) {
+const a = Math.min(1, age / .8) * Math.min(1, (4.5 - age) / 1);
+c.save();
+c.globalAlpha = a;
+c.textAlign = "center";
+c.fillStyle = "#f4ecdc";
+c.shadowColor = def.col;
+c.shadowBlur = 14;
+c.font = "900 " + Math.round(W * .085) + "px Georgia,serif";
+c.fillText(def.name.toUpperCase(), W / 2, Hh * .38);
+c.shadowBlur = 0;
+c.font = "italic 600 " + Math.round(W * .036) + "px Georgia,serif";
+c.fillStyle = "#c8bfd8";
+c.fillText(def.tag, W / 2, Hh * .38 + W * .065);
+c.restore();
+}
+} });
+r31HudUpdate();
+}
+function r31PuddleBubble(planetId, x, y) {
+const def = R31_DEFS[planetId];
+const st = r31Stats(planetId);
+worldShowBubble({
+x, y,
+iconHtml: "🌑",
+title: "Nightmare puddle",
+meta: def.name + " · " + def.tag + (st.clears ? " · escaped ×" + st.clears + " · best " + r31Time(st.best) : ""),
+text: roamingActive
+? "Something waits beneath the ink. Walk in to dream: sneak past it, light the three lanterns in the order on the door, then run for the door."
+: "Something waits beneath the ink. Go roaming with a pet and walk into it — if you dare.",
+buttons: [{ label: "Close" }]
+});
+}
+function r31Hud(show) {
+let el = document.getElementById("nmHud");
+if (!el) {
+el = document.createElement("div");
+el.id = "nmHud";
+el.className = "nm-hud hidden";
+el.innerHTML =
+'<div class="nm-top"><span class="nm-name"></span><span class="nm-state"></span></div>' +
+'<div class="nm-glyphs"></div>' +
+'<div class="nm-noise"><span>NOISE</span><div class="nm-noise-bar"><i></i></div></div>' +
+'<div class="nm-msg"></div>' +
+'<div class="nm-btns"><button class="neon-btn" data-nm="throw"></button><button class="neon-btn" data-nm="wake">Wake up</button></div>';
+(document.getElementById("planetFocus") || document.body).appendChild(el);
+el.addEventListener("pointerdown", e => {
+e.stopPropagation();
+const btn = e.target.closest("[data-nm]");
+if (!btn)
+return;
+e.preventDefault();
+if (btn.getAttribute("data-nm") === "throw")
+r31Throw();
+else
+r31End("woke");
+});
+}
+el.classList.toggle("hidden", !show);
+el._shownAt = 0;
+}
+function r31HudUpdate() {
+const run = r31Run;
+const el = document.getElementById("nmHud");
+if (!run || !el)
+return;
+const now = performance.now();
+if (now - (el._at || 0) < 120)
+return;
+el._at = now;
+const b = run.boss;
+el.querySelector(".nm-name").textContent = "☾ " + run.def.name.toUpperCase();
+el.querySelector(".nm-state").textContent =
+run.phase === "intro" ? "waking…"
+: run.phase === "escape" ? "🏃 RUN!"
+: now < b.stunUntil ? "✶ staggered"
+: b.state === "chase" ? "❗ hunting you"
+: run.hidden ? "🫣 hidden"
+: b.state === "look" ? "❓ searching"
+: "💤 unaware";
+el.querySelector(".nm-state").className = "nm-state" + (b.state === "chase" || run.phase === "escape" ? " hot" : "");
+el.querySelector(".nm-glyphs").innerHTML =
+run.phase === "escape"
+? '<b>The door is open — get back to the puddle!</b>'
+: 'Light the lanterns in the door\'s order ' + run.lanterns.map(l => '<span class="nm-g' + (l.lit ? ' lit' : '') + '">' + l.glyph + '</span>').join("");
+const sf = roamingIsMoving ? roamingSpeedFraction : 0;
+const k = Math.min(1, sf / (R31.sneak * 1.8));
+const bar = el.querySelector(".nm-noise-bar i");
+bar.style.width = Math.round(k * 100) + "%";
+bar.className = run.hidden ? "" : sf > R31.sneak ? "loud" : "quiet";
+el.querySelector(".nm-noise span").textContent = run.hidden ? "HIDDEN" : sf > R31.sneak ? "LOUD" : sf > .15 ? "SNEAKING" : "STILL";
+const msgEl = el.querySelector(".nm-msg");
+const show = run.msg && now - run.msgAt < 5000;
+msgEl.textContent = show ? run.msg : run.def.hint;
+msgEl.classList.toggle("fresh", !!show);
+el.querySelector('[data-nm="throw"]').textContent = "🪨 Throw ×" + run.pebbles;
+el.querySelector('[data-nm="throw"]').disabled = run.pebbles <= 0;
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent =
+'.nm-hud{position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 74px);z-index:40;' +
+'background:rgba(8,3,14,.82);border:1px solid rgba(255,138,92,.35);border-radius:14px;padding:8px 12px;' +
+'color:#efe6f6;font:600 12px system-ui,sans-serif;box-shadow:0 0 24px rgba(0,0,0,.6);pointer-events:auto;max-width:420px;margin:0 auto;}' +
+'.nm-hud.hidden{display:none;}' +
+'.nm-top{display:flex;justify-content:space-between;align-items:center;letter-spacing:.12em;font:900 13px Georgia,serif;}' +
+'.nm-state{font:800 11px system-ui,sans-serif;letter-spacing:.04em;color:#cfc6dc;}' +
+'.nm-state.hot{color:#ff5c5c;animation:nmPulse .5s infinite alternate;}' +
+'@keyframes nmPulse{from{opacity:.55}to{opacity:1}}' +
+'.nm-glyphs{margin-top:6px;color:#bfb4cf;}' +
+'.nm-g{display:inline-block;margin-left:7px;font-size:16px;opacity:.45;}' +
+'.nm-g.lit{opacity:1;color:#fff1b8;text-shadow:0 0 8px #ffcc66;}' +
+'.nm-noise{display:flex;align-items:center;gap:8px;margin-top:6px;font:800 10px system-ui,sans-serif;letter-spacing:.08em;color:#a99fba;}' +
+'.nm-noise span{width:64px;}' +
+'.nm-noise-bar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;}' +
+'.nm-noise-bar i{display:block;height:100%;width:0;background:#7dffb0;transition:width .12s;}' +
+'.nm-noise-bar i.loud{background:#ff5c5c;}' +
+'.nm-msg{margin-top:5px;color:#a99fba;font-style:italic;line-height:1.3;}' +
+'.nm-msg.fresh{color:#f4ecdc;font-style:normal;}' +
+'.nm-btns{display:flex;gap:8px;margin-top:7px;}' +
+'.nm-btns .neon-btn{flex:1;padding:6px 10px;font-size:12px;min-height:0;}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -35335,6 +36790,7 @@ corpseSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat,
 trapSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 world.r29Struct = {};
 r29RaidSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+r31Entries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 r26PenEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
