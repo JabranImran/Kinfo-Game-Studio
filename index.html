@@ -7574,7 +7574,7 @@ const SITE_EXTRA_PET_RATE = .6;
 function siteRateFor(n) {
 return n <= 0 ? 0 : 1 + (n - 1) * SITE_EXTRA_PET_RATE;
 }
-function siteNeedMs(job) {
+function siteNeedMs__r30(job) {
 return (job.durationSeconds || 60) * 1000;
 }
 function siteActiveWorkers(planetId, job) {
@@ -7628,7 +7628,7 @@ const name = SPECIES_DISPLAY_NAMES[pet.species] || "Native pet";
 const same = getPets(planetId).filter(p => (SPECIES_DISPLAY_NAMES[p.species] || "Native pet") === name);
 return same.length > 1 ? name + " " + (same.indexOf(pet) + 1) : name;
 }
-function placeStructureSite(planetId, structureId) {
+function placeStructureSite__r30(planetId, structureId) {
 const structure = STRUCTURES[structureId];
 const queue = planetSave.buildQueue[planetId];
 const busy = new Set();
@@ -7682,7 +7682,7 @@ savePlanetProgress();
 const st = STRUCTURES[structureId];
 showShipToast(on ? petShortName(planetId, pet) + " stepped off the " + st.name + " site" : petShortName(planetId, pet) + " is building the " + st.name + (pet.energy <= 0 ? " (once it's fed)" : "") + "!");
 }
-function siteBubble(planetId, structureId, x, y) {
+function siteBubble__r30(planetId, structureId, x, y) {
 const job = getSiteJob(planetId, structureId);
 const st = STRUCTURES[structureId];
 if (!job || !st)
@@ -7718,7 +7718,7 @@ buttons
 });
 void view;
 }
-function siteMenuHtml(planetId, job) {
+function siteMenuHtml__r30(planetId, job) {
 const st = STRUCTURES[job.structureId];
 const view = siteTimerView(job);
 const pct = Math.round(siteFraction(job) * 1000) / 10;
@@ -8168,7 +8168,7 @@ const credits = satCredits(planetId);
 credits[itemId] = (credits[itemId] || 0) + 1;
 return hasStructure(planetId, "satellite-factory") ? " · +1 " + satTypeName(itemId) + " satellite blueprint" : "";
 }
-function satBuild(planetId, type, mode) {
+function satBuild__r30(planetId, type, mode) {
 if (!hasStructure(planetId, "satellite-factory"))
 return;
 mode = mode === "auto" ? "auto" : "manual";
@@ -9150,9 +9150,7 @@ const jobs = getBuildQueue(planetId).filter(b => b.type === "satellite");
 jobs.forEach(job => {
 html +=
 '<div class="metric-note state-warn">🛰 Building ' + satModeLabel(job.satMode).toLowerCase() + ' ' + satTypeName(job.satType) + ' — ' +
-'<span class="live-timer" data-start="' + job.startedAt + '" data-duration="' + job.durationSeconds + '">' + formatRemainingText(job) + '</span>' +
-'<div class="live-bar"><div class="live-bar-fill" data-start="' + job.startedAt + '" data-duration="' + job.durationSeconds + '" style="width:' + liveProgressPercent(job) + '%"></div></div>' +
-'</div>';
+r30TimeHtml(job) + r30BarHtml(job) + '</div>' + r30CrewRowHtml(planetId, job);
 });
 const hangar = satHangar(planetId);
 const ships = (getShips(planetId) || []);
@@ -9363,9 +9361,9 @@ c.save();
 c.fillStyle = "#eafcff";
 c.font = "800 12px system-ui,sans-serif";
 c.textAlign = "center";
-c.fillText(job ? "Building " + satTypeName(job.satType) + " · " + formatRemainingText(job) : "Assembly cradle · tap to build", p.x, p.y + 34 * s);
+c.fillText(job ? "Building " + satTypeName(job.satType) + " · " + formatRemainingText(job) : "Assembly cradle", p.x, p.y + 34 * s);
 c.restore();
-world.hits.push({ x: p.x, y: p.y - 50 * s, r: 70 * s, z: 6, onTap: () => worldOpenHolo("structure-satellite-factory", { title: "SATELLITE FACTORY" }) });
+r30FactoryButtons(c, { x: p.x, ringY: p.y - 50 * s, r: 70 * s, textY: p.y + 34 * s }, planetId, job, "sat");
 } });
 list.push({ v: .3, draw: () => {
 const box = roomDrawBox(c, .85, .3, 74, 46, st.accent, "HANGAR " + satHangar(planetId).length);
@@ -9382,7 +9380,7 @@ c.restore();
 world.hits.push({ x, y, r: 16 * box.s, z: 7, onTap: () => roomHangarBubble(planetId, sat, x, y) });
 });
 } });
-roomDrawWorkers(c, list, planetId, "builder", time);
+r30DrawCrew(c, list, planetId, time, ["satellite"]);
 }
 function roomHangarBubble(planetId, sat, x, y) {
 const ship = world.shownShipId ? satFindShip(planetId, world.shownShipId) : null;
@@ -9585,10 +9583,10 @@ else if (shipPointsValue(ship) >= 5)
 steps.push({ icon: "★", text: "Sell " + (shipPointsValue(ship) * POINTS_PER_COIN).toLocaleString() + " ship points", btn: shipPointsValue(ship) + " " + COIN_ICON_HTML, attrs: 'data-action="sell-ship-points" data-ship="' + ship.id + '"' });
 });
 getBuildQueue(planetId).forEach(job => {
-if (steps.length >= 3 || !job.site || (job.lastN || 0) > 0)
+if (steps.length >= 3 || !job.site || job.nemesis || (job.workers || []).length > 0)
 return;
 if (getPets(planetId).some(p => (p.role || "builder") === "builder" && p.energy > 0))
-steps.push({ icon: "🏗", text: STRUCTURES[job.structureId].name + " site is idle", btn: "Send builders", attrs: 'data-action="planet-tab" data-tab="structure-' + job.structureId + '"' });
+steps.push({ icon: "🏗", text: r30JobName(job) + " is paused", btn: "🔨 Build", attrs: 'data-action="r30-build" data-job="' + r30Key(job) + '"' });
 });
 if (steps.length < 2) {
 const unlockedNotBuilt = Object.keys(STRUCTURES).find(id => isStructureUnlocked(planetId, id) && !hasStructure(planetId, id) && !getSiteJob(planetId, id) && !(id === "ship-factory" && planetId === "earth"));
@@ -10141,12 +10139,12 @@ holo.style.bottom = (host.height - b.y + 14) + "px";
 holo.style.setProperty("--tail-x", Math.max(18, Math.min(w - 18, b.x - left)) + "px");
 }
 const ROOM_VIEW_IDS = ["pet-pen", "stock", "shop", "ship-factory", "pilot-training", "bio-dome", "powerup-forge", "satellite-factory"];
-function planetTapOpensRoom(structureId) {
+function planetTapOpensRoom__r30(structureId) {
 if (!ROOM_VIEW_IDS.includes(structureId))
 return false;
 return structureId === "pet-pen" || structureId === "stock" || structureId === "shop" || hasStructure(selectedStartPlanet, structureId);
 }
-function enterRoomView(kind, id) {
+function enterRoomView__r30(kind, id) {
 if (roamingActive) {
 enterRoom(kind, id);
 return;
@@ -13574,7 +13572,7 @@ return;
 bossSurfHitEnemy(spot, effOn.dmg, effOn.stun || 0);
 });
 plantPowerHit(kind, shape);
-r29StructPowerHit(kind, shape);
+r29StructPowerHit(kind, shape, pet);
 Object.values(world.petScreen || {}).forEach(ps => {
 if (!ps || !ps.pet || ps.pet.id === pet.id || (me && ps.pet.id === me.pet.id))
 return;
@@ -14133,6 +14131,8 @@ if (typeof r13Blocks === "function" && r13Blocks(target))
 return;
 if (typeof r14Blocks === "function" && r14Blocks(target))
 return;
+if (r30Blocks(target))
+return;
 const result = executePlanetDetailAction__orig(target);
 if (typeof r14After === "function")
 r14After(target);
@@ -14639,7 +14639,7 @@ f.pet.carriedBy = null;
 }
 return taken;
 }
-function worldPlacePut(planetId, place, d) {
+function worldPlacePut__r30(planetId, place, d) {
 if (!d || d.k !== "corpse")
 return worldPlacePut__orig(planetId, place, d);
 const f = findCorpse(d.r);
@@ -16277,7 +16277,7 @@ function shieldBuildPreviewHtml(planetId) {
 const n = shieldBuildCount(planetId);
 return n ? '<span class="shield-heart">' + "♥".repeat(n) + '</span>' : "";
 }
-function queueShipBuild(planetId, options) {
+function queueShipBuild__r30(planetId, options) {
 const want = Math.min(shieldUnlocked(planetId), (options && options.shield) || 0);
 const queue = ((planetSave.buildQueue || {})[planetId] || []);
 const before = queue.length;
@@ -20434,7 +20434,7 @@ pick.appendChild(badge);
 grid.insertBefore(pick, grid.firstChild);
 }
 const R29_STRUCT_MAX = 160;
-function r29Damageable(id) {
+function r29Damageable__r30(id) {
 return id === "stock" || !!STRUCTURES[id];
 }
 function r29Hp(planetId, id) {
@@ -20454,7 +20454,7 @@ r29SaveAt = now;
 savePlanetProgress();
 }
 }
-function r29DamageStructure(planetId, id, n) {
+function r29DamageStructure__r30(planetId, id, n) {
 if (!r29Damageable(id))
 return;
 withMySave(() => {
@@ -20512,7 +20512,7 @@ drop({ k: "item", r: id, n });
 });
 bossAnnounce("💥 The Vault on " + bossPlanetName(planetId) + " was smashed open — its contents are scattered across the ground!");
 }
-function r29DestroyStructure(planetId, id) {
+function r29DestroyStructure__r30(planetId, id) {
 if (!hasStructure(planetId, id))
 return;
 if (!planetSave.ruined)
@@ -20550,7 +20550,7 @@ const x = ix - M.c * h, y = iy - M.d * h;
 const fs = Math.max(8, Math.round(iconSize * .14));
 const dmg = r29Damageable(item.structureId) && !item.site;
 const f = dmg ? Math.max(0, Math.min(1, r29Hp(selectedStartPlanet, item.structureId) / R29_STRUCT_MAX)) : 1;
-if (dmg && item.structureId !== "shop" && item.structureId !== "board")
+if (dmg && item.structureId !== "board")
 (world.r29Struct || (world.r29Struct = {}))[item.structureId] = { x: ix, y: iy - iconSize * .5, r: iconSize * .6 };
 const col = f > .6 ? "#7dffb0" : f > .3 ? "#ffd76b" : "#ff5c5c";
 c.save();
@@ -20584,7 +20584,7 @@ c.textBaseline = "middle";
 c.fillText(name, x, y + .5);
 c.restore();
 }
-function r29StructPowerHit(kind, shape) {
+function r29StructPowerHit__r30(kind, shape) {
 if (selectedStartPlanet !== NEM)
 return;
 const n = PLANT_POWER_DAMAGE[kind];
@@ -20761,7 +20761,7 @@ return ('<span>🚀 ' + docked + ' ships docked' + (b.attack && b.attack.fleet ?
 (down.length ? ' · 💥 down: ' + down.join(", ") : '') +
 '</span>');
 }
-const R29_STAGE_MS = [0, 120000, 120000, 240000, 100000, 100000];
+const R29_STAGE_MS = [0, 120000, 120000, 240000, 10000, 100000];
 function r29StageMs(stage) {
 return R29_STAGE_MS[stage] || BOSS_STAGE_MS;
 }
@@ -20845,7 +20845,7 @@ const f = a.fleet.splice(idx, 1)[0];
 a.ships = a.fleet.length;
 if (real && f && f.cargo.length) {
 withMySave(() => {
-f.cargo.forEach(d => worldPlacePut(a.target, { t: "vault" }, d));
+f.cargo.forEach(d => r30Return(a.target, d));
 savePlanetProgress();
 });
 bossAnnounce("📦 A raider went down — " + f.cargo.length + " stolen load" + (f.cargo.length === 1 ? "" : "s") + " returned to " + bossPlanetName(a.target) + "'s Vault.");
@@ -20874,7 +20874,7 @@ r29Depart(a, f);
 bossMark();
 return;
 }
-const ids = withMySave(() => Object.keys(STRUCTURES).filter(id => hasStructure(a.target, id))).concat(["stock"]);
+const ids = withMySave(() => Object.keys(STRUCTURES).filter(id => hasStructure(a.target, id)).concat(r30StandingCores(a.target)));
 r29DamageStructure(a.target, ids[Math.floor(Math.random() * ids.length)], f.power ? 10 : 4);
 });
 }
@@ -21058,7 +21058,7 @@ goal = { kind: "item", id: g.x.id, p: g.p };
 }
 if (!goal) {
 const ll = world.structureLatLon || {};
-const ids = Object.keys(ll).filter(id => (id === "stock" || (STRUCTURES[id] && hasStructure(planet, id))));
+const ids = Object.keys(ll).filter(id => r30Standing(planet, id));
 const g = nearest(ids, id => ll[id]);
 if (g)
 goal = { kind: "build", id: g.x, p: g.p };
@@ -21174,7 +21174,7 @@ c.restore();
 }
 } });
 }
-function siteToggleWorker(planetId, structureId, petId) {
+function siteToggleWorker__r30(planetId, structureId, petId) {
 const job = getSiteJob(planetId, structureId);
 if (job && job.nemesis) {
 showShipToast("That's Nemesis's own building — its void pets are rebuilding it");
@@ -21187,8 +21187,775 @@ const f = b && b.attack && b.attack.fleet && b.attack.fleet[en.i];
 const s = f && r29R[f.id];
 return s ? { lat: ll.lat + s.dLat * 20, lon: ll.lon + s.dLon * 20 } : null;
 }
-const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
+const R30_CORE = {
+stock: { name: "Vault", icon: "🏦", secs: 90 },
+shop: { name: "Shop", icon: "🛒", secs: 75 }
+};
+const R30_NEAR = .12;
+const R30_FAR = .25;
+const R30_CREW_K = { "ship": .6, "ship-service": .6, "satellite": .5 };
+function r30IsCore(id) {
+return id === "stock" || id === "shop";
+}
+function r30CoreSite(planetId, id) {
+const j = getSiteJob(planetId, id);
+return j && j.core ? j : null;
+}
+function r30Ruined(planetId, id) {
+return r30IsCore(id) && !!r30CoreSite(planetId, id);
+}
+function r30CoreSiteIds(planetId) {
+return ["shop", "stock"].filter(id => r30Ruined(planetId, id));
+}
+function r30StandingCores(planetId) {
+return ["stock", "shop"].filter(id => !r30Ruined(planetId, id));
+}
+function r30Standing(planetId, id) {
+return r30IsCore(id) ? !r30Ruined(planetId, id) : !!STRUCTURES[id] && hasStructure(planetId, id);
+}
+let r30ToastAt = 0;
+function r30Toast(msg) {
+const now = performance.now();
+if (now - r30ToastAt < 1200)
+return;
+r30ToastAt = now;
+showShipToast(msg);
+}
+function r30Key(job) {
+if (job.type === "structure")
+return job.structureId;
+if (!job.jobId)
+job.jobId = "j" + Math.random().toString(36).slice(2, 9);
+return job.jobId;
+}
+function r30FindJob(planetId, key) {
+if (!key)
+return null;
+return getBuildQueue(planetId).find(b => (b.jobId && b.jobId === key) || (b.type === "structure" && b.structureId === key)) || null;
+}
+function r30JobName(job) {
+if (!job)
+return "job";
+if (job.type === "structure")
+return r30IsCore(job.structureId) ? R30_CORE[job.structureId].name : (STRUCTURES[job.structureId] || { name: "Structure" }).name;
+if (job.type === "ship")
+return "New ship";
+if (job.type === "ship-service")
+return (SHIP_SERVICES[job.serviceId] || { name: "Ship service" }).name;
+if (job.type === "satellite")
+return satTypeName(job.satType) + " satellite";
+return "Build";
+}
+function r30JobPhrase(job) {
+return job.type === "structure" ? r30JobName(job) : r30JobName(job).replace(/^New /, "new ");
+}
+function r30JobIcon(job) {
+if (job.type === "structure")
+return r30IsCore(job.structureId) ? R30_CORE[job.structureId].icon : getStructureIconHtml(job.structureId);
+if (job.type === "satellite")
+return getStructureIconHtml("satellite-factory");
+return getStructureIconHtml("ship-factory");
+}
+function r30JobHome(job) {
+if (job.type === "ship" || job.type === "ship-service")
+return "ship-factory";
+if (job.type === "satellite")
+return "satellite-factory";
+return job.structureId;
+}
+function r30JobLatLon(job) {
+return ((world && world.structureLatLon) || {})[r30JobHome(job)] || null;
+}
+function r30IsBuilder(p) {
+return (p.role || "builder") === "builder";
+}
+function r30JobOf(planetId, petId) {
+return getBuildQueue(planetId).find(b => b.site && (b.workers || []).includes(petId)) || null;
+}
+function r30FreeBuilders(planetId) {
+return getPets(planetId).filter(p => r30IsBuilder(p) && !r30JobOf(planetId, p.id));
+}
+function r30PickFree(planetId) {
+const free = r30FreeBuilders(planetId).filter(p => !isPetOutRoaming(p.id));
+free.sort((a, b) => (b.energy > 0) - (a.energy > 0) || (b.energy || 0) - (a.energy || 0));
+return free[0] || null;
+}
+function siteNeedMs(job) {
+return job.needMs || (job.durationSeconds || 60) * 1000;
+}
+function r30Virtualize(job) {
+if (!job.site || job.nemesis)
+return;
+if (!job.needMs)
+job.needMs = (job.durationSeconds || 60) * 1000;
+const rate = siteRateFor(job.lastN || 0);
+const prog = siteProgressMs(job);
+if (rate > 0) {
+job.startedAt = Date.now() - prog / rate;
+job.durationSeconds = job.needMs / rate / 1000;
+}
+else {
+job.startedAt = Date.now() - prog;
+job.durationSeconds = job.needMs / 1000;
+}
+}
+function r30Siteify(planetId) {
+if (planetId === NEM || !planetSave || !planetSave.buildQueue)
+return;
+const q = planetSave.buildQueue[planetId];
+if (!q || !q.length)
+return;
+let changed = false;
+q.forEach(job => {
+if (job.nemesis)
+return;
+if (!job.site) {
+const k = R30_CREW_K[job.type] || 0;
+const base = (job.durationSeconds || 60) * 1000;
+const need = base * (1 + getWorkingPetCount(planetId) * k);
+const frac = Math.max(0, Math.min(1, (Date.now() - (job.startedAt || Date.now())) / base));
+job.site = true;
+job.needMs = need;
+job.workMs = frac * need;
+job.lastTick = Date.now();
+job.workers = [];
+r30Key(job);
+const pet = r30PickFree(planetId);
+if (pet)
+job.workers = [pet.id];
+job.lastN = siteActiveWorkers(planetId, job).length;
+changed = true;
+}
+else if (!job.needMs) {
+job.needMs = (job.durationSeconds || 60) * 1000;
+changed = true;
+}
+r30Virtualize(job);
+});
+if (changed)
+savePlanetProgress();
+}
+function r30SetWorker(planetId, job, petId, on) {
+const q = getBuildQueue(planetId);
+q.forEach(b => {
+if (b.site && !b.nemesis)
+siteFold(planetId, b);
+});
+q.forEach(b => {
+if (b.site && b.workers)
+b.workers = b.workers.filter(id => id !== petId);
+});
+if (on)
+job.workers = (job.workers || []).concat(petId);
+q.forEach(b => {
+if (b.site && !b.nemesis) {
+b.lastN = siteActiveWorkers(planetId, b).length;
+r30Virtualize(b);
+}
+});
+savePlanetProgress();
+}
+function siteToggleWorker(planetId, key, petId) {
+const job = r30FindJob(planetId, key);
+const pet = getPets(planetId).find(p => p.id === petId);
+if (!job || !job.site || !pet)
+return;
+if (job.nemesis) {
+showShipToast("That's Nemesis's own building — its void pets are rebuilding it");
+return;
+}
+const on = (job.workers || []).includes(petId);
+if (!on && !r30IsBuilder(pet)) {
+showShipToast("Only builders can build — make " + petShortName(planetId, pet) + " a builder first");
+return;
+}
+const prev = !on && r30JobOf(planetId, petId);
+r30SetWorker(planetId, job, petId, !on);
+const name = petShortName(planetId, pet);
+if (on) {
+r30Toast(name + " left the " + r30JobPhrase(job) + ((job.workers || []).length ? "" : " — build paused"));
+}
+else {
+r30Toast("🔨 " + name + " is building the " + r30JobPhrase(job) + (prev ? " (moved off the " + r30JobPhrase(prev) + ")" : "") + (pet.energy <= 0 ? " — once it's fed" : ""));
+}
+}
+function r30Build(planetId, key, petId) {
+const job = r30FindJob(planetId, key);
+if (!job || !job.site)
+return;
+if (job.nemesis) {
+showShipToast("That's Nemesis's own building — its void pets are rebuilding it");
+return;
+}
+let pet = petId ? getPets(planetId).find(p => p.id === petId) : null;
+if (pet && !r30IsBuilder(pet))
+pet = null;
+if (pet && (job.workers || []).includes(pet.id))
+return;
+if (!pet)
+pet = r30PickFree(planetId);
+if (!pet) {
+const any = getPets(planetId).some(r30IsBuilder);
+showShipToast(any ? "Every builder is busy — tap ＋ Add builder to move one over" : "No builder pets here yet — adopt one at the Pet Pen");
+return;
+}
+siteToggleWorker(planetId, key, pet.id);
+}
+function r30AnnounceCrew(planetId, job) {
+if (!job)
+return;
+const pets = getPets(planetId);
+const p = pets.find(x => (job.workers || []).includes(x.id));
+showShipToast(p ? "🔨 " + petShortName(planetId, p) + " is building the " + r30JobPhrase(job) : r30JobName(job) + " queued — add a builder to start it");
+}
+function r30AfterQueue(planetId, before) {
+const q = getBuildQueue(planetId);
+if (q.length > before) {
+r30Siteify(planetId);
+r30AnnounceCrew(planetId, q[q.length - 1]);
+}
+}
+function queueShipBuild(planetId, options) {
+const n = getBuildQueue(planetId).length;
+const r = queueShipBuild__r30(planetId, options);
+r30AfterQueue(planetId, n);
+return r;
+}
+function satBuild(planetId, type, mode) {
+const n = getBuildQueue(planetId).length;
+const r = satBuild__r30(planetId, type, mode);
+r30AfterQueue(planetId, n);
+return r;
+}
+function queueShipService(planetId, shipId, serviceId) {
+const n = getBuildQueue(planetId).length;
+const r = queueShipService__r30(planetId, shipId, serviceId);
+r30AfterQueue(planetId, n);
+return r;
+}
+function computeShipBuildDuration(planetId) {
+return 90 / (1 + getWorkingPetCount(planetId) * .6);
+}
+function placeStructureSite(planetId, structureId) {
+const job = placeStructureSite__r30(planetId, structureId);
+job.workers = [];
+job.needMs = (job.durationSeconds || 60) * 1000;
+const pet = r30PickFree(planetId);
+if (pet)
+job.workers = [pet.id];
+job.lastN = siteActiveWorkers(planetId, job).length;
+r30Virtualize(job);
+return job;
+}
+function resolveBuildQueue(planetId) {
+try {
+if (typeof localPlanetSave === "undefined" || !localPlanetSave || planetSave === localPlanetSave)
+r30Siteify(planetId);
+const q = getBuildQueue(planetId);
+for (let i = q.length - 1; i >= 0; i--) {
+const j = q[i];
+if (j.core && j.site && siteProgressMs(j) >= siteNeedMs(j)) {
+q.splice(i, 1);
+r30CoreRebuilt(planetId, j);
+}
+}
+}
+catch (error) { }
+return resolveBuildQueue__r30(planetId);
+}
+function r30RuinCore(planetId, id) {
+if (!planetSave.buildQueue)
+planetSave.buildQueue = {};
+if (!planetSave.buildQueue[planetId])
+planetSave.buildQueue[planetId] = [];
+if (r30CoreSite(planetId, id))
+return;
+const secs = R30_CORE[id].secs;
+planetSave.buildQueue[planetId].push({
+type: "structure",
+structureId: id,
+site: true,
+core: true,
+rebuild: true,
+planetId,
+startedAt: Date.now(),
+durationSeconds: secs,
+needMs: secs * 1000,
+workMs: 0,
+lastTick: Date.now(),
+workers: [],
+lastN: 0
+});
+bossAnnounce("💥 The " + R30_CORE[id].name + " on " + bossPlanetName(planetId) + " was destroyed! Tap its ruins and press Build to raise it again.");
+}
+function r30CoreRebuilt(planetId, job) {
+if (planetSave.structHp && planetSave.structHp[planetId])
+delete planetSave.structHp[planetId][job.structureId];
+const c = R30_CORE[job.structureId];
+addRankPoints(40, "Rebuilt the " + c.name);
+showMilestoneFlourish(c.icon, c.name + " rebuilt!", "Open again on " + (getPlanet(planetId) || { name: planetId }).name);
+savePlanetProgress();
+}
+function r29Damageable(id) {
+return r30IsCore(id) || !!STRUCTURES[id];
+}
+function r29DamageStructure(planetId, id, n) {
+if (!r29Damageable(id) || !(n > 0))
+return;
+withMySave(() => {
+if (r30IsCore(id) ? r30Ruined(planetId, id) : !hasStructure(planetId, id))
+return;
+if (!planetSave.structHp)
+planetSave.structHp = {};
+const m = planetSave.structHp[planetId] || (planetSave.structHp[planetId] = {});
+const hp = (m[id] === undefined ? R29_STRUCT_MAX : m[id]) - n;
+if (hp > 0) {
+m[id] = hp;
+r29SaveSoon();
+return;
+}
+delete m[id];
+if (r30IsCore(id)) {
+if (id === "stock")
+r30WithVault(() => r29SpillVault(planetId));
+r30RuinCore(planetId, id);
+}
+else {
+r29DestroyStructure(planetId, id);
+}
+savePlanetProgress();
+});
+}
+function r29DestroyStructure(planetId, id) {
+if (!hasStructure(planetId, id))
+return;
+if (!planetSave.ruined)
+planetSave.ruined = {};
+const store = planetSave.ruined[planetId] || (planetSave.ruined[planetId] = {});
+store[id] = planetSave.structures[planetId][id];
+delete planetSave.structures[planetId][id];
+if (!planetSave.buildQueue)
+planetSave.buildQueue = {};
+if (!planetSave.buildQueue[planetId])
+planetSave.buildQueue[planetId] = [];
+const secs = Math.round((STRUCTURES[id].buildDurationSeconds || 60) * .6);
+planetSave.buildQueue[planetId].push({
+type: "structure",
+structureId: id,
+site: true,
+rebuild: true,
+planetId,
+startedAt: Date.now(),
+durationSeconds: secs,
+needMs: secs * 1000,
+workMs: 0,
+lastTick: Date.now(),
+workers: [],
+lastN: 0
+});
+bossAnnounce("💥 The " + STRUCTURES[id].name + " on " + bossPlanetName(planetId) + " was destroyed! Tap its ruins and press Build to raise it again.");
+}
+let r30VaultOpen = 0;
+function r30WithVault(fn) {
+r30VaultOpen++;
+try {
+return fn();
+}
+finally {
+r30VaultOpen--;
+}
+}
+function worldPlacePut(planetId, place, d) {
+if (place && place.t === "vault" && !r30VaultOpen && r30Ruined(planetId, "stock")) {
+r30Toast("🏦 The Vault is in ruins — rebuild it before storing anything");
+return false;
+}
+return worldPlacePut__r30(planetId, place, d);
+}
+function r30Return(planetId, d) {
+if (!r30Ruined(planetId, "stock"))
+return worldPlacePut(planetId, { t: "vault" }, d);
+const spot = ((world && world.structureLatLon) || {}).stock || { lat: SHIP_LAT - .25, lon: -.235 };
+const a = Math.random() * Math.PI * 2;
+return worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .03 + Math.cos(a) * .04, lon: spot.lon + Math.sin(a) * .05 } }, d);
+}
+function r30RuinedNotice(planetId, id) {
+r30Toast(R30_CORE[id].icon + " The " + R30_CORE[id].name + " is in ruins — tap it on the planet and press Build");
+}
+function r30Blocks(target) {
+const a = target.getAttribute("data-action");
+const pid = planetDetailId || selectedStartPlanet;
+if (a === "planet-tab") {
+const t = target.getAttribute("data-tab");
+const id = t === "shop" ? "shop" : t === "vault" ? "stock" : null;
+if (id && r30Ruined(pid, id)) {
+r30RuinedNotice(pid, id);
+return true;
+}
+}
+if ((a === "deposit" || a === "ship-unload-all") && r30Ruined(pid, "stock")) {
+r30Toast("🏦 The Vault is in ruins — rebuild it before unloading into it");
+return true;
+}
+if (a === "build-structure" && r30Ruined(pid, "shop")) {
+r30Toast("🛒 The Shop is in ruins — rebuild it to buy buildings again");
+return true;
+}
+return false;
+}
+function worldOpenHolo(tab, opts) {
+const id = tab === "shop" ? "shop" : tab === "vault" ? "stock" : null;
+if (id && r30Ruined(selectedStartPlanet, id)) {
+r30RuinedNotice(selectedStartPlanet, id);
+return;
+}
+return worldOpenHolo__r30(tab, opts);
+}
+function planetTapOpensRoom(structureId) {
+if (r30Ruined(selectedStartPlanet, structureId))
+return false;
+return planetTapOpensRoom__r30(structureId);
+}
+function enterRoom(kind, id) {
+if (kind === "structure" && r30Ruined(selectedStartPlanet, id)) {
+r30RuinedNotice(selectedStartPlanet, id);
+return;
+}
+return enterRoom__r30(kind, id);
+}
+function enterRoomView(kind, id) {
+if (kind === "structure" && r30Ruined(selectedStartPlanet, id)) {
+r30RuinedNotice(selectedStartPlanet, id);
+return;
+}
+return enterRoomView__r30(kind, id);
+}
+function r29StructPowerHit(kind, shape, pet) {
+if (selectedStartPlanet === NEM)
+return r29StructPowerHit__r30(kind, shape);
+const n = PLANT_POWER_DAMAGE[kind];
+if (!n)
+return;
+const me = bossMyRoamer();
+if (!me || !pet || me.pet.id !== pet.id)
+return;
+Object.keys(world.r29Struct || {}).forEach(id => {
+const s = world.r29Struct[id];
+if (!r29Damageable(id) || !bossShapeHit(shape, s.x, s.y, s.r) || !bossThrottle("ownstruct:" + kind + id, 700))
+return;
+worldRunAction({ "data-action": "r30-struct-hit", "data-structure": id, "data-n": String(n) });
+});
+}
+let r30Snub = null;
+function r30BuildBubble(planetId, job, x, y, mode) {
+if (!job)
+return;
+if (job.nemesis) {
+showShipToast("That's Nemesis's own building — its void pets are rebuilding it");
+return;
+}
+const key = r30Key(job);
+if (!mode && roamingActive && !activePlanetOwnerId) {
+const rp = getRoamingPet();
+if (rp && r30IsBuilder(rp) && !(job.workers || []).includes(rp.id)) {
+worldRunAction({ "data-action": "r30-build", "data-job": key, "data-pet": rp.id });
+r30Snub = null;
+}
+}
+const again = m => setTimeout(() => {
+const j = r30FindJob(planetId, key);
+if (j)
+r30BuildBubble(planetId, j, x, y, m || "main");
+else
+worldHideBubble();
+}, 90);
+const pets = getPets(planetId);
+const builders = pets.filter(r30IsBuilder);
+const crew = (job.workers || []).map(id => pets.find(p => p.id === id)).filter(Boolean);
+const pct = Math.round(siteFraction(job) * 100);
+const active = job.lastN || 0;
+const buttons = [];
+let text = "";
+if (mode === "pick") {
+builders.slice(0, 7).forEach(p => {
+const on = (job.workers || []).includes(p.id);
+const other = !on && r30JobOf(planetId, p.id);
+if (on)
+return;
+buttons.push({
+label: "＋ " + petShortName(planetId, p) + (p.energy <= 0 ? " · hungry" : other ? " · from " + r30JobName(other) : ""),
+keepOpen: true,
+action: () => {
+worldRunAction({ "data-action": "site-workers", "data-job": key, "data-pet": p.id });
+again("main");
+}
+});
+});
+buttons.push({ label: "◂ Back", keepOpen: true, action: () => again("main") });
+text = buttons.length > 1 ? "Pick a builder. One already on another job moves over." : "Every builder is already on this job.";
+}
+else if (!builders.length) {
+buttons.push({ label: "🐾 Get a pet", primary: true, action: () => enterRoomView("structure", "pet-pen") });
+text = "Nobody here can build yet — adopt a builder pet at the Pet Pen.";
+}
+else {
+if (!crew.length) {
+buttons.push({
+label: "🔨 Build",
+primary: true,
+keepOpen: true,
+action: () => {
+worldRunAction({ "data-action": "r30-build", "data-job": key });
+again("main");
+}
+});
+}
+crew.forEach(p => {
+buttons.push({
+label: "✓ " + petShortName(planetId, p) + (p.energy <= 0 ? " · hungry" : "") + "  ✕",
+keepOpen: true,
+action: () => {
+const rp = roamingActive && getRoamingPet();
+if (rp && rp.id === p.id)
+r30Snub = key;
+worldRunAction({ "data-action": "site-workers", "data-job": key, "data-pet": p.id });
+again("main");
+}
+});
+});
+buttons.push({ label: "＋ Add builder", keepOpen: true, disabled: crew.length >= builders.length, action: () => again("pick") });
+text = crew.length
+? "More builders, faster build. When it's done they're free for the next job."
+: (job.rebuild ? "Destroyed. " : "") + "Press Build to put a builder on it.";
+}
+worldShowBubble({
+x, y,
+iconHtml: r30JobIcon(job),
+title: r30JobName(job) + (job.rebuild ? " · ruins" : job.type === "structure" ? " · build site" : ""),
+meta: pct + "% · " + (active ? active + " builder" + (active > 1 ? "s" : "") + " · " + formatRemainingText(job) : crew.length ? "builders are hungry — feed them" : "paused — no builders"),
+text,
+buttons
+});
+}
+function siteBubble(planetId, structureId, x, y) {
+r30BuildBubble(planetId, getSiteJob(planetId, structureId), x, y);
+}
+function r30TimeHtml(job) {
+if (!(job.lastN || 0))
+return '<span>paused — ' + Math.round(siteFraction(job) * 100) + '% done</span>';
+return '<span class="live-timer" data-start="' + job.startedAt + '" data-duration="' + job.durationSeconds + '">' + formatRemainingText(job) + '</span>';
+}
+function r30BarHtml(job) {
+const pct = Math.round(siteFraction(job) * 1000) / 10;
+if (!(job.lastN || 0))
+return '<div class="live-bar"><div class="live-bar-fill" style="width:' + pct + '%"></div></div>';
+return '<div class="live-bar"><div class="live-bar-fill" data-start="' + job.startedAt + '" data-duration="' + job.durationSeconds + '" style="width:' + pct + '%"></div></div>';
+}
+function r30CrewRowHtml(planetId, job) {
+if (!job || !job.site || job.nemesis)
+return "";
+const builders = getPets(planetId).filter(r30IsBuilder);
+if (!builders.length)
+return '<div class="metric-note">No builder pets here yet — adopt one at the Pet Pen.</div>';
+const key = r30Key(job);
+let h = '<div class="site-crew">';
+builders.forEach(p => {
+const on = (job.workers || []).includes(p.id);
+const other = !on && r30JobOf(planetId, p.id);
+h +=
+'<button class="site-crew-btn' + (on ? ' on' : '') + '" data-action="site-workers" data-job="' + key + '" data-pet="' + p.id + '">' +
+'<span class="site-crew-tick">' + (on ? '✓' : '＋') + '</span>' +
+'<span>' + petShortName(planetId, p) + '</span>' +
+'<span class="site-crew-meta">' + (p.energy <= 0 ? 'hungry' : other ? 'on ' + r30JobName(other) : 'free') + '</span>' +
+'</button>';
+});
+return h + '</div>';
+}
+function siteMenuHtml(planetId, job) {
+return ('<div class="customizer-section">' +
+'<div class="customizer-section-title">' + r30JobIcon(job) + ' ' + r30JobName(job) + ' · ' + (job.rebuild ? 'ruins' : 'build site') + '</div>' +
+'<div class="metric-note state-warn">🏗 ' + ((job.lastN || 0) ? 'Being built — ' : '') + r30TimeHtml(job) + '</div>' +
+r30BarHtml(job) +
+r30CrewRowHtml(planetId, job) +
+'<div class="metric-note">Tap a pet to put it on the job or take it off. A pet works one job at a time; each extra builder adds 60% speed.</div>' +
+'</div>');
+}
+let r30CrewFilter = null;
+function r30DrawCrew(c, list, planetId, time, types) {
+const ids = new Set();
+getBuildQueue(planetId).forEach(b => {
+if (types.includes(b.type))
+(b.workers || []).forEach(id => ids.add(id));
+});
+r30CrewFilter = ids;
+try {
+roomDrawWorkers(c, list, planetId, "builder", time);
+}
+finally {
+r30CrewFilter = null;
+}
+}
+function r30Pill(c, x, y, label, col, on, coin) {
+c.save();
+c.font = "800 12px system-ui,sans-serif";
+const w = c.measureText(label).width + 22 + (coin ? 16 : 0), h = 26;
+c.fillStyle = on ? "rgba(6,10,26,.88)" : "rgba(6,10,26,.55)";
+c.strokeStyle = on ? col : "rgba(150,170,200,.35)";
+c.lineWidth = 1.5;
+c.shadowColor = col;
+c.shadowBlur = on ? 10 : 0;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+else
+c.rect(x - w / 2, y - h / 2, w, h);
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = on ? "#eafcff" : "rgba(220,230,255,.45)";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, x - (coin ? 8 : 0), y + .5);
+if (coin) {
+const cx = x + w / 2 - 17, cy = y;
+c.globalAlpha = on ? 1 : .45;
+c.fillStyle = "#ffd34d";
+c.beginPath();
+c.arc(cx, cy, 5.5, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#b8860b";
+c.lineWidth = 1.2;
+c.beginPath();
+c.arc(cx, cy, 3.2, 0, Math.PI * 2);
+c.stroke();
+}
+c.restore();
+return { x, y, w, h };
+}
+function r30FactoryButtons(c, g, planetId, job, kind) {
+const tab = kind === "ship" ? "structure-ship-factory" : "structure-satellite-factory";
+const title = kind === "ship" ? "SHIP FACTORY" : "SATELLITE FACTORY";
+world.hits.push({ x: g.x, y: g.ringY, r: g.r, z: 6, onTap: () => job ? r30BuildBubble(planetId, job, g.x, g.ringY - g.r * .7) : worldOpenHolo(tab, { title }) });
+const y = g.textY + 30;
+let buildLabel, canBuild = true, coin = false, act;
+if (kind === "ship") {
+const cost = computeShipBuildCost(planetId);
+buildLabel = "🔨 Build ship · " + cost;
+coin = true;
+canBuild = getTotalAvailableCoins(planetId) >= cost;
+act = () => {
+if (getTotalAvailableCoins(planetId) < cost) {
+showShipToast("A new ship costs " + cost + " coins");
+return;
+}
+worldRunAction({ "data-action": "queue-ship" });
+};
+}
+else {
+buildLabel = "🔨 Build satellite";
+act = () => worldOpenHolo(tab, { title });
+}
+const crew = job ? (job.workers || []).length : 0;
+const addLabel = "＋ Builder" + (job ? " (" + crew + ")" : "");
+c.save();
+c.font = "800 12px system-ui,sans-serif";
+const w1 = c.measureText(buildLabel).width + 22 + (coin ? 16 : 0);
+const w2 = c.measureText(addLabel).width + 22;
+c.restore();
+const gap = 10;
+const x1 = g.x - (w2 + gap) / 2;
+const x2 = g.x + (w1 + gap) / 2;
+const b1 = r30Pill(c, x1, y, buildLabel, "#7dffb0", canBuild, coin);
+const b2 = r30Pill(c, x2, y, addLabel, "#5ff3ff", !!job);
+world.hits.push({ x: b1.x, y: b1.y, r: Math.min(b1.w / 2, 40), z: 9, onTap: act });
+world.hits.push({ x: b1.x - b1.w / 4, y: b1.y, r: b1.h * .6, z: 9, onTap: act });
+world.hits.push({ x: b1.x + b1.w / 4, y: b1.y, r: b1.h * .6, z: 9, onTap: act });
+world.hits.push({ x: b2.x, y: b2.y, r: Math.min(b2.w / 2, 40), z: 9, onTap: () => {
+if (!job) {
+showShipToast(kind === "ship" ? "Nothing to build yet — press Build ship first" : "Nothing to build yet — start a satellite first");
+return;
+}
+const rp = roamingActive && getRoamingPet();
+const petId = rp && r30IsBuilder(rp) && !(job.workers || []).includes(rp.id) ? rp.id : "";
+worldRunAction(petId ? { "data-action": "r30-build", "data-job": r30Key(job), "data-pet": petId } : { "data-action": "r30-build", "data-job": r30Key(job) });
+} });
+}
+function r30Ang(a, b) {
+const v = Math.sin(a.lat) * Math.sin(b.lat) + Math.cos(a.lat) * Math.cos(b.lat) * Math.cos(a.lon - b.lon);
+return Math.acos(Math.max(-1, Math.min(1, v)));
+}
+function r30Proximity() {
+const pet = getRoamingPet();
+if (!pet || !r30IsBuilder(pet))
+return;
+const planetId = selectedStartPlanet;
+if (!getPets(planetId).some(p => p.id === pet.id))
+return;
+const here = { lat: roamingLat, lon: roamingLon };
+const inRoom = roomState && roomState.kind === "structure" ? roomState.id : null;
+const dist = job => {
+if (inRoom)
+return r30JobHome(job) === inRoom ? 0 : 9;
+const ll = r30JobLatLon(job);
+return ll ? r30Ang(here, ll) : 9;
+};
+const mine = r30JobOf(planetId, pet.id);
+if (mine) {
+if (!mine.nemesis && dist(mine) > R30_FAR)
+worldRunAction({ "data-action": "site-workers", "data-job": r30Key(mine), "data-pet": pet.id });
+return;
+}
+if (r30Snub) {
+const j = r30FindJob(planetId, r30Snub);
+if (!j || dist(j) > R30_NEAR + .04)
+r30Snub = null;
+}
+let best = null, bd = R30_NEAR;
+getBuildQueue(planetId).forEach(j => {
+if (!j.site || j.nemesis || (j.workers || []).length || r30Key(j) === r30Snub)
+return;
+const d = dist(j);
+if (d < bd) {
+bd = d;
+best = j;
+}
+});
+if (best && pet.energy > 0)
+worldRunAction({ "data-action": "r30-build", "data-job": r30Key(best), "data-pet": pet.id });
+}
+function r30Tick() {
+try {
+if (typeof planetSave === "undefined" || !planetSave)
+return;
+withMySave(() => {
+PLANETS.forEach(p => {
+if (p.id === NEM)
+return;
+r30Siteify(p.id);
+const q = (planetSave.buildQueue || {})[p.id] || [];
+if (q.some(j => j.site && !j.nemesis && siteProgressMs(j) >= siteNeedMs(j)))
+resolveBuildQueue(p.id);
+});
+});
+if (roamingActive && !activePlanetOwnerId && selectedStartPlanet !== NEM)
+r30Proximity();
+}
+catch (error) { }
+}
+setInterval(r30Tick, 500);
 function featureExecuteAction(action, target, planetId) {
+if (action === "r30-build") {
+r30Build(planetId, target.getAttribute("data-job"), target.getAttribute("data-pet"));
+return;
+}
+if (action === "r30-struct-hit") {
+r29DamageStructure(planetId, target.getAttribute("data-structure"), Number(target.getAttribute("data-n")) || 0);
+return;
+}
+return featureExecuteAction__r30(action, target, planetId);
+}
+const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
+function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
 let src = null, d = null;
 try {
@@ -21219,7 +21986,7 @@ if (action === "pet-subtab") {
 petSubTabByPet[target.getAttribute("data-pet")] = target.getAttribute("data-tab");
 }
 else if (action === "site-workers") {
-siteToggleWorker(planetId, target.getAttribute("data-structure"), target.getAttribute("data-pet"));
+siteToggleWorker(planetId, target.getAttribute("data-job") || target.getAttribute("data-structure"), target.getAttribute("data-pet"));
 }
 else if (action === "forge-powerup") {
 forgePowerup(planetId, target.getAttribute("data-pet"));
@@ -30315,7 +31082,7 @@ if (roomHoloOpen && holo && !holo.contains(event.target))
 worldCloseHolo();
 }
 let roomHoloOpen = null;
-function worldOpenHolo(tab, opts) {
+function worldOpenHolo__r30(tab, opts) {
 opts = opts || {};
 const planetId = selectedStartPlanet;
 let holo = document.getElementById("roomHolo");
@@ -30435,7 +31202,7 @@ return info ? { name: info.name, colour: info.colour, accent: info.colour } : RO
 }
 return ROOM_STYLE[roomState.kind === "ship" ? "ship" : roomState.id] || ROOM_STYLE.ship;
 }
-function enterRoom(kind, id) {
+function enterRoom__r30(kind, id) {
 if (!roamingActive || roomState)
 return;
 roomState = {
@@ -31094,14 +31861,14 @@ c.save();
 c.fillStyle = "#eafcff";
 c.font = "800 12px system-ui,sans-serif";
 c.textAlign = "center";
-c.fillText(job ? (job.type === "ship" ? "Building a ship · " : "Servicing · ") + formatRemainingText(job) : "Assembly bay · tap to build", p.x, p.y + 40 * p.s);
+c.fillText(job ? (job.type === "ship" ? "Building a ship · " : "Servicing · ") + formatRemainingText(job) : "Assembly bay", p.x, p.y + 40 * p.s);
 c.restore();
-world.hits.push({ x: p.x, y: p.y - 40 * p.s, r: 80 * p.s, z: 6, onTap: () => worldOpenHolo("structure-ship-factory", { title: "SHIP FACTORY" }) });
+r30FactoryButtons(c, { x: p.x, ringY: p.y - 40 * p.s, r: 80 * p.s, textY: p.y + 40 * p.s }, planetId, job, "ship");
 } });
-roomDrawWorkers(c, list, planetId, "builder", time);
+r30DrawCrew(c, list, planetId, time, ["ship", "ship-service"]);
 }
 function roomDrawWorkers(c, list, planetId, role, time) {
-const pets = getPets(planetId).filter(p => (!role || (p.role || "builder") === role) && !isPetOutRoaming(p.id)).slice(0, 5);
+const pets = getPets(planetId).filter(p => (!role || (p.role || "builder") === role) && !isPetOutRoaming(p.id) && (!r30CrewFilter || r30CrewFilter.has(p.id))).slice(0, 5);
 pets.forEach((pet, i) => {
 let seed = 0;
 for (let k = 0; k < pet.id.length; k++)
@@ -33870,13 +34637,15 @@ surfaceItems.push({
 kind: "structure",
 structureId: "shop",
 icon: "🛒",
-tab: "shop"
+tab: "shop",
+site: r30CoreSite(selectedStartPlanet, "shop")
 });
 surfaceItems.push({
 kind: "structure",
 structureId: "stock",
 icon: "🏦",
-tab: "vault"
+tab: "vault",
+site: r30CoreSite(selectedStartPlanet, "stock")
 });
 surfaceItems.push({
 kind: "structure",
@@ -33884,7 +34653,7 @@ structureId: "board",
 icon: "🪧",
 tab: "board"
 });
-world.siteIds = new Set();
+world.siteIds = new Set(r30CoreSiteIds(selectedStartPlanet));
 for (const structureId in STRUCTURES) {
 const built = hasStructure(selectedStartPlanet, structureId);
 const siteJob = built
@@ -34763,8 +35532,7 @@ if (launchBtn) {
 const orbitalReady = !!(chosenLaunchShip &&
 chosenLaunchShip.pendingPilot);
 const planetHasShip = !!planet &&
-(planet.id === "earth" ||
-getShipCount(planet.id) > 0);
+((planet.id === "earth" ? getEarthLaunchCandidates().length > 0 : getShipCount(planet.id) > 0));
 const hasFactory = !!planet &&
 (hasStructure(planet.id, "ship-factory") ||
 getBuildQueue(planet.id).some(b => b.type === "structure" &&
@@ -35065,7 +35833,7 @@ getHeartsLabel(ship)
 '</button>' +
 mpRenderCrewUiHtml(ship, claimedBy, isChosen));
 }
-function resolveBuildQueue(planetId) {
+function resolveBuildQueue__r30(planetId) {
 const queue = getBuildQueue(planetId);
 if (!queue.length)
 return;
@@ -35178,7 +35946,7 @@ return 5 + total * 2;
 function computeStructureBuildCost(structureId) {
 return { "ship-factory": 18, "pilot-training": 15, "bio-dome": 15, "powerup-forge": 24, "satellite-factory": 30 }[structureId] || 15;
 }
-function computeShipBuildDuration(planetId) {
+function computeShipBuildDuration__r30(planetId) {
 const pets = getWorkingPetCount(planetId);
 const base = 90;
 return Math.max(20, Math.round(base /
@@ -35253,7 +36021,7 @@ const pets = getWorkingPetCount(planetId);
 return Math.max(10, Math.round(SHIP_SERVICES[serviceId].baseSeconds /
 (1 + pets * .6)));
 }
-function queueShipService(planetId, shipId, serviceId) {
+function queueShipService__r30(planetId, shipId, serviceId) {
 const service = SHIP_SERVICES[serviceId];
 if (!service ||
 !hasStructure(planetId, "ship-factory"))
@@ -37935,7 +38703,8 @@ html +=
 '🏗 Ship under construction — ' +
 formatRemaining(build) +
 '</div>' +
-progressBarHtml(build);
+progressBarHtml(build) +
+r30CrewRowHtml(id, build);
 });
 }
 const dockedHere = getShips(id);
