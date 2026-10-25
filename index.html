@@ -4456,9 +4456,9 @@ const WANDER_CYCLE_SECONDS = 14;
 const WANDER_WALK_FRACTION = .55;
 const ROAM_CAMERA_TILT = .78;
 const SHIP_LAT = Math.PI / 2 -
-SURFACE_ITEM_LAT_OFFSET;
+SURFACE_ITEM_LAT_OFFSET + .03;
 const ROAM_START_LAT_OFFSET = .42;
-const HOME_VIEW_TILT = .885;
+const HOME_VIEW_TILT = .915;
 const PLANET_VIEW_LAT = SHIP_LAT - HOME_VIEW_TILT;
 const EARTH_CONTINENTS_3D = [
 [-.38, -.25, .22, .13],
@@ -7653,7 +7653,7 @@ job.lastN = siteActiveWorkers(planetId, job).length;
 queue.push(job);
 return job;
 }
-function siteToggleWorker(planetId, structureId, petId) {
+function siteToggleWorker__r29(planetId, structureId, petId) {
 const job = getSiteJob(planetId, structureId);
 const pet = getPets(planetId).find(p => p.id === petId);
 if (!job || !job.site || !pet)
@@ -10828,7 +10828,7 @@ const BOSS_STAGE_MS = 210000;
 const BOSS_ATTACK_GAP_MS = 240000;
 const BOSS_PET_POWERS = ["incinerator-beam", "emp", "ricochet-orb", "singularity", "chrono-field"];
 const BOSS_PET_SPECIES = ["cat", "penguin", "gorilla", "koala", "rex"];
-const BOSS_STAGE_TEXT = ["", "massing in the asteroid field", "fighting in orbit", "on the ground, stealing"];
+const BOSS_STAGE_TEXT = ["", "massing in the asteroid field", "fighting in orbit", "on the ground, raiding", "escaping into orbit", "fleeing through the asteroid field"];
 function bossMyId() {
 return (typeof mp !== "undefined" && mp.connected && mp.myId) ? mp.myId : "me";
 }
@@ -10959,6 +10959,17 @@ if (s.hp <= 0)
 s.deadAt = Date.now();
 }
 }
+else if (ev.t === "struct") {
+if (!b.structHp)
+b.structHp = {};
+const id = String(ev.id || "");
+const cur = b.structHp[id] === undefined || b.structHp[id] === null ? R29_STRUCT_MAX : b.structHp[id];
+if (cur > 0) {
+b.structHp[id] = Math.max(0, cur - n);
+if (real && cur - n <= 0)
+r29NemDestroy(b, id);
+}
+}
 else if (ev.t === "plant") {
 if (!b.plant)
 b.plant = {};
@@ -10982,7 +10993,7 @@ else if (ev.t === "ship") {
 else if (ev.t === "raidKill") {
 const a = b.attack;
 if (a && a.id === ev.id && a.ships > 0) {
-a.ships--;
+r29FleetKill(b, a, ev.k, real);
 a.killed = (a.killed || 0) + 1;
 if (real && a.ships <= 0)
 bossRaidRepelled(b);
@@ -11021,18 +11032,18 @@ bossMark(true);
 setTimeout(() => bossAnnounce("☠ A dark world has appeared beyond Zenith: Nemesis. Its raiders are out — break its ring, wear it down, free it."), 1500);
 }
 const before = Math.floor(b.coins);
-b.coins = Math.min(4000, b.coins + dt / 60000 * 2);
+r29NemesisAI(b, now, dt);
 if (Math.floor(b.coins / 10) !== Math.floor(before / 10))
 bossSyncDirty = true;
 b.sats.forEach(s => {
-if (s.hp <= 0 && now - (s.deadAt || 0) > 60000 && b.coins >= 25) {
+if (s.hp <= 0 && now - (s.deadAt || 0) > 60000 && r29Afford(b, R29_COST.sat, "sat")) {
 s.hp = BOSS_SAT_HP;
 b.coins -= 25;
 bossMark();
 }
 });
-b.pets.forEach(p => {
-if (p.hp <= 0 && now - (p.deadAt || 0) > 45000 && b.coins >= 15) {
+b.pets.forEach((p, pi) => {
+if (p.hp <= 0 && now - (p.deadAt || 0) > 45000 && r29Afford(b, R29_COST.pet, "pet", pi)) {
 p.hp = BOSS_PET_HP;
 b.coins -= 15;
 bossMark();
@@ -11040,10 +11051,7 @@ bossMark();
 });
 if (b.attack)
 bossRaidTick(b, now);
-else if (b.hp < b.maxHp * .995 &&
-now - (b.lastAttackAt || 0) > BOSS_ATTACK_GAP_MS &&
-b.coins >= 60 &&
-Math.random() < 1 / 12)
+else if (r29ShouldRaid(b, now))
 bossLaunchRaid(b, now);
 enemyFleetTick(b, now);
 bossSiegeTick(b, now);
@@ -11063,7 +11071,7 @@ q.push(o);
 }
 return hops;
 }
-function bossLaunchRaid(b, now, forceTarget) {
+function bossLaunchRaid__orig(b, now, forceTarget) {
 const hops = bossRouteHops();
 const visited = localPlanetSave.visitedPlanets || {};
 const list = PLANETS
@@ -11102,7 +11110,7 @@ bossAnnounce("⚠ Nemesis has sent " + ships + " raiders to " + bossPlanetName(t
 function bossStructureCount(planetId) {
 return withMySave(() => Object.keys(STRUCTURES).filter(id => hasStructure(planetId, id)).length);
 }
-function bossRaidTick(b, now) {
+function bossRaidTick__orig(b, now) {
 const a = b.attack;
 if (a.ships <= 0) {
 bossRaidRepelled(b);
@@ -11159,7 +11167,7 @@ a.loot.coins += 5;
 });
 bossMark();
 }
-function bossRaidSucceeded(b) {
+function bossRaidSucceeded__orig(b) {
 const a = b.attack;
 const heal = a.ships * 150;
 b.hp = Math.min(b.maxHp, b.hp + heal);
@@ -11172,7 +11180,7 @@ b.lastAttackAt = Date.now();
 bossMark(true);
 bossAnnounce("☠ " + a.ships + " raiders made it home from " + bossPlanetName(a.target) + " — Nemesis healed +" + heal);
 }
-function bossRaidRepelled(b) {
+function bossRaidRepelled__orig(b) {
 const a = b.attack;
 if (!a)
 return;
@@ -11524,7 +11532,7 @@ ctx.planetHit = orbit;
 ctx.rate = (orbit ? 1 / 14 : 1 / 10) * (1 + hurt * 1.2);
 ctx.cap = (orbit ? 2 : 3) + (hurt > .4 ? 1 : 0) + (hurt > .75 ? 1 : 0);
 }
-else if (a && a.target === here && a.ships > 0 && ((a.stage === 1 && !orbit) || (a.stage === 2 && orbit))) {
+else if (a && a.target === here && a.ships > 0 && (((a.stage === 1 || a.stage === 5) && !orbit) || ((a.stage === 2 || a.stage === 4) && orbit))) {
 ctx.raid = a.id;
 ctx.rate = 1 / 5;
 ctx.cap = Math.min(4, a.ships);
@@ -12947,12 +12955,12 @@ show = { name: "☠ NEMESIS", f: b.hp / b.maxHp, num: Math.ceil(b.hp).toLocaleSt
 }
 else if (b.attack && b.attack.target === planet) {
 const a = b.attack;
-const left = Math.max(0, Math.ceil((BOSS_STAGE_MS - (Date.now() - a.stageAt)) / 1000));
+const left = Math.max(0, Math.ceil((r29StageMs(a.stage) - (Date.now() - a.stageAt)) / 1000));
 show = {
 name: "⚠ RAID ON " + bossPlanetName(planet).toUpperCase(),
 f: a.ships / Math.max(1, a.sent),
 num: a.ships + " raider" + (a.ships === 1 ? "" : "s"),
-sub: "Stage " + a.stage + "/3 · " + BOSS_STAGE_TEXT[a.stage] + " · " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"),
+sub: "Stage " + a.stage + "/5 · " + BOSS_STAGE_TEXT[a.stage] + " · " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"),
 cls: "raid"
 };
 }
@@ -13063,8 +13071,12 @@ if (bossSurf.raidShips !== a.ships) {
 bossSurf.raidShips = a.ships;
 bossSurf.raidHp = {};
 }
-for (let k = 0; k < Math.min(6, a.ships); k++)
-out.push(Object.assign({ kind: "raid", i: k, key: "r" + k, raidId: a.id, hp: bossSurf.raidHp[k] === undefined ? 100 : bossSurf.raidHp[k], maxHp: 100 }, bossRaiderInfo(k)));
+for (let k = 0; k < Math.min(6, a.ships); k++) {
+const f = a.fleet && a.fleet[k];
+if (f && f.departed)
+continue;
+out.push(Object.assign({ kind: "raid", i: k, key: "r" + k, raidId: a.id, hp: bossSurf.raidHp[k] === undefined ? 100 : bossSurf.raidHp[k], maxHp: 100 }, bossRaiderInfo(k), f ? { power: f.power } : {}));
+}
 }
 return out;
 }
@@ -13094,11 +13106,11 @@ const size = Math.max(24, p.width * .068);
 const list = bossSurfaceEnemies(planet, b);
 list.forEach(en => {
 const guard = en.kind === "boss" ? en.i < 4 : en.i < 3;
-const ll = r28EnemyPos(en, bossPetLatLon(en.seed, T, guard), now);
+const ll = (en.kind === "raid" && r29RaiderPos(en, b, now)) || r28EnemyPos(en, bossPetLatLon(en.seed, T, guard), now);
 const pr = projectSphere(ll.lat, ll.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!pr.visible)
 return;
-const ahead = r28EnemyAhead(en, ll);
+const ahead = (en.kind === "raid" && r29RaiderAhead(en, b, ll)) || r28EnemyAhead(en, ll);
 const pa = projectSphere(ahead.lat, ahead.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 const facing = pa.x < pr.x ? -1 : 1;
 const spot = { en, x: pr.x, y: pr.y, size, owner };
@@ -13165,7 +13177,7 @@ let a = null;
 if (planet === NEM && !b.defeated)
 a = { name: "☠ NEMESIS", f: b.hp / b.maxHp, num: Math.ceil(b.hp).toLocaleString() + " / " + b.maxHp.toLocaleString(), col: "#d02bff" };
 else if (b.attack && b.attack.target === planet && b.attack.ships > 0)
-a = { name: "⚠ RAID · STAGE " + b.attack.stage + "/3", f: b.attack.ships / Math.max(1, b.attack.sent), num: b.attack.ships + " raiders", col: "#ff3b6b" };
+a = { name: "⚠ RAID · STAGE " + b.attack.stage + "/5", f: b.attack.ships / Math.max(1, b.attack.sent), num: b.attack.ships + " raiders", col: "#ff3b6b" };
 if (!a)
 return;
 const c = p.c;
@@ -13562,6 +13574,7 @@ return;
 bossSurfHitEnemy(spot, effOn.dmg, effOn.stun || 0);
 });
 plantPowerHit(kind, shape);
+r29StructPowerHit(kind, shape);
 Object.values(world.petScreen || {}).forEach(ps => {
 if (!ps || !ps.pet || ps.pet.id === pet.id || (me && ps.pet.id === me.pet.id))
 return;
@@ -13625,7 +13638,7 @@ const hp = (bossSurf.raidHp[en.i] === undefined ? 100 : bossSurf.raidHp[en.i]) -
 bossSurf.raidHp[en.i] = hp;
 if (hp <= 0) {
 bossSurf.raidHp = {};
-bossApply(spot.owner, { t: "raidKill", id: en.raidId });
+bossApply(spot.owner, { t: "raidKill", id: en.raidId, k: en.i });
 bossSurfText(spot.x, spot.y - spot.size * 2, "RAIDER DOWN", "#ffd6fb");
 withMySave(() => addRankPoints(25, "Raider defeated"));
 }
@@ -13692,17 +13705,17 @@ return ('<div class="boss-card">' +
 '<span class="boss-lore">🥀 Nemesis is a viral plant. It took root in this world\'s core and infected everything — thorned roots, neon blooms, void guards, a ring of satellites and a fleet, all of it the plant reaching out. Tear at its roots and blooms, hit it from orbit, steal its ships, and set the planet free.</span>' +
 '<b>☠ Nemesis · ' + Math.ceil(b.hp).toLocaleString() + ' / ' + b.maxHp.toLocaleString() + '</b>' +
 '<i class="boss-card-bar"><i style="width:' + (f * 100) + '%"></i></i>' +
-'<span>🛰 ' + sats + '/' + BOSS_SATS + ' ring satellites · 😈 ' + pets + '/' + BOSS_PETS + ' void pets · war chest ' + Math.floor(b.coins) + ' ' + COIN_ICON_HTML + '</span>' +
-(b.attack ? '<span class="boss-warn">⚠ Raiding ' + bossPlanetName(b.attack.target) + ' with ' + b.attack.ships + ' ships — stage ' + b.attack.stage + '/3</span>' : '') +
+'<span>🛰 ' + sats + '/' + BOSS_SATS + ' ring satellites · 😈 ' + pets + '/' + BOSS_PETS + ' void pets · war chest ' + Math.floor(b.coins) + ' ' + COIN_ICON_HTML + '</span>' + r29EconomyHtml(b) +
+(b.attack ? '<span class="boss-warn">⚠ Raiding ' + bossPlanetName(b.attack.target) + ' with ' + b.attack.ships + ' ships — stage ' + b.attack.stage + '/5</span>' : '') +
 '<span class="boss-lock">🔒 Shop, building, ship holds and the transporter are jammed until it falls. Your docked ships here come under fire. Its own ships sit locked with enemy pilots — seat a pilot pet in one to steal it.</span>' +
 '</div>');
 }
 const a = b.attack;
 if (a && a.target === planetId) {
-const lootN = (a.loot.coins || 0) + Object.values(a.loot.mats || {}).reduce((s, v) => s + v, 0);
+const lootN = a.fleet ? r29LootCount(a) : (a.loot.coins || 0) + Object.values(a.loot.mats || {}).reduce((s, v) => s + v, 0);
 return ('<div class="boss-card raid">' +
 '<b>⚠ Raid! ' + a.ships + ' of ' + a.sent + ' Nemesis ships remain</b>' +
-'<span>Stage ' + a.stage + '/3: ' + BOSS_STAGE_TEXT[a.stage] + '. Fight them in the field, in orbit, then on the ground — your satellites and buildings help.' + (lootN ? ' Stolen so far: ' + lootN + '.' : '') + '</span>' +
+'<span>Stage ' + a.stage + '/5: ' + BOSS_STAGE_TEXT[a.stage] + '. Fight them in the field, in orbit and on the ground — then catch them as they flee to win back what they took.' + (lootN ? ' Stolen so far: ' + lootN + '.' : '') + '</span>' +
 '</div>');
 }
 return "";
@@ -13747,7 +13760,7 @@ if (a && a.target === p.id && a.ships > 0) {
 const n = Math.min(6, a.ships);
 for (let k = 0; k < n; k++) {
 const ang = time * .8 + k / n * Math.PI * 2;
-const rr = pr * (a.stage === 1 ? 2.6 : a.stage === 2 ? 1.9 : 1.3);
+const rr = pr * ((a.stage === 1 || a.stage === 5) ? 2.6 : (a.stage === 2 || a.stage === 4) ? 1.9 : 1.3);
 const x = px + Math.cos(ang) * rr, y = py + Math.sin(ang) * rr;
 c.save();
 c.translate(x, y);
@@ -15072,10 +15085,10 @@ enemyFleetShip(b);
 savePlanetProgress();
 return;
 }
-if (enemies < ENEMY_FLEET_SIZE && b.coins >= 40 && now - (b.fleetBuiltAt || 0) > 180000) {
+if (r29ShouldBuildShip(b, now)) {
 b.fleetBuiltAt = now;
-b.coins -= 40;
-enemyFleetShip(b);
+const built = enemyFleetShip(b);
+b.coins -= r29ShipCost(built);
 savePlanetProgress();
 }
 });
@@ -19374,7 +19387,7 @@ return ('<div class="pet-vend">' +
 '<div class="pv-tray"></div>' +
 '</div>');
 }
-const R26_PEN = { drop: .3, r: .105, posts: 20 };
+const R26_PEN = { drop: .38, r: .105, posts: 20 };
 function r26PenCentre() {
 return { lat: SHIP_LAT - R26_PEN.drop, lon: 0 };
 }
@@ -20374,7 +20387,7 @@ if (item.structureId === "board")
 return "Boards";
 return (STRUCTURES[item.structureId] || {}).name || "";
 }
-function r28DrawLabel(c, item, ix, iy, iconSize) {
+function r28DrawLabel__old(c, item, ix, iy, iconSize) {
 if (item.kind !== "structure" || roomState)
 return;
 const name = r28StructureLabel(item);
@@ -20419,6 +20432,760 @@ badge.textContent = "▶ Fly from here";
 pick.appendChild(badge);
 }
 grid.insertBefore(pick, grid.firstChild);
+}
+const R29_STRUCT_MAX = 160;
+function r29Damageable(id) {
+return id === "stock" || !!STRUCTURES[id];
+}
+function r29Hp(planetId, id) {
+if (planetId === NEM) {
+const b = bossState(bossSurfaceOwner());
+const v = b && b.structHp && b.structHp[id];
+return v === undefined || v === null ? R29_STRUCT_MAX : v;
+}
+const m = ((planetSave.structHp || {})[planetId]) || {};
+return m[id] === undefined ? R29_STRUCT_MAX : m[id];
+}
+let r29SaveAt = 0;
+function r29SaveSoon() {
+const now = performance.now();
+if (now - r29SaveAt > 3000) {
+r29SaveAt = now;
+savePlanetProgress();
+}
+}
+function r29DamageStructure(planetId, id, n) {
+if (!r29Damageable(id))
+return;
+withMySave(() => {
+if (id !== "stock" && !hasStructure(planetId, id))
+return;
+if (!planetSave.structHp)
+planetSave.structHp = {};
+const m = planetSave.structHp[planetId] || (planetSave.structHp[planetId] = {});
+const hp = (m[id] === undefined ? R29_STRUCT_MAX : m[id]) - n;
+if (hp > 0) {
+m[id] = hp;
+r29SaveSoon();
+return;
+}
+if (id === "stock") {
+r29SpillVault(planetId);
+m[id] = Math.round(R29_STRUCT_MAX * .4);
+}
+else {
+delete m[id];
+r29DestroyStructure(planetId, id);
+}
+savePlanetProgress();
+});
+}
+function r29SpillVault(planetId) {
+const spot = (world.structureLatLon || {}).stock || { lat: SHIP_LAT - .25, lon: -.235 };
+let piles = 0;
+const drop = d => {
+const a = piles * 2.4, r = .04 + .025 * Math.sqrt(piles);
+worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .03 + Math.cos(a) * r, lon: spot.lon + Math.sin(a) * r * 1.4 } }, d);
+piles++;
+};
+let bags = Math.min(8, Math.ceil(getBank(planetId) / 20));
+while (bags-- > 0 && piles < 18) {
+const got = worldPlaceTake(planetId, { t: "vault" }, { k: "coin", r: "coin", n: Math.max(COIN_BAG, Math.ceil(getBank(planetId) / Math.max(1, bags + 1))) });
+if (got)
+drop(got);
+}
+const mats = Object.assign({}, worldMaterialBank(planetId));
+Object.keys(mats).forEach(id => {
+const n = Math.min(mats[id], 6);
+if (n > 0 && piles < 18) {
+addToMaterialBank(planetId, id, -n);
+drop({ k: "mat", r: id, n });
+}
+});
+const items = Object.assign({}, (planetSave.itemStock || {})[planetId] || {});
+Object.keys(items).forEach(id => {
+const n = Math.min(items[id], 3);
+if (n > 0 && piles < 18) {
+addItemStock(planetId, id, -n);
+drop({ k: "item", r: id, n });
+}
+});
+bossAnnounce("💥 The Vault on " + bossPlanetName(planetId) + " was smashed open — its contents are scattered across the ground!");
+}
+function r29DestroyStructure(planetId, id) {
+if (!hasStructure(planetId, id))
+return;
+if (!planetSave.ruined)
+planetSave.ruined = {};
+const store = planetSave.ruined[planetId] || (planetSave.ruined[planetId] = {});
+store[id] = planetSave.structures[planetId][id];
+delete planetSave.structures[planetId][id];
+if (!planetSave.buildQueue)
+planetSave.buildQueue = {};
+if (!planetSave.buildQueue[planetId])
+planetSave.buildQueue[planetId] = [];
+const job = placeStructureSite(planetId, id);
+job.rebuild = true;
+job.durationSeconds = Math.round((job.durationSeconds || 60) * .6);
+bossAnnounce("💥 The " + STRUCTURES[id].name + " on " + bossPlanetName(planetId) + " was destroyed! It's a building site again — send builders to raise it back up.");
+}
+function r29Restored(planetId, id) {
+const store = ((planetSave.ruined || {})[planetId]) || {};
+const data = store[id];
+if (data)
+delete store[id];
+if (planetSave.structHp && planetSave.structHp[planetId])
+delete planetSave.structHp[planetId][id];
+return data || null;
+}
+function r28DrawLabel(c, item, ix, iy, iconSize) {
+if (item.kind !== "structure" || roomState)
+return;
+const name = r28StructureLabel(item);
+if (!name)
+return;
+const M = r20Matrix(ix, iy, "radial");
+const h = iconSize * 1.0;
+const x = ix - M.c * h, y = iy - M.d * h;
+const fs = Math.max(8, Math.round(iconSize * .14));
+const dmg = r29Damageable(item.structureId) && !item.site;
+const f = dmg ? Math.max(0, Math.min(1, r29Hp(selectedStartPlanet, item.structureId) / R29_STRUCT_MAX)) : 1;
+if (dmg && item.structureId !== "shop" && item.structureId !== "board")
+(world.r29Struct || (world.r29Struct = {}))[item.structureId] = { x: ix, y: iy - iconSize * .5, r: iconSize * .6 };
+const col = f > .6 ? "#7dffb0" : f > .3 ? "#ffd76b" : "#ff5c5c";
+c.save();
+c.font = "800 " + fs + "px system-ui,sans-serif";
+const tw = c.measureText(name).width + 12;
+const bx = x - tw / 2, by = y - fs * .8, bw = tw, bh = fs * 1.6;
+c.fillStyle = "rgba(6,10,26,.82)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(bx, by, bw, bh, bh / 2);
+else
+c.rect(bx, by, bw, bh);
+c.fill();
+if (f < 1) {
+c.save();
+c.clip();
+c.fillStyle = col;
+c.globalAlpha = .28;
+c.fillRect(bx, by, bw * f, bh);
+c.restore();
+}
+c.strokeStyle = f < 1 ? col : "rgba(127,216,255,.45)";
+c.shadowColor = col;
+c.shadowBlur = f < 1 ? 2 + 8 * f : 0;
+c.lineWidth = f < 1 ? 1.4 : 1;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#eafcff";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(name, x, y + .5);
+c.restore();
+}
+function r29StructPowerHit(kind, shape) {
+if (selectedStartPlanet !== NEM)
+return;
+const n = PLANT_POWER_DAMAGE[kind];
+if (!n)
+return;
+const owner = bossSurfaceOwner();
+const b = bossState(owner);
+if (!b || b.defeated)
+return;
+Object.keys(world.r29Struct || {}).forEach(id => {
+const s = world.r29Struct[id];
+if (!STRUCTURES[id] || !bossShapeHit(shape, s.x, s.y, s.r) || !bossThrottle("struct:" + kind + id, 700))
+return;
+bossApply(owner, { t: "struct", id, n });
+bossSurfText(s.x, s.y - s.r, "−" + n, "#ffd76b");
+bossSurf.fx.push({ k: "shield", x: s.x, y: s.y, colour: "#ffd76b", t0: performance.now(), ms: 400 });
+});
+}
+const R29_NEM_BUILDINGS = ["ship-factory", "satellite-factory", "bio-dome", "pilot-training"];
+const R29_NEM_ROLE = { "ship-factory": "build ships", "satellite-factory": "replace satellites", "bio-dome": "raise void pets", "pilot-training": "launch raids" };
+function r29NemAlive(id) {
+return withMySave(() => !!((planetSave.structures || {})[NEM] || {})[id]);
+}
+function r29NemDestroy(b, id) {
+withMySave(() => {
+const st = planetSave.structures[NEM] || {};
+if (!st[id])
+return;
+if (!b.ruinsData)
+b.ruinsData = {};
+b.ruinsData[id] = st[id];
+delete st[id];
+if (!planetSave.buildQueue)
+planetSave.buildQueue = {};
+const q = planetSave.buildQueue[NEM] || (planetSave.buildQueue[NEM] = []);
+if (!q.some(j => j.structureId === id))
+q.push({ type: "structure", structureId: id, site: true, nemesis: true, planetId: NEM, startedAt: Date.now(), durationSeconds: 150, workMs: 0, lastTick: Date.now(), workers: [], lastN: 0 });
+savePlanetProgress();
+});
+if (!b.structHp)
+b.structHp = {};
+b.structHp[id] = 0;
+bossMark(true);
+bossAnnounce("💥 Nemesis's " + STRUCTURES[id].name + " is destroyed — it can't " + (R29_NEM_ROLE[id] || "use it") + " until its void pets rebuild it.");
+}
+function r29NemRebuildTick(b, dt) {
+const guards = b.pets.filter(p => p.hp > 0).length;
+withMySave(() => {
+const q = ((planetSave.buildQueue || {})[NEM]) || [];
+for (let i = q.length - 1; i >= 0; i--) {
+const job = q[i];
+if (!job.nemesis)
+continue;
+if (!job.paid) {
+if (b.coins < 40)
+continue;
+b.coins -= 40;
+job.paid = true;
+bossMark();
+}
+if (!guards)
+continue;
+const need = (job.durationSeconds || 150) * 1000;
+job.workMs = Math.min(need - 1, (job.workMs || 0) + dt * (1 + Math.min(3, guards) * .5));
+job.lastTick = Date.now();
+job.lastN = 0;
+if (job.workMs >= need - 1) {
+q.splice(i, 1);
+if (!planetSave.structures[NEM])
+planetSave.structures[NEM] = {};
+planetSave.structures[NEM][job.structureId] = (b.ruinsData && b.ruinsData[job.structureId]) || { level: 1 };
+if (b.ruinsData)
+delete b.ruinsData[job.structureId];
+if (b.structHp)
+delete b.structHp[job.structureId];
+bossMark(true);
+bossAnnounce("🔧 Nemesis has rebuilt its " + STRUCTURES[job.structureId].name + ".");
+}
+savePlanetProgress();
+}
+});
+}
+const R29_COST = { pet: 15, sat: 25, rebuild: 40, fuel: 6 };
+function r29ShipCost(ship) {
+return 25 + 12 * (ship.shieldHearts || 0) + ((ship.satCargo || []).length ? 20 : 0) + 8;
+}
+function r29ShipCap(ship) {
+return 2 + Math.min(3, (ship.shieldHearts || 0) + ((ship.satCargo || []).length ? 1 : 0));
+}
+function r29Docked() {
+return withMySave(() => (getShips(NEM) || []).filter(s => s.enemy));
+}
+function r29FleetTotal(b) {
+return r29Docked().length + ((b.attack && b.attack.fleet) ? b.attack.fleet.length : 0);
+}
+function r29Reserve(b, kind, i) {
+const hurt = 1 - b.hp / b.maxHp;
+const guardsDown = b.pets.slice(0, 4).filter(p => p.hp <= 0).length;
+const rebuilds = withMySave(() => (((planetSave.buildQueue || {})[NEM]) || []).filter(j => j.nemesis && !j.paid).length);
+let r = rebuilds * R29_COST.rebuild;
+if (kind === "pet")
+return i < 4 ? r : r + 40 + guardsDown * R29_COST.pet;
+if (kind === "ship")
+return r + guardsDown * R29_COST.pet + (hurt > .02 ? R29_COST.fuel * 3 : 0);
+if (kind === "sat")
+return r + guardsDown * R29_COST.pet + 60;
+return r;
+}
+function r29PetCap(b) {
+return Math.min(BOSS_PETS, 4 + Math.floor(b.coins / 70));
+}
+function r29Afford(b, cost, kind, i) {
+if (kind === "pet") {
+if (!r29NemAlive("bio-dome"))
+return false;
+const alive = b.pets.filter(p => p.hp > 0).length;
+if (i >= 4 && alive >= r29PetCap(b))
+return false;
+}
+if (kind === "sat" && !r29NemAlive("satellite-factory"))
+return false;
+return b.coins >= cost + r29Reserve(b, kind, i);
+}
+function r29ShouldBuildShip(b, now) {
+if (!r29NemAlive("ship-factory"))
+return false;
+if (now - (b.fleetBuiltAt || 0) < 120000)
+return false;
+const target = Math.min(6, 2 + Math.floor(b.coins / 160));
+return r29FleetTotal(b) < target && b.coins >= 45 + r29Reserve(b, "ship");
+}
+function r29ShouldRaid(b, now) {
+if (b.hp >= b.maxHp * .995 || now - (b.lastAttackAt || 0) < BOSS_ATTACK_GAP_MS)
+return false;
+if (!r29NemAlive("pilot-training"))
+return false;
+if (r29Docked().length < 2 || b.coins < R29_COST.fuel * 2)
+return false;
+return Math.random() < 1 / 12;
+}
+function r29NemesisAI(b, now, dt) {
+b.coins = Math.min(4000, b.coins + dt / 60000 * 1.2);
+const alive = b.pets.filter(p => p.hp > 0).length;
+b.coins -= alive * .3 * dt / 60000;
+if (b.coins < 0) {
+b.coins = 0;
+b.pets.forEach(p => {
+if (p.hp > 0) {
+p.hp = Math.max(0, p.hp - 2 * dt / 60000);
+if (p.hp <= 0)
+p.deadAt = now;
+}
+});
+}
+if (!b.nemBuildV2) {
+b.nemBuildV2 = true;
+withMySave(() => {
+if (!planetSave.structures[NEM])
+planetSave.structures[NEM] = {};
+R29_NEM_BUILDINGS.forEach(id => {
+if (!planetSave.structures[NEM][id])
+planetSave.structures[NEM][id] = { level: 1 };
+});
+savePlanetProgress();
+});
+}
+r29NemRebuildTick(b, dt);
+}
+function r29EconomyHtml(b) {
+const docked = r29Docked().length;
+const down = R29_NEM_BUILDINGS.filter(id => !r29NemAlive(id)).map(id => STRUCTURES[id].name);
+return ('<span>🚀 ' + docked + ' ships docked' + (b.attack && b.attack.fleet ? ' · ' + b.attack.fleet.length + ' out raiding' : '') +
+' · 🫐 feeding ' + b.pets.filter(p => p.hp > 0).length + ' pets' +
+(down.length ? ' · 💥 down: ' + down.join(", ") : '') +
+'</span>');
+}
+const R29_STAGE_MS = [0, 120000, 120000, 240000, 100000, 100000];
+function r29StageMs(stage) {
+return R29_STAGE_MS[stage] || BOSS_STAGE_MS;
+}
+function bossLaunchRaid(b, now, forceTarget) {
+if (!r29NemAlive("pilot-training"))
+return;
+const docked = r29Docked();
+if (docked.length < 2)
+return;
+const hops = bossRouteHops();
+const visited = localPlanetSave.visitedPlanets || {};
+const list = PLANETS
+.filter(p => p.id !== NEM && (p.id === "earth" || visited[p.id]))
+.map(p => ({ id: p.id, w: 1 / Math.pow(Math.max(1, hops[p.id] || 6), 1.6) }));
+if (!list.length)
+return;
+let target = forceTarget || list[0].id;
+if (!forceTarget) {
+let r = Math.random() * list.reduce((s, x) => s + x.w, 0);
+for (const x of list) {
+if ((r -= x.w) <= 0) {
+target = x.id;
+break;
+}
+}
+}
+const hurt = 1 - b.hp / b.maxHp;
+let ships = Math.min(docked.length - (docked.length > 2 ? 1 : 0), 2 + Math.round(hurt * 6));
+ships = Math.min(ships, Math.floor(b.coins / R29_COST.fuel));
+if (ships < 2)
+return;
+const fuel = ships * R29_COST.fuel;
+b.coins -= fuel;
+const sent = docked.sort((x, y) => r29ShipCap(y) - r29ShipCap(x)).slice(0, ships);
+withMySave(() => {
+const ids = new Set(sent.map(s => s.id));
+planetSave.ships[NEM] = (planetSave.ships[NEM] || []).filter(s => !ids.has(s.id));
+savePlanetProgress();
+});
+b.attack = {
+id: "raid" + now.toString(36),
+target, ships, sent: ships, cost: fuel,
+stage: 1, stageAt: now, startedAt: now,
+loot: { coins: 0, mats: {} },
+killed: 0,
+fleet: sent.map((ship, k) => ({
+id: "f" + k + now.toString(36),
+ship,
+cap: r29ShipCap(ship),
+cargo: [],
+power: bossRaiderInfo(k).power || ship.equipment || null,
+departed: false
+}))
+};
+b.lastAttackAt = now;
+bossMark(true);
+bossAnnounce("⚠ Nemesis has sent " + ships + " raiders to " + bossPlanetName(target) + "! They're " + BOSS_STAGE_TEXT[1] + ".");
+}
+function r29LootCount(a) {
+let n = 0;
+(a.fleet || []).forEach(f => f.cargo.forEach(d => n += d.k === "coin" ? 1 : (d.n || 1)));
+return n;
+}
+function r29FleetKill(b, a, k, real) {
+if (!a.fleet) {
+a.ships = Math.max(0, a.ships - 1);
+return;
+}
+let idx = Number.isInteger(k) && a.fleet[k] && (a.stage !== 3 || !a.fleet[k].departed) ? k : -1;
+if (idx < 0) {
+let best = -1;
+a.fleet.forEach((f, i) => {
+if (a.stage === 3 && f.departed)
+return;
+if (best < 0 || f.cargo.length > a.fleet[best].cargo.length)
+best = i;
+});
+idx = best < 0 ? a.fleet.length - 1 : best;
+}
+const f = a.fleet.splice(idx, 1)[0];
+a.ships = a.fleet.length;
+if (real && f && f.cargo.length) {
+withMySave(() => {
+f.cargo.forEach(d => worldPlacePut(a.target, { t: "vault" }, d));
+savePlanetProgress();
+});
+bossAnnounce("📦 A raider went down — " + f.cargo.length + " stolen load" + (f.cargo.length === 1 ? "" : "s") + " returned to " + bossPlanetName(a.target) + "'s Vault.");
+}
+}
+function r29Depart(a, f) {
+if (f.departed)
+return;
+f.departed = true;
+f.departAt = Date.now();
+bossMark(true);
+}
+let r29ViewAt = 0;
+function r29GroundTick(b, a) {
+if (performance.now() - r29ViewAt < 2500)
+return;
+a.fleet.forEach(f => {
+if (f.departed)
+return;
+const ground = withMySave(() => worldGroundList(a.target));
+if (ground.length && Math.random() < .6) {
+const g = ground.splice(Math.floor(Math.random() * ground.length), 1)[0];
+f.cargo.push({ k: g.k, r: g.r, n: g.n || 1 });
+if (f.cargo.length >= f.cap)
+r29Depart(a, f);
+bossMark();
+return;
+}
+const ids = withMySave(() => Object.keys(STRUCTURES).filter(id => hasStructure(a.target, id))).concat(["stock"]);
+r29DamageStructure(a.target, ids[Math.floor(Math.random() * ids.length)], f.power ? 10 : 4);
+});
+}
+function bossRaidTick(b, now) {
+const a = b.attack;
+if (!a.fleet) {
+bossRaidTick__orig(b, now);
+return;
+}
+if (a.ships <= 0 || !a.fleet.length) {
+bossRaidRepelled(b);
+return;
+}
+const name = bossPlanetName(a.target);
+if (a.stage === 2) {
+const all = satOrbitAll();
+const sats = [...(all["me:" + a.target] || []), ...(all[bossMyId() + ":" + a.target] || [])].filter(s => s && s.hp > 0).length;
+if (sats && Math.random() < Math.min(.45, .07 * sats)) {
+r29FleetKill(b, a, undefined, true);
+a.killed++;
+bossMark(true);
+bossAnnounce("🛰 Your satellites over " + name + " shot down a raider (" + a.ships + " left)");
+if (a.ships <= 0) {
+bossRaidRepelled(b);
+return;
+}
+}
+}
+if (a.stage === 3) {
+r29GroundTick(b, a);
+const built = bossStructureCount(a.target);
+if (built && Math.random() < Math.min(.2, .015 * built)) {
+r29FleetKill(b, a, undefined, true);
+a.killed++;
+bossMark(true);
+bossAnnounce("🏰 The buildings on " + name + " fought off a raider (" + a.ships + " left)");
+if (a.ships <= 0) {
+bossRaidRepelled(b);
+return;
+}
+}
+if (a.fleet.every(f => f.departed) || now - a.stageAt > r29StageMs(3)) {
+a.fleet.forEach(f => r29Depart(a, f));
+a.stage = 4;
+a.stageAt = now;
+bossMark(true);
+bossAnnounce("⚠ " + a.ships + " raider" + (a.ships === 1 ? " is" : "s are") + " " + BOSS_STAGE_TEXT[4] + " over " + name + " with " + r29LootCount(a) + " stolen loads — stop them!");
+}
+return;
+}
+if (now - a.stageAt > r29StageMs(a.stage)) {
+a.stage++;
+a.stageAt = now;
+bossMark(true);
+if (a.stage > 5) {
+bossRaidSucceeded(b);
+return;
+}
+bossAnnounce("⚠ " + a.ships + " raiders " + (a.stage <= 3 ? "at " : "from ") + name + " are now " + BOSS_STAGE_TEXT[a.stage] + ".");
+}
+}
+function bossRaidSucceeded(b) {
+const a = b.attack;
+if (!a.fleet) {
+bossRaidSucceeded__orig(b);
+return;
+}
+const heal = a.ships * 150;
+b.hp = Math.min(b.maxHp, b.hp + heal);
+r28Regrow(b, heal);
+let gain = 0;
+a.fleet.forEach(f => f.cargo.forEach(d => {
+gain += d.k === "coin" ? (d.n || 0) : d.k === "mat" ? 4 * (d.n || 1) : d.k === "item" ? 10 * (d.n || 1) : 3 * (d.n || 1);
+bossLootAdd(b, d);
+}));
+b.coins += gain;
+withMySave(() => {
+if (!planetSave.ships[NEM])
+planetSave.ships[NEM] = [];
+a.fleet.forEach(f => planetSave.ships[NEM].push(f.ship));
+savePlanetProgress();
+});
+b.raidsWon = (b.raidsWon || 0) + 1;
+b.attack = null;
+b.lastAttackAt = Date.now();
+bossMark(true);
+bossAnnounce("☠ " + a.ships + " raiders made it home from " + bossPlanetName(a.target) + " — Nemesis healed +" + heal + " and banked " + gain + " coins of loot");
+}
+function bossRaidRepelled(b) {
+const a = b.attack;
+if (!a)
+return;
+if (!a.fleet) {
+bossRaidRepelled__orig(b);
+return;
+}
+const reward = a.sent * 8;
+withMySave(() => {
+planetSave.banks[a.target] = (planetSave.banks[a.target] || 0) + reward;
+addRankPoints(a.sent * 40, "Raid repelled");
+});
+b.raidsRepelled = (b.raidsRepelled || 0) + 1;
+b.attack = null;
+b.lastAttackAt = Date.now();
+bossMark(true);
+bossAnnounce("🛡 The raid on " + bossPlanetName(a.target) + " is repelled! +" + reward + " coins banked there, and everything they stole came back.");
+}
+function r29Landing(k) {
+return { lat: SHIP_LAT - .02 - (Math.floor(k / 2)) * .07, lon: (k % 2 ? 1 : -1) * (.66 + .16 * Math.floor(k / 2)) };
+}
+const r29R = {};
+const r29Beams = [];
+function r29Dist(a, b) {
+return Math.hypot(a.lat - b.lat, r28Wrap(a.lon - b.lon) * Math.cos(a.lat));
+}
+function r29Step(s, t, speed, dt) {
+const dLat = t.lat - s.lat, dLon = r28Wrap(t.lon - s.lon);
+const d = Math.hypot(dLat, dLon * Math.cos(s.lat));
+if (d < 1e-4)
+return 0;
+const step = Math.min(d, speed * dt);
+s.dLat = dLat / d * step;
+s.dLon = dLon / d * step;
+s.lat += s.dLat;
+s.lon = r28Wrap(s.lon + s.dLon);
+return d - step;
+}
+function r29RaiderPos(en, b, now) {
+const a = b.attack;
+const f = a && a.fleet && a.fleet[en.i];
+if (!f)
+return null;
+const home = r29Landing(en.i);
+let s = r29R[f.id];
+if (!s)
+s = r29R[f.id] = { lat: home.lat - .03, lon: home.lon, at: now, lastHp: en.hp, dmgAt: 0, cd: 0, dLat: 0, dLon: 0, carry: null, goal: null };
+const dt = Math.min(.1, Math.max(0, (now - s.at) / 1000));
+s.at = now;
+if (en.hp < s.lastHp)
+s.dmgAt = now;
+s.lastHp = en.hp;
+const owner = bossSurfaceOwner();
+if (!bossIsMe(owner) || a.stage !== 3 || f.departed)
+return { lat: s.lat, lon: s.lon };
+r29ViewAt = performance.now();
+const planet = a.target;
+const hurt = now - s.dmgAt < 8000;
+const ground = worldGroundList(planet);
+const nearest = (list, fn) => {
+let best = null, bd = Infinity;
+list.forEach(x => {
+const p = fn(x);
+if (!p)
+return;
+const d = r29Dist(s, p);
+if (d < bd) {
+bd = d;
+best = { x, p, d };
+}
+});
+return best;
+};
+let goal = null;
+if (s.carry) {
+goal = { kind: "ship", p: home };
+}
+else if (hurt && !f.power) {
+const g = nearest(ground.filter(x => x.k === "item" && isBasePowerupId(x.r)), x => x.at);
+if (g)
+goal = { kind: "item", id: g.x.id, p: g.p };
+}
+else if (hurt && f.power && roamingActive) {
+const me = { lat: roamingLat, lon: roamingLon };
+if (r29Dist(s, me) < .3)
+goal = { kind: "fight", p: me };
+}
+if (!goal && ground.length) {
+const g = nearest(ground.filter(x => x.at && x.at.t === "planet" && x.k !== "corpse"), x => x.at);
+if (g)
+goal = { kind: "item", id: g.x.id, p: g.p };
+}
+if (!goal) {
+const ll = world.structureLatLon || {};
+const ids = Object.keys(ll).filter(id => (id === "stock" || (STRUCTURES[id] && hasStructure(planet, id))));
+const g = nearest(ids, id => ll[id]);
+if (g)
+goal = { kind: "build", id: g.x, p: g.p };
+}
+if (!goal)
+goal = { kind: "ship", p: home };
+const reach = goal.kind === "build" ? .07 : goal.kind === "fight" ? .1 : .025;
+const left = r29Step(s, { lat: goal.p.lat - (goal.kind === "build" ? .06 : 0), lon: goal.p.lon }, goal.kind === "fight" ? .09 : .075, dt);
+if (left > reach)
+return { lat: s.lat, lon: s.lon };
+if (goal.kind === "ship" && s.carry) {
+f.cargo.push(s.carry);
+s.carry = null;
+bossMark();
+if (f.cargo.length >= f.cap) {
+r29Depart(a, f);
+bossAnnounce("🚀 A raider ship on " + bossPlanetName(planet) + " is full and lifting off!");
+}
+}
+else if (goal.kind === "item") {
+const gi = ground.findIndex(x => x.id === goal.id);
+if (gi >= 0) {
+const g = ground.splice(gi, 1)[0];
+if (hurt && !f.power && g.k === "item" && isBasePowerupId(g.r) && (g.n || 1) === 1) {
+f.power = g.r;
+}
+else {
+if (f.power) {
+worldPlacePut(planet, { t: "ground", at: { t: "planet", lat: s.lat - .02, lon: s.lon + .03 } }, { k: "item", r: f.power, n: 1 });
+f.power = null;
+}
+s.carry = { k: g.k, r: g.r, n: g.n || 1 };
+}
+r29SaveSoon();
+bossMark();
+}
+}
+else if (goal.kind === "build" && now - s.cd > 1400) {
+s.cd = now;
+r29DamageStructure(planet, goal.id, f.power ? 10 : 4);
+r29Beams.push({ fid: f.id, id: goal.id, t0: now, col: f.power ? "#ff3b6b" : "#ffb3c6" });
+}
+return { lat: s.lat, lon: s.lon };
+}
+function r29RaidSurfaceEntries(queue, p) {
+if (roomState)
+return;
+const b = bossState(bossSurfaceOwner());
+const a = b && b.attack;
+if (!a || !a.fleet || a.target !== selectedStartPlanet || a.stage !== 3)
+return;
+const c = p.c, now = performance.now();
+a.fleet.forEach((f, k) => {
+const spot = r29Landing(k);
+const pr = projectSphere(spot.lat, spot.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!pr.visible)
+return;
+const up = f.departed ? Math.min(1, (Date.now() - (f.departAt || Date.now())) / 2500) : 0;
+if (up >= 1)
+return;
+queue.push({ z: p.groundDepthAt(pr.x, pr.y), alpha: 1, r20Fade: 1, draw: () => {
+c.save();
+c.globalAlpha *= 1 - up;
+r20Around(c, pr.x, pr.y - up * 160, "radial", r19SurfScale);
+c.translate(pr.x, pr.y - up * 160);
+try {
+drawShipAtScale(c, f.ship, YARD_SHIP_SCALE * 1.1, up > 0);
+}
+catch (error) { }
+c.restore();
+const w = 34 * r19SurfScale, h = 4;
+c.save();
+c.fillStyle = "rgba(10,4,16,.85)";
+c.fillRect(pr.x - w / 2, pr.y + 6, w, h);
+c.fillStyle = "#ffd76b";
+c.fillRect(pr.x - w / 2, pr.y + 6, w * Math.min(1, f.cargo.length / f.cap), h);
+c.restore();
+} });
+});
+queue.push({ z: 1e8, alpha: 1, draw: () => {
+const spots = world.bossEnemyPets || [];
+spots.forEach(spot => {
+const f = spot.en && spot.en.kind === "raid" && a.fleet[spot.en.i];
+const s = f && r29R[f.id];
+if (s && s.carry)
+try {
+drawWorldItem(c, s.carry, spot.x, spot.y - spot.size * 1.25, Math.max(16, spot.size * .6), {});
+}
+catch (error) { }
+});
+for (let i = r29Beams.length - 1; i >= 0; i--) {
+const bm = r29Beams[i];
+const age = (now - bm.t0) / 400;
+if (age > 1) {
+r29Beams.splice(i, 1);
+continue;
+}
+const spot = spots.find(sp => sp.en && sp.en.kind === "raid" && a.fleet[sp.en.i] && a.fleet[sp.en.i].id === bm.fid);
+const tgt = (world.r29Struct || {})[bm.id];
+if (!spot || !tgt)
+continue;
+c.save();
+c.globalAlpha = 1 - age;
+c.strokeStyle = bm.col;
+c.shadowColor = bm.col;
+c.shadowBlur = 12;
+c.lineWidth = 3;
+c.beginPath();
+c.moveTo(spot.x, spot.y - spot.size * .5);
+c.lineTo(tgt.x, tgt.y);
+c.stroke();
+c.restore();
+}
+} });
+}
+function siteToggleWorker(planetId, structureId, petId) {
+const job = getSiteJob(planetId, structureId);
+if (job && job.nemesis) {
+showShipToast("That's Nemesis's own building — its void pets are rebuilding it");
+return;
+}
+return siteToggleWorker__r29(planetId, structureId, petId);
+}
+function r29RaiderAhead(en, b, ll) {
+const f = b && b.attack && b.attack.fleet && b.attack.fleet[en.i];
+const s = f && r29R[f.id];
+return s ? { lat: ll.lat + s.dLat * 20, lon: ll.lon + s.dLon * 20 } : null;
 }
 const FEATURE_ACTIONS = new Set(["trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction(action, target, planetId) {
@@ -33797,6 +34564,8 @@ worldDrawPlanetGround(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat
 bossSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 corpseSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 trapSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+world.r29Struct = {};
+r29RaidSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 r26PenEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
@@ -34374,7 +35143,7 @@ if (!planetSave.structures[planetId]) {
 planetSave.structures[planetId] = {};
 }
 planetSave.structures[planetId][build.structureId] =
-{ level: 1 };
+r29Restored(planetId, build.structureId) || { level: 1 };
 addRankPoints(80, "Built a structure");
 showMilestoneFlourish(STRUCTURES[build.structureId]
 ? getStructureIconHtml(build.structureId)
@@ -34601,7 +35370,7 @@ for (const planet of PLANETS) {
 total +=
 (planet.id === "earth"
 ? (planetSave.ships.earth || [])
-: (getShips(planet.id) || [])).length;
+: (getShips(planet.id) || [])).filter(s => !s.enemy).length;
 }
 return total;
 }
