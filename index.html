@@ -11329,7 +11329,7 @@ withMySave(() => savePlanetProgress());
 }
 catch (error) { }
 });
-function bossOnNet(fromId, event) {
+function bossOnNet__r32(fromId, event) {
 const k = event && event.kind;
 if (!k)
 return false;
@@ -14681,7 +14681,7 @@ return true;
 }
 return false;
 }
-function worldItemInfo(d) {
+function worldItemInfo__r32(d) {
 if (d && d.k === "corpse") {
 const f = findCorpse(d.r);
 const name = f ? corpseName(f.pet) : "pet";
@@ -14694,7 +14694,7 @@ text: "Out of energy for good — unless you get it to Kepler. Fly it there in a
 }
 return worldItemInfo__orig(d);
 }
-function drawWorldItem(c, d, x, y, size, opts) {
+function drawWorldItem__r32(c, d, x, y, size, opts) {
 if (d && d.k === "corpse") {
 const f = findCorpse(d.r);
 if (f) {
@@ -21955,12 +21955,18 @@ return;
 return featureExecuteAction__r30(action, target, planetId);
 }
 const R31_DEFS = {
-mars: { boss: "keeper", name: "The Keeper", tag: "blind · hunts by sound", col: "#ff8a5c", lat: -.22, lon: Math.PI + .35,
-hint: "It can't see you — but it hears every running step. Creep, and it walks right past." },
-neptune: { boss: "watcher", name: "The Watcher", tag: "one great eye · hunts by sight", col: "#ffe27a", lat: -.3, lon: Math.PI - .4,
-hint: "Stay out of its lantern-light. Behind it, or under cover, you're invisible." },
-titan: { boss: "gourmand", name: "The Gourmand", tag: "always hungry · follows your scent", col: "#9dff7a", lat: -.18, lon: Math.PI + .1,
-hint: "Everywhere you walk leaves a scent trail. Hide and stay still, and the trail goes cold." }
+mars: { boss: "keeper", art: "scrapper", name: "The Scrapper", col: "#ff8a5c", lat: -.22, lon: Math.PI + .35,
+tag: "blind · hunts by sound",
+lore: "Every rover that never came home was dragged out here and welded into one. It can't see — but its old dish still hears everything.",
+hint: "Its dish swings toward every sound. Creep, and it rolls right past you." },
+neptune: { boss: "watcher", art: "unfinished", name: "The Unfinished", col: "#7aa8ff", lat: -.3, lon: Math.PI - .4,
+tag: "one drawn eye · hunts by sight",
+lore: "The very first page of the sketchbook — never finished, never named. It wanders the paper looking for the pieces it's missing.",
+hint: "Stay out of its gaze. Behind it, or under cover, it can't see you." },
+titan: { boss: "gourmand", art: "chef", name: "The Chef", col: "#9dff7a", lat: -.18, lon: Math.PI + .1,
+tag: "always hungry · follows your scent",
+lore: "Titan's food pets didn't name themselves. Something under the mushrooms has been fattening them up for a very long time.",
+hint: "It sniffs out your trail. Hide and keep still, and the scent goes cold." }
 };
 const R31_GLYPHS = ["☾", "✦", "◆", "▲", "●"];
 const R31 = {
@@ -22123,7 +22129,13 @@ const clash = lanterns.some(l => r31Ang(l.v, v) < .14) || hides.some(h => r31Ang
 if (!clash)
 hides.push({ v, kind: hides.length % 3 === 2 ? "crate" : "table", seed: rnd() });
 }
-const piles = [0, 1, 2].map(i => ({ v: r31At(P, rot + Math.PI / 3 + i * Math.PI * 2 / 3, .3 + rnd() * .25), cool: 0 }));
+const items = [];
+tries = 0;
+while (items.length < 7 && tries++ < 200) {
+const v = r31At(P, rnd() * Math.PI * 2, .1 + rnd() * .78);
+if (!lanterns.some(l => r31Ang(l.v, v) < .1) && !items.some(i => r31Ang(i.v, v) < .14) && r31Ang(P, v) > .08)
+items.push({ id: "p" + items.length, kind: "pebble", v });
+}
 const lair = r31At(P, rot + Math.PI + (rnd() - .5) * .6, .82);
 r31Run = {
 planet: planetId,
@@ -22135,9 +22147,10 @@ order,
 next: 0,
 lanterns,
 hides,
-piles,
+items,
+itemSeq: 100,
+heldTip: false,
 boss: { v: lair, f: r31Tan(lair, P), state: "rise", rise: 0, timer: 0, spot: 0, lastSense: 0, known: null, stunUntil: 0, charge: 0, look: 0, wp: null, sawHide: false },
-pebbles: 3,
 noise: [],
 crumbs: [],
 flights: [],
@@ -22155,7 +22168,7 @@ result: null
 };
 r31Sfx.drone();
 r31Sfx.screech();
-r31Say("The planet goes dark… " + def.name + " is waking. Drag gently to sneak.");
+r31Say(def.lore);
 r31Hud(true);
 }
 function r31Say(msg) {
@@ -22173,6 +22186,7 @@ if (!run)
 return;
 r31Run = null;
 r31Hud(false);
+r31ClearCarry();
 const planetId = run.planet;
 const pet = getRoamingPet();
 const petName = pet ? petShortName(planetId, pet) : "Your pet";
@@ -22293,6 +22307,7 @@ b.rise = Math.min(1, (now - run.startAt - 1800) / 2200);
 if (b.rise >= 1) {
 run.phase = "hunt";
 b.state = "patrol";
+r31Say(def.hint + " Drag gently to sneak.");
 }
 }
 const hide = run.hides.find(h => r31Ang(h.v, pv) < R31.hide);
@@ -22310,24 +22325,23 @@ run.crumbs.push({ v: pv, t0: now });
 }
 run.crumbs = run.crumbs.filter(cb => now - cb.t0 < 10000);
 run.noise = run.noise.filter(n => now - n.t0 < 900);
-run.piles.forEach(pl => {
-if (run.pebbles < 3 && now > pl.cool && r31Ang(pl.v, pv) < R31.pile) {
-run.pebbles = 3;
-pl.cool = now + 20000;
-r31Say("🪨 Pebbles ×3 — throw one to lure it away.");
-sound("click");
+{
+const pet = getRoamingPet();
+if (pet && !pet.carry) {
+const it = run.items.find(i => r31Ang(i.v, pv) < .035);
+if (it)
+r31PickItem(it.id);
 }
-});
+}
 for (let i = run.flights.length - 1; i >= 0; i--) {
 const fl = run.flights[i];
 if (now - fl.t0 >= 600) {
 run.flights.splice(i, 1);
-run.stones.push({ v: fl.to, t0: now });
+run.items.push({ id: "p" + (run.itemSeq++), kind: "pebble", v: fl.to });
 r31Sfx.pebble();
 r31Noise(fl.to, .5, "pebble");
 }
 }
-run.stones = run.stones.filter(s => now - s.t0 < 6000);
 if (run.phase === "hunt") {
 const lan = run.lanterns.find(l => !l.lit && r31Ang(l.v, pv) < R31.lantern);
 run.lanterns.forEach(l => {
@@ -22376,7 +22390,13 @@ run.endAt = now + 1600;
 r31Sfx.win();
 return;
 }
+{
+const before = b.v;
 r31Boss(dt, now, pv);
+const mv = r31Ang(before, b.v);
+b.spd = b.spd === undefined ? 0 : b.spd + ((dt > 0 ? mv / dt : 0) - b.spd) * Math.min(1, dt * 8);
+b.walk = (b.walk || 0) + mv * 9;
+}
 const d = r31Ang(b.v, pv);
 if (b.state !== "rise" && (b.state === "chase" || d < .35)) {
 const gap = b.state === "chase" ? 380 : Math.max(420, 1300 * d / .35);
@@ -22517,22 +22537,72 @@ b.pause = kind === "watcher" ? 3 : 1.2;
 function sf31(run) {
 return (roamingIsMoving ? roamingSpeedFraction : 0) > .2;
 }
-function r31Throw() {
+function r31Throw(target) {
 const run = r31Run;
 if (!run || (run.phase !== "hunt" && run.phase !== "escape"))
-return;
-if (run.pebbles <= 0) {
-r31Say("No pebbles — find a pile of stones.");
-return;
-}
+return false;
+const pet = getRoamingPet();
+if (!pet || !pet.carry || pet.carry.k !== "nm" || pet.carry.r !== "pebble")
+return false;
 const pv = r31PetV();
-let dir = run.lastDir;
-if (!dir)
-dir = r31Tan(pv, run.boss.v);
-const to = r31Go(pv, r31Flat(pv, dir), .24);
-run.pebbles--;
+let to;
+if (target) {
+const d = r31Ang(pv, target);
+to = d <= .4 ? target : r31Go(pv, r31Tan(pv, target), .4);
+}
+else {
+const dir = run.lastDir || r31Tan(pv, run.boss.v);
+to = r31Go(pv, r31Flat(pv, dir), .26);
+}
+pet.carry = null;
 run.flights.push({ from: pv, to, t0: performance.now() });
 sound("click");
+return true;
+}
+function r31PickItem(id) {
+const run = r31Run;
+const pet = getRoamingPet();
+const i = run ? run.items.findIndex(x => x.id === id) : -1;
+if (i < 0 || !pet)
+return;
+if (pet.carry) {
+r31Say("Your pet's hands are full — put down what it's carrying first.");
+return;
+}
+run.items.splice(i, 1);
+pet.carry = { k: "nm", r: "pebble", n: 1 };
+sound("click");
+if (!run.heldTip) {
+run.heldTip = true;
+r31Say("🪨 Got a pebble! Tap your pet to throw it ahead — or drag it to where you want it to land.");
+}
+}
+function r31TapItem(id) {
+const run = r31Run;
+const it = run && run.items.find(x => x.id === id);
+if (!it)
+return;
+if (r31Ang(it.v, r31PetV()) < .12)
+r31PickItem(id);
+else
+r31Say("Walk over the pebble to pick it up — or drag it onto your pet.");
+}
+function r31ClearCarry() {
+try {
+const pet = getRoamingPet();
+if (pet && pet.carry && pet.carry.k === "nm")
+pet.carry = null;
+Object.values((localPlanetSave || planetSave).pets || {}).forEach(list => {
+(list || []).forEach(p => {
+if (p.carry && p.carry.k === "nm")
+p.carry = null;
+});
+});
+}
+catch (error) { }
+}
+function r31AngDiff(a, b) {
+return wrapAngle(a - b);
 }
 function r29StructPowerHit(kind, shape, pet) {
 r29StructPowerHit__r31(kind, shape, pet);
@@ -22544,7 +22614,7 @@ run.boss.stunUntil = performance.now() + 2500;
 r31Say("It staggers — nightmares can't be killed, but that bought you a moment.");
 }
 }
-function roamingPaceNow() {
+function roamingPaceNow__r32() {
 const v = roamingPaceNow__r31();
 if (!r31Run)
 return v;
@@ -22768,264 +22838,730 @@ c.stroke();
 }
 c.restore();
 }
-function r31DrawPile(c, u, ready) {
-c.save();
-c.globalAlpha = ready ? 1 : .4;
-[[-.18, 0, .13], [.12, 0, .11], [0, -.1, .12], [.24, -.04, .08]].forEach(s => {
-c.fillStyle = "#8a8f99";
-c.strokeStyle = "#cfd6e2";
-c.lineWidth = 1;
+const R32_VIEW = r31Norm([0, .3, .954]);
+const R32_LIGHT = r31Norm([-.45, .75, .5]);
+function r32Cam(yaw, S) {
+const c = Math.cos(yaw), s = Math.sin(yaw);
+const f = (x, y, z) => {
+const X = x * c + z * s, Z = -x * s + z * c;
+return { x: X * S, y: (-y * .94 + Z * .3) * S, z: Z };
+};
+f.rot = n => [n[0] * c + n[2] * s, n[1], -n[0] * s + n[2] * c];
+f.S = S;
+return f;
+}
+function r32Rgb(hex) {
+const h = hex.replace("#", "");
+return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function r32Lit(hex, k, a) {
+const c = r32Rgb(hex);
+return "rgba(" + Math.round(Math.min(255, c[0] * k)) + "," + Math.round(Math.min(255, c[1] * k)) + "," + Math.round(Math.min(255, c[2] * k)) + "," + (a === undefined ? 1 : a) + ")";
+}
+function r32Light(n) {
+return .4 + .75 * Math.max(0, r31Dot(n, R32_LIGHT));
+}
+function r32Facing(cam, n) {
+return r31Dot(cam.rot(n), R32_VIEW);
+}
+function r32Face(c, cam, pts, n, col, opt) {
+opt = opt || {};
+const nr = cam.rot(n);
+if (r31Dot(nr, R32_VIEW) <= 0 && !opt.both)
+return null;
+const q = pts.map(p => cam(p[0], p[1], p[2]));
 c.beginPath();
-c.ellipse(s[0] * u, s[1] * u - s[2] * u * .5, s[2] * u, s[2] * u * .75, 0, 0, Math.PI * 2);
+q.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y));
+c.closePath();
+c.fillStyle = r32Lit(col, r32Light(nr) * (opt.k || 1), opt.a);
+c.fill();
+if (opt.line) {
+c.strokeStyle = opt.line;
+c.lineWidth = opt.lw || 1.2;
+c.stroke();
+}
+return q;
+}
+function r32Box(c, cam, x, y, z, w, h, d, col, opt) {
+const X0 = x - w / 2, X1 = x + w / 2, Y0 = y, Y1 = y + h, Z0 = z - d / 2, Z1 = z + d / 2;
+const out = {};
+[
+["r", [[X1, Y0, Z0], [X1, Y0, Z1], [X1, Y1, Z1], [X1, Y1, Z0]], [1, 0, 0]],
+["l", [[X0, Y0, Z1], [X0, Y0, Z0], [X0, Y1, Z0], [X0, Y1, Z1]], [-1, 0, 0]],
+["t", [[X0, Y1, Z0], [X1, Y1, Z0], [X1, Y1, Z1], [X0, Y1, Z1]], [0, 1, 0]],
+["f", [[X0, Y0, Z1], [X1, Y0, Z1], [X1, Y1, Z1], [X0, Y1, Z1]], [0, 0, 1]],
+["b", [[X1, Y0, Z0], [X0, Y0, Z0], [X0, Y1, Z0], [X1, Y1, Z0]], [0, 0, -1]]
+].forEach(([k, p, n]) => {
+const q = r32Face(c, cam, p, n, col, opt);
+if (q)
+out[k] = q;
+});
+return out;
+}
+function r32Limb(c, cam, a, b, w, col) {
+const p = cam(a[0], a[1], a[2]), q = cam(b[0], b[1], b[2]);
+c.strokeStyle = col;
+c.lineWidth = w;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(p.x, p.y);
+c.lineTo(q.x, q.y);
+c.stroke();
+}
+function r32Shadow(c, S, k) {
+c.save();
+c.fillStyle = "rgba(0,0,0," + (.42 * (k === undefined ? 1 : k)) + ")";
+c.beginPath();
+c.ellipse(0, 0, S * .5, S * .15, 0, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r32Hash(n) {
+const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+return x - Math.floor(x);
+}
+function r32Dizzy(c, x, y, S, t) {
+c.save();
+c.fillStyle = "#fff1b8";
+c.font = "900 " + Math.round(S * .12) + "px system-ui,sans-serif";
+c.textAlign = "center";
+for (let i = 0; i < 3; i++) {
+const a = t * 5 + i * 2.1;
+c.fillText("✶", x + Math.cos(a) * S * .22, y + Math.sin(a) * S * .06);
+}
+c.restore();
+}
+function r32DrawScrapper(c, H, t, b, view) {
+const S = H * 1.1, cam = r32Cam(view.yaw, S);
+const chase = b.state === "chase", look = b.state === "look", grab = view.grab;
+const g = (b.walk || 0) * Math.PI * 2;
+const hB = .4 + Math.sin(t * 2.2) * .008 + (look ? -.04 : 0) + (chase ? .03 * Math.abs(Math.sin(g)) : 0);
+const ops = [];
+r32Shadow(c, S * 1.15);
+[-1, 1].forEach(sd => [-1, 0, 1].forEach((k, i) => {
+const ph = g + ((i + (sd > 0 ? 1 : 0)) % 2) * Math.PI;
+const lift = Math.max(0, Math.sin(ph)) * .1 * Math.min(1, view.speed * 12 + .15);
+const sw = Math.cos(ph) * .08 * Math.min(1, view.speed * 12);
+const hip = [sd * .27, hB + .06, k * .16];
+const knee = [sd * .5, hB + .22 + lift * .5, k * .21 + sw * .4];
+const foot = [sd * .58, lift, k * .27 + sw];
+ops.push({ z: cam(knee[0], knee[1], knee[2]).z, fn: () => {
+r32Limb(c, cam, hip, knee, S * .055, "#3b2a22");
+r32Limb(c, cam, hip, knee, S * .032, r32Lit("#7a4a32", r32Light(cam.rot([sd, .5, 0]))));
+r32Limb(c, cam, knee, foot, S * .042, r32Lit("#5c3826", r32Light(cam.rot([sd, 0, 0]))));
+const kn = cam(knee[0], knee[1], knee[2]), ft = cam(foot[0], foot[1], foot[2]);
+c.fillStyle = "#c96a3a";
+c.beginPath();
+c.arc(kn.x, kn.y, S * .022, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#24160e";
+c.beginPath();
+c.ellipse(ft.x, ft.y, S * .03, S * .014, 0, 0, Math.PI * 2);
+c.fill();
+} });
+}));
+ops.push({ z: 0, fn: () => {
+r32Box(c, cam, 0, hB, 0, .64, .2, .54, "#7e3c22", { line: "rgba(255,138,92,.85)", lw: 1.5 });
+[-1, 1].forEach(sd => {
+const w = cam(sd * .33, hB + .08, 0);
+if (r32Facing(cam, [sd, 0, 0]) <= 0)
+return;
+c.fillStyle = "#1e1612";
+c.strokeStyle = "#c96a3a";
+c.lineWidth = 1.4;
+c.beginPath();
+c.ellipse(w.x, w.y, S * .07 * Math.abs(Math.sin(view.yaw)) + S * .012, S * .075, 0, 0, Math.PI * 2);
 c.fill();
 c.stroke();
 });
+const f = r32Box(c, cam, 0, hB + .2, .04, .46, .2, .4, "#9a4b2c", { line: "rgba(255,138,92,.85)", lw: 1.5 });
+if (f.f) {
+c.save();
+c.strokeStyle = "rgba(60,20,8,.55)";
+c.lineWidth = S * .012;
+[-.18, .05, .2].forEach((x, i) => {
+const a = cam(x * .8, hB + .39, .241), bb = cam(x * .8 + .02, hB + .22 + i * .03, .241);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(bb.x, bb.y);
+c.stroke();
+});
+const l = cam(0, hB + .3, .245);
+c.fillStyle = "#0c0606";
+c.strokeStyle = "#c96a3a";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(l.x, l.y, S * .055, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+c.strokeStyle = "rgba(255,200,170,.5)";
+c.lineWidth = 1;
+c.beginPath();
+c.moveTo(l.x - S * .04, l.y - S * .02);
+c.lineTo(l.x + S * .01, l.y + S * .005);
+c.lineTo(l.x + S * .03, l.y + S * .04);
+c.stroke();
 c.restore();
 }
-function r31DrawKeeper(c, H, t, b, flip, grab) {
-const sway = Math.sin(t * 2.2);
-const chase = b.state === "chase";
+const sp = r32Face(c, cam, [[-.2, hB + .405, -.13], [.2, hB + .405, -.13], [.2, hB + .405, .2], [-.2, hB + .405, .2]], [0, 1, 0], "#1d2c52", { line: "rgba(130,180,255,.55)" });
+if (sp) {
 c.save();
-c.scale(flip, 1);
-c.strokeStyle = "#15121b";
-c.lineWidth = H * .05;
-c.lineCap = "round";
-const step = chase ? Math.sin(t * 9) * H * .06 : Math.sin(t * 3) * H * .03;
+c.strokeStyle = "rgba(130,180,255,.25)";
+c.lineWidth = 1;
+for (let i = 1; i < 4; i++) {
+const a = cam(-.2 + i * .1, hB + .406, -.13), bb = cam(-.2 + i * .1, hB + .406, .2);
 c.beginPath();
-c.moveTo(-H * .06, -H * .3);
-c.lineTo(-H * .08 + step, 0);
-c.moveTo(H * .06, -H * .3);
-c.lineTo(H * .08 - step, 0);
-c.stroke();
-c.fillStyle = "#1d1a24";
-c.strokeStyle = "#ff8a5c";
-c.lineWidth = 1.6;
-c.shadowColor = "#ff8a5c";
-c.shadowBlur = 6;
-c.beginPath();
-c.moveTo(-H * .16, -H * .28);
-c.quadraticCurveTo(-H * .22, -H * .7, -H * .02, -H * .86);
-c.quadraticCurveTo(H * .2, -H * .82, H * .2, -H * .62);
-c.lineTo(H * .15, -H * .28);
-c.closePath();
-c.fill();
-c.stroke();
-c.shadowBlur = 0;
-const hx = H * .14, hy = -H * .86;
-c.fillStyle = "#d8cbb0";
-c.beginPath();
-c.ellipse(hx, hy, H * .09, H * .11, .35, 0, Math.PI * 2);
-c.fill();
-c.strokeStyle = "#a8987a";
-c.lineWidth = 1.4;
-for (let i = -2; i <= 2; i++) {
-c.beginPath();
-c.moveTo(hx - H * .08, hy + i * H * .035);
-c.lineTo(hx + H * .08, hy + i * H * .035 - H * .02);
+c.moveTo(a.x, a.y);
+c.lineTo(bb.x, bb.y);
 c.stroke();
 }
-c.fillStyle = "#3a0f12";
-c.fillRect(hx + H * .01, hy + H * .05, H * .06, H * .012);
-c.strokeStyle = "#4a3c52";
+c.restore();
+}
+const led = cam(.17, hB + .41, .21);
+const on = Math.sin(t * (chase ? 18 : look ? 8 : 2.5)) > 0;
+c.fillStyle = on ? "#ff3b2b" : "#4a0e0a";
+c.shadowColor = "#ff3b2b";
+c.shadowBlur = on ? 14 : 0;
+c.beginPath();
+c.arc(led.x, led.y, S * .022, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+} });
+{
+const base = [0, hB + .4, -.12], top = [0, hB + .72, -.12];
+const e = view.ear, tl = look || chase ? .12 : .32;
+const d = [Math.sin(e) * Math.cos(tl), Math.sin(tl), Math.cos(e) * Math.cos(tl)];
+const u = r31Norm(r31Cross(d, [0, 1, 0]));
+const v = r31Cross(u, d);
+const ctr = [top[0] + d[0] * .04, top[1] + d[1] * .04, top[2] + d[2] * .04];
+ops.push({ z: cam(ctr[0], ctr[1], ctr[2]).z + .01, fn: () => {
+r32Limb(c, cam, base, top, S * .025, "#6b4430");
+const pts = [];
+for (let i = 0; i < 20; i++) {
+const a = i / 20 * Math.PI * 2;
+pts.push(cam(ctr[0] + (u[0] * Math.cos(a) + v[0] * Math.sin(a)) * .21, ctr[1] + (u[1] * Math.cos(a) + v[1] * Math.sin(a)) * .21, ctr[2] + (u[2] * Math.cos(a) + v[2] * Math.sin(a)) * .21));
+}
+const front = r32Facing(cam, d) > 0;
+const cc = cam(ctr[0], ctr[1], ctr[2]);
+c.beginPath();
+pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y));
+c.closePath();
+const gr = c.createRadialGradient(cc.x, cc.y, 1, cc.x, cc.y, S * .18);
+gr.addColorStop(0, front ? "#e8d2c0" : "#6a4a3a");
+gr.addColorStop(1, front ? "#8e6a56" : "#3a261c");
+c.fillStyle = gr;
+c.fill();
+c.strokeStyle = look || chase ? "#ffb08a" : "rgba(255,138,92,.7)";
 c.shadowColor = "#ff8a5c";
-c.shadowBlur = 5;
-c.lineWidth = H * .035;
-const sx = H * .12, sy = -H * .7;
-const arm = (dx) => {
-let ex, ey;
+c.shadowBlur = look || chase ? 10 : 0;
+c.lineWidth = 1.6;
+c.stroke();
+c.shadowBlur = 0;
+const hn = cam(ctr[0] + d[0] * .13, ctr[1] + d[1] * .13, ctr[2] + d[2] * .13);
+c.strokeStyle = "#c9b4a4";
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(cc.x, cc.y);
+c.lineTo(hn.x, hn.y);
+c.stroke();
+if (look || chase) {
+c.strokeStyle = "rgba(255,190,150,.55)";
+c.lineWidth = 1.4;
+for (let i = 0; i < 3; i++) {
+const k = ((t * 1.6 + i / 3) % 1);
+const far = .2 + (1 - k) * .5;
+const p = cam(ctr[0] + d[0] * far, ctr[1] + d[1] * far, ctr[2] + d[2] * far);
+c.globalAlpha = k * .8;
+c.beginPath();
+c.arc(p.x, p.y, S * (.03 + .09 * (1 - k)), 0, Math.PI * 2);
+c.stroke();
+}
+c.globalAlpha = 1;
+}
+} });
+}
+[-1, 1].forEach(sd => {
+const sh = [sd * .2, hB + .12, .26];
+let el, hand, open;
 if (chase || grab) {
-const r = grab ? 1.15 : .85;
-ex = sx + H * r * Math.cos(.15 + dx * .08);
-ey = sy + H * .25 + Math.sin(t * 6 + dx) * H * .04;
+const ext = grab ? 1.15 : .72 + Math.sin(t * 6 + sd) * .07;
+el = [sd * .24, hB + .14, .24 + ext * .45];
+hand = [sd * .12, hB + .04 + Math.sin(t * 8 + sd) * .03, .24 + ext];
+open = .25 + .25 * Math.abs(Math.sin(t * 9 + sd));
 }
 else {
-ex = sx + H * .1 + dx * H * .05 + sway * H * .05;
-ey = -H * .04;
+el = [sd * .3, hB - .1, .36];
+hand = [sd * .2, .12 + Math.sin(t * 1.7 + sd) * .02, .46];
+open = .12 + .06 * Math.sin(t * 3 + sd);
 }
+ops.push({ z: cam(hand[0], hand[1], hand[2]).z + .02, fn: () => {
+r32Limb(c, cam, sh, el, S * .046, "#4a2e20");
+r32Limb(c, cam, sh, el, S * .026, "#b0663e");
+r32Limb(c, cam, el, hand, S * .04, "#4a2e20");
+r32Limb(c, cam, el, hand, S * .022, "#b0663e");
+[-1, 1].forEach(j => {
+const tip = [hand[0] + sd * j * open * .12, hand[1] + j * open * .05, hand[2] + .13];
+r32Limb(c, cam, hand, tip, S * .03, "#d8c4b2");
+});
+} });
+});
+ops.sort((a, b) => a.z - b.z).forEach(o => o.fn());
+if (view.stun)
+r32Dizzy(c, 0, -S * 1.05, S, t);
+}
+function r32DrawUnfinished(c, H, t, b, view, run) {
+const S = H * 1.15, cam = r32Cam(view.yaw, S);
+const chase = b.state === "chase", look = b.state === "look";
+const boil = Math.floor(t * (chase ? 14 : 8));
+const jt = i => (r32Hash(boil * 37 + i) - .5) * S * .012;
+const g = (b.walk || 0) * Math.PI * 2;
+const ink = "#3a6bff";
+const ops = [];
+r32Shadow(c, S * .7, .8);
+[-1, 1].forEach((sd, i) => {
+const ph = g + i * Math.PI;
+const hip = [sd * .07, .5, 0];
+const foot = [sd * .1, Math.max(0, Math.sin(ph)) * .07 * Math.min(1, view.speed * 14), Math.cos(ph) * .14 * Math.min(1, view.speed * 14)];
+ops.push({ z: cam(foot[0], foot[1], foot[2]).z - .05, fn: () => r32Pencil(c, cam, hip, foot, S, jt, i) });
+});
+ops.push({ z: 0, fn: () => {
+const a = cam(0, .48, 0), bb = cam(0, .84, 0);
+const w0 = .13 * S, w1 = .21 * S;
+c.save();
 c.beginPath();
-c.moveTo(sx + dx * H * .04, sy);
-c.quadraticCurveTo(sx + H * .18, (sy + ey) / 2 + H * .08, ex, ey);
+c.moveTo(a.x - w0 + jt(1), a.y + jt(2));
+c.lineTo(a.x + w0 + jt(3), a.y + jt(4));
+c.lineTo(bb.x + w1 + jt(5), bb.y + jt(6));
+c.lineTo(bb.x - w1 + jt(7), bb.y + jt(8));
+c.closePath();
+const gr = c.createLinearGradient(a.x - w1, 0, a.x + w1, 0);
+gr.addColorStop(0, "#f2eee2");
+gr.addColorStop(1, "#a9a497");
+c.fillStyle = gr;
+c.fill();
+c.strokeStyle = ink;
+c.lineWidth = 1.8;
 c.stroke();
-c.lineWidth = H * .012;
-for (let f = -1; f <= 1; f++) {
+c.clip();
+c.strokeStyle = "rgba(40,50,90,.35)";
+c.lineWidth = 1;
+for (let i = 0; i < 9; i++) {
+const y = a.y - (i + .5) * (a.y - bb.y) / 9;
 c.beginPath();
-c.moveTo(ex, ey);
-c.lineTo(ex + H * .07, ey + f * H * .03 + H * .02);
+c.moveTo(bb.x + w1 * .1 + jt(20 + i), y + S * .03);
+c.lineTo(bb.x + w1 + jt(40 + i), y - S * .03);
 c.stroke();
 }
-c.lineWidth = H * .035;
-};
-arm(-1);
-arm(1);
+c.restore();
+} });
+[-1, 1].forEach((sd, i) => {
+const sh = [sd * .14, .8, 0];
+let hand;
+if (chase) {
+hand = [sd * .13 + Math.cos(t * 22 + i) * .04, .7 + Math.sin(t * 22 + i) * .04, .52];
+}
+else if (look) {
+hand = [sd * .28, .72 + Math.sin(t * 3 + i) * .03, .12];
+}
+else {
+hand = [sd * .22, .42 + Math.sin(t * 2 + i * 2) * .03, .06];
+}
+ops.push({ z: cam(hand[0], hand[1], hand[2]).z, fn: () => {
+r32Pencil(c, cam, sh, hand, S * .85, jt, 10 + i);
+if (chase) {
+const p = cam(hand[0], hand[1], hand[2]);
+c.save();
+c.strokeStyle = "rgba(30,40,80,.7)";
+c.lineWidth = 1.3;
+c.beginPath();
+for (let k = 0; k < 10; k++) {
+const x = p.x + (r32Hash(boil * 13 + k + i * 50) - .5) * S * .22;
+const y = p.y + (r32Hash(boil * 17 + k + i * 90) - .5) * S * .12;
+k ? c.lineTo(x, y) : c.moveTo(x, y);
+}
+c.stroke();
 c.restore();
 }
-function r31DrawWatcher(c, H, t, b, flip, lookX) {
+} });
+});
+ops.push({ z: cam(0, 1, 0).z + .001, fn: () => {
+const hc = r32Cam(view.yaw + view.head, S);
+const bob = Math.sin(t * 2) * .01;
+const P = [[-.25, .84 + bob, 0], [.25, .84 + bob, 0], [.25, 1.24 + bob, 0], [-.15, 1.24 + bob, 0], [-.25, 1.14 + bob, 0]];
+const front = r32Facing(hc, [0, 0, 1]) > 0;
+const q = P.map(p => hc(p[0], p[1], p[2]));
 c.save();
-c.scale(flip, 1);
-const chase = b.state === "chase";
-const step = chase ? Math.sin(t * 8) * H * .05 : Math.sin(t * 2.5) * H * .025;
-c.strokeStyle = "#1a1830";
-c.lineWidth = H * .03;
+c.beginPath();
+q.forEach((p, i) => i ? c.lineTo(p.x + jt(60 + i), p.y + jt(70 + i)) : c.moveTo(p.x + jt(60 + i), p.y + jt(70 + i)));
+c.closePath();
+c.fillStyle = front ? "#f6f2e6" : "#cfcabd";
+c.fill();
+c.strokeStyle = ink;
+c.lineWidth = 1.8;
+c.shadowColor = ink;
+c.shadowBlur = 6;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#d8d2c2";
+c.beginPath();
+c.moveTo(q[3].x, q[3].y);
+c.lineTo(q[4].x, q[4].y);
+const fold = hc(-.15, 1.14 + bob, 0);
+c.lineTo(fold.x, fold.y);
+c.closePath();
+c.fill();
+c.stroke();
+if (front) {
+const o = hc(0, 1.03 + bob, .002), ax = hc(.13, 1.03 + bob, .002), ay = hc(0, 1.16 + bob, .002);
+c.save();
+c.transform((ax.x - o.x), (ax.y - o.y), (ay.x - o.x), (ay.y - o.y), o.x, o.y);
+const wide = 1 + b.spot * .5 + (chase ? .3 : 0);
+c.beginPath();
+c.ellipse(0, 0, 1.25, .62 * wide, 0, 0, Math.PI * 2);
+c.fillStyle = "#ffffff";
+c.fill();
+c.lineWidth = .08;
+c.strokeStyle = "#1a1f3a";
+c.stroke();
+const lx = Math.max(-.6, Math.min(.6, view.look || 0));
+c.fillStyle = chase || b.spot > .2 ? "#ff3b3b" : ink;
+c.beginPath();
+c.arc(lx, 0, .42, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#05060c";
+c.beginPath();
+c.arc(lx, 0, .18, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#1a1f3a";
+c.lineWidth = .07;
+for (let k = -3; k <= 3; k++) {
+c.beginPath();
+c.moveTo(k * .3, -.58 * wide);
+c.lineTo(k * .38, -.9 * wide);
+c.stroke();
+}
+c.restore();
+const m = c.getTransform();
+run.eyeDev = { x: m.a * o.x + m.c * o.y + m.e, y: m.b * o.x + m.d * o.y + m.f, s: Math.hypot(m.a, m.b) };
+}
+else {
+c.strokeStyle = "rgba(40,50,90,.45)";
+c.lineWidth = 1;
+for (let k = 0; k < 5; k++) {
+const a = hc(-.14, .92 + k * .05 + bob, -.002), bb = hc(.12 - (k % 2) * .08, .92 + k * .05 + bob, -.002);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(bb.x, bb.y);
+c.stroke();
+}
+run.eyeDev = null;
+}
+c.restore();
+} });
+ops.sort((a, b) => a.z - b.z).forEach(o => o.fn());
+if (view.stun)
+r32Dizzy(c, 0, -S * 1.25, S, t);
+}
+function r32Pencil(c, cam, a, b, S, jt, seed) {
+const p = cam(a[0], a[1], a[2]), q = cam(b[0], b[1], b[2]);
+const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
+const ux = dx / len, uy = dy / len, nx = -uy, ny = ux, w = S * .03;
+const tipL = Math.min(len * .22, S * .07);
+const mx = q.x - ux * tipL, my = q.y - uy * tipL;
+c.save();
+c.fillStyle = "#ff9fb4";
+c.beginPath();
+c.arc(p.x, p.y, w * 1.05, 0, Math.PI * 2);
+c.fill();
+c.beginPath();
+c.moveTo(p.x + nx * w + jt(seed * 3), p.y + ny * w);
+c.lineTo(mx + nx * w, my + ny * w + jt(seed * 3 + 1));
+c.lineTo(mx - nx * w, my - ny * w);
+c.lineTo(p.x - nx * w, p.y - ny * w + jt(seed * 3 + 2));
+c.closePath();
+c.fillStyle = "#e8c45a";
+c.fill();
+c.strokeStyle = "#3a6bff";
+c.lineWidth = 1.3;
+c.stroke();
+c.strokeStyle = "rgba(150,110,30,.6)";
+c.beginPath();
+c.moveTo(p.x, p.y);
+c.lineTo(mx, my);
+c.stroke();
+c.fillStyle = "#e9c9a0";
+c.beginPath();
+c.moveTo(mx + nx * w, my + ny * w);
+c.lineTo(q.x, q.y);
+c.lineTo(mx - nx * w, my - ny * w);
+c.closePath();
+c.fill();
+c.fillStyle = "#2a2a30";
+c.beginPath();
+c.moveTo(q.x - ux * tipL * .35 + nx * w * .35, q.y - uy * tipL * .35 + ny * w * .35);
+c.lineTo(q.x, q.y);
+c.lineTo(q.x - ux * tipL * .35 - nx * w * .35, q.y - uy * tipL * .35 - ny * w * .35);
+c.closePath();
+c.fill();
+c.restore();
+}
+function r32DrawChef(c, H, t, b, view) {
+const S = H * .95;
+const chase = b.state === "chase", look = b.state === "look";
+const ph = (b.walk || 0) * Math.PI;
+const hop = Math.abs(Math.sin(ph)) * (chase ? .2 : .06) * Math.min(1, view.speed * 10 + .1);
+const land = 1 - Math.min(1, Math.abs(Math.sin(ph)) * 6);
+const sq = land * (chase ? .16 : .08) - hop * .4 + Math.sin(t * 3) * .02;
+const rx = .42 * S * (1 + sq * .6), ry = .37 * S * (1 - sq);
+const cy = -(ry / .94 + hop * S) * .94;
+const sx = Math.sin(view.yaw), fv = Math.cos(view.yaw);
+r32Shadow(c, S * (1.05 - hop * 1.5), 1 - hop * 1.5);
+c.save();
+c.save();
+c.beginPath();
+c.ellipse(0, cy, rx * .92, ry * .92, 0, 0, Math.PI * 2);
+c.clip();
+const bits = [["mallow", .3, .1], ["pine", 2.4, -.2], ["bub", 4.1, .3], ["mallow", 5.2, -.05], ["bub", 1.2, -.35]];
+bits.forEach(([k, a, yy], i) => {
+const ang = a + view.yaw + t * .15;
+const x = Math.sin(ang) * rx * .5, depth = Math.cos(ang);
+const y = cy + yy * ry + Math.sin(t * 1.3 + i) * ry * .06;
+const s = S * (.07 + .025 * depth);
+c.globalAlpha = .45 + .35 * (depth + 1) / 2;
+if (k === "mallow") {
+c.fillStyle = "#fff4f6";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - s, y - s * .8, s * 2, s * 1.6, s * .5);
+else
+c.rect(x - s, y - s * .8, s * 2, s * 1.6);
+c.fill();
+}
+else if (k === "pine") {
+c.fillStyle = "#ffd34d";
+c.beginPath();
+c.moveTo(x, y - s * 1.2);
+c.lineTo(x + s, y + s * .8);
+c.lineTo(x - s, y + s * .8);
+c.closePath();
+c.fill();
+c.strokeStyle = "#c98a16";
+c.lineWidth = 1;
+c.stroke();
+}
+else {
+c.strokeStyle = "rgba(230,255,220,.8)";
+c.lineWidth = 1.2;
+c.beginPath();
+c.arc(x, y, s * .5, 0, Math.PI * 2);
+c.stroke();
+}
+});
+c.restore();
+const gr = c.createRadialGradient(-rx * .35, cy - ry * .4, ry * .05, 0, cy, Math.max(rx, ry) * 1.05);
+gr.addColorStop(0, "rgba(220,255,190,.7)");
+gr.addColorStop(.5, "rgba(110,210,70,.55)");
+gr.addColorStop(1, "rgba(35,100,25,.85)");
+c.fillStyle = gr;
+c.strokeStyle = "#9dff7a";
+c.shadowColor = "#9dff7a";
+c.shadowBlur = chase ? 16 : 8;
+c.lineWidth = 2;
+c.beginPath();
+for (let i = 0; i <= 32; i++) {
+const a = i / 32 * Math.PI * 2;
+const w = 1 + Math.sin(a * 3 + t * 4) * .025 + Math.sin(a * 5 - t * 3) * .015;
+const x = Math.cos(a) * rx * w, y = cy + Math.sin(a) * ry * w;
+i ? c.lineTo(x, y) : c.moveTo(x, y);
+}
+c.closePath();
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "rgba(255,255,255,.55)";
+c.beginPath();
+c.ellipse(-rx * .42, cy - ry * .5, rx * .16, ry * .08, -.5, 0, Math.PI * 2);
+c.fill();
+for (let i = 0; i < 3; i++) {
+const x = (i - 1) * rx * .5 + Math.sin(t + i) * rx * .05;
+const len = ry * (.1 + .08 * ((t * .7 + i * .37) % 1));
+c.fillStyle = "rgba(110,210,70,.75)";
+c.beginPath();
+c.ellipse(x, cy + ry * .92 + len * .5, rx * .04, len * .6, 0, 0, Math.PI * 2);
+c.fill();
+}
+const armSide = sx >= 0 ? -1 : 1;
+{
+const ax = armSide * rx * .92, ay = cy + ry * .05;
+const raise = chase ? -.9 + Math.sin(t * 10) * .5 : look ? -.3 : .2 + Math.sin(t * 2) * .1;
+c.save();
+c.translate(ax, ay);
+c.rotate(armSide * (.6 + raise));
+c.strokeStyle = "#5ea83a";
+c.lineWidth = S * .06;
 c.lineCap = "round";
 c.beginPath();
-c.moveTo(-H * .04, -H * .45);
-c.lineTo(-H * .07 + step, 0);
-c.moveTo(H * .04, -H * .45);
-c.lineTo(H * .07 - step, 0);
+c.moveTo(0, 0);
+c.lineTo(armSide * S * .12, -S * .06);
 c.stroke();
-c.fillStyle = "#24203a";
-c.strokeStyle = "#ffe27a";
-c.lineWidth = 1.5;
-c.shadowColor = "#ffe27a";
-c.shadowBlur = 5;
+c.strokeStyle = "#b8c0cc";
+c.lineWidth = S * .02;
 c.beginPath();
-c.moveTo(-H * .1, -H * .42);
-c.lineTo(-H * .07, -H * .78);
-c.lineTo(H * .07, -H * .78);
-c.lineTo(H * .1, -H * .42);
-c.closePath();
+c.moveTo(armSide * S * .12, -S * .06);
+c.lineTo(armSide * S * .14, -S * .42);
+c.stroke();
+c.fillStyle = "#d8dee8";
+c.beginPath();
+c.ellipse(armSide * S * .14, -S * .46, S * .07, S * .045, 0, 0, Math.PI * 2);
 c.fill();
-c.stroke();
-c.shadowBlur = 0;
-c.strokeStyle = "#1a1830";
-c.lineWidth = H * .02;
-c.beginPath();
-c.moveTo(-H * .07, -H * .75);
-c.lineTo(-H * .12, -H * .42 + Math.sin(t * 2) * H * .02);
-c.moveTo(H * .07, -H * .75);
-c.lineTo(H * .12, -H * .42 - Math.sin(t * 2) * H * .02);
-c.stroke();
-const hx = 0, hy = -H * .88, hw = H * .13, hh = H * .15;
-c.fillStyle = "rgba(255,226,122,.18)";
-c.fillRect(hx - hw, hy - hh, hw * 2, hh * 2);
-c.strokeStyle = "#c9a24a";
-c.lineWidth = 1.6;
-c.strokeRect(hx - hw, hy - hh, hw * 2, hh * 2);
-for (let i = -1; i <= 1; i++) {
-c.beginPath();
-c.moveTo(hx + i * hw * .66, hy - hh);
-c.lineTo(hx + i * hw * .66, hy + hh);
-c.stroke();
-}
-c.beginPath();
-c.moveTo(hx - hw * .6, hy - hh);
-c.lineTo(hx, hy - hh * 1.5);
-c.lineTo(hx + hw * .6, hy - hh);
-c.stroke();
 c.restore();
 }
-function r31DrawGourmand(c, H, t, b, flip) {
-c.save();
-c.scale(flip, 1);
-const chase = b.state === "chase";
-const bob = Math.abs(Math.sin(t * (chase ? 8 : 3))) * H * .03;
-c.translate(0, -bob);
-c.fillStyle = "#2a3320";
-c.fillRect(-H * .2, -H * .16, H * .12, H * .16 + bob);
-c.fillRect(H * .08, -H * .16, H * .12, H * .16 + bob);
-c.fillStyle = "#3f4f2a";
-c.strokeStyle = "#9dff7a";
-c.lineWidth = 1.6;
-c.shadowColor = "#9dff7a";
-c.shadowBlur = 6;
+if (fv > -.25) {
+const vis = Math.max(.15, fv);
+const fx = sx * rx * .62;
+[-1, 1].forEach(j => {
+const ex = fx + j * rx * .2 * vis, ey = cy - ry * .32;
+c.fillStyle = "#fffbe8";
 c.beginPath();
-c.ellipse(0, -H * .42, H * .36, H * .3, 0, 0, Math.PI * 2);
+c.ellipse(ex, ey, S * .035 * vis, S * .04, 0, 0, Math.PI * 2);
 c.fill();
-c.stroke();
-c.shadowBlur = 0;
-c.fillStyle = "#e8e2d0";
+c.fillStyle = chase ? "#ff3b3b" : "#1a0608";
 c.beginPath();
-c.moveTo(-H * .13, -H * .64);
-c.lineTo(H * .13, -H * .64);
-c.lineTo(H * .09, -H * .42);
-c.lineTo(-H * .09, -H * .42);
-c.closePath();
+c.arc(ex + sx * S * .012, ey, S * .018, 0, Math.PI * 2);
 c.fill();
-const hy = -H * .78;
-c.fillStyle = "#56683a";
+});
+const sniff = (look || chase ? .18 : .05) * Math.max(0, Math.sin(t * (look ? 16 : 6)));
+const nx = sx * rx * .78, ny = cy - ry * .08;
+const ng = c.createRadialGradient(nx - S * .03, ny - S * .03, 1, nx, ny, S * .11);
+ng.addColorStop(0, "#c7f59a");
+ng.addColorStop(1, "#4f8a2c");
+c.fillStyle = ng;
 c.beginPath();
-c.ellipse(0, hy, H * .14, H * .12, 0, 0, Math.PI * 2);
+c.ellipse(nx, ny, S * (.085 + sniff * .04) * Math.max(.55, vis), S * (.07 + sniff * .03), 0, 0, Math.PI * 2);
 c.fill();
-c.stroke();
-const sniff = Math.sin(t * 14) * H * .008;
-c.fillStyle = "#7a9a4a";
+c.fillStyle = "#1d3a10";
+[-1, 1].forEach(j => {
 c.beginPath();
-c.ellipse(H * .15, hy + sniff, H * .07, H * .045, .2, 0, Math.PI * 2);
+c.ellipse(nx + j * S * .028 * vis, ny + S * .03, S * (.012 + sniff * .02) * vis, S * .012, 0, 0, Math.PI * 2);
 c.fill();
-const open = chase ? .5 + .5 * Math.sin(t * 12) : .15;
-c.fillStyle = "#1a0608";
+});
+if (look || chase) {
+c.fillStyle = "rgba(190,255,140,.75)";
+for (let i = 0; i < 5; i++) {
+const k = (t * 1.4 + i / 5) % 1;
+const a = i * 1.3;
+c.globalAlpha = k;
 c.beginPath();
-c.ellipse(H * .04, hy + H * .06, H * .09, H * .025 + open * H * .035, 0, 0, Math.PI * 2);
+c.arc(nx + Math.cos(a) * S * .3 * (1 - k) + sx * S * .15 * (1 - k), ny + Math.sin(a) * S * .12 * (1 - k), S * .012, 0, Math.PI * 2);
+c.fill();
+}
+c.globalAlpha = 1;
+}
+const open = chase ? .5 + .5 * Math.abs(Math.sin(t * 10)) : look ? .15 : .06;
+const mw = rx * .42 * vis, mx = sx * rx * .55, my = cy + ry * .32;
+c.fillStyle = "#2a0608";
+c.beginPath();
+c.ellipse(mx, my, mw, S * (.02 + open * .07), 0, 0, Math.PI * 2);
 c.fill();
 c.fillStyle = "#f4ecd8";
-for (let i = -2; i <= 2; i++)
-c.fillRect(H * .04 + i * H * .03 - H * .008, hy + H * .06 - H * .025 - open * H * .03, H * .016, H * .02);
-c.fillStyle = "#ffe27a";
+for (let i = -3; i <= 3; i++)
+c.fillRect(mx + i * mw * .27 - S * .008, my - S * (.02 + open * .07), S * .016, S * .025);
+if (chase) {
+c.fillStyle = "#ff6b8a";
 c.beginPath();
-c.arc(H * .07, hy - H * .05, H * .018, 0, Math.PI * 2);
+c.ellipse(mx, my + S * (.02 + open * .05), mw * .4, S * .03, 0, 0, Math.PI);
 c.fill();
-c.strokeStyle = "#3f4f2a";
-c.lineWidth = H * .045;
-c.lineCap = "round";
+}
+}
+{
+const hx = sx * rx * .1, hy = cy - ry * .92;
+c.save();
+c.translate(hx, hy);
+c.rotate(sq * .6 + Math.sin(t * 3) * .04);
+const band = c.createLinearGradient(-rx * .3, 0, rx * .3, 0);
+band.addColorStop(0, "#ffffff");
+band.addColorStop(1, "#b9bcc6");
+c.fillStyle = band;
+c.fillRect(-rx * .3, -S * .16, rx * .6, S * .16);
+c.strokeStyle = "#9dff7a";
+c.lineWidth = 1.2;
+c.strokeRect(-rx * .3, -S * .16, rx * .6, S * .16);
+[[-.22, -.24, .15], [0, -.29, .17], [.22, -.24, .15]].forEach(([x, y, r]) => {
+const pg = c.createRadialGradient(x * rx - S * .03, y * S - S * .03, 1, x * rx, y * S, r * S);
+pg.addColorStop(0, "#ffffff");
+pg.addColorStop(1, "#c3c6cf");
+c.fillStyle = pg;
 c.beginPath();
-c.moveTo(H * .3, -H * .5);
-c.lineTo(H * .42, -H * .42 + (chase ? -Math.sin(t * 12) * H * .06 : 0));
-c.stroke();
+c.arc(x * rx, y * S, r * S, 0, Math.PI * 2);
+c.fill();
+});
 c.restore();
 }
-function r31DrawBoss(c, H, run, t, flip) {
+c.restore();
+if (view.stun)
+r32Dizzy(c, 0, cy - ry * 1.8, S, t);
+}
+function r31DrawBoss(c, H, run, t, view) {
 const b = run.boss;
-const grab = run.phase === "caught";
 c.save();
 if (b.state === "rise" || run.phase === "intro") {
 c.beginPath();
-c.rect(-H, -H * 1.6, H * 2, H * 1.6);
+c.rect(-H * 2, -H * 2, H * 4, H * 2);
 c.clip();
-c.translate(0, (1 - Math.max(0, b.rise)) * H * 1.1);
+c.translate(0, (1 - Math.max(0, b.rise)) * H * 1.3);
 }
-if (performance.now() < b.stunUntil)
-c.rotate(Math.sin(t * 20) * .08);
-if (run.def.boss === "keeper")
-r31DrawKeeper(c, H, t, b, flip, grab);
-else if (run.def.boss === "watcher")
-r31DrawWatcher(c, H, t, b, flip);
+const art = run.def.art;
+if (art === "scrapper")
+r32DrawScrapper(c, H, t, b, view);
+else if (art === "unfinished")
+r32DrawUnfinished(c, H, t, b, view, run);
 else
-r31DrawGourmand(c, H, t, b, flip);
+r32DrawChef(c, H, t, b, view);
 c.restore();
 }
-function r31DrawEye(c, x, y, H, run, t, flip) {
+function r31DrawEye(c, x, y, H, run, t) {
 const b = run.boss;
-if (run.def.boss === "watcher") {
-const ex = x, ey = y - H * .88;
+if (run.def.art === "unfinished" && run.eyeDev && b.state !== "rise") {
+const e = run.eyeDev;
 c.save();
-c.fillStyle = "#fffbe8";
-c.shadowColor = "#ffe27a";
-c.shadowBlur = 18;
-c.beginPath();
-c.ellipse(ex, ey, H * .09, H * .07, 0, 0, Math.PI * 2);
-c.fill();
-c.shadowBlur = 0;
-c.fillStyle = b.state === "chase" ? "#ff3b3b" : "#d9a400";
-c.beginPath();
-c.arc(ex + flip * H * .035, ey, H * .04, 0, Math.PI * 2);
-c.fill();
-c.fillStyle = "#000";
-c.beginPath();
-c.arc(ex + flip * H * .042, ey, H * .018, 0, Math.PI * 2);
-c.fill();
+c.setTransform(1, 0, 0, 1, 0, 0);
+const r = H * .18 * e.s;
+const g = c.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
+g.addColorStop(0, b.state === "chase" ? "rgba(255,80,80,.55)" : "rgba(140,180,255,.5)");
+g.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = g;
+c.fillRect(e.x - r, e.y - r, r * 2, r * 2);
 c.restore();
 }
 const mark = b.state === "chase" ? "!" : b.state === "look" ? "?" : performance.now() < b.stunUntil ? "✶" : "";
 if (mark && run.phase !== "intro") {
 c.save();
-c.font = "900 " + Math.round(H * .28) + "px system-ui,sans-serif";
+c.font = "900 " + Math.round(H * .24) + "px system-ui,sans-serif";
 c.textAlign = "center";
 c.fillStyle = mark === "!" ? "#ff3b3b" : "#ffe27a";
 c.shadowColor = c.fillStyle;
 c.shadowBlur = 12;
-c.fillText(mark, x, y - H * 1.15 + Math.sin(t * 6) * 3);
+c.fillText(mark, x, y - H * 1.25 + Math.sin(t * 6) * 3);
 c.restore();
 }
+}
+function r32DrawPebble(c, x, y, size) {
+c.save();
+const g = c.createRadialGradient(x - size * .12, y - size * .12, 1, x, y, size * .42);
+g.addColorStop(0, "#d9dde6");
+g.addColorStop(1, "#5c6270");
+c.fillStyle = g;
+c.strokeStyle = "#eaf0ff";
+c.lineWidth = 1.2;
+c.beginPath();
+c.moveTo(x - size * .36, y + size * .05);
+c.quadraticCurveTo(x - size * .3, y - size * .3, x, y - size * .3);
+c.quadraticCurveTo(x + size * .38, y - size * .25, x + size * .36, y + size * .08);
+c.quadraticCurveTo(x + size * .2, y + size * .3, x - size * .05, y + size * .26);
+c.quadraticCurveTo(x - size * .34, y + size * .24, x - size * .36, y + size * .05);
+c.fill();
+c.stroke();
+c.restore();
 }
 function r31Dark(c, lights, alpha) {
 const W = c.canvas.width, H = c.canvas.height;
@@ -23044,7 +23580,7 @@ o.fillRect(0, 0, W, H);
 o.globalCompositeOperation = "destination-out";
 const sc = Math.hypot(m.a, m.b);
 lights.forEach(L => {
-const x = m.a * L.x + m.c * L.y + m.e, y = m.b * L.x + m.d * L.y + m.f, r = L.r * sc;
+const x = L.dev ? L.x : m.a * L.x + m.c * L.y + m.e, y = L.dev ? L.y : m.b * L.x + m.d * L.y + m.f, r = L.r * sc;
 const g = o.createRadialGradient(x, y, 0, x, y, r);
 g.addColorStop(0, "rgba(0,0,0," + L.k + ")");
 g.addColorStop(.55, "rgba(0,0,0," + L.k * .7 + ")");
@@ -23059,7 +23595,7 @@ c.globalCompositeOperation = "lighter";
 lights.forEach(L => {
 if (!L.warm)
 return;
-const x = m.a * L.x + m.c * L.y + m.e, y = m.b * L.x + m.d * L.y + m.f, r = L.r * sc * .8;
+const x = L.dev ? L.x : m.a * L.x + m.c * L.y + m.e, y = L.dev ? L.y : m.b * L.x + m.d * L.y + m.f, r = L.r * sc * .8;
 const g = c.createRadialGradient(x, y, 0, x, y, r);
 g.addColorStop(0, "rgba(255,170,70," + L.warm + ")");
 g.addColorStop(1, "rgba(255,170,70,0)");
@@ -23192,24 +23728,48 @@ r31Place(queue, p, h.v, cc => r31DrawHide(cc, u, h, false, inside), -.0004);
 if (inside)
 r31Place(queue, p, h.v, cc => r31DrawHide(cc, u, h, true, true), .002);
 });
-run.piles.forEach(pl => r31Place(queue, p, pl.v, cc => r31DrawPile(cc, u, now > pl.cool)));
-run.stones.forEach(s => r31Place(queue, p, s.v, cc => {
-cc.fillStyle = "#8a8f99";
+run.items.forEach(it => {
+const q = r31Place(queue, p, it.v, cc => {
+const bob = Math.sin(now / 380 + it.id.length) * u * .03;
+cc.fillStyle = "rgba(0,0,0,.35)";
 cc.beginPath();
-cc.ellipse(0, -u * .05, u * .08, u * .06, 0, 0, Math.PI * 2);
+cc.ellipse(0, 0, u * .2, u * .06, 0, 0, Math.PI * 2);
 cc.fill();
-}));
+r32DrawPebble(cc, 0, -u * .2 + bob, u * .55);
+});
+if (q)
+world.hits.push({ x: q.x, y: q.y - u * .2, r: u * .42, z: 10, desc: { k: "nm", r: "pebble", n: 1 }, src: { t: "nm", id: it.id }, draggable: true, onTap: () => r31TapItem(it.id) });
+});
 const bq = r31P(b.v, p);
 const H = u * 3.8;
-let flip = 1;
 if (bq.visible) {
-const ahead = r31P(r31Go(b.v, r31Flat(b.v, b.f), .02), p);
-flip = ahead.x < bq.x ? -1 : 1;
-r31Place(queue, p, b.v, cc => r31DrawBoss(cc, H * (r19SurfScale || 1) / (r19SurfScale || 1), run, t, flip));
+const ahead = r31P(r31Go(b.v, r31Flat(b.v, b.f), .03), p);
+const dx = ahead.x - bq.x, dy = ahead.y - bq.y;
+if (Math.hypot(dx, dy) > .5) {
+const want = Math.atan2(dx, dy);
+b.yaw = b.yaw === undefined ? want : b.yaw + r31AngDiff(want, b.yaw) * Math.min(1, dt * 6);
+}
+let ear = Math.sin(t * .7) * 1.1;
+let head = Math.sin(t * .9) * (b.state === "look" ? .9 : .3);
+let look = Math.sin(t * .6) * .5;
+if (b.known && (b.state === "look" || b.state === "chase")) {
+const kq = r31P(b.known, p);
+if (kq.visible)
+ear = r31AngDiff(Math.atan2(kq.x - bq.x, kq.y - bq.y), b.yaw || 0);
+}
+b.ear = (b.ear || 0) + r31AngDiff(ear, b.ear || 0) * Math.min(1, dt * 5);
+if (pv && (b.state === "chase" || (b.spot || 0) > .1)) {
+const pq = r31P(pv, p);
+look = Math.max(-1, Math.min(1, (pq.x - bq.x) / (u * 3)));
+head = 0;
+}
+const view = { yaw: b.yaw || 0, ear: b.ear, head, look, speed: b.spd || 0, grab: run.phase === "caught", stun: now < b.stunUntil };
+r31Place(queue, p, b.v, cc => r31DrawBoss(cc, H, run, t, view));
 r31Screen = { x: bq.x, y: bq.y, h: H };
 }
 else {
 r31Screen = null;
+run.eyeDev = null;
 }
 queue.push({ z: 1e9, alpha: 1, draw: () => {
 const lights = [];
@@ -23228,8 +23788,8 @@ const q = r31P(P, p);
 if (q.visible)
 lights.push({ x: q.x, y: q.y - u * .8, r: u * 5, k: 1, warm: .3 });
 }
-if (bq.visible && def.boss === "watcher" && b.state !== "rise")
-lights.push({ x: bq.x, y: bq.y - H * .88, r: u * 1.6, k: .8, warm: .15 });
+if (bq.visible && def.art === "unfinished" && run.eyeDev && b.state !== "rise")
+lights.push({ x: run.eyeDev.x, y: run.eyeDev.y, dev: true, r: u * 1.5, k: .75, warm: .12 });
 run.flights.forEach(fl => {
 const k = (now - fl.t0) / 600;
 const a = r31P(fl.from, p), z = r31P(fl.to, p);
@@ -23241,7 +23801,7 @@ r31Dark(c, lights, .8 + flick);
 } });
 queue.push({ z: 1e9 + 1, alpha: 1, draw: () => {
 if (bq.visible)
-r31DrawEye(c, bq.x, bq.y, H, run, t, flip);
+r31DrawEye(c, bq.x, bq.y, H, run, t);
 run.flights.forEach(fl => {
 const k = (now - fl.t0) / 600;
 const a = r31P(fl.from, p), z = r31P(fl.to, p);
@@ -23308,107 +23868,1410 @@ const st = r31Stats(planetId);
 worldShowBubble({
 x, y,
 iconHtml: "🌑",
-title: "Nightmare puddle",
-meta: def.name + " · " + def.tag + (st.clears ? " · escaped ×" + st.clears + " · best " + r31Time(st.best) : ""),
-text: roamingActive
-? "Something waits beneath the ink. Walk in to dream: sneak past it, light the three lanterns in the order on the door, then run for the door."
-: "Something waits beneath the ink. Go roaming with a pet and walk into it — if you dare.",
+title: "Nightmare puddle · " + def.name,
+meta: def.tag + (st.clears ? " · escaped ×" + st.clears + " · best " + r31Time(st.best) : ""),
+text: def.lore + " " + (roamingActive ? "Walk in, if you dare." : "Go roaming with a pet and walk into it — if you dare."),
 buttons: [{ label: "Close" }]
 });
 }
-function r31Hud(show) {
-let el = document.getElementById("nmHud");
+function r31BarEl() {
+let el = document.getElementById("nmBar");
 if (!el) {
 el = document.createElement("div");
-el.id = "nmHud";
-el.className = "nm-hud hidden";
+el.id = "nmBar";
 el.innerHTML =
-'<div class="nm-top"><span class="nm-name"></span><span class="nm-state"></span></div>' +
-'<div class="nm-glyphs"></div>' +
-'<div class="nm-noise"><span>NOISE</span><div class="nm-noise-bar"><i></i></div></div>' +
-'<div class="nm-msg"></div>' +
-'<div class="nm-btns"><button class="neon-btn" data-nm="throw"></button><button class="neon-btn" data-nm="wake">Wake up</button></div>';
-(document.getElementById("planetFocus") || document.body).appendChild(el);
-el.addEventListener("pointerdown", e => {
-e.stopPropagation();
-const btn = e.target.closest("[data-nm]");
-if (!btn)
-return;
-e.preventDefault();
-if (btn.getAttribute("data-nm") === "throw")
-r31Throw();
-else
-r31End("woke");
-});
+'<div class="nb-name"><b></b><span></span></div>' +
+'<div class="nb-bar"><i></i></div>' +
+'<div class="nb-sub"></div>' +
+'<div class="nb-msg"></div>';
 }
-el.classList.toggle("hidden", !show);
-el._shownAt = 0;
+const host = document.getElementById("planetFocus") || document.body;
+if (el.parentElement !== host)
+host.appendChild(el);
+return el;
+}
+function r31RoamButtons(on) {
+const btn = document.getElementById("roamExitBtn");
+if (btn) {
+if (on) {
+if (btn.dataset.nmOld === undefined)
+btn.dataset.nmOld = btn.textContent;
+btn.textContent = "☾ Wake up";
+btn.classList.add("nm-wake");
+}
+else if (btn.dataset.nmOld !== undefined) {
+btn.textContent = btn.dataset.nmOld;
+delete btn.dataset.nmOld;
+btn.classList.remove("nm-wake");
+}
+}
+const hint = document.getElementById("roamHint");
+if (hint)
+hint.classList.toggle("nm-hide", on);
+}
+function r31Hud(show) {
+const el = r31BarEl();
+el.classList.toggle("show", !!show);
+r31RoamButtons(!!show);
+}
+function r31BarSet(o) {
+const el = r31BarEl();
+const now = performance.now();
+if (now - (el._at || 0) < 100)
+return;
+el._at = now;
+el.querySelector(".nb-name b").textContent = o.name;
+const st = el.querySelector(".nb-name span");
+st.textContent = o.state;
+st.className = o.hot ? "hot" : "";
+const bar = el.querySelector(".nb-bar i");
+bar.style.width = Math.round(Math.max(0, Math.min(1, o.fill)) * 100) + "%";
+bar.className = o.barClass || "";
+el.querySelector(".nb-sub").innerHTML = o.sub || "";
+const msg = el.querySelector(".nb-msg");
+if (msg.textContent !== (o.msg || ""))
+msg.textContent = o.msg || "";
+msg.classList.toggle("on", !!o.msg);
+el.classList.toggle("hot", !!o.hot);
 }
 function r31HudUpdate() {
 const run = r31Run;
-const el = document.getElementById("nmHud");
-if (!run || !el)
+if (!run)
 return;
 const now = performance.now();
-if (now - (el._at || 0) < 120)
-return;
-el._at = now;
 const b = run.boss;
-el.querySelector(".nm-name").textContent = "☾ " + run.def.name.toUpperCase();
-el.querySelector(".nm-state").textContent =
-run.phase === "intro" ? "waking…"
+const sf = roamingIsMoving ? roamingSpeedFraction : 0;
+const chase = b.state === "chase" || run.phase === "escape";
+let fill = Math.min(1, sf / (R31.sneak * 1.8));
+if (run.def.boss === "watcher")
+fill = Math.max(fill, (b.spot || 0) / .45);
+if (chase)
+fill = 1;
+let cls = fill > .55 ? "loud" : fill > .15 ? "mid" : "quiet";
+if (run.hidden && !chase) {
+fill = .06;
+cls = "hidden";
+}
+const state = run.phase === "intro" ? "waking…"
 : run.phase === "escape" ? "🏃 RUN!"
 : now < b.stunUntil ? "✶ staggered"
 : b.state === "chase" ? "❗ hunting you"
 : run.hidden ? "🫣 hidden"
 : b.state === "look" ? "❓ searching"
 : "💤 unaware";
-el.querySelector(".nm-state").className = "nm-state" + (b.state === "chase" || run.phase === "escape" ? " hot" : "");
-el.querySelector(".nm-glyphs").innerHTML =
-run.phase === "escape"
-? '<b>The door is open — get back to the puddle!</b>'
-: 'Light the lanterns in the door\'s order ' + run.lanterns.map(l => '<span class="nm-g' + (l.lit ? ' lit' : '') + '">' + l.glyph + '</span>').join("");
-const sf = roamingIsMoving ? roamingSpeedFraction : 0;
-const k = Math.min(1, sf / (R31.sneak * 1.8));
-const bar = el.querySelector(".nm-noise-bar i");
-bar.style.width = Math.round(k * 100) + "%";
-bar.className = run.hidden ? "" : sf > R31.sneak ? "loud" : "quiet";
-el.querySelector(".nm-noise span").textContent = run.hidden ? "HIDDEN" : sf > R31.sneak ? "LOUD" : sf > .15 ? "SNEAKING" : "STILL";
-const msgEl = el.querySelector(".nm-msg");
-const show = run.msg && now - run.msgAt < 5000;
-msgEl.textContent = show ? run.msg : run.def.hint;
-msgEl.classList.toggle("fresh", !!show);
-el.querySelector('[data-nm="throw"]').textContent = "🪨 Throw ×" + run.pebbles;
-el.querySelector('[data-nm="throw"]').disabled = run.pebbles <= 0;
+const sub = run.phase === "escape"
+? "The door is open — back to the puddle!"
+: "LANTERNS " + run.lanterns.map(l => '<span class="nb-g' + (l.lit ? ' lit' : '') + '">' + l.glyph + '</span>').join("");
+r31BarSet({
+name: "☾ " + run.def.name.toUpperCase(),
+state,
+hot: chase,
+fill,
+barClass: cls,
+sub,
+msg: run.msg && now - run.msgAt < 4500 ? run.msg : ""
+});
 }
 (function () {
 try {
 const css = document.createElement("style");
 css.textContent =
-'.nm-hud{position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 74px);z-index:40;' +
-'background:rgba(8,3,14,.82);border:1px solid rgba(255,138,92,.35);border-radius:14px;padding:8px 12px;' +
-'color:#efe6f6;font:600 12px system-ui,sans-serif;box-shadow:0 0 24px rgba(0,0,0,.6);pointer-events:auto;max-width:420px;margin:0 auto;}' +
-'.nm-hud.hidden{display:none;}' +
-'.nm-top{display:flex;justify-content:space-between;align-items:center;letter-spacing:.12em;font:900 13px Georgia,serif;}' +
-'.nm-state{font:800 11px system-ui,sans-serif;letter-spacing:.04em;color:#cfc6dc;}' +
-'.nm-state.hot{color:#ff5c5c;animation:nmPulse .5s infinite alternate;}' +
-'@keyframes nmPulse{from{opacity:.55}to{opacity:1}}' +
-'.nm-glyphs{margin-top:6px;color:#bfb4cf;}' +
-'.nm-g{display:inline-block;margin-left:7px;font-size:16px;opacity:.45;}' +
-'.nm-g.lit{opacity:1;color:#fff1b8;text-shadow:0 0 8px #ffcc66;}' +
-'.nm-noise{display:flex;align-items:center;gap:8px;margin-top:6px;font:800 10px system-ui,sans-serif;letter-spacing:.08em;color:#a99fba;}' +
-'.nm-noise span{width:64px;}' +
-'.nm-noise-bar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;}' +
-'.nm-noise-bar i{display:block;height:100%;width:0;background:#7dffb0;transition:width .12s;}' +
-'.nm-noise-bar i.loud{background:#ff5c5c;}' +
-'.nm-msg{margin-top:5px;color:#a99fba;font-style:italic;line-height:1.3;}' +
-'.nm-msg.fresh{color:#f4ecdc;font-style:normal;}' +
-'.nm-btns{display:flex;gap:8px;margin-top:7px;}' +
-'.nm-btns .neon-btn{flex:1;padding:6px 10px;font-size:12px;min-height:0;}';
+'#nmBar{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 92px);transform:translate(-50%,-8px);width:min(330px,74vw);z-index:40;' +
+'pointer-events:none;opacity:0;transition:opacity .35s,transform .35s;font-family:system-ui,sans-serif;text-align:center;}' +
+'#nmBar.show{opacity:1;transform:translate(-50%,0);}' +
+'#nmBar .nb-name{display:flex;justify-content:space-between;align-items:baseline;font:900 11px Georgia,serif;letter-spacing:.14em;color:#f4ecdc;text-shadow:0 0 8px rgba(0,0,0,.9);}' +
+'#nmBar .nb-name span{font:800 10.5px system-ui,sans-serif;letter-spacing:.02em;color:#d9cfe6;}' +
+'#nmBar .nb-name span.hot{color:#ff5c5c;animation:nbPulse .45s infinite alternate;}' +
+'@keyframes nbPulse{from{opacity:.5}to{opacity:1}}' +
+'#nmBar .nb-bar{height:6px;border-radius:4px;background:rgba(14,6,22,.8);border:1px solid rgba(200,180,230,.35);overflow:hidden;margin:3px 0;}' +
+'#nmBar.hot .nb-bar{border-color:rgba(255,80,80,.8);box-shadow:0 0 12px rgba(255,60,60,.5);}' +
+'#nmBar .nb-bar i{display:block;height:100%;width:0;transition:width .15s,background .3s;background:#7dffb0;}' +
+'#nmBar .nb-bar i.mid{background:#ffd27a;}' +
+'#nmBar .nb-bar i.loud{background:linear-gradient(90deg,#ff8a1a,#ff3b3b);}' +
+'#nmBar .nb-bar i.hidden{background:#a98bff;}' +
+'#nmBar .nb-sub{font:800 10px system-ui,sans-serif;letter-spacing:.08em;color:#bfb4cf;text-shadow:0 0 6px #000;}' +
+'#nmBar .nb-g{display:inline-block;margin-left:6px;font-size:13px;opacity:.4;letter-spacing:0;}' +
+'#nmBar .nb-g.lit{opacity:1;color:#fff1b8;text-shadow:0 0 8px #ffcc66;}' +
+'#nmBar .nb-g.done{opacity:1;color:#7dffb0;text-shadow:0 0 8px #7dffb0;}' +
+'#nmBar .nb-msg{margin-top:5px;font:700 12px system-ui,sans-serif;color:#f4ecdc;text-shadow:0 1px 6px #000,0 0 2px #000;opacity:0;transition:opacity .5s;}' +
+'#nmBar .nb-msg.on{opacity:1;}' +
+'.roam-hint.nm-hide{display:none !important;}' +
+'.roam-exit-btn.nm-wake{border-color:rgba(190,150,255,.8) !important;color:#efe6ff !important;box-shadow:0 0 18px rgba(150,110,255,.45) !important;}';
 document.head.appendChild(css);
 }
 catch (error) { }
 })();
+const R32_RIFTS = {
+europa: { name: "The Deep", col: "#7fe3ff", lat: -.26, lon: Math.PI - .2, kind: "deep",
+lore: "Under Europa's ice there's an ocean. Something down there has been listening to every step you take." },
+helios: { name: "The Pyre", col: "#ffb347", lat: -.2, lon: Math.PI + .3, kind: "pyre",
+lore: "Helios's dragons hatched in a fire that never went out. Something still tends it — and it hates anything that comes out of the dark." }
+};
+const R32 = {
+rift: .05,
+socket: .045,
+stone: .035,
+strikeR: .085,
+warnMs: 1300,
+gatherMs: 240000,
+escapeMs: 40000,
+hearts: 3,
+pace: .45
+};
+let r32Run = null;
+let r32Invites = {};
+let r32Seen = {};
+function r32MyId() {
+return (typeof mp !== "undefined" && mp.connected && mp.myId) || "me";
+}
+function r32OwnerHere() {
+return activePlanetOwnerId || r32MyId();
+}
+function r32RiftV(planetId) {
+const d = R32_RIFTS[planetId];
+return d ? r31V(d.lat, d.lon) : null;
+}
+function r32Bearing(P, v) {
+let e = r31Cross([0, 1, 0], P);
+if (Math.hypot(e[0], e[1], e[2]) < 1e-3)
+e = [1, 0, 0];
+e = r31Norm(e);
+const nn = r31Cross(P, e);
+const d = r31Tan(P, v);
+return Math.atan2(r31Dot(d, nn), r31Dot(d, e));
+}
+function r32Layout(planetId, seed) {
+const P = r32RiftV(planetId);
+const rnd = r31Rand(seed);
+const rot = rnd() * Math.PI * 2;
+const glyphs = R31_GLYPHS.slice(0, 5).sort(() => rnd() - .5).slice(0, 4);
+const sockets = glyphs.map((g, i) => ({ glyph: g, v: r31At(P, rot + i * Math.PI / 2 + Math.PI / 4, .14), stone: null }));
+const order = glyphs.slice().sort(() => rnd() - .5);
+const stones = order.map((g, i) => ({
+id: "s" + i,
+glyph: g,
+v: r31At(P, rot + i * Math.PI / 2 + (rnd() - .5) * .9, .38 + rnd() * .32),
+sealed: i % 2 === 1,
+state: "ground",
+by: null
+}));
+return { P, rot, sockets, stones };
+}
+function r32Start(planetId) {
+const me = r32MyId();
+const seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0;
+const ev = { t: "start", rid: me + ":" + Date.now(), planet: planetId, owner: r32OwnerHere(), seed, host: me, name: bossMyName() };
+r32Begin(ev, 0);
+r32Send(ev, true);
+r31Sfx.drone();
+}
+function r32Begin(ev, elapsed) {
+const def = R32_RIFTS[ev.planet];
+const L = r32Layout(ev.planet, ev.seed);
+const me = r32MyId();
+r32Run = {
+rid: ev.rid,
+planet: ev.planet,
+owner: ev.owner,
+seed: ev.seed,
+def,
+P: L.P,
+rot: L.rot,
+sockets: L.sockets,
+stones: L.stones,
+t0: performance.now() - (elapsed || 0),
+phase: "intro",
+players: {},
+strikes: [],
+nextStrike: 0,
+msg: "",
+msgAt: 0,
+lastPet: r31PetV(),
+lastDir: null,
+dashUntil: 0,
+dashReady: 0,
+dashDir: null,
+reviving: {},
+escapeAt: 0,
+endAt: 0,
+result: null,
+beatAt: 0,
+clockAt: 0,
+hitFlash: 0
+};
+r32Run.players[ev.host] = { name: r32NameOf(ev.host, ev.name), hearts: R32.hearts, down: false, escaped: false, left: false, inv: 0 };
+r32Run.players[me] = r32Run.players[me] || { name: "You", hearts: R32.hearts, down: false, escaped: false, left: false, inv: 0 };
+r32Run.players[me].name = "You";
+r31Hud(true);
+r32Say(def.lore);
+}
+function r32Join() {
+const inv = r32Invite();
+if (!inv)
+return false;
+const elapsed = performance.now() - inv.at;
+r32Begin(inv.ev, elapsed);
+r32Send({ t: "join", name: bossMyName() }, true);
+r32Say("You slip into " + r32Run.def.name + " — find the sigil stones!");
+r31Sfx.drone();
+return true;
+}
+function r32Invite() {
+const key = r32OwnerHere() + "|" + selectedStartPlanet;
+const inv = r32Invites[key];
+if (!inv || inv.ended || performance.now() - inv.at > R32.gatherMs + R32.escapeMs)
+return null;
+return inv;
+}
+function r32Leave() {
+if (!r32Run)
+return;
+r32Send({ t: "left" }, true);
+r32Finish("left");
+}
+function r32Say(msg) {
+if (!r32Run)
+return;
+r32Run.msg = msg;
+r32Run.msgAt = performance.now();
+}
+function r32Send(ev, applyLocal) {
+const run = r32Run;
+if (run && !ev.rid)
+ev.rid = run.rid;
+if (applyLocal && ev.t !== "start")
+r32Apply(r32MyId(), ev);
+try {
+if (typeof mp !== "undefined" && mp.connected)
+mpSend({ type: "fieldEvent", event: Object.assign({ kind: "r32" }, ev) });
+}
+catch (error) { }
+}
+function bossOnNet(fromId, event) {
+if (event && event.kind === "r32") {
+try {
+r32OnNet(fromId, event);
+}
+catch (error) {
+console.error("rift event", error);
+}
+return true;
+}
+return bossOnNet__r32(fromId, event);
+}
+function r32OnNet(fromId, ev) {
+if (ev.t === "start") {
+const key = ev.owner + "|" + ev.planet;
+r32Invites[key] = { ev, at: performance.now(), ended: false };
+if (roamingActive && !r32Run && !r31Run && r32OwnerHere() === ev.owner && selectedStartPlanet === ev.planet)
+showShipToast("🌀 " + (ev.name || "Someone") + " opened " + R32_RIFTS[ev.planet].name + " on the far side — walk into the rift to join them!");
+return;
+}
+if (ev.t === "end") {
+Object.values(r32Invites).forEach(inv => {
+if (inv.ev.rid === ev.rid)
+inv.ended = true;
+});
+}
+const run = r32Run;
+if (!run || ev.rid !== run.rid)
+return;
+r32Apply(fromId, ev);
+if (ev.t === "join" && r32IsHost())
+r32Send({ t: "snap", to: fromId, elapsed: performance.now() - run.t0, phase: run.phase, stones: run.stones.map(s => ({ id: s.id, state: s.state, by: s.by, sealed: s.sealed, v: s.v })), sockets: run.sockets.map(s => s.stone), players: run.players }, false);
+}
+function r32Apply(fromId, ev) {
+const run = r32Run;
+if (!run)
+return;
+const me = r32MyId();
+const pl = id => run.players[id] || (run.players[id] = { name: r32NameOf(id), hearts: R32.hearts, down: false, escaped: false, left: false, inv: 0 });
+const stone = id => run.stones.find(s => s.id === id);
+switch (ev.t) {
+case "join": {
+const p = pl(fromId);
+p.name = fromId === me ? "You" : r32NameOf(fromId, ev.name);
+p.left = false;
+if (fromId !== me)
+r32Say("👋 " + p.name + " joined the nightmare");
+break;
+}
+case "snap": {
+if (ev.to !== me)
+break;
+run.t0 = performance.now() - (ev.elapsed || 0);
+run.phase = ev.phase || run.phase;
+(ev.stones || []).forEach(x => {
+const s = stone(x.id);
+if (s) {
+s.state = x.state;
+s.by = x.by;
+s.sealed = x.sealed;
+if (x.v)
+s.v = x.v;
+}
+});
+(ev.sockets || []).forEach((sid, i) => {
+if (run.sockets[i])
+run.sockets[i].stone = sid;
+});
+Object.keys(ev.players || {}).forEach(id => {
+if (id === me)
+return;
+run.players[id] = Object.assign(pl(id), ev.players[id], { name: r32NameOf(id, ev.players[id].name) });
+});
+break;
+}
+case "pick": {
+const s = stone(ev.stone);
+if (!s)
+break;
+if (s.state === "ground") {
+s.state = "held";
+s.by = fromId;
+}
+else if (s.state === "held" && s.by !== fromId) {
+const keep = String(s.by) < String(fromId) ? s.by : fromId;
+if (s.by === me && keep !== me)
+r32DropLocalCarry();
+s.by = keep;
+}
+break;
+}
+case "drop": {
+const s = stone(ev.stone);
+if (!s || s.state !== "held" || s.by !== fromId)
+break;
+s.state = "ground";
+s.by = null;
+if (ev.v)
+s.v = ev.v;
+break;
+}
+case "socket": {
+const s = stone(ev.stone);
+const k = run.sockets[ev.socket];
+if (!s || !k || k.stone || k.glyph !== s.glyph)
+break;
+s.state = "set";
+s.by = null;
+k.stone = s.id;
+r31Sfx.chime();
+r32Say("✦ " + (fromId === me ? "You" : pl(fromId).name) + " set the " + s.glyph + " sigil — " + run.sockets.filter(x => x.stone).length + "/4");
+if (run.sockets.every(x => x.stone) && run.phase === "gather")
+r32Open();
+break;
+}
+case "strike": {
+if (!run.strikes.some(s => s.id === ev.id))
+run.strikes.push({ id: ev.id, v: ev.v, at: performance.now() + (ev.delay || R32.warnMs), r: R32.strikeR, done: false });
+break;
+}
+case "hit": {
+const p = pl(fromId);
+p.hearts = ev.hearts;
+p.down = ev.hearts <= 0;
+if (p.down && fromId !== me)
+r32Say("💔 " + p.name + " is down — get to them!");
+break;
+}
+case "revive": {
+const p = pl(ev.who);
+if (!p.down)
+break;
+p.down = false;
+p.hearts = 1;
+p.inv = performance.now() + 2000;
+r32Say("✚ " + (fromId === me ? "You" : pl(fromId).name) + " pulled " + (ev.who === me ? "you" : p.name) + " back up!");
+break;
+}
+case "escaped": {
+pl(fromId).escaped = true;
+if (fromId !== me)
+r32Say("🌀 " + pl(fromId).name + " made it through the rift");
+break;
+}
+case "left": {
+pl(fromId).left = true;
+break;
+}
+case "clock": {
+if (r32IsHost())
+break;
+const want = performance.now() - (ev.elapsed || 0);
+if (Math.abs(want - run.t0) > 150)
+run.t0 = want;
+if (ev.phase === "escape" && run.phase === "gather")
+r32Open();
+break;
+}
+case "end": {
+r32Finish(ev.result);
+break;
+}
+}
+}
+function r32NameOf(id, fallback) {
+let n = null;
+try {
+n = ((mp.remotePlayerInfo || {})[id] || {}).name;
+}
+catch (error) { }
+if (!n && fallback && fallback !== "You")
+n = fallback;
+return n || "Player";
+}
+function r32IsHost() {
+const run = r32Run;
+if (!run)
+return false;
+const ids = r32Present().map(x => x.id).sort();
+return ids[0] === r32MyId();
+}
+function r32Present() {
+const run = r32Run;
+const me = r32MyId();
+const out = [];
+if (!run)
+return out;
+Object.keys(run.players).forEach(id => {
+const p = run.players[id];
+if (p.left)
+return;
+if (id === me) {
+out.push({ id, p, v: r31PetV(), me: true });
+return;
+}
+const r = (typeof mpGetRemoteRoamersHere === "function" ? mpGetRemoteRoamersHere() : []).find(x => x.playerId === id);
+if (r && r.presence)
+out.push({ id, p, v: r31V(r.presence.lat, r.presence.lon), me: false, remote: r });
+});
+return out;
+}
+function r32Pick(id) {
+const run = r32Run;
+const pet = getRoamingPet();
+const s = run && run.stones.find(x => x.id === id);
+const me = run && run.players[r32MyId()];
+if (!s || !pet || !me || me.down || me.escaped)
+return;
+if (s.state !== "ground")
+return;
+if (s.sealed) {
+r32Say(run.def.kind === "deep" ? "It's frozen into the ice. Lure a strike onto it to crack it free!" : "It's caged in embers. Lure a strike onto it to break the cage!");
+return;
+}
+if (r31Ang(s.v, r31PetV()) > .12) {
+r32Say("Walk over the sigil stone to pick it up — or drag it onto your pet.");
+return;
+}
+if (pet.carry) {
+r32Say("Your pet's hands are full.");
+return;
+}
+pet.carry = { k: "nm", r: "stone:" + s.id, n: 1 };
+r32Send({ t: "pick", stone: s.id }, true);
+sound("click");
+r32Say("You've got the " + s.glyph + " sigil — find its socket by the rift. It's heavy: no dashing.");
+}
+function r32DropLocalCarry() {
+const pet = getRoamingPet();
+if (pet && pet.carry && pet.carry.k === "nm" && String(pet.carry.r).startsWith("stone:"))
+pet.carry = null;
+}
+function r32CarriedStone() {
+const pet = getRoamingPet();
+if (!pet || !pet.carry || pet.carry.k !== "nm" || !String(pet.carry.r).startsWith("stone:"))
+return null;
+return r32Run && r32Run.stones.find(s => s.id === String(pet.carry.r).slice(6));
+}
+function r32Drop(at) {
+const s = r32CarriedStone();
+if (!s)
+return;
+let v = at ? r31V(at.lat, at.lon) : r31PetV();
+const pv = r31PetV();
+if (r31Ang(pv, v) > .08)
+v = r31Go(pv, r31Tan(pv, v), .08);
+r32DropLocalCarry();
+r32Send({ t: "drop", stone: s.id, v }, true);
+}
+function r32Tick(dt, now) {
+const run = r32Run;
+if (!run)
+return;
+const me = r32MyId();
+const mine = run.players[me];
+const pv = r31PetV();
+const el = now - run.t0;
+const moved = r31Ang(run.lastPet, pv);
+if (moved > 1e-4)
+run.lastDir = r31Tan(run.lastPet, pv);
+run.lastPet = pv;
+if (now < run.dashUntil && run.dashDir) {
+const nv = r31Go(pv, r31Flat(pv, run.dashDir), .55 * dt);
+r31SetPet(nv);
+}
+if (r31Ang(run.P, pv) > 1.0)
+r31SetPet(r31Go(run.P, r31Tan(run.P, pv), .996));
+if (run.phase === "won" || run.phase === "lost") {
+if (now >= run.endAt)
+r32Finish(run.phase);
+return;
+}
+if (run.phase === "intro" && el > 4500) {
+run.phase = "gather";
+r32Say("Carry each sigil stone to its socket by the rift. Tap your pet to dash!");
+}
+if (r32IsHost()) {
+if (now - run.clockAt > 2000) {
+run.clockAt = now;
+r32Send({ t: "clock", elapsed: el, phase: run.phase }, false);
+}
+if ((run.phase === "gather" || run.phase === "escape") && now >= run.nextStrike) {
+const live = r32Present().filter(x => !x.p.down && !x.p.escaped);
+const n = r32Present().length;
+const gap = run.phase === "escape" ? 1300 : Math.max(1700, 3300 - (n - 1) * 350 - Math.min(900, el / 300));
+run.nextStrike = now + gap * (.8 + Math.random() * .4);
+if (live.length) {
+const tg = live[Math.floor(Math.random() * live.length)];
+let v = tg.v;
+if (tg.me && run.lastDir && roamingIsMoving)
+v = r31Go(v, r31Flat(v, run.lastDir), .03);
+r32Send({ t: "strike", id: me + "-" + Math.round(now), v, delay: R32.warnMs }, true);
+const sealed = run.stones.find(s => s.sealed && s.state === "ground" && live.some(x => r31Ang(x.v, s.v) < .16));
+if (sealed && Math.random() < .35)
+r32Send({ t: "strike", id: me + "-s" + Math.round(now), v: sealed.v, delay: R32.warnMs + 400 }, true);
+}
+}
+if (run.phase === "gather" && el > R32.gatherMs)
+r32Send({ t: "end", result: "lost" }, true);
+if (run.phase === "escape" && now - run.escapeAt > R32.escapeMs)
+r32Send({ t: "end", result: run.players && Object.values(run.players).some(p => p.escaped) ? "won" : "lost" }, true);
+}
+run.strikes.forEach(s => {
+if (!s.done && now >= s.at) {
+s.done = true;
+run.stones.forEach(st => {
+if (st.sealed && st.state === "ground" && r31Ang(st.v, s.v) < s.r + .03) {
+st.sealed = false;
+r32Say("💥 The " + st.glyph + " stone broke free!");
+}
+});
+r31Tone(run.def.kind === "deep" ? 160 : 220, 50, .5, "sawtooth", .07);
+}
+if (now >= s.at && now < s.at + 450 && r31Ang(pv, s.v) < s.r)
+r32Hurt(now);
+});
+run.strikes = run.strikes.filter(s => now < s.at + 1100);
+if (run.phase !== "intro" && r32SweepHit(run, pv, el / 1000))
+r32Hurt(now);
+if (mine && !mine.down && !mine.escaped) {
+const held = r32CarriedStone();
+if (held) {
+const k = run.sockets.findIndex(x => !x.stone && r31Ang(x.v, pv) < R32.socket);
+if (k >= 0) {
+if (run.sockets[k].glyph === held.glyph) {
+r32DropLocalCarry();
+r32Send({ t: "socket", stone: held.id, socket: k }, true);
+}
+else if (now - (run.wrongAt || 0) > 2500) {
+run.wrongAt = now;
+r32Say("That's the " + run.sockets[k].glyph + " socket — this stone is " + held.glyph + ".");
+}
+}
+}
+else {
+const pet = getRoamingPet();
+const s = run.stones.find(x => x.state === "ground" && !x.sealed && r31Ang(x.v, pv) < R32.stone);
+if (s && pet && !pet.carry)
+r32Pick(s.id);
+}
+r32Present().forEach(x => {
+if (x.me || !x.p.down)
+return;
+if (r31Ang(x.v, pv) < .06) {
+if (!run.reviving[x.id])
+run.reviving[x.id] = now;
+if (now - run.reviving[x.id] > 1500) {
+run.reviving[x.id] = 0;
+r32Send({ t: "revive", who: x.id }, true);
+}
+}
+else {
+run.reviving[x.id] = 0;
+}
+});
+if (run.phase === "escape" && r31Ang(run.P, pv) < R32.rift) {
+r32Send({ t: "escaped" }, true);
+r31Sfx.win();
+r32Say("You're through! Waiting for the others…");
+}
+}
+const present = r32Present();
+if (present.length && run.phase !== "intro") {
+const standing = present.filter(x => !x.p.down && !x.p.escaped);
+if (!standing.length) {
+const won = present.some(x => x.p.escaped);
+run.phase = won ? "won" : "lost";
+run.endAt = now + 1500;
+if (!won)
+r31Sfx.caught();
+}
+}
+const near = run.strikes.some(s => !s.done && r31Ang(s.v, pv) < .2);
+if (near && now - run.beatAt > 420) {
+run.beatAt = now;
+r31Sfx.beat();
+}
+}
+function r32Hurt(now) {
+const run = r32Run;
+const me = run.players[r32MyId()];
+if (!me || me.down || me.escaped || now < me.inv || now < run.dashUntil)
+return;
+me.inv = now + 1500;
+run.hitFlash = now;
+const hearts = Math.max(0, me.hearts - 1);
+r31Tone(300, 80, .4, "square", .08);
+if (hearts <= 0) {
+const s = r32CarriedStone();
+if (s)
+r32Drop(null);
+r32Say("You're down! A friend can stand over you to pull you back up.");
+}
+else {
+r32Say("Hit! " + "♥".repeat(hearts) + " left");
+}
+r32Send({ t: "hit", hearts }, true);
+}
+function r32Open() {
+const run = r32Run;
+run.phase = "escape";
+run.escapeAt = performance.now();
+run.nextStrike = performance.now() + 1500;
+r31Sfx.screech();
+r32Say("All four sigils set — the rift is OPEN! Everyone dive in!");
+}
+function r32Wisps(run, tS) {
+return [0, 1, 2].map(i => {
+const dir = i % 2 ? 1 : -1;
+const b = run.rot + i * Math.PI * 2 / 3 + tS * .28 * dir;
+const d = .3 + .17 * Math.sin(tS * .55 + i * 2.1);
+return r31At(run.P, b, d);
+});
+}
+function r32Jets(run, tS) {
+return [0, 1].map(i => run.rot + tS * .42 + i * Math.PI);
+}
+function r32SweepHit(run, pv, tS) {
+if (run.def.kind === "deep")
+return r32Wisps(run, tS).some(w => r31Ang(w, pv) < .042);
+const d = r31Ang(run.P, pv);
+if (d < .07 || d > .62)
+return false;
+const b = r32Bearing(run.P, pv);
+return r32Jets(run, tS).some(a => Math.abs(r31AngDiff(a, b)) * Math.sin(d) < .024);
+}
+function r32Dash() {
+const run = r32Run;
+const now = performance.now();
+const me = run && run.players[r32MyId()];
+if (!run || !me || me.down || me.escaped)
+return;
+if (r32CarriedStone()) {
+r32Say("Too heavy to dash with a sigil stone.");
+return;
+}
+if (now < run.dashReady)
+return;
+const pv = r31PetV();
+run.dashDir = run.lastDir || r31Tan(pv, run.P);
+run.dashUntil = now + 330;
+run.dashReady = now + 2200;
+r31Tone(500, 1400, .18, "triangle", .07);
+}
+function r32Finish(result) {
+const run = r32Run;
+if (!run)
+return;
+r32Run = null;
+r32DropLocalCarry();
+r31Hud(false);
+Object.values(r32Invites).forEach(inv => {
+if (inv.ev.rid === run.rid)
+inv.ended = true;
+});
+if (result === "left") {
+showShipToast("You woke up and left the rift.");
+return;
+}
+const me = run.players[r32MyId()] || {};
+if (result === "won") {
+withMySave(() => {
+if (!planetSave.nightmares)
+planetSave.nightmares = {};
+const key = "rift:" + run.planet;
+const st = planetSave.nightmares[key] || (planetSave.nightmares[key] = { clears: 0, best: 0, tries: 0 });
+const first = !st.clears;
+st.clears = (st.clears || 0) + 1;
+const secs = Math.round((performance.now() - run.t0) / 1000);
+if (!st.best || secs < st.best)
+st.best = secs;
+const full = !!me.escaped;
+const coins = Math.round((first ? 160 : 50) * (full ? 1 : .5));
+addToBank(run.planet, coins);
+const pool = Object.keys(SHOP_ITEMS || {}).filter(isBasePowerupId);
+const n = full ? (first ? 2 : 1) : 0;
+for (let i = 0; i < n && pool.length; i++)
+addItemStock(run.planet, pool[Math.floor(Math.random() * pool.length)], 1);
+addRankPoints(Math.round((first ? 350 : 110) * (full ? 1 : .5)), "Survived " + run.def.name);
+const crew = Object.values(run.players).filter(p => p.escaped).length;
+showMilestoneFlourish("🌀", full ? "Through the rift!" : "Your friends got you out", run.def.name + " · " + r31Time(secs) + " · " + crew + " escaped · +" + coins + " coins" + (n ? ", " + n + " powerup" + (n > 1 ? "s" : "") : ""));
+savePlanetProgress();
+});
+}
+else {
+showShipToast("🌑 " + run.def.name + " swallowed the rift. You wake up, cold.");
+}
+}
+function r32DrawRift(c, pts, t, col, open) {
+if (!pts)
+return;
+const cx = pts.reduce((s, q) => s + q.x, 0) / pts.length, cy = pts.reduce((s, q) => s + q.y, 0) / pts.length;
+const rx = Math.max(...pts.map(q => Math.abs(q.x - cx))), ry = Math.max(...pts.map(q => Math.abs(q.y - cy)));
+c.save();
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+const g = c.createRadialGradient(cx, cy, 1, cx, cy, Math.max(rx, 4) * 1.1);
+g.addColorStop(0, open ? "#ffffff" : "#05030c");
+g.addColorStop(.5, open ? r32Lit(col.slice(0, 7), 1.1, .9) : "#120a24");
+g.addColorStop(1, r32Lit(col.slice(0, 7), .6, .8));
+c.fillStyle = g;
+c.fill();
+c.clip();
+c.strokeStyle = open ? "rgba(255,255,255,.8)" : col;
+c.lineWidth = 1.6;
+for (let arm = 0; arm < 3; arm++) {
+c.globalAlpha = .7;
+c.beginPath();
+for (let i = 0; i <= 24; i++) {
+const k = i / 24;
+const a = t * (open ? 3 : 1.2) + arm * Math.PI * 2 / 3 + k * 4;
+const x = cx + Math.cos(a) * rx * k, y = cy + Math.sin(a) * ry * k;
+i ? c.lineTo(x, y) : c.moveTo(x, y);
+}
+c.stroke();
+}
+c.restore();
+c.save();
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+c.strokeStyle = open ? "#ffffff" : col;
+c.shadowColor = col;
+c.shadowBlur = open ? 24 : 12;
+c.lineWidth = 2.4;
+c.stroke();
+c.restore();
+}
+function r32DrawSigil(c, u, glyph, col, lit, sealed, kind, t) {
+const s = u * .6;
+c.save();
+if (sealed) {
+if (kind === "deep") {
+const cam = r32Cam(.5, u * .62);
+r32Box(c, cam, 0, 0, 0, 1, 1, 1, "#9fe6ff", { a: .55, line: "rgba(220,250,255,.9)", lw: 1.4 });
+}
+else {
+c.strokeStyle = "#ff7a1a";
+c.shadowColor = "#ff7a1a";
+c.shadowBlur = 10;
+c.lineWidth = 2.4;
+for (let i = -2; i <= 2; i++) {
+c.beginPath();
+c.moveTo(i * s * .42, 0);
+c.quadraticCurveTo(i * s * .5, -s * 1.2, 0, -s * 1.55);
+c.stroke();
+}
+c.shadowBlur = 0;
+}
+}
+const cam = r32Cam(.35 + Math.sin(t * .8) * .1, s);
+r32Box(c, cam, 0, .05, 0, .9, 1.25, .35, "#3b3550", { line: "rgba(200,190,255,.5)" });
+const p = cam(0, .7, .18);
+c.font = "900 " + Math.round(s * .85) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillStyle = lit ? "#ffffff" : col;
+c.shadowColor = col;
+c.shadowBlur = lit ? 18 : 10;
+c.fillText(glyph, p.x, p.y);
+c.restore();
+}
+function r32DrawSocket(c, u, k, col, stone, t, kind) {
+const cam = r32Cam(.4, u * .8);
+r32Box(c, cam, 0, 0, 0, 1.1, .55, 1.1, "#2a2438", { line: col });
+const top = cam(0, .56, 0);
+c.save();
+c.font = "900 " + Math.round(u * .42) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillStyle = stone ? "#ffffff" : r32Lit(col.slice(0, 7), 1, .55);
+c.shadowColor = col;
+c.shadowBlur = stone ? 16 : 4;
+c.fillText(k.glyph, top.x, top.y - u * .05);
+c.restore();
+if (stone) {
+c.save();
+c.translate(top.x, top.y - u * .06);
+r32DrawSigil(c, u * .8, stone.glyph, col, true, false, kind, t);
+c.restore();
+c.save();
+c.globalAlpha = .35 + .2 * Math.sin(t * 4);
+const g = c.createLinearGradient(0, top.y, 0, top.y - u * 3);
+g.addColorStop(0, col);
+g.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = g;
+c.fillRect(-u * .08, top.y - u * 3, u * .16, u * 3);
+c.restore();
+}
+}
+function r32DrawSerpent(c, u, k, kind, t) {
+const deep = kind === "deep";
+const H = u * 3.4 * k;
+if (H < 2)
+return;
+const sway = Math.sin(t * 3) * u * .25 * k;
+const body = deep ? ["#2c4a66", "#9fe6ff", "#0d1a28"] : ["#2a1410", "#ff7a1a", "#0c0605"];
+c.save();
+const segs = 10;
+for (let i = 0; i < segs; i++) {
+const a = i / segs, b = (i + 1) / segs;
+const x0 = Math.sin(a * 2.2) * sway, x1 = Math.sin(b * 2.2) * sway;
+const w = u * (.55 - .18 * a) * Math.min(1, k * 1.5);
+const g = c.createLinearGradient(x0 - w, 0, x0 + w, 0);
+g.addColorStop(0, body[2]);
+g.addColorStop(.45, body[0]);
+g.addColorStop(1, body[2]);
+c.fillStyle = g;
+c.beginPath();
+c.moveTo(x0 - w, -a * H);
+c.lineTo(x0 + w, -a * H);
+c.lineTo(x1 + w * .92, -b * H);
+c.lineTo(x1 - w * .92, -b * H);
+c.closePath();
+c.fill();
+c.strokeStyle = r32Lit(body[1].slice(0, 7), .8, .5);
+c.lineWidth = 1;
+c.stroke();
+if (deep && i % 2 === 0) {
+c.fillStyle = "rgba(150,240,255,.85)";
+c.beginPath();
+c.arc(x0 + w * .4, -a * H - u * .1, u * .04, 0, Math.PI * 2);
+c.fill();
+}
+}
+const hx = Math.sin(2.2) * sway, hy = -H;
+const open = .35 + .25 * Math.sin(t * 12);
+c.translate(hx, hy);
+const hg = c.createRadialGradient(-u * .15, -u * .2, 2, 0, 0, u * .8);
+hg.addColorStop(0, r32Lit(body[0].slice(0, 7), 1.8));
+hg.addColorStop(1, body[2]);
+c.fillStyle = hg;
+c.strokeStyle = body[1];
+c.shadowColor = body[1];
+c.shadowBlur = 14;
+c.lineWidth = 2;
+c.beginPath();
+c.moveTo(-u * .5, 0);
+c.quadraticCurveTo(-u * .55, -u * .55, 0, -u * .75);
+c.quadraticCurveTo(u * .55, -u * .55, u * .5, 0);
+c.lineTo(u * .3, u * .1);
+c.lineTo(-u * .3, u * .1);
+c.closePath();
+c.fill();
+c.stroke();
+c.beginPath();
+c.moveTo(-u * .4, u * .1);
+c.lineTo(u * .4, u * .1);
+c.lineTo(u * .22, u * (.35 + open));
+c.lineTo(-u * .22, u * (.35 + open));
+c.closePath();
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = deep ? "#e8fbff" : "#ffe2b0";
+for (let i = -3; i <= 3; i++) {
+c.beginPath();
+c.moveTo(i * u * .09 - u * .03, u * .1);
+c.lineTo(i * u * .09, u * .24);
+c.lineTo(i * u * .09 + u * .03, u * .1);
+c.fill();
+}
+c.fillStyle = deep ? "#7dfcff" : "#ffd34d";
+c.shadowColor = c.fillStyle;
+c.shadowBlur = 16;
+[-1, 1].forEach(j => {
+c.beginPath();
+c.ellipse(j * u * .24, -u * .32, u * .09, u * .05, j * .4, 0, Math.PI * 2);
+c.fill();
+});
+c.shadowBlur = 0;
+if (!deep) {
+c.strokeStyle = "#3a1a10";
+c.lineWidth = u * .08;
+c.lineCap = "round";
+[-1, 1].forEach(j => {
+c.beginPath();
+c.moveTo(j * u * .3, -u * .55);
+c.quadraticCurveTo(j * u * .6, -u * .9, j * u * .45, -u * 1.15);
+c.stroke();
+});
+const fg = c.createRadialGradient(0, u * .3, 1, 0, u * .3, u * .4);
+fg.addColorStop(0, "rgba(255,240,180,.95)");
+fg.addColorStop(1, "rgba(255,90,20,0)");
+c.fillStyle = fg;
+c.beginPath();
+c.arc(0, u * .3, u * .4, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+}
+function r32DrawWisp(c, q, u, t, i) {
+c.save();
+const r = u * .28;
+for (let k = 4; k >= 0; k--) {
+c.globalAlpha = .12 * (5 - k);
+c.fillStyle = "#bff6ff";
+c.beginPath();
+c.arc(q.x - Math.cos(t * 2 + i) * k * r * .35, q.y - r * 1.5 + k * r * .15, r * (1 - k * .12), 0, Math.PI * 2);
+c.fill();
+}
+c.globalAlpha = 1;
+const g = c.createRadialGradient(q.x, q.y - r * 1.5, 1, q.x, q.y - r * 1.5, r * 1.3);
+g.addColorStop(0, "#ffffff");
+g.addColorStop(.5, "rgba(160,240,255,.85)");
+g.addColorStop(1, "rgba(80,180,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(q.x, q.y - r * 1.5, r * 1.3, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#0b2a40";
+[-1, 1].forEach(j => {
+c.beginPath();
+c.ellipse(q.x + j * r * .3, q.y - r * 1.6, r * .12, r * .2, 0, 0, Math.PI * 2);
+c.fill();
+});
+c.beginPath();
+c.ellipse(q.x, q.y - r * 1.2, r * .15, r * .2 + Math.sin(t * 5 + i) * r * .08, 0, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r32DrawDowned(c, x, y, u, kind, t, k) {
+c.save();
+if (kind === "deep") {
+const cam = r32Cam(.5, u * .9);
+c.translate(x, y);
+r32Box(c, cam, 0, 0, 0, 1.1, 1.25, 1.1, "#bff0ff", { a: .55, line: "rgba(230,252,255,.95)", lw: 1.6 });
+}
+else {
+c.translate(x, y);
+c.fillStyle = "rgba(40,30,28,.85)";
+c.beginPath();
+c.ellipse(0, -u * .5, u * .5, u * .6, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#ff7a1a";
+c.globalAlpha = .6 + .4 * Math.sin(t * 3);
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(-u * .2, -u * .9);
+c.lineTo(-u * .05, -u * .5);
+c.lineTo(-u * .25, -u * .2);
+c.moveTo(u * .15, -u * .85);
+c.lineTo(u * .25, -u * .4);
+c.stroke();
+}
+if (k > 0) {
+c.globalAlpha = 1;
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 3;
+c.beginPath();
+c.arc(0, -u * .6, u * .7, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+c.stroke();
+}
+c.restore();
+}
+let r32LastFrame = 0;
+function r32Entries(queue, p) {
+const planetId = selectedStartPlanet;
+const def = R32_RIFTS[planetId];
+const now = performance.now();
+const dt = Math.min(.1, Math.max(0, (now - (r32LastFrame || now)) / 1000));
+r32LastFrame = now;
+let run = r32Run;
+if (run && (!roamingActive || planetId !== run.planet || roomState || r32OwnerHere() !== run.owner)) {
+r32Send({ t: "left" }, false);
+r32Finish("left");
+run = null;
+}
+if (!def)
+return;
+const c = p.c, t = now / 1000;
+const u = Math.max(26, p.width * .075);
+const P = r32RiftV(planetId);
+const pv = roamingActive ? r31PetV() : null;
+if (!run && !r31Run && roamingActive && !roomState && pv) {
+const d = r31Ang(P, pv);
+if (d > .09)
+r32Run_armed = true;
+if (!r32Seen[planetId] && d < .7) {
+r32Seen[planetId] = true;
+showShipToast("🌀 A Night Rift on the far side of " + (getPlanet(planetId) || { name: planetId }).name + "… it's big enough for friends.");
+}
+if (d < R32.rift && r32Run_armed && now > r32Rearm) {
+r32Run_armed = false;
+if (!r32Join())
+r32Start(planetId);
+run = r32Run;
+}
+}
+if (run)
+r32Tick(dt, now);
+run = r32Run;
+const tS = run ? (now - run.t0) / 1000 : t;
+{
+const pts = r31Ring(P, R32.rift * (run && run.phase === "escape" ? 1.5 : 1), p, 26);
+const q = r31P(P, p);
+if (pts) {
+const live = !run && r32Invite();
+queue.push({ z: -.5, alpha: 1, draw: () => r32DrawRift(c, pts, t, def.col, run && (run.phase === "escape" || run.phase === "won")) });
+if (!run)
+world.hits.push({ x: q.x, y: q.y, r: u * .9, z: 4, onTap: () => r32RiftBubble(planetId, q.x, q.y - u, !!live) });
+}
+}
+if (!run)
+return;
+const kind = def.kind;
+run.sockets.forEach(k => {
+const st = k.stone && run.stones.find(s => s.id === k.stone);
+r31Place(queue, p, k.v, cc => r32DrawSocket(cc, u, k, def.col, st, t, kind));
+});
+run.stones.forEach(s => {
+if (s.state !== "ground")
+return;
+const q = r31Place(queue, p, s.v, cc => {
+cc.fillStyle = "rgba(0,0,0,.35)";
+cc.beginPath();
+cc.ellipse(0, 0, u * .25, u * .07, 0, 0, Math.PI * 2);
+cc.fill();
+r32DrawSigil(cc, u, s.glyph, def.col, false, s.sealed, kind, t);
+});
+if (q)
+world.hits.push({ x: q.x, y: q.y - u * .25, r: u * .45, z: 10, desc: { k: "nm", r: "stone:" + s.id, n: 1 }, src: { t: "nm", id: s.id }, draggable: !s.sealed, onTap: () => r32Pick(s.id) });
+});
+queue.push({ z: -.47, alpha: 1, draw: () => {
+c.save();
+if (kind === "pyre" && run.phase !== "intro") {
+r32Jets(run, tS).forEach(a => {
+const pts = [];
+for (let i = 0; i <= 16; i++) {
+const q = r31P(r31At(run.P, a, .07 + .55 * i / 16), p);
+if (q.visible)
+pts.push(q);
+}
+if (pts.length < 2)
+return;
+[[u * .5, "rgba(255,90,20,.35)"], [u * .28, "rgba(255,170,60,.75)"], [u * .1, "rgba(255,245,200,.95)"]].forEach(([w, col]) => {
+c.strokeStyle = col;
+c.lineWidth = w * (1 + .15 * Math.sin(t * 20));
+c.lineCap = "round";
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.stroke();
+});
+});
+}
+run.strikes.forEach(s => {
+const k = Math.max(0, Math.min(1, 1 - (s.at - now) / R32.warnMs));
+if (now > s.at)
+return;
+const ring = r31Ring(s.v, s.r, p, 24);
+if (!ring)
+return;
+const ctr = r31P(s.v, p);
+c.globalAlpha = .35 + .5 * k;
+c.fillStyle = kind === "deep" ? "rgba(10,30,60," + (.3 + .4 * k) + ")" : "rgba(255,90,20," + (.15 + .35 * k) + ")";
+r31Poly(c, ring);
+c.fill();
+c.strokeStyle = kind === "deep" ? "#bff6ff" : "#ffb347";
+c.lineWidth = 2;
+c.stroke();
+c.strokeStyle = kind === "deep" ? "rgba(220,250,255,.9)" : "rgba(255,230,160,.9)";
+c.lineWidth = 1.4;
+for (let i = 0; i < 8; i++) {
+const a = i / 8 * Math.PI * 2 + s.id.length;
+const e = ring[Math.floor(i / 8 * ring.length)];
+c.beginPath();
+c.moveTo(ctr.x, ctr.y);
+c.lineTo(ctr.x + (e.x - ctr.x) * k, ctr.y + (e.y - ctr.y) * k + Math.sin(a) * 2);
+c.stroke();
+}
+});
+c.restore();
+} });
+run.strikes.forEach(s => {
+if (now < s.at)
+return;
+const age = (now - s.at) / 900;
+const k = age < .25 ? age / .25 : Math.max(0, 1 - (age - .25) / .75);
+r31Place(queue, p, s.v, cc => r32DrawSerpent(cc, u, k, kind, t), .003);
+});
+if (kind === "deep" && run.phase !== "intro")
+r32Wisps(run, tS).forEach((w, i) => {
+const q = r31P(w, p);
+if (q.visible)
+queue.push({ z: p.groundDepthAt(q.x, q.y) + .001, alpha: 1, draw: () => r32DrawWisp(c, q, u, t, i) });
+});
+const present = r32Present();
+present.forEach(x => {
+const q = r31P(x.v, p);
+if (!q.visible)
+return;
+queue.push({ z: p.groundDepthAt(q.x, q.y) + .004, alpha: 1, draw: () => {
+if (x.p.down)
+r32DrawDowned(c, q.x, q.y, u, kind, t, (run.reviving[x.id] ? Math.min(1, (now - run.reviving[x.id]) / 1500) : 0));
+if (x.p.escaped)
+return;
+if (!x.me) {
+const st = run.stones.find(s => s.state === "held" && s.by === x.id);
+if (st) {
+c.save();
+c.translate(q.x, q.y - u * 1.15);
+r32DrawSigil(c, u * .7, st.glyph, def.col, true, false, kind, t);
+c.restore();
+}
+}
+c.save();
+c.font = "900 " + Math.round(u * .26) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = "#ff6b8a";
+c.shadowColor = "#000";
+c.shadowBlur = 4;
+c.fillText(x.p.down ? "" : "♥".repeat(Math.max(0, x.p.hearts)), q.x, q.y - u * (x.me ? 1.55 : 1.35));
+c.restore();
+} });
+});
+queue.push({ z: 1e9, alpha: 1, draw: () => {
+const lights = [];
+const head = world.roamHead;
+if (head)
+lights.push({ x: head.x, y: head.y + head.size * .9, r: u * 3.2, k: .9 });
+present.forEach(x => {
+if (x.me)
+return;
+const q = r31P(x.v, p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y - u * .5, r: u * 2.6, k: .8 });
+});
+const rq = r31P(run.P, p);
+if (rq.visible)
+lights.push({ x: rq.x, y: rq.y, r: u * (run.phase === "escape" ? 6 : 3), k: 1, warm: run.phase === "escape" ? .25 : .08 });
+run.sockets.forEach(k => {
+if (!k.stone)
+return;
+const q = r31P(k.v, p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y - u * .4, r: u * 2.4, k: .9, warm: .1 });
+});
+run.strikes.forEach(s => {
+const q = r31P(s.v, p);
+if (q.visible && now > s.at - R32.warnMs)
+lights.push({ x: q.x, y: q.y - u, r: u * 2.6, k: .7, warm: kind === "pyre" ? .25 : 0 });
+});
+if (kind === "pyre" && run.phase !== "intro")
+r32Jets(run, tS).forEach(a => {
+for (let i = 1; i <= 4; i++) {
+const q = r31P(r31At(run.P, a, .14 * i), p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y, r: u * 1.8, k: .8, warm: .18 });
+}
+});
+if (kind === "deep" && run.phase !== "intro")
+r32Wisps(run, tS).forEach(w => {
+const q = r31P(w, p);
+if (q.visible)
+lights.push({ x: q.x, y: q.y - u * .4, r: u * 1.6, k: .7 });
+});
+r31Dark(c, lights, .66);
+} });
+queue.push({ z: 1e9 + 1, alpha: 1, draw: () => {
+const W = p.width, Hh = c.canvas.height / (c.getTransform().d || 1);
+const me = run.players[r32MyId()] || {};
+const hk = Math.max(0, 1 - (now - run.hitFlash) / 500);
+if (hk > 0 || me.down) {
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.fillStyle = me.down ? "rgba(20,40,70,.35)" : "rgba(255,40,40," + hk * .35 + ")";
+c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+c.restore();
+}
+if (run.phase === "won" || run.phase === "lost") {
+const k = 1 - Math.max(0, (run.endAt - now) / 1500);
+c.save();
+c.setTransform(1, 0, 0, 1, 0, 0);
+c.fillStyle = run.phase === "won" ? "rgba(255,255,255," + k + ")" : "rgba(0,0,0," + k + ")";
+c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+c.restore();
+}
+const age = tS;
+if (age < 4.5) {
+const a = Math.min(1, age / .8) * Math.min(1, (4.5 - age) / 1);
+c.save();
+c.globalAlpha = a;
+c.textAlign = "center";
+c.fillStyle = "#f4ecdc";
+c.shadowColor = def.col;
+c.shadowBlur = 14;
+c.font = "900 " + Math.round(W * .085) + "px Georgia,serif";
+c.fillText(def.name.toUpperCase(), W / 2, Hh * .38);
+c.shadowBlur = 0;
+c.font = "italic 600 " + Math.round(W * .036) + "px Georgia,serif";
+c.fillStyle = "#c8bfd8";
+c.fillText("a night rift · bring friends", W / 2, Hh * .38 + W * .065);
+c.restore();
+}
+} });
+r32HudUpdate();
+}
+let r32Run_armed = true;
+let r32Rearm = 0;
+function r32RiftBubble(planetId, x, y, live) {
+const def = R32_RIFTS[planetId];
+const st = r31Stats("rift:" + planetId);
+worldShowBubble({
+x, y,
+iconHtml: "🌀",
+title: "Night Rift · " + def.name,
+meta: (live ? "⚠ someone is inside right now · " : "") + "for friends" + (st.clears ? " · survived ×" + st.clears + " · best " + r31Time(st.best) : ""),
+text: def.lore + " Walk in to " + (live ? "join them" : "open it") + ": set the four sigil stones in their sockets, crack the sealed ones by luring strikes onto them, revive anyone who falls, then everyone dive back in. Tap your pet to dash.",
+buttons: [{ label: "Close" }]
+});
+}
+function r32HudUpdate() {
+const run = r32Run;
+if (!run)
+return;
+const now = performance.now();
+const me = run.players[r32MyId()] || {};
+const el = now - run.t0;
+const set = run.sockets.filter(k => k.stone).length;
+const left = run.phase === "escape" ? Math.max(0, 1 - (now - run.escapeAt) / R32.escapeMs) : Math.max(0, 1 - el / R32.gatherMs);
+const team = r32Present().map(x => (x.me ? "You" : x.p.name) + " " + (x.p.escaped ? "🌀" : x.p.down ? "✖" : "♥".repeat(Math.max(0, x.p.hearts)))).join(" · ");
+r31BarSet({
+name: "🌀 " + run.def.name.toUpperCase(),
+state: me.down ? "✖ down — wait for help" : me.escaped ? "🌀 through" : run.phase === "escape" ? "🏃 RIFT OPEN" : run.phase === "intro" ? "waking…" : "SIGILS " + set + "/4",
+hot: run.phase === "escape" || !!me.down,
+fill: left,
+barClass: left < .25 ? "loud" : left < .5 ? "mid" : "quiet",
+sub: '<span>' + team + '</span><br>' + run.sockets.map(k => '<span class="nb-g' + (k.stone ? ' done' : '') + '">' + k.glyph + '</span>').join("") + (now < run.dashReady ? ' <span style="opacity:.5">· dash recharging</span>' : ''),
+msg: run.msg && now - run.msgAt < 4500 ? run.msg : ""
+});
+}
+function worldUseCarried(pet, origin) {
+const d = pet && pet.carry;
+const roaming = getRoamingPet();
+if (d && d.k === "nm") {
+if (d.r === "pebble") {
+if (!r31Throw())
+pet.carry = null;
+return;
+}
+if (r32Run) {
+r32Say("Carry it to the socket with the same sigil, by the rift.");
+return;
+}
+pet.carry = null;
+return;
+}
+if (!d && r32Run && roaming && pet && pet.id === roaming.id) {
+r32Dash();
+return;
+}
+return worldUseCarried__r32(pet, origin);
+}
+function worldMove(from, to, d) {
+if (d && d.k === "nm") {
+if (from && from.t === "nm" && to && to.t === "pet") {
+if (r32Run && String(d.r).startsWith("stone:"))
+r32Pick(from.id);
+else if (r31Run)
+r31PickItem(from.id);
+return;
+}
+if (from && from.t === "pet" && to && to.t === "ground" && to.at && to.at.t === "planet") {
+if (d.r === "pebble")
+r31Throw(r31V(to.at.lat, to.at.lon));
+else if (r32Run)
+r32Drop(to.at);
+}
+return;
+}
+return worldMove__r32(from, to, d);
+}
+function drawWorldItem(c, d, x, y, size, opts) {
+if (d && d.k === "nm") {
+if (d.r === "pebble") {
+r32DrawPebble(c, x, y, size * .9);
+return;
+}
+const run = r32Run;
+const s = run && run.stones.find(st => "stone:" + st.id === d.r);
+c.save();
+c.translate(x, y + size * .35);
+r32DrawSigil(c, size * .9, s ? s.glyph : "?", run ? run.def.col : "#fff", true, false, run ? run.def.kind : "deep", performance.now() / 1000);
+c.restore();
+return;
+}
+return drawWorldItem__r32(c, d, x, y, size, opts);
+}
+function worldItemInfo(d) {
+if (d && d.k === "nm") {
+return d.r === "pebble"
+? { name: "Pebble", iconHtml: "🪨", colour: "#cfd6e2", text: "Tap your pet to throw it — whatever's hunting you will go and look." }
+: { name: "Sigil stone", iconHtml: "✦", colour: "#d0c4ff", text: "Carry it to the socket with the same sigil, by the rift." };
+}
+return worldItemInfo__r32(d);
+}
+function exitRoamingByButton() {
+if (r31Run) {
+r31End("woke");
+return;
+}
+if (r32Run) {
+r32Leave();
+return;
+}
+return exitRoamingByButton__r32();
+}
+function roamingPaceNow() {
+const v = roamingPaceNow__r32();
+const run = r32Run;
+if (!run)
+return v;
+const me = run.players[r32MyId()] || {};
+if (me.down || run.phase === "won" || run.phase === "lost")
+return 0;
+return v * R32.pace * (r32CarriedStone() ? .78 : 1);
+}
+setInterval(() => {
+try {
+if (!r31Run && !r32Run)
+r31ClearCarry();
+}
+catch (error) { }
+}, 3000);
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -31007,7 +32870,7 @@ catch (error) { }
 }
 return false;
 }
-function exitRoamingByButton() {
+function exitRoamingByButton__r32() {
 if (!roamingActive)
 return;
 sound("click");
@@ -31634,7 +33497,7 @@ catch (error) {
 console.error("World action failed:", error);
 }
 }
-function worldMove(from, to, d) {
+function worldMove__r32(from, to, d) {
 worldRunAction({
 "data-action": "item-move",
 "data-from": JSON.stringify(from),
@@ -31759,7 +33622,7 @@ draggable: true,
 onTap: () => worldUseCarried(pet, isRoamer ? { x, y: headY } : { x, y: headY })
 });
 }
-function worldUseCarried(pet, origin) {
+function worldUseCarried__r32(pet, origin) {
 const d = pet && pet.carry;
 if (!d) {
 world.effects.push({ type: "hop", x: origin.x, y: origin.y, t0: performance.now(), petId: pet.id, energy: pet.energy });
@@ -36791,6 +38654,7 @@ trapSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, v
 world.r29Struct = {};
 r29RaidSurfaceEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 r31Entries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
+r32Entries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 r26PenEntries(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
 if (flightProgress <= .001)
 exploreDrawPlanet(composeQueue, { c, cx, cy, R: radius, viewLat: roamViewLat, viewLon: roamViewLon, width, groundDepthAt });
