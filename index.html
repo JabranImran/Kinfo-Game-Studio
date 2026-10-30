@@ -9207,7 +9207,7 @@ return ('<div class="pet-role-panel">' +
 '<div class="pet-role-panel-text">' + (SPECIES_DISPLAY_NAMES[pet.species] || "Native pets") + ' don\'t carry a perk yet — but every pet has a forge recipe (see the Forge tab).</div>' +
 '</div>');
 }
-function roomForgeFixtures(c, list, planetId, st, time) {
+function roomForgeFixtures__r33(c, list, planetId, st, time) {
 roomTerminal(c, list, .18, "FORGE CONSOLE", st.colour, "structure-powerup-forge");
 list.push({ v: -2, draw: () => {
 const p = roomWallPt(.62, .42);
@@ -9321,7 +9321,7 @@ buttons: [
 ]
 });
 }
-function roomSatFactoryFixtures(c, list, planetId, st, time) {
+function roomSatFactoryFixtures__r33(c, list, planetId, st, time) {
 roomTerminal(c, list, .2, "ORBITAL WORKS", st.colour, "structure-satellite-factory");
 list.push({ v: .45, draw: () => {
 const p = roomFloorPt(.55, .45);
@@ -14136,6 +14136,7 @@ return;
 const result = executePlanetDetailAction__orig(target);
 if (typeof r14After === "function")
 r14After(target);
+r33After(target);
 return result;
 }
 function transporterSend(d, src, ship, n) {
@@ -22412,10 +22413,10 @@ run.phase = "escape";
 const pv = r31PetV();
 if (r31Ang(b.v, pv) > .4) {
 const away = r31Tan(pv, run.P).map(x => -x);
-b.v = r31Go(pv, r31Turn(pv, r31Flat(pv, away), (Math.random() - .5) * .8), .38);
+b.v = r31Go(pv, r31Turn(pv, r31Flat(pv, away), (Math.random() - .5) * .8), .5);
 }
 b.stunUntil = 0;
-b.roarUntil = performance.now() + 1400;
+b.roarUntil = performance.now() + 2200;
 r31Chase();
 r31Say("The door opens! RUN for the puddle!");
 }
@@ -22491,10 +22492,10 @@ b.look = 0;
 r31Say(hidden ? "It lost you. Stay still…" : "It lost your trail.");
 }
 else {
-let sp = spd.chase * (esc ? 1.15 : 1);
+let sp = esc ? Math.min(spd.chase * .7, .2) : spd.chase;
 if (kind === "gourmand") {
 b.charge = (b.charge + dt) % 2.6;
-sp = b.charge < 1.3 ? spd.charge * (esc ? 1.1 : 1) : .05;
+sp = b.charge < 1.3 ? (esc ? .24 : spd.charge) : .05;
 }
 r31Step(b, b.known || pv, sp * dt);
 }
@@ -25272,6 +25273,2202 @@ r31ClearCarry();
 }
 catch (error) { }
 }, 3000);
+const R33_THEME = {
+"shop": { wall: "wallpaper", wallA: "#5a2840", wallB: "#3c1a2c", stripe: "rgba(255,190,220,.07)", trim: "#d9a066", floor: "wood", floorA: "#8a5a34", floorB: "#5e3a20", ceil: "#22101a", lamp: "pendant", lampCol: "#ffd9a8", furn: ["#7a4a2a", "#3e2414"], furnTop: "#a8743e" },
+"stock": { wall: "steel", wallA: "#3e454f", wallB: "#262b33", trim: "#c9a24a", floor: "tread", floorA: "#4c525c", floorB: "#2c3037", ceil: "#14171c", lamp: "strip", lampCol: "#fff1c8", furn: ["#5b616b", "#2a2e35"], furnTop: "#8a919c" },
+"ship-factory": { wall: "hangar", wallA: "#3b4452", wallB: "#232933", trim: "#ffcc33", floor: "concrete", floorA: "#5a5f66", floorB: "#383c42", ceil: "#12151a", lamp: "flood", lampCol: "#e8f4ff", furn: ["#4a5260", "#262c35"], furnTop: "#6f7a8a" },
+"pilot-training": { wall: "panels", wallA: "#2e2a54", wallB: "#1c1838", trim: "#b98cff", floor: "carpet", floorA: "#3c3470", floorB: "#241e48", ceil: "#120e26", lamp: "strip", lampCol: "#e6dcff", furn: ["#3a3560", "#1e1a38"], furnTop: "#5a5290" },
+"bio-dome": { wall: "glass", wallA: "#2a5a4a", wallB: "#163a2e", trim: "#e8f0d8", floor: "grass", floorA: "#4a8a3e", floorB: "#2c5a26", ceil: "glass", lamp: "sun", lampCol: "#fff6d0", furn: ["#6b4a2a", "#3a2614"], furnTop: "#8a6a3e" },
+"powerup-forge": { wall: "brick", wallA: "#5a2e24", wallB: "#2e1612", trim: "#ffb347", floor: "stone", floorA: "#4e4644", floorB: "#2a2422", ceil: "#160b09", lamp: "embers", lampCol: "#ffb070", furn: ["#3e3a3a", "#1c1818"], furnTop: "#5e5656" },
+"satellite-factory": { wall: "clean", wallA: "#5c6878", wallB: "#3a4452", trim: "#5ff3ff", floor: "epoxy", floorA: "#6a7686", floorB: "#46505e", ceil: "#2a323e", lamp: "panel", lampCol: "#f4fbff", furn: ["#c9d1dc", "#8e98a6"], furnTop: "#e8eef5" },
+"ship": { wall: "hull", wallA: "#2c3446", wallB: "#181e2c", trim: "#4f9dff", floor: "deck", floorA: "#3a4256", floorB: "#222838", ceil: "#0e121c", lamp: "strip", lampCol: "#bfe0ff", furn: ["#3a4458", "#1e2436"], furnTop: "#56627c" }
+};
+function r33Theme() {
+if (!roomState || roomState.kind === "ruin" || roomState.kind === "special" || roomState.id === "pet-pen")
+return null;
+return R33_THEME[roomState.kind === "ship" ? "ship" : roomState.id] || null;
+}
+function r33Hash(i) {
+const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+return x - Math.floor(x);
+}
+function r33Shade(hex, k) {
+const h = hex.replace("#", "");
+const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+return "rgb(" + Math.round(Math.min(255, r * k)) + "," + Math.round(Math.min(255, g * k)) + "," + Math.round(Math.min(255, b * k)) + ")";
+}
+function roomDrawShell(c, W, H, st, time) {
+const th = r33Theme();
+if (!th)
+return roomDrawShell__r33(c, W, H, st, time);
+const g = roomGeo;
+const bl = g.cx - g.backW / 2, br = g.cx + g.backW / 2;
+const floorPoly = () => {
+c.beginPath();
+c.moveTo(bl, g.backY);
+c.lineTo(br, g.backY);
+c.lineTo(W * 1.2, H * 1.05);
+c.lineTo(-W * .2, H * 1.05);
+c.closePath();
+};
+c.save();
+c.beginPath();
+c.moveTo(0, 0);
+c.lineTo(W, 0);
+c.lineTo(br, g.wallTop);
+c.lineTo(bl, g.wallTop);
+c.closePath();
+if (th.ceil === "glass") {
+const sky = c.createLinearGradient(0, 0, 0, g.wallTop);
+sky.addColorStop(0, "#5aa8e8");
+sky.addColorStop(1, "#a8dcff");
+c.fillStyle = sky;
+c.fill();
+c.clip();
+c.strokeStyle = th.trim;
+c.lineWidth = 2;
+for (let i = 0; i <= 8; i++) {
+const x = bl + (br - bl) * i / 8;
+c.beginPath();
+c.moveTo(x, g.wallTop);
+c.lineTo(W * i / 8, 0);
+c.stroke();
+}
+}
+else {
+const cg = c.createLinearGradient(0, 0, 0, g.wallTop);
+cg.addColorStop(0, r33Shade(th.ceil, .7));
+cg.addColorStop(1, th.ceil);
+c.fillStyle = cg;
+c.fill();
+c.clip();
+c.strokeStyle = "rgba(255,255,255,.05)";
+c.lineWidth = 1;
+for (let i = 0; i <= 6; i++) {
+const x = bl + (br - bl) * i / 6;
+c.beginPath();
+c.moveTo(x, g.wallTop);
+c.lineTo(W * i / 6, 0);
+c.stroke();
+}
+}
+c.restore();
+c.save();
+c.beginPath();
+c.rect(bl, g.wallTop, g.backW, g.backY - g.wallTop);
+c.clip();
+r33WallFill(c, th, bl, g.wallTop, g.backW, g.backY - g.wallTop, time, false);
+c.restore();
+[-1, 1].forEach(side => {
+const ex = side < 0 ? 0 : W, ix = side < 0 ? bl : br;
+c.save();
+c.beginPath();
+c.moveTo(ex, 0);
+c.lineTo(ix, g.wallTop);
+c.lineTo(ix, g.backY);
+c.lineTo(ex, g.frontY * 1.02);
+c.closePath();
+c.clip();
+r33SideWall(c, th, ex, ix, g, time, side);
+c.restore();
+});
+c.save();
+floorPoly();
+c.clip();
+r33FloorFill(c, th, W, H, g, bl, br, time);
+c.restore();
+c.save();
+c.strokeStyle = th.trim;
+c.lineWidth = 3;
+c.globalAlpha = .85;
+c.beginPath();
+c.moveTo(bl, g.backY);
+c.lineTo(br, g.backY);
+c.moveTo(bl, g.backY);
+c.lineTo(-W * .2, H * 1.05);
+c.moveTo(br, g.backY);
+c.lineTo(W * 1.2, H * 1.05);
+c.stroke();
+c.globalAlpha = .35;
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(bl, g.wallTop);
+c.lineTo(br, g.wallTop);
+c.moveTo(bl, g.wallTop);
+c.lineTo(bl, g.backY);
+c.moveTo(br, g.wallTop);
+c.lineTo(br, g.backY);
+c.stroke();
+c.restore();
+r33Lights(c, th, W, H, g, time);
+r33FrontDoor(c, W, H, st, time, th);
+{
+const name = roomTitle().toUpperCase();
+c.save();
+c.font = "900 13px system-ui,sans-serif";
+const tw = c.measureText(name).width + 26;
+const x = g.cx, y = g.wallTop - 16;
+c.fillStyle = "rgba(8,10,18,.82)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - tw / 2, y - 12, tw, 24, 6);
+else
+c.rect(x - tw / 2, y - 12, tw, 24);
+c.fill();
+c.strokeStyle = th.trim;
+c.lineWidth = 1.5;
+c.stroke();
+c.fillStyle = "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.shadowColor = st.colour;
+c.shadowBlur = 8;
+c.fillText(name, x, y + 1);
+c.restore();
+}
+const vg = c.createRadialGradient(W / 2, H * .5, Math.min(W, H) * .3, W / 2, H * .5, Math.max(W, H) * .75);
+vg.addColorStop(0, "rgba(0,0,0,0)");
+vg.addColorStop(1, "rgba(0,0,0,.45)");
+c.fillStyle = vg;
+c.fillRect(0, 0, W, H);
+}
+function r33WallFill(c, th, x, y, w, h, time, side) {
+const gr = c.createLinearGradient(0, y, 0, y + h);
+gr.addColorStop(0, r33Shade(th.wallA, .8));
+gr.addColorStop(1, th.wallA);
+c.fillStyle = gr;
+c.fillRect(x, y, w, h);
+c.save();
+switch (th.wall) {
+case "wallpaper": {
+for (let i = 0; i < w / 12; i++) {
+if (i % 2)
+continue;
+c.fillStyle = th.stripe;
+c.fillRect(x + i * 12, y, 12, h * .62);
+}
+c.fillStyle = "rgba(255,220,240,.05)";
+for (let i = 0; i < w / 24; i++)
+for (let j = 0; j < h * .62 / 24; j++) {
+c.beginPath();
+c.arc(x + i * 24 + 12, y + j * 24 + 12, 2, 0, Math.PI * 2);
+c.fill();
+}
+c.fillStyle = r33Shade(th.furn[0], .9);
+c.fillRect(x, y + h * .62, w, h * .38);
+c.strokeStyle = "rgba(0,0,0,.35)";
+c.lineWidth = 1.5;
+const n = Math.max(3, Math.round(w / 70));
+for (let i = 0; i < n; i++) {
+const px = x + w * i / n + 6, pw = w / n - 12;
+c.strokeRect(px, y + h * .68, pw, h * .26);
+}
+c.fillStyle = th.trim;
+c.fillRect(x, y + h * .62 - 3, w, 5);
+break;
+}
+case "steel": {
+c.strokeStyle = "rgba(0,0,0,.35)";
+c.lineWidth = 1.5;
+for (let j = 1; j < 4; j++) {
+c.beginPath();
+c.moveTo(x, y + h * j / 4);
+c.lineTo(x + w, y + h * j / 4);
+c.stroke();
+}
+const n = Math.max(3, Math.round(w / 60));
+for (let i = 1; i < n; i++) {
+c.beginPath();
+c.moveTo(x + w * i / n, y);
+c.lineTo(x + w * i / n, y + h);
+c.stroke();
+}
+c.fillStyle = "rgba(255,255,255,.18)";
+for (let i = 0; i <= n; i++)
+for (let j = 0; j <= 4; j++) {
+c.beginPath();
+c.arc(x + w * i / n + (i === 0 ? 5 : i === n ? -5 : 0), y + h * j / 4 + (j === 0 ? 5 : j === 4 ? -5 : 0), 1.6, 0, Math.PI * 2);
+c.fill();
+}
+r33Hazard(c, x, y + h * .86, w, h * .06, .5);
+break;
+}
+case "hangar": {
+c.strokeStyle = "rgba(0,0,0,.28)";
+c.lineWidth = 2;
+for (let i = 0; i < w; i += 7) {
+c.beginPath();
+c.moveTo(x + i, y + h * .18);
+c.lineTo(x + i, y + h);
+c.stroke();
+}
+c.fillStyle = "#2a2f38";
+c.fillRect(x, y, w, h * .16);
+c.strokeStyle = "#5a6270";
+c.lineWidth = 2;
+c.beginPath();
+for (let i = 0; i < w; i += 26) {
+c.moveTo(x + i, y + h * .16);
+c.lineTo(x + i + 13, y + 2);
+c.lineTo(x + i + 26, y + h * .16);
+}
+c.stroke();
+const dw = w * .42, dx = x + w / 2 - dw / 2;
+c.fillStyle = "rgba(20,24,30,.55)";
+c.fillRect(dx, y + h * .26, dw, h * .74);
+c.strokeStyle = "rgba(255,255,255,.08)";
+c.lineWidth = 1;
+for (let j = 0; j < 9; j++) {
+c.beginPath();
+c.moveTo(dx, y + h * .26 + j * h * .74 / 9);
+c.lineTo(dx + dw, y + h * .26 + j * h * .74 / 9);
+c.stroke();
+}
+r33Hazard(c, dx, y + h * .22, dw, h * .04, .8);
+break;
+}
+case "panels": {
+c.strokeStyle = "rgba(255,255,255,.06)";
+c.lineWidth = 1.5;
+const n = Math.max(3, Math.round(w / 64));
+for (let i = 0; i < n; i++)
+for (let j = 0; j < 3; j++) {
+const px = x + w * i / n + 4, py = y + h * j / 3 + 4;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(px, py, w / n - 8, h / 3 - 8, 6);
+else
+c.rect(px, py, w / n - 8, h / 3 - 8);
+c.stroke();
+}
+c.fillStyle = "rgba(185,140,255,.12)";
+c.fillRect(x, y + h * .48, w, 3);
+break;
+}
+case "glass": {
+const sky = c.createLinearGradient(0, y, 0, y + h);
+sky.addColorStop(0, "#6cb8f2");
+sky.addColorStop(1, "#cbeeff");
+c.fillStyle = sky;
+c.fillRect(x, y, w, h);
+c.fillStyle = "rgba(255,255,255,.75)";
+for (let i = 0; i < 4; i++) {
+const cx = x + ((i * 0.29 + time * .004) % 1) * w, cy = y + h * (.15 + .12 * (i % 2));
+c.beginPath();
+c.ellipse(cx, cy, w * .07, h * .035, 0, 0, Math.PI * 2);
+c.ellipse(cx + w * .04, cy - h * .02, w * .05, h * .03, 0, 0, Math.PI * 2);
+c.fill();
+}
+c.fillStyle = "#7fb88a";
+c.beginPath();
+c.moveTo(x, y + h * .78);
+for (let i = 0; i <= 10; i++)
+c.lineTo(x + w * i / 10, y + h * (.7 + .06 * Math.sin(i * 1.7)));
+c.lineTo(x + w, y + h);
+c.lineTo(x, y + h);
+c.closePath();
+c.fill();
+c.strokeStyle = th.trim;
+c.lineWidth = 2.5;
+const n = Math.max(3, Math.round(w / 60));
+for (let i = 0; i <= n; i++) {
+c.beginPath();
+c.moveTo(x + w * i / n, y);
+c.lineTo(x + w * i / n, y + h);
+c.stroke();
+}
+for (let j = 1; j < 3; j++) {
+c.beginPath();
+c.moveTo(x, y + h * j / 3);
+c.lineTo(x + w, y + h * j / 3);
+c.stroke();
+}
+c.fillStyle = "rgba(255,255,255,.12)";
+c.beginPath();
+c.moveTo(x + w * .1, y);
+c.lineTo(x + w * .18, y);
+c.lineTo(x + w * .02, y + h * .6);
+c.lineTo(x, y + h * .6);
+c.closePath();
+c.fill();
+break;
+}
+case "brick": {
+const bh = Math.max(8, h / 14), bw = bh * 2.4;
+for (let j = 0; j * bh < h; j++) {
+for (let i = -1; i * bw < w; i++) {
+const bx = x + i * bw + (j % 2 ? bw / 2 : 0), by = y + j * bh;
+c.fillStyle = r33Shade(th.wallA, .75 + .35 * r33Hash(i * 31 + j * 7));
+c.fillRect(bx + 1, by + 1, bw - 2, bh - 2);
+}
+}
+const glow = c.createLinearGradient(0, y + h, 0, y);
+glow.addColorStop(0, "rgba(255,140,40," + (.25 + .08 * Math.sin(time * 3)) + ")");
+glow.addColorStop(1, "rgba(255,140,40,0)");
+c.fillStyle = glow;
+c.fillRect(x, y, w, h);
+break;
+}
+case "clean": {
+c.strokeStyle = "rgba(255,255,255,.14)";
+c.lineWidth = 1.5;
+const n = Math.max(3, Math.round(w / 80));
+for (let i = 1; i < n; i++) {
+c.beginPath();
+c.moveTo(x + w * i / n, y);
+c.lineTo(x + w * i / n, y + h);
+c.stroke();
+}
+const wx = x + w * .36, ww = w * .28, wy = y + h * .12, wh = h * .42;
+c.fillStyle = "#04060f";
+c.fillRect(wx, wy, ww, wh);
+c.fillStyle = "#fff";
+for (let i = 0; i < 18; i++) {
+c.globalAlpha = .3 + .7 * r33Hash(i);
+c.fillRect(wx + r33Hash(i * 3) * ww, wy + r33Hash(i * 5) * wh, 1.4, 1.4);
+}
+c.globalAlpha = 1;
+c.strokeStyle = "#c9d1dc";
+c.lineWidth = 4;
+c.strokeRect(wx, wy, ww, wh);
+c.fillStyle = "rgba(95,243,255,.25)";
+c.fillRect(x, y + h * .8, w, 3);
+break;
+}
+case "hull": {
+c.strokeStyle = "rgba(0,0,0,.4)";
+c.lineWidth = 4;
+const n = Math.max(4, Math.round(w / 70));
+for (let i = 0; i <= n; i++) {
+c.beginPath();
+c.moveTo(x + w * i / n, y);
+c.quadraticCurveTo(x + w * i / n + (i - n / 2) * 2, y + h / 2, x + w * i / n, y + h);
+c.stroke();
+}
+c.strokeStyle = "rgba(120,160,255,.15)";
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(x, y + h * .75);
+c.lineTo(x + w, y + h * .75);
+c.stroke();
+break;
+}
+}
+c.restore();
+}
+function r33Hazard(c, x, y, w, h, alpha) {
+c.save();
+c.beginPath();
+c.rect(x, y, w, h);
+c.clip();
+c.globalAlpha = alpha;
+c.fillStyle = "#f2c230";
+c.fillRect(x, y, w, h);
+c.fillStyle = "#16181c";
+for (let i = -h; i < w + h; i += h * 2) {
+c.beginPath();
+c.moveTo(x + i, y + h);
+c.lineTo(x + i + h, y);
+c.lineTo(x + i + h * 2, y);
+c.lineTo(x + i + h, y + h);
+c.closePath();
+c.fill();
+}
+c.restore();
+}
+function r33SideWall(c, th, ex, ix, g, time, side) {
+const top = t => ({ x: ex + (ix - ex) * t, y: 0 + (g.wallTop) * t });
+const bot = t => ({ x: ex + (ix - ex) * t, y: g.frontY * 1.02 + (g.backY - g.frontY * 1.02) * t });
+const gr = c.createLinearGradient(ex, 0, ix, 0);
+gr.addColorStop(0, r33Shade(th.wallB, .7));
+gr.addColorStop(1, th.wallB);
+c.fillStyle = gr;
+c.fillRect(Math.min(ex, ix) - 2, 0, Math.abs(ix - ex) + 4, g.frontY * 1.05);
+c.save();
+if (th.wall === "glass") {
+c.fillStyle = "rgba(150,210,255,.35)";
+c.fillRect(Math.min(ex, ix) - 2, 0, Math.abs(ix - ex) + 4, g.frontY * 1.05);
+}
+c.strokeStyle = th.wall === "glass" ? th.trim : "rgba(0,0,0,.3)";
+c.lineWidth = th.wall === "glass" ? 2.5 : 1.5;
+for (let i = 1; i < 6; i++) {
+const t = 1 - Math.pow(1 - i / 6, 1.6);
+const a = top(t), b = bot(t);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+}
+const rails = th.wall === "wallpaper" ? [.62] : th.wall === "steel" || th.wall === "glass" ? [.33, .66] : th.wall === "hull" ? [.75] : [.5];
+rails.forEach(r => {
+c.strokeStyle = th.wall === "wallpaper" ? th.trim : th.wall === "glass" ? th.trim : "rgba(255,255,255,.08)";
+c.lineWidth = th.wall === "wallpaper" ? 3 : 2;
+const a = { x: ex, y: 0 + (g.frontY * 1.02) * r }, b = { x: ix, y: g.wallTop + (g.backY - g.wallTop) * r };
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+});
+if (th.wall === "brick") {
+c.fillStyle = "rgba(255,140,40," + (.12 + .05 * Math.sin(time * 3)) + ")";
+c.fillRect(Math.min(ex, ix) - 2, 0, Math.abs(ix - ex) + 4, g.frontY * 1.05);
+}
+c.restore();
+}
+function r33FloorFill(c, th, W, H, g, bl, br, time) {
+const fg = c.createLinearGradient(0, g.backY, 0, H);
+fg.addColorStop(0, th.floorB);
+fg.addColorStop(1, th.floorA);
+c.fillStyle = fg;
+c.fillRect(-W * .2, g.backY, W * 1.4, H);
+const P = (u, v) => roomFloorPt(u, v);
+c.save();
+switch (th.floor) {
+case "wood": {
+const n = 14;
+for (let i = 0; i <= n; i++) {
+const u = -.2 + 1.4 * i / n;
+const a = P(u, 0), b = P(u, 1.2);
+c.strokeStyle = "rgba(30,14,6,.55)";
+c.lineWidth = 1.4;
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+if (i < n) {
+for (let k = 0; k < 4; k++) {
+const v = ((k + (i % 3) * .33) * .3) % 1.2;
+const p0 = P(u, v), p1 = P(u + 1.4 / n, v);
+c.beginPath();
+c.moveTo(p0.x, p0.y);
+c.lineTo(p1.x, p1.y);
+c.stroke();
+}
+c.fillStyle = "rgba(255,220,170," + (.03 + .05 * r33Hash(i)) + ")";
+const a0 = P(u, 0), a1 = P(u + 1.4 / n, 0), b1 = P(u + 1.4 / n, 1.2), b0 = P(u, 1.2);
+c.beginPath();
+c.moveTo(a0.x, a0.y);
+c.lineTo(a1.x, a1.y);
+c.lineTo(b1.x, b1.y);
+c.lineTo(b0.x, b0.y);
+c.closePath();
+c.fill();
+}
+}
+const r0 = P(.3, .35), r1 = P(.7, .35), r2 = P(.76, .82), r3 = P(.24, .82);
+c.fillStyle = "rgba(120,30,50,.55)";
+c.beginPath();
+c.moveTo(r0.x, r0.y);
+c.lineTo(r1.x, r1.y);
+c.lineTo(r2.x, r2.y);
+c.lineTo(r3.x, r3.y);
+c.closePath();
+c.fill();
+c.strokeStyle = "rgba(240,190,120,.5)";
+c.lineWidth = 2;
+c.stroke();
+break;
+}
+case "tread": {
+for (let j = 0; j < 10; j++)
+for (let i = 0; i < 14; i++) {
+const p = P(-.2 + i * .1 + (j % 2) * .05, j * .12);
+c.fillStyle = "rgba(255,255,255,.07)";
+c.save();
+c.translate(p.x, p.y);
+c.rotate(.6);
+c.fillRect(-4 * p.s, -1 * p.s, 8 * p.s, 2 * p.s);
+c.restore();
+}
+r33FloorGrid(c, P, 5, 4, "rgba(0,0,0,.35)");
+break;
+}
+case "concrete": {
+r33FloorGrid(c, P, 6, 5, "rgba(0,0,0,.22)");
+for (let i = 0; i < 40; i++) {
+const p = P(r33Hash(i * 2), r33Hash(i * 3) * 1.1);
+c.fillStyle = "rgba(0,0,0," + (.05 + .08 * r33Hash(i * 7)) + ")";
+c.beginPath();
+c.ellipse(p.x, p.y, (4 + r33Hash(i) * 14) * p.s, (2 + r33Hash(i * 5) * 5) * p.s, 0, 0, Math.PI * 2);
+c.fill();
+}
+c.strokeStyle = "rgba(242,194,48,.7)";
+c.lineWidth = 3;
+[.16, .84].forEach(u => {
+const a = P(u, 0), b = P(u, 1.1);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+});
+break;
+}
+case "carpet": {
+for (let i = 0; i < 120; i++) {
+const p = P(r33Hash(i) * 1.3 - .15, r33Hash(i * 9) * 1.15);
+c.fillStyle = "rgba(255,255,255," + (.02 + .03 * r33Hash(i * 4)) + ")";
+c.fillRect(p.x, p.y, 2 * p.s, 2 * p.s);
+}
+const r0 = P(.1, .1), r1 = P(.9, .1), r2 = P(.95, .95), r3 = P(.05, .95);
+c.strokeStyle = "rgba(185,140,255,.35)";
+c.lineWidth = 3;
+c.beginPath();
+c.moveTo(r0.x, r0.y);
+c.lineTo(r1.x, r1.y);
+c.lineTo(r2.x, r2.y);
+c.lineTo(r3.x, r3.y);
+c.closePath();
+c.stroke();
+break;
+}
+case "grass": {
+for (let i = 0; i < 9; i++) {
+const v = 1.05 - i * .12;
+const p = P(.5 + Math.sin(i * 1.3) * .04, v);
+c.fillStyle = "#9a9286";
+c.strokeStyle = "#6e675e";
+c.lineWidth = 1;
+c.beginPath();
+c.ellipse(p.x, p.y, 26 * p.s, 9 * p.s, 0, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+}
+for (let i = 0; i < 160; i++) {
+const u = r33Hash(i) * 1.3 - .15, v = r33Hash(i * 3) * 1.15;
+if (Math.abs(u - .5) < .09)
+continue;
+const p = P(u, v);
+c.strokeStyle = i % 3 ? "#5fa84a" : "#3d7a30";
+c.lineWidth = 1.2;
+c.beginPath();
+c.moveTo(p.x, p.y);
+c.lineTo(p.x + (r33Hash(i * 7) - .5) * 4, p.y - 6 * p.s);
+c.stroke();
+}
+break;
+}
+case "stone": {
+for (let j = 0; j < 6; j++) {
+for (let i = 0; i < 7; i++) {
+const u0 = -.2 + i * .2 + (j % 2) * .1, v0 = j * .2;
+const a = P(u0 + .01, v0 + .01), b = P(u0 + .19, v0 + .01), cc = P(u0 + .19, v0 + .19), d = P(u0 + .01, v0 + .19);
+c.fillStyle = r33Shade(th.floorA, .7 + .4 * r33Hash(i * 13 + j));
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.lineTo(cc.x, cc.y);
+c.lineTo(d.x, d.y);
+c.closePath();
+c.fill();
+}
+}
+break;
+}
+case "epoxy": {
+r33FloorGrid(c, P, 8, 6, "rgba(255,255,255,.08)");
+const sh = c.createLinearGradient(0, g.backY, 0, H);
+sh.addColorStop(0, "rgba(255,255,255,.12)");
+sh.addColorStop(.4, "rgba(255,255,255,0)");
+c.fillStyle = sh;
+c.fillRect(0, g.backY, W, H);
+break;
+}
+case "deck": {
+r33FloorGrid(c, P, 6, 6, "rgba(0,0,0,.4)");
+for (let i = 0; i <= 6; i++)
+for (let j = 0; j <= 6; j++) {
+const p = P(-.2 + 1.4 * i / 6, 1.2 * j / 6);
+c.fillStyle = "rgba(255,255,255,.18)";
+c.beginPath();
+c.arc(p.x, p.y, 1.6 * p.s, 0, Math.PI * 2);
+c.fill();
+}
+const a = P(.44, 0), b = P(.56, 0), cc = P(.56, 1.1), d = P(.44, 1.1);
+c.fillStyle = "rgba(79,157,255,.10)";
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.lineTo(cc.x, cc.y);
+c.lineTo(d.x, d.y);
+c.closePath();
+c.fill();
+for (let k = 0; k < 8; k++) {
+const p = P(.44, k * .14), q = P(.56, k * .14);
+c.fillStyle = "rgba(140,200,255," + (.35 + .3 * Math.sin(time * 3 - k)) + ")";
+c.fillRect(p.x - 1, p.y - 1, 3, 3);
+c.fillRect(q.x - 1, q.y - 1, 3, 3);
+}
+break;
+}
+}
+c.restore();
+}
+function r33FloorGrid(c, P, nu, nv, col) {
+c.strokeStyle = col;
+c.lineWidth = 1.2;
+for (let i = 0; i <= nu; i++) {
+const u = -.2 + 1.4 * i / nu;
+const a = P(u, 0), b = P(u, 1.2);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+}
+for (let j = 0; j <= nv; j++) {
+const v = 1.2 * Math.pow(j / nv, 1.1);
+const a = P(-.3, v), b = P(1.3, v);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+}
+}
+function r33Lights(c, th, W, H, g, time) {
+const spots = [.25, .75];
+c.save();
+spots.forEach((u, i) => {
+const fl = roomFloorPt(u, .45);
+const x = fl.x;
+const hy = g.wallTop * .55 + 12;
+if (th.lamp === "pendant") {
+c.strokeStyle = "#20140c";
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(x, 0);
+c.lineTo(x, hy);
+c.stroke();
+c.fillStyle = "#3a2a1a";
+c.beginPath();
+c.moveTo(x - 16, hy + 12);
+c.lineTo(x - 6, hy);
+c.lineTo(x + 6, hy);
+c.lineTo(x + 16, hy + 12);
+c.closePath();
+c.fill();
+c.fillStyle = th.lampCol;
+c.shadowColor = th.lampCol;
+c.shadowBlur = 18;
+c.beginPath();
+c.ellipse(x, hy + 12, 12, 3, 0, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+}
+else if (th.lamp === "flood") {
+c.fillStyle = "#2a3038";
+c.fillRect(x - 14, hy - 6, 28, 12);
+c.fillStyle = th.lampCol;
+c.shadowColor = th.lampCol;
+c.shadowBlur = 20;
+c.fillRect(x - 11, hy + 4, 22, 3);
+c.shadowBlur = 0;
+}
+else if (th.lamp === "embers") {
+c.strokeStyle = "#2a1a12";
+c.lineWidth = 1.5;
+c.beginPath();
+c.moveTo(x, 0);
+c.lineTo(x, hy);
+c.stroke();
+c.fillStyle = "#2a1a12";
+c.beginPath();
+c.moveTo(x - 12, hy);
+c.lineTo(x + 12, hy);
+c.lineTo(x + 7, hy + 10);
+c.lineTo(x - 7, hy + 10);
+c.closePath();
+c.fill();
+c.fillStyle = th.lampCol;
+c.shadowColor = "#ff7a1a";
+c.shadowBlur = 18;
+for (let k = 0; k < 3; k++) {
+c.beginPath();
+c.ellipse(x - 5 + k * 5, hy - 2 - Math.abs(Math.sin(time * 6 + k + i)) * 5, 3, 5, 0, 0, Math.PI * 2);
+c.fill();
+}
+c.shadowBlur = 0;
+}
+else if (th.lamp !== "sun") {
+const lw = th.lamp === "panel" ? 44 : 56;
+c.fillStyle = th.lampCol;
+c.shadowColor = th.lampCol;
+c.shadowBlur = 16;
+c.globalAlpha = .9;
+c.fillRect(x - lw / 2, g.wallTop * .4 + i * 4, lw, th.lamp === "panel" ? 10 : 4);
+c.globalAlpha = 1;
+c.shadowBlur = 0;
+}
+c.save();
+c.globalCompositeOperation = "lighter";
+const r = fl.s * 120;
+const pg = c.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, r);
+pg.addColorStop(0, th.lamp === "sun" ? "rgba(255,246,200,.16)" : "rgba(255,235,200,.12)");
+pg.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = pg;
+c.save();
+c.translate(fl.x, fl.y);
+c.scale(1.6, .55);
+c.translate(-fl.x, -fl.y);
+c.fillRect(fl.x - r, fl.y - r, r * 2, r * 2);
+c.restore();
+c.restore();
+});
+if (th.lamp === "sun") {
+c.save();
+c.globalCompositeOperation = "lighter";
+const sg = c.createLinearGradient(W * .8, 0, W * .2, H);
+sg.addColorStop(0, "rgba(255,246,200,.12)");
+sg.addColorStop(1, "rgba(255,246,200,0)");
+c.fillStyle = sg;
+c.fillRect(0, 0, W, H);
+c.restore();
+}
+c.restore();
+}
+function r33FrontDoor(c, W, H, st, time, th) {
+const d0 = roomFloorPt(.34, 1), d1 = roomFloorPt(.66, 1);
+const pulse = .6 + .4 * Math.sin(time * 3);
+c.save();
+c.globalCompositeOperation = "lighter";
+const dg = c.createLinearGradient(0, d0.y - 50, 0, H);
+dg.addColorStop(0, "rgba(255,250,230,0)");
+dg.addColorStop(1, "rgba(255,250,230,.16)");
+c.fillStyle = dg;
+c.beginPath();
+c.moveTo(d0.x + 10, d0.y - 40);
+c.lineTo(d1.x - 10, d1.y - 40);
+c.lineTo(d1.x + 30, H);
+c.lineTo(d0.x - 30, H);
+c.closePath();
+c.fill();
+c.restore();
+c.save();
+c.fillStyle = "rgba(40,30,22,.85)";
+c.beginPath();
+c.moveTo(d0.x + 14, d0.y - 6);
+c.lineTo(d1.x - 14, d1.y - 6);
+c.lineTo(d1.x - 4, d1.y + 12);
+c.lineTo(d0.x + 4, d0.y + 12);
+c.closePath();
+c.fill();
+c.restore();
+const ex = (d0.x + d1.x) / 2, ey = Math.min(H - 28, d0.y + 16);
+const sw = 110, sh = 30;
+c.save();
+c.fillStyle = "rgba(6,30,20,.95)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(ex - sw / 2, ey, sw, sh, 6);
+else
+c.rect(ex - sw / 2, ey, sw, sh);
+c.fill();
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 2;
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 10;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#bfffd9";
+c.font = "900 14px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.globalAlpha = .75 + .25 * pulse;
+c.fillText("▼ EXIT ▼", ex, ey + sh / 2 + 1);
+c.restore();
+world.hits.push({ x: ex, y: ey + sh / 2, r: Math.max(56, sw * .6), z: 40, onTap: () => leaveRoom() });
+void th;
+void st;
+}
+function roomDrawBox(c, u, v, w, h, colour, label, fill) {
+const th = r33Theme();
+if (!th)
+return roomDrawBox__r33(c, u, v, w, h, colour, label, fill);
+const p = roomFloorPt(u, v);
+const bw = w * p.s, bh = h * p.s;
+const d = Math.min(12 * p.s, bh * .35);
+const x0 = p.x - bw / 2, x1 = p.x + bw / 2, y0 = p.y - bh;
+const side = (u - .5) * 2;
+const sw = Math.abs(side) * d * 1.4;
+c.save();
+c.fillStyle = "rgba(0,0,0,.35)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * p.s, bw * .62, 7 * p.s, 0, 0, Math.PI * 2);
+c.fill();
+if (sw > 1) {
+c.fillStyle = r33Shade(th.furn[1], .85);
+c.beginPath();
+if (side < 0) {
+c.moveTo(x1, y0);
+c.lineTo(x1 + sw, y0 - d);
+c.lineTo(x1 + sw, p.y - d);
+c.lineTo(x1, p.y);
+}
+else {
+c.moveTo(x0, y0);
+c.lineTo(x0 - sw, y0 - d);
+c.lineTo(x0 - sw, p.y - d);
+c.lineTo(x0, p.y);
+}
+c.closePath();
+c.fill();
+}
+const sx = side < 0 ? sw : -sw;
+c.fillStyle = th.furnTop;
+c.beginPath();
+c.moveTo(x0, y0);
+c.lineTo(x0 + d * .6 + (side > 0 ? sx : 0), y0 - d);
+c.lineTo(x1 - d * .6 + (side < 0 ? sx : 0), y0 - d);
+c.lineTo(x1, y0);
+c.closePath();
+c.fill();
+const fg = c.createLinearGradient(0, y0, 0, p.y);
+fg.addColorStop(0, th.furn[0]);
+fg.addColorStop(1, th.furn[1]);
+c.fillStyle = fg;
+c.fillRect(x0, y0, bw, bh);
+c.strokeStyle = "rgba(0,0,0,.35)";
+c.lineWidth = 1;
+c.strokeRect(x0 + .5, y0 + .5, bw - 1, bh - 1);
+c.fillStyle = colour;
+c.shadowColor = colour;
+c.shadowBlur = 8;
+c.globalAlpha = .85;
+c.fillRect(x0 + 3 * p.s, y0 + 2 * p.s, bw - 6 * p.s, 2 * p.s);
+c.restore();
+if (label) {
+c.save();
+const fs = Math.round(9 * p.s + 2);
+c.font = "800 " + fs + "px system-ui,sans-serif";
+const tw = c.measureText(label).width + 10;
+const ly = p.y + 4 * p.s;
+c.fillStyle = "rgba(8,10,18,.8)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(p.x - tw / 2, ly, tw, fs + 6, 4);
+else
+c.rect(p.x - tw / 2, ly, tw, fs + 6);
+c.fill();
+c.fillStyle = "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText(label, p.x, ly + 3);
+c.restore();
+}
+return { x: p.x, y: p.y - bh / 2, top: p.y - bh, w: bw, h: bh, s: p.s, base: p.y };
+}
+function roomTerminal(c, list, wx, label, colour, tab, opts) {
+if (!r33Theme())
+return roomTerminal__r33(c, list, wx, label, colour, tab, opts);
+list.push({ v: -1, draw: () => {
+const p = roomWallPt(wx, .32);
+const w = roomGeo.backW * .2, h = (roomGeo.backY - roomGeo.wallTop) * .36;
+const t = performance.now() / 1000;
+c.save();
+c.fillStyle = "#15181e";
+c.fillRect(p.x - w * .06, p.y + h / 2, w * .12, h * .18);
+c.fillStyle = "#1c2028";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(p.x - w / 2 - 5, p.y - h / 2 - 5, w + 10, h + 10, 5);
+else
+c.rect(p.x - w / 2 - 5, p.y - h / 2 - 5, w + 10, h + 10);
+c.fill();
+c.strokeStyle = "rgba(255,255,255,.15)";
+c.lineWidth = 1;
+c.stroke();
+const sg = c.createLinearGradient(0, p.y - h / 2, 0, p.y + h / 2);
+sg.addColorStop(0, "#0a1830");
+sg.addColorStop(1, "#04080f");
+c.fillStyle = sg;
+c.fillRect(p.x - w / 2, p.y - h / 2, w, h);
+c.fillStyle = colour;
+const lines = terminalLines(tab);
+if (lines) {
+const longest = Math.max(...lines.slice(0, 2).map(ln => ln.length), 1);
+c.font = "800 " + Math.max(7, Math.min(Math.round(h * .16), Math.floor(w * .86 / (longest * .62)))) + "px ui-monospace,Menlo,monospace";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.shadowColor = colour;
+c.shadowBlur = 6;
+lines.slice(0, 2).forEach((ln, i) => c.fillText(ln, p.x, p.y - h * .16 + i * h * .34));
+c.shadowBlur = 0;
+}
+else {
+c.globalAlpha = .6;
+for (let i = 0; i < 4; i++)
+c.fillRect(p.x - w * .36, p.y - h * .3 + i * h * .17, w * (.4 + .3 * ((i * 7) % 3) / 2), 2);
+}
+c.globalAlpha = .18;
+c.fillRect(p.x - w * .45, p.y - h * .4 + ((t * 18) % (h * .8)), w * .9, 1);
+c.globalAlpha = .07;
+c.fillStyle = "#ffffff";
+c.beginPath();
+c.moveTo(p.x - w / 2, p.y - h / 2);
+c.lineTo(p.x - w * .1, p.y - h / 2);
+c.lineTo(p.x - w * .3, p.y + h / 2);
+c.lineTo(p.x - w / 2, p.y + h / 2);
+c.closePath();
+c.fill();
+c.restore();
+c.save();
+c.font = "800 9.5px system-ui,sans-serif";
+const tw = c.measureText(label).width + 12;
+c.fillStyle = "rgba(8,10,18,.82)";
+c.fillRect(p.x - tw / 2, p.y + h / 2 + 9, tw, 15);
+c.fillStyle = "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, p.x, p.y + h / 2 + 17);
+c.restore();
+world.hits.push({ x: p.x, y: p.y, r: Math.max(w, h) * .7, z: 5, onTap: () => worldOpenHolo(tab, Object.assign({ title: label }, opts || {})) });
+} });
+}
+function roomShelfSlots(c, items, src, colour, opts) {
+const th = r33Theme();
+if (!th)
+return roomShelfSlots__r33(c, items, src, colour, opts);
+opts = opts || {};
+const rows = opts.rows || 3;
+const top = opts.top !== undefined ? opts.top : .12;
+const bottom = opts.bottom !== undefined ? opts.bottom : .92;
+const x0 = opts.x0 !== undefined ? opts.x0 : .08, x1 = opts.x1 !== undefined ? opts.x1 : .92;
+const rowH = (bottom - top) / rows;
+c.save();
+const A = roomWallPt(x0 - .01, top - .02), B = roomWallPt(x1 + .01, bottom + .02);
+c.fillStyle = "rgba(0,0,0,.25)";
+c.fillRect(A.x, A.y, B.x - A.x, B.y - A.y);
+for (let r = 0; r < rows; r++) {
+const a = roomWallPt(x0, top + rowH * (r + 1)), b = roomWallPt(x1, top + rowH * (r + 1));
+c.fillStyle = th.furnTop;
+c.fillRect(a.x, a.y - 3, b.x - a.x, 4);
+c.fillStyle = th.furn[1];
+c.fillRect(a.x, a.y + 1, b.x - a.x, 5);
+c.fillStyle = "rgba(0,0,0,.4)";
+[a.x + 6, b.x - 10].forEach(x => c.fillRect(x, a.y + 5, 4, 7));
+}
+c.restore();
+const save = roomNeonPath;
+roomNeonPath = function () { };
+try {
+roomShelfSlots__r33(c, items, src, colour, opts);
+}
+finally {
+roomNeonPath = save;
+}
+}
+function r33Plant(c, u, v, big) {
+const p = roomFloorPt(u, v), s = p.s * (big ? 1.4 : 1);
+c.save();
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, 16 * s, 5 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#8a4a2c";
+c.beginPath();
+c.moveTo(p.x - 13 * s, p.y - 22 * s);
+c.lineTo(p.x + 13 * s, p.y - 22 * s);
+c.lineTo(p.x + 9 * s, p.y);
+c.lineTo(p.x - 9 * s, p.y);
+c.closePath();
+c.fill();
+c.fillStyle = "#a85a34";
+c.fillRect(p.x - 14 * s, p.y - 25 * s, 28 * s, 5 * s);
+const t = performance.now() / 1000;
+for (let i = 0; i < 7; i++) {
+const a = -Math.PI / 2 + (i - 3) * .4 + Math.sin(t * .8 + i) * .04;
+const len = (28 + (i % 3) * 8) * s;
+c.fillStyle = i % 2 ? "#3f8a3a" : "#57a84a";
+c.save();
+c.translate(p.x, p.y - 24 * s);
+c.rotate(a + Math.PI / 2);
+c.beginPath();
+c.ellipse(0, -len / 2, 5 * s, len / 2, 0, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+c.restore();
+}
+function r33Crate(c, u, v, k, col) {
+const p = roomFloorPt(u, v), s = p.s * (k || 1);
+const w = 34 * s, h = 28 * s, d = 8 * s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, w * .6, 5 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = col || "#8a6038";
+c.fillRect(p.x - w / 2, p.y - h, w, h);
+c.fillStyle = r33Shade(col || "#8a6038", 1.25);
+c.beginPath();
+c.moveTo(p.x - w / 2, p.y - h);
+c.lineTo(p.x - w / 2 + d, p.y - h - d);
+c.lineTo(p.x + w / 2 + d * .3, p.y - h - d);
+c.lineTo(p.x + w / 2, p.y - h);
+c.closePath();
+c.fill();
+c.strokeStyle = "rgba(40,20,8,.7)";
+c.lineWidth = 1.5;
+c.strokeRect(p.x - w / 2, p.y - h, w, h);
+c.beginPath();
+c.moveTo(p.x - w / 2, p.y - h);
+c.lineTo(p.x + w / 2, p.y);
+c.moveTo(p.x + w / 2, p.y - h);
+c.lineTo(p.x - w / 2, p.y);
+c.stroke();
+c.restore();
+}
+function r33Barrel(c, u, v, col, glow) {
+const p = roomFloorPt(u, v), s = p.s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, 16 * s, 5 * s, 0, 0, Math.PI * 2);
+c.fill();
+const gr = c.createLinearGradient(p.x - 13 * s, 0, p.x + 13 * s, 0);
+gr.addColorStop(0, r33Shade(col, .6));
+gr.addColorStop(.4, col);
+gr.addColorStop(1, r33Shade(col, .5));
+c.fillStyle = gr;
+c.fillRect(p.x - 13 * s, p.y - 34 * s, 26 * s, 34 * s);
+c.fillStyle = r33Shade(col, 1.2);
+c.beginPath();
+c.ellipse(p.x, p.y - 34 * s, 13 * s, 4 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "rgba(0,0,0,.35)";
+c.lineWidth = 2;
+[-26, -8].forEach(y => {
+c.beginPath();
+c.moveTo(p.x - 13 * s, p.y + y * s);
+c.lineTo(p.x + 13 * s, p.y + y * s);
+c.stroke();
+});
+if (glow) {
+c.fillStyle = glow;
+c.shadowColor = glow;
+c.shadowBlur = 10;
+c.beginPath();
+c.ellipse(p.x, p.y - 34 * s, 9 * s, 2.5 * s, 0, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+}
+function r33Poster(c, wx, wy, w, h, draw) {
+const a = roomWallPt(wx - w / 2, wy - h / 2), b = roomWallPt(wx + w / 2, wy + h / 2);
+c.save();
+c.fillStyle = "#1a1410";
+c.fillRect(a.x - 3, a.y - 3, b.x - a.x + 6, b.y - a.y + 6);
+c.beginPath();
+c.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+c.clip();
+draw(a.x, a.y, b.x - a.x, b.y - a.y);
+c.restore();
+}
+function r33SideDoor(c, list, side, target, label, col) {
+list.push({ v: .36, draw: () => {
+const u = side < 0 ? .012 : .988;
+const fa = roomFloorPt(u, .36), fb = roomFloorPt(u, .64);
+const ha = 118 * fa.s, hb = 118 * fb.s;
+const ta = { x: fa.x, y: fa.y - ha }, tb = { x: fb.x, y: fb.y - hb };
+const ruined = r30Ruined(selectedStartPlanet, target);
+const tm = performance.now() / 1000;
+c.save();
+c.fillStyle = "#120c08";
+c.beginPath();
+c.moveTo(fa.x, fa.y);
+c.lineTo(fb.x, fb.y);
+c.lineTo(tb.x, tb.y);
+c.lineTo(ta.x, ta.y);
+c.closePath();
+c.fill();
+const lg = c.createLinearGradient(fa.x, 0, fb.x, 0);
+lg.addColorStop(0, ruined ? "rgba(70,40,40,.9)" : r33Shade(col, .55));
+lg.addColorStop(1, ruined ? "rgba(30,16,16,.9)" : r33Shade(col, 1));
+c.fillStyle = lg;
+c.globalAlpha = .85;
+const k = .12;
+c.beginPath();
+c.moveTo(fa.x + (fb.x - fa.x) * k, fa.y + (fb.y - fa.y) * k);
+c.lineTo(fb.x - (fb.x - fa.x) * k, fb.y - (fb.y - fa.y) * k);
+c.lineTo(tb.x - (tb.x - ta.x) * k, tb.y - (tb.y - ta.y) * k + 6);
+c.lineTo(ta.x + (tb.x - ta.x) * k, ta.y + (tb.y - ta.y) * k + 6);
+c.closePath();
+c.fill();
+c.globalAlpha = 1;
+c.strokeStyle = ruined ? "#7a4a4a" : "#d9a066";
+c.lineWidth = 4;
+c.beginPath();
+c.moveTo(fa.x, fa.y);
+c.lineTo(ta.x, ta.y);
+c.lineTo(tb.x, tb.y);
+c.lineTo(fb.x, fb.y);
+c.stroke();
+if (!ruined) {
+c.globalCompositeOperation = "lighter";
+const fp = roomFloorPt(side < 0 ? .12 : .88, .5);
+const pg = c.createRadialGradient(fp.x, fp.y, 0, fp.x, fp.y, 90 * fp.s);
+pg.addColorStop(0, roomTint(col, .18 + .05 * Math.sin(tm * 2)));
+pg.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = pg;
+c.fillRect(fp.x - 90 * fp.s, fp.y - 90 * fp.s, 180 * fp.s, 180 * fp.s);
+c.globalCompositeOperation = "source-over";
+}
+const mx = (ta.x + tb.x) / 2 + (side < 0 ? 26 : -26), my = Math.min(ta.y, tb.y) - 12;
+c.font = "800 11px system-ui,sans-serif";
+const tw = c.measureText(label).width + 14;
+c.fillStyle = "rgba(8,10,18,.9)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(mx - tw / 2, my - 10, tw, 20, 5);
+else
+c.rect(mx - tw / 2, my - 10, tw, 20);
+c.fill();
+c.strokeStyle = ruined ? "#7a4a4a" : col;
+c.lineWidth = 1.5;
+c.stroke();
+c.fillStyle = ruined ? "#ff9a9a" : "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(ruined ? "✖ " + label : label, mx, my + 1);
+c.restore();
+const hx = (fa.x + fb.x + ta.x + tb.x) / 4, hy = (fa.y + fb.y + ta.y + tb.y) / 4;
+world.hits.push({ x: hx, y: hy, r: Math.max(40, (fb.y - ta.y) * .5), z: 9, onTap: () => r33GoThrough(target) });
+world.hits.push({ x: mx, y: my, r: 24, z: 9, onTap: () => r33GoThrough(target) });
+} });
+}
+function r33GoThrough(target) {
+if (!roomState)
+return;
+if (r30Ruined(selectedStartPlanet, target)) {
+r30RuinedNotice(selectedStartPlanet, target);
+return;
+}
+const from = roomState.id;
+roomState.id = target;
+roomState.key = "s:" + target;
+roomState.inside = {};
+roomState.u = from === "shop" ? .9 : .1;
+roomState.v = .55;
+worldHideBubble();
+worldCloseHolo();
+sound("click");
+toggleRoamingUI(true);
+}
+function roomMove(dirX, dirY, speed, dt) {
+roomMove__r33(dirX, dirY, speed, dt);
+if (!roomState || roomState.kind !== "structure")
+return;
+const door = roomState.id === "shop" ? { side: -1, to: "stock" } : roomState.id === "stock" ? { side: 1, to: "shop" } : null;
+if (!door)
+return;
+const atWall = door.side < 0 ? roomState.u <= .065 : roomState.u >= .935;
+if (atWall && roomState.v > .42 && roomState.v < .7 && dirX * door.side > .4) {
+if (!roomState._doorAt || performance.now() - roomState._doorAt > 900) {
+roomState._doorAt = performance.now();
+r33GoThrough(door.to);
+}
+}
+}
+function roomShopFixtures(c, list, planetId, st, time) {
+const savePen = roomPetPenFixture;
+roomPetPenFixture = function () { };
+try {
+roomShopFixtures__r33(c, list, planetId, st, time);
+}
+finally {
+roomPetPenFixture = savePen;
+}
+if (!r33Theme())
+return;
+list.push({ v: -2.5, draw: () => {
+const a = roomWallPt(.03, .8), b = roomWallPt(.79, .8);
+c.save();
+c.fillStyle = "#a8743e";
+c.fillRect(a.x, a.y - 4, b.x - a.x, 6);
+c.fillStyle = "#5e3a20";
+c.fillRect(a.x, a.y + 2, b.x - a.x, 10);
+c.restore();
+r33Poster(c, .42, .14, .3, .13, (x, y, w, h) => {
+c.fillStyle = "#2a0f1e";
+c.fillRect(x, y, w, h);
+c.fillStyle = "#ff9ad8";
+c.shadowColor = "#ff5ec4";
+c.shadowBlur = 10;
+c.font = "900 " + Math.round(h * .55) + "px Georgia,serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("OPEN", x + w / 2, y + h / 2 + 1);
+});
+} });
+r33SideDoor(c, list, -1, "stock", "VAULT ▸", "#ffd76b");
+list.push({ v: .9, draw: () => r33Plant(c, .9, .9, true) });
+list.push({ v: .12, draw: () => r33Plant(c, .08, .15) });
+}
+function roomVaultFixtures(c, list, planetId, st, time) {
+roomVaultFixtures__r33(c, list, planetId, st, time);
+if (!r33Theme())
+return;
+r33SideDoor(c, list, 1, "shop", "◂ SHOP", "#ff5ec4");
+list.push({ v: -1.8, draw: () => {
+const p = roomWallPt(.86, .78);
+const r = (roomGeo.backY - roomGeo.wallTop) * .2;
+c.save();
+c.fillStyle = "#1a1c20";
+c.beginPath();
+c.arc(p.x, p.y, r * 1.05, 0, Math.PI * 2);
+c.fill();
+const gr = c.createRadialGradient(p.x - r * .3, p.y - r * .3, 2, p.x, p.y, r);
+gr.addColorStop(0, "#c9cdd4");
+gr.addColorStop(1, "#5c626c");
+c.fillStyle = gr;
+c.beginPath();
+c.ellipse(p.x + r * .25, p.y, r * .55, r, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#c9a24a";
+c.lineWidth = 2;
+c.stroke();
+c.strokeStyle = "#2a2d33";
+c.lineWidth = 3;
+for (let i = 0; i < 3; i++) {
+const a = i * Math.PI * 2 / 3 + performance.now() / 4000;
+c.beginPath();
+c.moveTo(p.x + r * .25, p.y);
+c.lineTo(p.x + r * .25 + Math.cos(a) * r * .4, p.y + Math.sin(a) * r * .7);
+c.stroke();
+}
+c.restore();
+} });
+list.push({ v: .66, draw: () => {
+const p = roomFloorPt(.9, .66), s = p.s;
+c.save();
+for (let row = 0; row < 3; row++)
+for (let i = 0; i < 3 - row; i++) {
+const x = p.x - 22 * s + i * 16 * s + row * 8 * s, y = p.y - row * 8 * s;
+c.fillStyle = "#e8b830";
+c.beginPath();
+c.moveTo(x, y);
+c.lineTo(x + 14 * s, y);
+c.lineTo(x + 11 * s, y - 8 * s);
+c.lineTo(x + 3 * s, y - 8 * s);
+c.closePath();
+c.fill();
+c.fillStyle = "#fff1a8";
+c.fillRect(x + 4 * s, y - 7 * s, 6 * s, 1.5 * s);
+}
+c.restore();
+} });
+}
+function roomShipFixtures(c, list, planetId, st, time) {
+if (!r33Theme())
+return roomShipFixtures__r33(c, list, planetId, st, time);
+const ship = worldShip(planetId, roomState.id);
+if (!ship) {
+leaveRoom();
+return;
+}
+list.push({ v: -3, draw: () => {
+const a = roomWallPt(.24, .04), b = roomWallPt(.76, .7);
+const w = b.x - a.x, h = b.y - a.y;
+c.save();
+c.beginPath();
+c.moveTo(a.x + w * .12, a.y);
+c.lineTo(a.x + w * .88, a.y);
+c.lineTo(b.x, b.y);
+c.lineTo(a.x, b.y);
+c.closePath();
+c.fillStyle = "#02030c";
+c.fill();
+c.save();
+c.clip();
+const t = performance.now() / 1000;
+for (let i = 0; i < 40; i++) {
+const sx = a.x + ((r33Hash(i) * w + t * (4 + r33Hash(i * 3) * 10)) % w);
+const sy = a.y + r33Hash(i * 7) * h;
+c.globalAlpha = .3 + .7 * r33Hash(i * 11);
+c.fillStyle = "#fff";
+c.fillRect(sx, sy, 1.5, 1.5);
+}
+c.globalAlpha = .8;
+const pg = c.createRadialGradient(a.x + w * .75, a.y + h * .85, 2, a.x + w * .75, a.y + h * .85, h * .6);
+pg.addColorStop(0, "#ffb07a");
+pg.addColorStop(1, "rgba(255,120,60,0)");
+c.fillStyle = pg;
+c.fillRect(a.x, a.y, w, h);
+c.restore();
+c.strokeStyle = "#56627c";
+c.lineWidth = 6;
+c.stroke();
+c.lineWidth = 3;
+c.beginPath();
+c.moveTo(a.x + w * .5, a.y);
+c.lineTo(a.x + w * .5, b.y);
+c.stroke();
+c.restore();
+} });
+roomTerminal(c, list, .1, "SHIP COMPUTER", st.colour, "ships", { shipId: ship.id });
+list.push({ v: .08, draw: () => {
+const a = roomFloorPt(.3, .08), b = roomFloorPt(.7, .08);
+const s = a.s, h = 26 * s;
+const t = performance.now() / 1000;
+c.save();
+c.fillStyle = "#1e2434";
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.lineTo(b.x - 6 * s, b.y - h);
+c.lineTo(a.x + 6 * s, a.y - h);
+c.closePath();
+c.fill();
+c.fillStyle = "#2c3448";
+c.beginPath();
+c.moveTo(a.x + 6 * s, a.y - h);
+c.lineTo(b.x - 6 * s, b.y - h);
+c.lineTo(b.x - 14 * s, b.y - h - 8 * s);
+c.lineTo(a.x + 14 * s, a.y - h - 8 * s);
+c.closePath();
+c.fill();
+for (let i = 0; i < 14; i++) {
+const x = a.x + 16 * s + (b.x - a.x - 32 * s) * i / 13, y = a.y - h - 4 * s;
+c.fillStyle = ["#ff5c5c", "#7dffb0", "#ffd76b", "#5ff3ff"][i % 4];
+c.globalAlpha = Math.sin(t * 2 + i * 1.7) > 0 ? 1 : .3;
+c.fillRect(x - 1.5 * s, y - 1.5 * s, 3 * s, 3 * s);
+}
+c.globalAlpha = 1;
+[[.36, "#7dffb0"], [.64, "#5ff3ff"]].forEach(([u, col]) => {
+const q = roomFloorPt(u, .08);
+c.fillStyle = "#04080f";
+c.fillRect(q.x - 14 * s, q.y - h * .85, 28 * s, h * .55);
+c.strokeStyle = col;
+c.globalAlpha = .8;
+c.lineWidth = 1;
+c.beginPath();
+for (let k = 0; k < 12; k++) {
+const x = q.x - 12 * s + k * 2 * s, y = q.y - h * .58 + Math.sin(t * 3 + k * .8 + u * 9) * h * .12;
+k ? c.lineTo(x, y) : c.moveTo(x, y);
+}
+c.stroke();
+c.globalAlpha = 1;
+});
+const L = roomFloorPt(.5, .08);
+const selected = world.shownShipId === ship.id;
+c.fillStyle = selected ? "#7dffb0" : "#4a5a70";
+c.shadowColor = "#7dffb0";
+c.shadowBlur = selected ? 12 : 0;
+c.beginPath();
+c.arc(L.x, L.y - h - 12 * s, 5 * s, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+c.strokeStyle = "#8a94a8";
+c.lineWidth = 2.5 * s;
+c.beginPath();
+c.moveTo(L.x, L.y - h - 2 * s);
+c.lineTo(L.x, L.y - h - 12 * s);
+c.stroke();
+c.restore();
+world.hits.push({ x: (a.x + b.x) / 2, y: a.y - h, r: (b.x - a.x) * .45, z: 6, onTap: () => worldShowBubble({
+x: (a.x + b.x) / 2, y: a.y - h - 14,
+iconHtml: ROCKET_ICON_HTML,
+title: "Flight deck",
+text: selected ? "This is the ship you'll fly. Pull the lever to head back outside and off into orbit." : "Pick this ship as the one you'll fly.",
+buttons: [
+selected
+? { label: "🚀 Launch", primary: true, action: () => roomLaunchShip(ship) }
+: { label: "Select this ship", primary: true, action: () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id }) }
+]
+}) });
+} });
+list.push({
+v: .26,
+walk: { u: .5, v: .26, r: .08, id: "seat", onWalk: () => roomSitInSeat(ship) },
+draw: () => {
+const p = roomFloorPt(.5, .26), s = p.s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.35)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, 30 * s, 8 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#3a4458";
+c.fillRect(p.x - 3 * s, p.y - 16 * s, 6 * s, 16 * s);
+c.beginPath();
+c.ellipse(p.x, p.y, 18 * s, 5 * s, 0, 0, Math.PI * 2);
+c.fill();
+if (ship.pendingPilot && roamingShipId !== ship.id) {
+try {
+withPetBack(true, () => drawSpacePet(c, planetId, p.x, p.y - 52 * s, 30 * s, ship.pendingPilot.energy, performance.now() / 900, ship.pendingPilot.species, false, "builder", 1));
+}
+catch (error) { }
+}
+const bg = c.createLinearGradient(p.x - 24 * s, 0, p.x + 24 * s, 0);
+bg.addColorStop(0, "#2a3a66");
+bg.addColorStop(.5, "#3f5590");
+bg.addColorStop(1, "#22305a");
+c.fillStyle = bg;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(p.x - 22 * s, p.y - 52 * s, 44 * s, 38 * s, 8 * s);
+else
+c.rect(p.x - 22 * s, p.y - 52 * s, 44 * s, 38 * s);
+c.fill();
+c.strokeStyle = "#4f9dff";
+c.lineWidth = 1.5;
+c.stroke();
+c.strokeStyle = "rgba(0,0,0,.3)";
+c.lineWidth = 1;
+for (let k = 1; k < 4; k++) {
+c.beginPath();
+c.moveTo(p.x - 22 * s + k * 11 * s, p.y - 50 * s);
+c.lineTo(p.x - 22 * s + k * 11 * s, p.y - 16 * s);
+c.stroke();
+}
+c.fillStyle = "#22305a";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(p.x - 12 * s, p.y - 64 * s, 24 * s, 13 * s, 5 * s);
+else
+c.rect(p.x - 12 * s, p.y - 64 * s, 24 * s, 13 * s);
+c.fill();
+c.fillStyle = "#1c2436";
+c.fillRect(p.x - 30 * s, p.y - 26 * s, 9 * s, 5 * s);
+c.fillRect(p.x + 21 * s, p.y - 26 * s, 9 * s, 5 * s);
+c.fillStyle = "#ffd76b";
+c.fillRect(p.x + 23 * s, p.y - 28 * s, 4 * s, 2 * s);
+c.restore();
+c.save();
+const label = ship.pendingPilot ? "PILOT" : "PILOT SEAT";
+c.font = "800 " + Math.round(9 * s + 2) + "px system-ui,sans-serif";
+const tw = c.measureText(label).width + 10;
+c.fillStyle = "rgba(8,10,18,.8)";
+c.fillRect(p.x - tw / 2, p.y + 6 * s, tw, 13 * s);
+c.fillStyle = "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, p.x, p.y + 12.5 * s);
+c.restore();
+world.hits.push({ x: p.x, y: p.y - 34 * s, r: 36 * s, z: 6, onTap: () => roomSeatBubble(ship, p) });
+}
+});
+list.push({ v: .52, draw: () => {
+const p = roomFloorPt(.18, .52), s = p.s;
+const t = performance.now() / 1000;
+const d = { k: "item", r: ship.equipment || "emp", n: 1 };
+const info = worldItemInfo(d);
+const col = (info && info.colour) || "#ffe45c";
+const r = 26 * s, h = 88 * s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.35)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, r * 1.5, 8 * s, 0, 0, Math.PI * 2);
+c.fill();
+const cap = (y, hh) => {
+const g = c.createLinearGradient(p.x - r * 1.3, 0, p.x + r * 1.3, 0);
+g.addColorStop(0, "#2a3040");
+g.addColorStop(.45, "#6f7a92");
+g.addColorStop(1, "#20263a");
+c.fillStyle = g;
+c.fillRect(p.x - r * 1.25, y - hh, r * 2.5, hh);
+c.fillStyle = "#8a94aa";
+c.beginPath();
+c.ellipse(p.x, y - hh, r * 1.25, r * .35, 0, 0, Math.PI * 2);
+c.fill();
+};
+cap(p.y, 14 * s);
+const top = p.y - 14 * s - h;
+const eg = c.createLinearGradient(0, top, 0, p.y - 14 * s);
+eg.addColorStop(0, roomTint(col, .25));
+eg.addColorStop(.5, roomTint(col, .55));
+eg.addColorStop(1, roomTint(col, .25));
+c.fillStyle = eg;
+c.fillRect(p.x - r, top, r * 2, h);
+c.strokeStyle = roomTint(col, .9);
+c.lineWidth = 1.5;
+for (let k = 0; k < 3; k++) {
+c.beginPath();
+for (let i = 0; i <= 20; i++) {
+const y = top + h * i / 20;
+const x = p.x + Math.sin(t * 3 + i * .6 + k * 2.1) * r * .7;
+i ? c.lineTo(x, y) : c.moveTo(x, y);
+}
+c.stroke();
+}
+c.fillStyle = "rgba(255,255,255,.18)";
+c.fillRect(p.x - r * .75, top + 4 * s, r * .22, h - 8 * s);
+cap(top + 2 * s, 12 * s);
+c.strokeStyle = "#3a4458";
+c.lineWidth = 6 * s;
+c.beginPath();
+c.moveTo(p.x - r * 1.2, p.y - 30 * s);
+c.lineTo(p.x - r * 2.4, p.y - 36 * s);
+c.stroke();
+c.restore();
+const size = 34 * s;
+const iy = top + h * .5 + Math.sin(t * 2) * 6 * s;
+c.save();
+c.shadowColor = col;
+c.shadowBlur = 20;
+drawWorldItem(c, d, p.x, iy, size, {});
+c.restore();
+c.save();
+const label = "REACTOR CORE";
+c.font = "800 " + Math.round(9 * s + 2) + "px system-ui,sans-serif";
+const tw = c.measureText(label).width + 10;
+c.fillStyle = "rgba(8,10,18,.8)";
+c.fillRect(p.x - tw / 2, p.y + 6 * s, tw, 13 * s);
+c.fillStyle = "#f6f2ea";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, p.x, p.y + 12.5 * s);
+c.restore();
+world.drops.push({
+x: p.x, y: iy, r: size * 1.6,
+kind: "bay",
+accept: (dd, src) => dd.k === "item" && src && (src.t === "pet" || src.t === "vault"),
+drop: (dd, src) => {
+if (src.t === "vault")
+worldRunAction({ "data-action": "equip-item", "data-ship": ship.id, "data-item": dd.r });
+else
+worldMove(src, { t: "bay", s: ship.id }, dd);
+}
+});
+world.hits.push({ x: p.x, y: iy, r: size * .9, z: 7, onTap: () => worldShowBubble({
+x: p.x, y: top,
+iconHtml: info.iconHtml,
+title: "Reactor core: " + info.name,
+text: info.text.replace(" Tap the pet carrying it to use it.", "") + " To swap it, bring another powerup on your pet's head and drop it into the core — this one pops out onto your pet.",
+buttons: []
+}) });
+} });
+list.push({ v: .4, draw: () => {
+const a = roomFloorPt(.66, .4), b = roomFloorPt(.97, .4);
+const s = a.s;
+const h = 110 * s;
+c.save();
+c.fillStyle = "#1a2030";
+c.fillRect(a.x, a.y - h, b.x - a.x, h);
+c.strokeStyle = "#56627c";
+c.lineWidth = 3 * s;
+c.strokeRect(a.x, a.y - h, b.x - a.x, h);
+[1, 2].forEach(k => {
+c.fillStyle = "#3a4458";
+c.fillRect(a.x, a.y - h * k / 3 - 3 * s, b.x - a.x, 5 * s);
+});
+c.strokeStyle = "rgba(140,170,220,.18)";
+c.lineWidth = 1;
+for (let x = a.x; x < b.x; x += 8 * s) {
+c.beginPath();
+c.moveTo(x, a.y - h);
+c.lineTo(x + h * .25, a.y);
+c.stroke();
+}
+c.restore();
+c.save();
+const label = "CARGO " + getShipCargoUsed(ship) + "/" + getShipCargoCapacity(ship.materialCapBonus);
+c.font = "800 " + Math.round(9 * s + 2) + "px system-ui,sans-serif";
+const tw = c.measureText(label).width + 10;
+c.fillStyle = "rgba(8,10,18,.85)";
+c.fillRect((a.x + b.x) / 2 - tw / 2, a.y + 5 * s, tw, 13 * s);
+c.fillStyle = "#ffd7a0";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, (a.x + b.x) / 2, a.y + 11.5 * s);
+c.restore();
+const cargo = worldShipCargo(ship);
+const cols = 3;
+const cw = (b.x - a.x) / cols;
+const size = Math.min(28 * s, cw * .78);
+const slotXY = i => {
+const row = Math.floor(i / cols) % 3, col = i % cols;
+return { x: a.x + cw * (col + .5), y: a.y - h * row / 3 - size * .6 - 4 * s };
+};
+cargo.forEach((d, i) => {
+const q = slotXY(i);
+drawWorldItem(c, d, q.x, q.y, size, { count: d.n });
+world.hits.push({
+x: q.x, y: q.y, r: size * .62, z: 8,
+desc: d.k === "coin" ? { k: "coin", r: "coin", n: Math.min(COIN_BAG, d.n) } : { k: d.k, r: d.r, n: 1 },
+src: { t: "ship", s: ship.id },
+draggable: true,
+onTap: () => worldStockBubble(d, { t: "ship", s: ship.id }, q)
+});
+});
+let slot = cargo.length;
+(ship.cargoPets || []).forEach(cp => {
+const q = slotXY(slot++);
+try {
+drawSpacePet(c, planetId, q.x, q.y, size * .95, cp.energy, performance.now() / 800 + slot, cp.species, false, "builder", -1);
+}
+catch (error) { }
+world.hits.push({ x: q.x, y: q.y, r: size * .6, z: 8, onTap: () => worldShowBubble({
+x: q.x, y: q.y - size,
+iconHtml: "🐾",
+title: (SPECIES_DISPLAY_NAMES[cp.species] || "Pet") + " in cargo",
+meta: "Energy " + Math.round(cp.energy) + "% · " + PET_CARGO_SLOTS + " slots",
+text: "Riding in the hold — its perk works on every flight, and it earns pilot points as the ship scores.",
+buttons: [
+{ label: "Feed " + SNACK_ICON, disabled: cp.energy >= 100 || getSnackStock(planetId) < 1, keepOpen: true, action: () => worldRunAction({ "data-action": "feed-pet", "data-pet": cp.id }) },
+{ label: "Let it out here", primary: true, action: () => worldRunAction({ "data-action": "unload-pet", "data-ship": ship.id, "data-pet": cp.id }) }
+]
+}) });
+});
+(ship.satCargo || []).forEach(sat => {
+const q = slotXY(slot++);
+c.save();
+c.translate(q.x, q.y);
+c.scale(.5 * s, .5 * s);
+c.translate(-W / 2, -H / 2);
+try {
+satDrawOne(c, Object.assign({ space: "field", ox: 0, oy: 0, hp: SAT_HP, cd: 0 }, sat));
+}
+catch (error) { }
+c.restore();
+world.hits.push({ x: q.x, y: q.y, r: size * .6, z: 8, onTap: () => worldShowBubble({
+x: q.x, y: q.y - size,
+iconHtml: "🛰",
+title: satTypeName(sat.type) + " satellite",
+meta: satModeLabel(sat.mode) + " · " + SAT_CARGO_SLOTS + " slots",
+text: "In flight, swipe up from the ship to throw it out. Power: " + satPowerText(sat.type) + ".",
+buttons: hasStructure(planetId, "satellite-factory")
+? [{ label: "Unload to the hangar", action: () => worldRunAction({ "data-action": "sat-unload", "data-item": sat.id, "data-ship": ship.id }) }]
+: []
+}) });
+});
+world.drops.push({
+x: (a.x + b.x) / 2, y: a.y - h / 2, r: Math.max(b.x - a.x, h) * .7,
+kind: "cargo",
+accept: (d, src) => d.k !== "item" && d.k !== "snack" && d.k !== "extra" && !(src && src.t === "ship" && src.s === ship.id),
+drop: (d, src) => worldMove(src, { t: "ship", s: ship.id }, d)
+});
+} });
+list.push({ v: .62, draw: () => r33Crate(c, .72, .62, 1.1, "#6b5a3a") });
+list.push({ v: .66, draw: () => r33Crate(c, .62, .68, .9, "#7a6a48") });
+list.push({
+v: .82,
+walk: { u: .82, v: .82, r: .09, id: "petbay", onWalk: () => roomBoardPetBay(ship) },
+draw: () => {
+const p = roomFloorPt(.82, .82), s = p.s;
+const room = shipCargoRoom(ship);
+const ok = room >= PET_CARGO_SLOTS;
+c.save();
+c.fillStyle = "#141a26";
+c.beginPath();
+c.ellipse(p.x, p.y, 34 * s, 10 * s, 0, 0, Math.PI * 2);
+c.fill();
+r33Hazard(c, p.x - 34 * s, p.y + 8 * s, 68 * s, 4 * s, .8);
+c.strokeStyle = ok ? "#ff9f3a" : "#5c7ba0";
+c.lineWidth = 2;
+c.beginPath();
+c.ellipse(p.x, p.y, 34 * s, 10 * s, 0, 0, Math.PI * 2);
+c.stroke();
+c.fillStyle = "#f6f2ea";
+c.font = "800 " + Math.round(8 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(ok ? "CARGO HATCH" : "HOLD FULL", p.x, p.y + 24 * s);
+c.restore();
+world.hits.push({ x: p.x, y: p.y, r: 36 * s, z: 5, onTap: () => worldShowBubble({
+x: p.x, y: p.y - 20 * s,
+iconHtml: "🐾",
+title: "Cargo hatch",
+meta: room + " slots free · a pet takes " + PET_CARGO_SLOTS,
+text: getPets(planetId).length ? "Pick a pet to bring aboard (or walk one onto the hatch)." : "No pets on this planet to bring aboard.",
+buttons: petChoiceButtons(planetId, () => ok, pp => "Load " + petShortName(planetId, pp), pp => worldRunAction({ "data-action": "load-pet", "data-ship": ship.id, "data-pet": pp.id }))
+}) });
+}
+});
+}
+const R33_TOGGLES = [
+{ key: "cargoHold", toggle: "cargo-hold", service: "cargo-hold", name: "Hold I", cost: 3, tier: "cargoHold" },
+{ key: "petBay", toggle: "pet-bay", service: "pet-bay", name: "Hold II", cost: 4, tier: "petBay" },
+{ key: "dualPerk", toggle: "pet-bay-2", service: "pet-bay-2", name: "Hold III", cost: 5, tier: "dualPerk" }
+];
+let r33FactoryPick = {};
+function r33Fav(planetId) {
+return withMySave(() => ((planetSave.shipFav || {})[planetId]) || null);
+}
+function r33SaveFav(planetId) {
+withMySave(() => {
+if (!planetSave.shipFav)
+planetSave.shipFav = {};
+planetSave.shipFav[planetId] = {
+cargoHold: !!shipBuildToggles.cargoHold,
+petBay: !!shipBuildToggles.petBay,
+dualPerk: !!shipBuildToggles.dualPerk,
+shield: shipBuildToggles.shield || 0
+};
+savePlanetProgress();
+});
+}
+function r33ApplyFav(planetId) {
+const f = r33Fav(planetId);
+if (!f)
+return;
+["cargoHold", "petBay", "dualPerk", "shield"].forEach(k => {
+if ((shipBuildToggles[k] || 0) !== (f[k] || 0))
+shipBuildToggles[k] = f[k];
+});
+}
+function r33After(target) {
+try {
+const a = target.getAttribute("data-action");
+if (a === "toggle-ship-build-option")
+r33SaveFav(planetDetailId || selectedStartPlanet);
+}
+catch (error) { }
+}
+setInterval(() => {
+try {
+if (typeof planetSave !== "undefined" && planetSave && selectedStartPlanet)
+r33ApplyFav(selectedStartPlanet);
+}
+catch (error) { }
+}, 700);
+function r33NewCost(planetId) {
+let cost = computeShipBuildCost(planetId);
+R33_TOGGLES.forEach(t => {
+if (shipBuildToggles[t.key] && hasPurchasedToggleUpgrade(planetId, "ship-factory", t.toggle))
+cost += t.cost;
+});
+cost += Math.min(shieldUnlocked(planetId), shipBuildToggles.shield || 0) * SHIELD_BUILD_COST;
+return cost;
+}
+function roomFactoryFixtures(c, list, planetId, st, time) {
+if (!r33Theme())
+return roomFactoryFixtures__r33(c, list, planetId, st, time);
+r33ApplyFav(planetId);
+const ships = (getShips(planetId) || []).filter(s => !s.enemy);
+let pick = r33FactoryPick[planetId] || 0;
+if (pick > ships.length)
+pick = 0;
+r33FactoryPick[planetId] = pick;
+const ship = pick > 0 ? ships[pick - 1] : null;
+const jobs = getBuildQueue(planetId).filter(b => b.type === "ship" || b.type === "ship-service");
+const newJob = getBuildQueue(planetId).find(b => b.type === "ship");
+const svcJob = ship && getBuildQueue(planetId).find(b => b.type === "ship-service" && b.shipId === ship.id);
+const job = ship ? svcJob : newJob;
+roomTerminal(c, list, .5, "BUILD CONSOLE", st.colour, "structure-ship-factory");
+list.push({ v: -1.2, draw: () => {
+r33Poster(c, .14, .42, .18, .5, (x, y, w, h) => {
+c.fillStyle = "#2a2f38";
+c.fillRect(x, y, w, h);
+c.strokeStyle = "#8a94a8";
+c.lineWidth = 2;
+for (let i = 0; i < 3; i++)
+for (let j = 0; j < 4; j++) {
+const tx = x + w * (i + .5) / 3, ty = y + h * (j + .5) / 4;
+c.beginPath();
+if ((i + j) % 2) {
+c.moveTo(tx, ty - h * .08);
+c.lineTo(tx, ty + h * .08);
+c.moveTo(tx - w * .06, ty - h * .06);
+c.lineTo(tx + w * .06, ty - h * .06);
+}
+else {
+c.arc(tx, ty, w * .06, 0, Math.PI * 2);
+}
+c.stroke();
+}
+});
+r33Poster(c, .86, .42, .18, .5, (x, y, w, h) => {
+c.fillStyle = "#0e2236";
+c.fillRect(x, y, w, h);
+c.strokeStyle = "rgba(140,200,255,.6)";
+c.lineWidth = 1;
+c.beginPath();
+c.moveTo(x + w * .5, y + h * .1);
+c.lineTo(x + w * .75, y + h * .8);
+c.lineTo(x + w * .25, y + h * .8);
+c.closePath();
+c.stroke();
+c.fillStyle = "rgba(140,200,255,.8)";
+c.font = "700 " + Math.round(h * .08) + "px ui-monospace,monospace";
+c.textAlign = "center";
+c.fillText("BLUEPRINT", x + w / 2, y + h * .95);
+});
+} });
+list.push({ v: .2, draw: () => r33Barrel(c, .08, .24, "#3a6aa8") });
+list.push({ v: .3, draw: () => r33Crate(c, .94, .3, .9, "#6b5a3a") });
+list.push({ v: .45, draw: () => {
+const p = roomFloorPt(.5, .45), s = p.s;
+const t = performance.now() / 1000;
+c.save();
+c.fillStyle = "#1c2028";
+c.beginPath();
+c.ellipse(p.x, p.y + 6 * s, 118 * s, 32 * s, 0, 0, Math.PI * 2);
+c.fill();
+const dg = c.createRadialGradient(p.x - 30 * s, p.y - 8 * s, 4, p.x, p.y, 118 * s);
+dg.addColorStop(0, "#7a8392");
+dg.addColorStop(1, "#3c424c");
+c.fillStyle = dg;
+c.beginPath();
+c.ellipse(p.x, p.y, 112 * s, 29 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#f2c230";
+c.setLineDash([10 * s, 8 * s]);
+c.lineDashOffset = -t * 20;
+c.lineWidth = 4 * s;
+c.beginPath();
+c.ellipse(p.x, p.y, 104 * s, 26 * s, 0, 0, Math.PI * 2);
+c.stroke();
+c.setLineDash([]);
+c.restore();
+c.save();
+c.translate(p.x, p.y - 6 * s);
+const sway = Math.sin(t * .6) * .04;
+c.rotate(sway);
+if (ship) {
+try {
+drawShipAtScale(c, ship, .55 * s, false);
+}
+catch (error) { }
+}
+else {
+const model = resolvePadShip(ships) || { cargoPets: [] };
+c.globalAlpha = job ? .55 + .35 * ((Date.now() - (job.startedAt || 0)) / ((job.durationSeconds || 1) * 1000)) : .35 + .1 * Math.sin(t * 3);
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 18;
+try {
+drawShipAtScale(c, model, .55 * s, !!job);
+}
+catch (error) { }
+}
+c.restore();
+if (job) {
+const k = (Math.sin(t * 2) + 1) / 2;
+const tip = { x: p.x - 40 * s + k * 80 * s, y: p.y - 60 * s };
+c.save();
+c.strokeStyle = "#ffcc33";
+c.lineWidth = 5 * s;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(p.x + 120 * s, p.y - 140 * s);
+c.lineTo(p.x + 60 * s, p.y - 110 * s);
+c.lineTo(tip.x, tip.y);
+c.stroke();
+for (let i = 0; i < 6; i++) {
+c.fillStyle = i % 2 ? "#fff6c8" : "#ffb347";
+c.fillRect(tip.x + (Math.random() - .5) * 14 * s, tip.y + Math.random() * 12 * s, 2, 2);
+}
+c.restore();
+c.save();
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 4;
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 10;
+const frac = job.site ? siteFraction(job) : Math.min(1, (Date.now() - job.startedAt) / (job.durationSeconds * 1000));
+c.beginPath();
+c.arc(p.x, p.y - 48 * s, 56 * s, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+c.stroke();
+c.restore();
+}
+c.save();
+c.font = "800 12px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = "#f6f2ea";
+c.shadowColor = "#000";
+c.shadowBlur = 6;
+const title = ship ? "Ship " + pick + " of " + ships.length + (svcJob ? " · servicing · " + formatRemainingText(svcJob) : "") : (newJob ? "Building a ship · " + formatRemainingText(newJob) : "New ship");
+c.fillText(title, p.x, p.y + 40 * s);
+c.restore();
+[-1, 1].forEach(dir => {
+const ax = p.x + dir * 96 * s, ay = p.y - 78 * s;
+c.save();
+c.fillStyle = "rgba(10,14,22,.85)";
+c.beginPath();
+c.arc(ax, ay, 18 * s, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#5ff3ff";
+c.lineWidth = 2;
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 8;
+c.stroke();
+c.fillStyle = "#eafcff";
+c.beginPath();
+c.moveTo(ax + dir * 7 * s, ay);
+c.lineTo(ax - dir * 5 * s, ay - 8 * s);
+c.lineTo(ax - dir * 5 * s, ay + 8 * s);
+c.closePath();
+c.fill();
+c.restore();
+world.hits.push({ x: ax, y: ay, r: 24 * s, z: 9, onTap: () => {
+const n = ships.length + 1;
+r33FactoryPick[planetId] = ((r33FactoryPick[planetId] || 0) + dir + n) % n;
+sound("click");
+} });
+});
+if (ship) {
+r33Pill(c, p.x, p.y + 64 * s, world.shownShipId === ship.id ? "✈ Flying this one" : "✈ Fly this ship", "#7dffb0", world.shownShipId !== ship.id, () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id }));
+world.hits.push({ x: p.x, y: p.y - 30 * s, r: 80 * s, z: 6, onTap: () => svcJob ? r30BuildBubble(planetId, svcJob, p.x, p.y - 90 * s) : r33ShipInfo(ship, p) });
+}
+else {
+r30FactoryButtons(c, { x: p.x, ringY: p.y - 40 * s, r: 80 * s, textY: p.y + 34 * s }, planetId, newJob, "ship");
+}
+} });
+list.push({ v: .5, draw: () => r33StatsBoard(c, planetId, ship, pick) });
+list.push({ v: .5, draw: () => r33SwitchBoard(c, planetId, ship) });
+r30DrawCrew(c, list, planetId, time, ["ship", "ship-service"]);
+void jobs;
+}
+function r33Pill(c, x, y, label, col, on, act) {
+const b = r30Pill(c, x, y, label, col, on, false);
+world.hits.push({ x: b.x, y: b.y, r: Math.min(b.w / 2, 60), z: 9, onTap: () => {
+if (on)
+act();
+} });
+}
+function r33ShipInfo(ship, p) {
+worldShowBubble({
+x: p.x, y: p.y - 90,
+iconHtml: ROCKET_ICON_HTML,
+title: "Ship on the table",
+text: "Flip its switches on the right to retrofit upgrades (builders do the work), or use the arrows to look at another — or a fresh one.",
+buttons: []
+});
+}
+function r33Board(c, u, v, w, h, title, col) {
+const p = roomFloorPt(u, v), s = p.s;
+const bw = w * s, bh = h * s;
+const x = p.x - bw / 2, y = p.y - bh - 26 * s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.35)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, bw * .4, 6 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#2a3038";
+c.fillRect(p.x - 4 * s, y + bh, 8 * s, 26 * s);
+c.fillRect(p.x - 20 * s, p.y - 4 * s, 40 * s, 4 * s);
+c.fillStyle = "#1a1e26";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - 5 * s, y - 5 * s, bw + 10 * s, bh + 10 * s, 6 * s);
+else
+c.rect(x - 5 * s, y - 5 * s, bw + 10 * s, bh + 10 * s);
+c.fill();
+const sg = c.createLinearGradient(0, y, 0, y + bh);
+sg.addColorStop(0, "#0c1a2e");
+sg.addColorStop(1, "#060b14");
+c.fillStyle = sg;
+c.fillRect(x, y, bw, bh);
+c.strokeStyle = col;
+c.lineWidth = 1.2;
+c.globalAlpha = .6;
+c.strokeRect(x + .5, y + .5, bw - 1, bh - 1);
+c.globalAlpha = 1;
+c.fillStyle = col;
+c.font = "900 " + Math.round(8.5 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText(title, p.x, y + 5 * s);
+c.restore();
+return { x, y, w: bw, h: bh, s, cx: p.x };
+}
+function r33StatsBoard(c, planetId, ship, pick) {
+const B = r33Board(c, .15, .6, 100, 132, ship ? "SHIP " + pick + " STATS" : "NEW SHIP STATS", "#5ff3ff");
+const s = B.s;
+const rows = [];
+if (ship) {
+const cap = getShipCargoCapacity(ship.materialCapBonus);
+rows.push(["Hearts", (Number(ship.lives) || 3) / 3, (Number(ship.lives) || 3) + "/3", "#ff6b8a"]);
+rows.push(["Shields", (ship.shieldHearts || 0) / SHIELD_HEART_MAX, (ship.shieldHearts || 0) + "/" + SHIELD_HEART_MAX, "#5ff3ff"]);
+rows.push(["Cargo", getShipCargoUsed(ship) / cap, getShipCargoUsed(ship) + "/" + cap, "#ffb347"]);
+rows.push(["Pet seats", (ship.cargoPetCapacity || 1) / 3, String(ship.cargoPetCapacity || 1), "#7dffb0"]);
+rows.push(["Powerup", 1, (getItemInfo(ship.equipment || "emp") || { name: "—" }).name.split(" ")[0], "#ffe45c"]);
+rows.push(["Pilot", ship.pendingPilot ? 1 : 0, ship.pendingPilot ? (SPECIES_DISPLAY_NAMES[ship.pendingPilot.species] || "Pet") : "none", "#b98cff"]);
+}
+else {
+const bonus = Math.max(shipBuildToggles.dualPerk && hasPurchasedToggleUpgrade(planetId, "ship-factory", "pet-bay-2") ? CARGO_TIER_BONUS.dualPerk : 0, shipBuildToggles.petBay && hasPurchasedToggleUpgrade(planetId, "ship-factory", "pet-bay") ? CARGO_TIER_BONUS.petBay : 0, shipBuildToggles.cargoHold && hasPurchasedToggleUpgrade(planetId, "ship-factory", "cargo-hold") ? CARGO_TIER_BONUS.cargoHold : 0);
+const cap = getShipCargoCapacity(bonus);
+const sh = Math.min(shieldUnlocked(planetId), shipBuildToggles.shield || 0);
+const seats = shipBuildToggles.dualPerk && hasPurchasedToggleUpgrade(planetId, "ship-factory", "pet-bay-2") ? 3 : shipBuildToggles.petBay && hasPurchasedToggleUpgrade(planetId, "ship-factory", "pet-bay") ? 2 : 1;
+rows.push(["Hearts", 1, "3/3", "#ff6b8a"]);
+rows.push(["Shields", sh / SHIELD_HEART_MAX, sh + "/" + SHIELD_HEART_MAX, "#5ff3ff"]);
+rows.push(["Cargo", cap / (MATERIAL_CAP + CARGO_TIER_BONUS.dualPerk), String(cap), "#ffb347"]);
+rows.push(["Pet seats", seats / 3, String(seats), "#7dffb0"]);
+rows.push(["Cost", Math.min(1, r33NewCost(planetId) / 40), r33NewCost(planetId) + " ¢", "#ffd76b"]);
+rows.push(["Build", .6, "90s", "#b98cff"]);
+}
+c.save();
+const fs = Math.round(7 * s + 2);
+rows.forEach((r, i) => {
+const y = B.y + 22 * s + i * 17 * s;
+c.font = "700 " + fs + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "top";
+c.fillStyle = "#bfd3ea";
+c.fillText(r[0], B.x + 6 * s, y);
+c.textAlign = "right";
+c.fillStyle = "#f6f2ea";
+c.fillText(r[2], B.x + B.w - 6 * s, y);
+c.fillStyle = "rgba(255,255,255,.08)";
+c.fillRect(B.x + 6 * s, y + fs + 2 * s, B.w - 12 * s, 3 * s);
+c.fillStyle = r[3];
+c.fillRect(B.x + 6 * s, y + fs + 2 * s, (B.w - 12 * s) * Math.max(0, Math.min(1, r[1])), 3 * s);
+});
+c.restore();
+}
+function r33Switch(c, x, y, s, on, locked, col) {
+const w = 26 * s, h = 13 * s;
+c.save();
+c.fillStyle = locked ? "#20242c" : on ? r33Shade(col, .55) : "#2a2f38";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+else
+c.rect(x - w / 2, y - h / 2, w, h);
+c.fill();
+c.strokeStyle = locked ? "#3a3f48" : on ? col : "#5a6270";
+c.lineWidth = 1.5;
+c.stroke();
+const kx = on ? x + w / 2 - h / 2 : x - w / 2 + h / 2;
+const kg = c.createRadialGradient(kx - 2 * s, y - 2 * s, 1, kx, y, h * .5);
+kg.addColorStop(0, locked ? "#5a5f68" : "#ffffff");
+kg.addColorStop(1, locked ? "#3a3f48" : "#aab4c4");
+c.fillStyle = kg;
+if (on && !locked) {
+c.shadowColor = col;
+c.shadowBlur = 10;
+}
+c.beginPath();
+c.arc(kx, y, h * .42, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r33SwitchBoard(c, planetId, ship) {
+const B = r33Board(c, .85, .6, 100, 132, ship ? "RETROFITS" : "UPGRADES", "#ffcc33");
+const s = B.s;
+const rows = [];
+if (ship) {
+const bonus = ship.materialCapBonus || 0;
+R33_TOGGLES.forEach(t => {
+const have = bonus >= CARGO_TIER_BONUS[t.tier];
+const svc = SHIP_SERVICES[t.service];
+const unlocked = !svc.requiresUpgrade || isUpgradePurchased(planetId, svc.requiresUpgrade);
+rows.push({ name: t.name, on: have, locked: !unlocked && !have, tap: () => {
+if (have)
+return showShipToast("Already fitted to this ship");
+if (!unlocked)
+return worldOpenHolo("structure-ship-factory", { title: "SHIP FACTORY" });
+r33ConfirmService(planetId, ship, t.service);
+} });
+});
+const sh = ship.shieldHearts || 0, max = Math.min(SHIELD_HEART_MAX, shieldUnlocked(planetId));
+rows.push({ name: "Shield " + sh + "/" + SHIELD_HEART_MAX, on: sh > 0, locked: !max, tap: () => {
+if (!max)
+return worldOpenHolo("structure-ship-factory", { title: "SHIP FACTORY" });
+if (sh >= max)
+return showShipToast("As many shield hearts as this factory can fit");
+r33ConfirmService(planetId, ship, "shield-heart");
+} });
+const lives = Number(ship.lives) || 3;
+rows.push({ name: "Hull " + lives + "/3", on: lives >= 3, locked: false, tap: () => {
+if (lives >= 3)
+return showShipToast("Hull's in one piece");
+r33ConfirmService(planetId, ship, "restore-heart");
+} });
+}
+else {
+R33_TOGGLES.forEach(t => {
+const unlocked = hasPurchasedToggleUpgrade(planetId, "ship-factory", t.toggle);
+rows.push({ name: t.name + " +" + t.cost + "¢", on: !!shipBuildToggles[t.key] && unlocked, locked: !unlocked, tap: () => {
+if (!unlocked)
+return worldOpenHolo("structure-ship-factory", { title: "SHIP FACTORY" });
+shipBuildToggles[t.key] = !shipBuildToggles[t.key];
+r33SaveFav(planetId);
+sound("click");
+} });
+});
+const max = shieldUnlocked(planetId);
+const sh = Math.min(max, shipBuildToggles.shield || 0);
+rows.push({ name: "Shield " + sh + "/" + max, on: sh > 0, locked: !max, tap: () => {
+if (!max)
+return worldOpenHolo("structure-ship-factory", { title: "SHIP FACTORY" });
+shipBuildToggles.shield = (sh + 1) % (max + 1);
+r33SaveFav(planetId);
+sound("click");
+} });
+}
+c.save();
+const fs = Math.round(7 * s + 2);
+rows.forEach((r, i) => {
+const y = B.y + 28 * s + i * 19 * s;
+c.font = "700 " + fs + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillStyle = r.locked ? "#6a7282" : "#e6eef8";
+c.fillText((r.locked ? "🔒 " : "") + r.name, B.x + 5 * s, y);
+const sx = B.x + B.w - 17 * s;
+if (r.count) {
+c.textAlign = "right";
+c.fillStyle = "#ffcc33";
+c.fillText(r.count, sx - 16 * s, y);
+}
+r33Switch(c, sx, y, s * .85, r.on, r.locked, "#7dffb0");
+world.hits.push({ x: B.x + B.w / 2, y, r: Math.max(12 * s, B.w * .32), z: 9, onTap: r.tap });
+});
+c.font = "600 " + Math.round(6 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = "rgba(230,238,248,.55)";
+c.fillText(ship ? "flip to retrofit" : "saved as your favourite", B.cx, B.y + B.h - 8 * s);
+c.restore();
+}
+function r33ConfirmService(planetId, ship, serviceId) {
+const svc = SHIP_SERVICES[serviceId];
+const p = roomFloorPt(.87, .4);
+if (isShipInService(ship)) {
+showShipToast("This ship is already being worked on");
+return;
+}
+worldShowBubble({
+x: p.x, y: p.y - 120,
+iconHtml: "🔧",
+title: svc.name,
+meta: svc.cost + " " + COIN_ICON_HTML + " · builders do the work",
+text: "Fit it to this ship? It goes on the build list like anything else — put builders on it to get it done.",
+buttons: [{ label: "🔧 Retrofit · " + svc.cost + " " + COIN_ICON_HTML, primary: true, disabled: getTotalAvailableCoins(planetId) < svc.cost, action: () => worldRunAction({ "data-action": "queue-ship-service", "data-ship": ship.id, "data-service": serviceId }) }]
+});
+}
+function roomTrainingFixtures(c, list, planetId, st, time) {
+roomTrainingFixtures__r33(c, list, planetId, st, time);
+if (!r33Theme())
+return;
+list.push({ v: -1.4, draw: () => {
+[.16, .84].forEach((wx, k) => r33Poster(c, wx, .4, .2, .5, (x, y, w, h) => {
+c.fillStyle = "#0c0a24";
+c.fillRect(x, y, w, h);
+c.fillStyle = "#fff";
+for (let i = 0; i < 14; i++) {
+c.globalAlpha = .4 + .6 * r33Hash(i + k * 20);
+c.fillRect(x + r33Hash(i * 3 + k) * w, y + r33Hash(i * 7 + k) * h, 1.6, 1.6);
+}
+c.globalAlpha = .6;
+c.strokeStyle = "#b98cff";
+c.lineWidth = 1;
+c.beginPath();
+for (let i = 0; i < 5; i++) {
+const px = x + r33Hash(i * 3 + k) * w, py = y + r33Hash(i * 7 + k) * h;
+i ? c.lineTo(px, py) : c.moveTo(px, py);
+}
+c.stroke();
+c.globalAlpha = 1;
+}));
+} });
+list.push({ v: .85, draw: () => r33Plant(c, .92, .85) });
+}
+function roomDomeFixtures(c, list, planetId, st, time) {
+roomDomeFixtures__r33(c, list, planetId, st, time);
+if (!r33Theme())
+return;
+[[.06, .3], [.94, .36], [.1, .8], [.9, .84]].forEach(([u, v]) => list.push({ v, draw: () => r33Plant(c, u, v, true) }));
+}
+function roomForgeFixtures(c, list, planetId, st, time) {
+roomForgeFixtures__r33(c, list, planetId, st, time);
+if (!r33Theme())
+return;
+list.push({ v: .3, draw: () => r33Barrel(c, .08, .3, "#5a3a2a", "#ff8a3a") });
+list.push({ v: .36, draw: () => r33Barrel(c, .92, .36, "#5a3a2a", "#ff8a3a") });
+list.push({ v: .78, draw: () => r33Crate(c, .9, .8, 1, "#4a3a2e") });
+}
+function roomSatFactoryFixtures(c, list, planetId, st, time) {
+roomSatFactoryFixtures__r33(c, list, planetId, st, time);
+if (!r33Theme())
+return;
+list.push({ v: .82, draw: () => r33Barrel(c, .08, .82, "#8e98a6", "#5ff3ff") });
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -34597,7 +36794,7 @@ let u = (x - g.cx) / w + .5;
 u = Math.max(.05, Math.min(.95, u));
 return { u, v: Math.max(.05, Math.min(.95, v)) };
 }
-function roomMove(dirX, dirY, speed, dt) {
+function roomMove__r33(dirX, dirY, speed, dt) {
 const pace = .34 * speed * dt;
 roomState.u = Math.max(.06, Math.min(.94, roomState.u + dirX * pace * .9));
 roomState.v = Math.max(.06, Math.min(1.04, roomState.v + dirY * pace * .8));
@@ -34624,7 +36821,7 @@ draw();
 c.stroke();
 c.restore();
 }
-function roomDrawShell(c, W, H, st, time) {
+function roomDrawShell__r33(c, W, H, st, time) {
 const g = roomGeo;
 const bl = g.cx - g.backW / 2, br = g.cx + g.backW / 2;
 const wall = c.createLinearGradient(0, g.wallTop, 0, g.backY);
@@ -34752,7 +36949,7 @@ if (/^#[0-9a-f]{6}$/i.test(colour || ""))
 return colour + Math.round(alpha * 255).toString(16).padStart(2, "0");
 return colour;
 }
-function roomDrawBox(c, u, v, w, h, colour, label, fill) {
+function roomDrawBox__r33(c, u, v, w, h, colour, label, fill) {
 const p = roomFloorPt(u, v);
 const bw = w * p.s, bh = h * p.s;
 const d = Math.min(9 * p.s, bh * .3);
@@ -34837,7 +37034,7 @@ roomSatFactoryFixtures(c, list, planetId, st, time);
 }
 return list;
 }
-function roomTerminal(c, list, wx, label, colour, tab, opts) {
+function roomTerminal__r33(c, list, wx, label, colour, tab, opts) {
 list.push({ v: -1, draw: () => {
 const p = roomWallPt(wx, .32);
 const w = roomGeo.backW * .2, h = (roomGeo.backY - roomGeo.wallTop) * .36;
@@ -34876,7 +37073,7 @@ c.restore();
 world.hits.push({ x: p.x, y: p.y, r: Math.max(w, h) * .7, z: 5, onTap: () => worldOpenHolo(tab, Object.assign({ title: label }, opts || {})) });
 } });
 }
-function roomShelfSlots(c, items, src, colour, opts) {
+function roomShelfSlots__r33(c, items, src, colour, opts) {
 opts = opts || {};
 const rows = opts.rows || 3;
 const cols = Math.max(3, Math.ceil(items.length / rows));
@@ -34962,7 +37159,7 @@ text: info.text + " Or drag it onto your pet.",
 buttons
 });
 }
-function roomVaultFixtures(c, list, planetId, st, time) {
+function roomVaultFixtures__r33(c, list, planetId, st, time) {
 list.push({ v: -2, draw: () => {
 const p = roomWallPt(.5, .06);
 roomShelfSlots(c, worldVaultContents(planetId), { t: "vault" }, st.colour, {
@@ -35039,7 +37236,7 @@ buttons: []
 }) });
 } });
 }
-function roomShopFixtures(c, list, planetId, st, time) {
+function roomShopFixtures__r33(c, list, planetId, st, time) {
 const forSale = [{ k: "snack", r: "berry", n: SNACK_BUNDLE, price: SNACK_BUNDLE_COST, buy: { "data-action": "buy-snacks" } }];
 const local = getShopSaleItemForPlanet(planetId);
 if (local)
@@ -35120,7 +37317,7 @@ roomBlueprintFixture(c, list, planetId, st, id, .5 + .2 * (i % 3), .36 + .26 * M
 roomPetPenFixture(c, list, planetId);
 roomTransporterFixture(c, list, planetId, st, .24, .76);
 }
-function roomFactoryFixtures(c, list, planetId, st, time) {
+function roomFactoryFixtures__r33(c, list, planetId, st, time) {
 roomTerminal(c, list, .2, "BUILD CONSOLE", st.colour, "structure-ship-factory");
 roomTerminal(c, list, .8, "SERVICE BAY", st.accent, "structure-ship-factory");
 list.push({ v: .45, draw: () => {
@@ -35215,7 +37412,7 @@ onTap: () => worldPetBubble(pet, p.x, p.y - size)
 } });
 });
 }
-function roomTrainingFixtures(c, list, planetId, st, time) {
+function roomTrainingFixtures__r33(c, list, planetId, st, time) {
 roomTerminal(c, list, .5, "MISSION BOARD", st.colour, "structure-pilot-training");
 roomLicenceDeskFixture(c, list, planetId, st);
 const pods = [
@@ -35298,7 +37495,7 @@ buttons: [{ label: "Train", primary: true, disabled: level >= max || (pet.pilotP
 });
 void tapped;
 }
-function roomDomeFixtures(c, list, planetId, st, time) {
+function roomDomeFixtures__r33(c, list, planetId, st, time) {
 roomTerminal(c, list, .85, "HABITAT INFO", st.colour, "structure-bio-dome");
 list.push({ v: -2, draw: () => {
 const g = roomGeo;
@@ -35330,7 +37527,7 @@ c.restore();
 });
 roomDrawWorkers(c, list, planetId, null, time);
 }
-function roomShipFixtures(c, list, planetId, st, time) {
+function roomShipFixtures__r33(c, list, planetId, st, time) {
 const ship = worldShip(planetId, roomState.id);
 if (!ship) {
 leaveRoom();
