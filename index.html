@@ -28228,6 +28228,248 @@ r35SwipeEl("down").classList.toggle("on", ready && !landButton.classList.contain
 }
 catch (error) { }
 }, 200);
+const R36_UNLOAD_MS = 15000;
+let r36Landed = null;
+function landAtCurrentPlanetInner() {
+const planetId = typeof currentPlanetId !== "undefined" ? currentPlanetId : null;
+const startId = currentShipId;
+const before = new Set(((getShips(planetId) || [])).map(s => s.id));
+const r = landAtCurrentPlanetInner__r36();
+try {
+if (planetId && !activePlanetOwnerId) {
+const ships = getShips(planetId) || [];
+const ship = ships.find(s => !before.has(s.id)) || ships.find(s => s.id === startId);
+if (ship && ((ship.coins || 0) > 0 || getCargoUsed(ship.materials || {}) > 0))
+r36Landed = { planetId, shipId: ship.id, at: 0, shown: false, kept: false };
+}
+}
+catch (error) { }
+return r;
+}
+function r36ShipScreen() {
+const fc = typeof focusCanvas !== "undefined" && focusCanvas;
+if (fc && fc._shipHitArea && world.shownShipId === r36Landed.shipId)
+return { x: fc._shipHitArea.x, y: fc._shipHitArea.y - 70 };
+const host = (document.getElementById("planetFocus") || document.body).getBoundingClientRect();
+return { x: host.width / 2, y: host.height * .5 };
+}
+function r36Left() {
+return Math.max(0, Math.ceil((r36Landed.at + R36_UNLOAD_MS - performance.now()) / 1000));
+}
+function r36ShowBubble() {
+const L = r36Landed;
+const ship = (getShips(L.planetId) || []).find(s => s.id === L.shipId);
+if (!ship) {
+r36Landed = null;
+return;
+}
+const items = getCargoUsed(ship.materials || {});
+const what = [(ship.coins || 0) ? (ship.coins + " " + COIN_ICON_HTML) : "", items ? items + " item" + (items > 1 ? "s" : "") : ""].filter(Boolean).join(" and ");
+const p = r36ShipScreen();
+worldShowBubble({
+x: p.x, y: p.y,
+iconHtml: "📦",
+title: "Landed with cargo",
+meta: '<span class="r36-count">To the Vault in ' + r36Left() + 's</span>',
+text: "Aboard: " + what + ". Pets and satellites stay on the ship either way.",
+r36: true,
+buttons: [
+{ label: "🏦 Send to the Vault", primary: true, action: () => r36Unload() },
+{ label: "🚀 Keep it on the ship", action: () => {
+r36Landed.kept = true;
+r36Landed = null;
+showShipToast("Cargo stays aboard");
+} }
+]
+});
+}
+function r36Unload() {
+const L = r36Landed;
+if (!L)
+return;
+r36Landed = null;
+try {
+runPlanetActionOn(L.planetId, { "data-action": "ship-unload-all", "data-ship": L.shipId });
+}
+catch (error) { }
+}
+setInterval(() => {
+try {
+const L = r36Landed;
+if (!L)
+return;
+const home = !running && selectedStartPlanet === L.planetId && !roomState && !roamingActive;
+if (!L.at) {
+if (home) {
+L.at = performance.now();
+setTimeout(() => { if (r36Landed === L && !L.shown) {
+L.shown = true;
+r36ShowBubble();
+} }, 700);
+}
+return;
+}
+if (performance.now() >= L.at + R36_UNLOAD_MS) {
+r36Unload();
+const b = document.getElementById("worldBubble");
+if (b && b._spec && b._spec.r36)
+worldHideBubble();
+return;
+}
+const b = document.getElementById("worldBubble");
+const cnt = b && !b.classList.contains("hidden") && b._spec && b._spec.r36 && b.querySelector(".r36-count");
+if (cnt)
+cnt.textContent = "To the Vault in " + r36Left() + "s";
+}
+catch (error) { }
+}, 250);
+const R36_RING_DIST = ORBITAL_ESCAPE_RADIUS * .8;
+const R36_RING_R = 74;
+const R36_RINGS = [
+{ name: "N", x: 0, y: -R36_RING_DIST },
+{ name: "E", x: R36_RING_DIST, y: 0 },
+{ name: "S", x: 0, y: R36_RING_DIST },
+{ name: "W", x: -R36_RING_DIST, y: 0 }
+];
+let r36Leaving = 0;
+let r36WrapAt = 0;
+function r36OrbitEdge(distance) {
+if (worldState !== "orbital")
+return;
+const now = performance.now();
+if (!r36Leaving) {
+const ring = R36_RINGS.find(r => Math.hypot(orbitalX - r.x, orbitalY - r.y) < R36_RING_R * .8);
+if (ring) {
+r36Leaving = now;
+orbitalFadeTarget = 1;
+floatingText("ACCELERATING", W / 2, H * .36, "#7dffb0");
+try {
+sound("arrival");
+}
+catch (error) { }
+}
+}
+if (r36Leaving) {
+if (now - r36Leaving > 520) {
+r36Leaving = 0;
+leaveOrbitForField();
+}
+return;
+}
+if (distance >= ORBITAL_ESCAPE_RADIUS) {
+const k = (ORBITAL_ESCAPE_RADIUS * .9) / Math.max(1, distance);
+orbitalX = -orbitalX * k;
+orbitalY = -orbitalY * k;
+r36WrapAt = now;
+floatingText("LOOPED ROUND", W / 2, H * .3, "#8de7ff");
+}
+}
+function r36DrawRings() {
+if (worldState !== "orbital")
+return;
+const c = ctx;
+const t = performance.now() / 1000;
+const fade = Math.max(0, 1 - (typeof orbitalFade === "number" ? orbitalFade : 0));
+c.save();
+c.globalAlpha = fade;
+R36_RINGS.forEach((r, i) => {
+const sx = r.x - orbitalX + W / 2, sy = r.y - orbitalY + H / 2;
+const R = R36_RING_R;
+const on = sx > -R * 2 && sx < W + R * 2 && sy > -R * 2 && sy < H + R * 2;
+if (on) {
+c.save();
+c.translate(sx, sy);
+const out = Math.atan2(r.y, r.x);
+const pulse = .5 + .5 * Math.sin(t * 4 + i);
+const g = c.createRadialGradient(0, 0, R * .2, 0, 0, R);
+g.addColorStop(0, "rgba(125,255,176," + (.10 + .08 * pulse) + ")");
+g.addColorStop(1, "rgba(125,255,176,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(0, 0, R, 0, Math.PI * 2);
+c.fill();
+c.lineWidth = 9;
+c.strokeStyle = "rgba(30,60,50,.9)";
+c.beginPath();
+c.arc(0, 0, R, 0, Math.PI * 2);
+c.stroke();
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 16;
+c.lineWidth = 3;
+c.strokeStyle = "#7dffb0";
+for (let k = 0; k < 8; k++) {
+const a = t * 1.6 + k * Math.PI / 4;
+c.beginPath();
+c.arc(0, 0, R, a, a + Math.PI / 6);
+c.stroke();
+}
+c.shadowBlur = 0;
+c.rotate(out);
+c.strokeStyle = "rgba(200,255,225," + (.4 + .5 * pulse) + ")";
+c.lineWidth = 3;
+for (let k = 0; k < 3; k++) {
+const x = -R * .4 + k * R * .3 + ((t * 40) % (R * .3));
+c.globalAlpha = fade * Math.min(1, (R * .5 - Math.abs(x)) / (R * .2));
+c.beginPath();
+c.moveTo(x - 8, -12);
+c.lineTo(x + 4, 0);
+c.lineTo(x - 8, 12);
+c.stroke();
+}
+c.globalAlpha = fade;
+c.rotate(-out);
+c.fillStyle = "#d8ffe9";
+c.font = "800 10px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("ACCELERATOR · TO THE FIELD", 0, R + 18);
+c.restore();
+}
+else {
+const a = Math.atan2(sy - H / 2, sx - W / 2);
+const m = 26;
+let ex = W / 2 + Math.cos(a) * W, ey = H / 2 + Math.sin(a) * H;
+const kx = (W / 2 - m) / Math.max(1e-6, Math.abs(ex - W / 2)), ky = (H / 2 - m) / Math.max(1e-6, Math.abs(ey - H / 2));
+const k = Math.min(kx, ky);
+ex = W / 2 + (ex - W / 2) * k;
+ey = H / 2 + (ey - H / 2) * k;
+const d = Math.hypot(r.x - orbitalX, r.y - orbitalY);
+c.save();
+c.translate(ex, ey);
+c.globalAlpha = fade * Math.max(.35, Math.min(.9, 1.6 - d / 1600));
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 2;
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 8;
+c.beginPath();
+c.arc(0, 0, 9, 0, Math.PI * 2);
+c.stroke();
+c.rotate(a);
+c.fillStyle = "#7dffb0";
+c.beginPath();
+c.moveTo(15, 0);
+c.lineTo(9, -5);
+c.lineTo(9, 5);
+c.closePath();
+c.fill();
+c.restore();
+}
+});
+const wk = 1 - (performance.now() - r36WrapAt) / 600;
+if (wk > 0) {
+c.globalAlpha = wk * .5;
+c.fillStyle = "#bff6ff";
+c.fillRect(0, 0, W, H);
+}
+c.restore();
+}
+function drawOrbitalScene() {
+const r = drawOrbitalScene__r36();
+try {
+r36DrawRings();
+}
+catch (error) { }
+return r;
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -52067,14 +52309,7 @@ returnFromOrbitToPlanet();
 return;
 }
 orbitalArrivalTimer = 0;
-if (distance >=
-ORBITAL_ESCAPE_RADIUS * .94) {
-orbitalFadeTarget = 1;
-}
-if (distance >=
-ORBITAL_ESCAPE_RADIUS) {
-leaveOrbitForField();
-}
+r36OrbitEdge(distance);
 }
 function returnFromOrbitToPlanet() {
 orbitalDragging = false;
@@ -52137,7 +52372,7 @@ currentShipId =
 ship.id;
 savePlanetProgress();
 }
-function drawOrbitalScene() {
+function drawOrbitalScene__r36() {
 const distance = getOrbitalDistance();
 const returnBandOuter = ORBITAL_RETURN_RADIUS * 2.6;
 const escapeBandInner = ORBITAL_ESCAPE_RADIUS * .72;
@@ -52665,7 +52900,7 @@ catch (error) {
 showDiagnosticError(error, "landAtCurrentPlanet");
 }
 }
-function landAtCurrentPlanetInner() {
+function landAtCurrentPlanetInner__r36() {
 if (!running ||
 worldState !== "planet")
 return;
