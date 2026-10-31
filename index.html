@@ -27222,7 +27222,10 @@ sound("click");
 } });
 });
 if (ship) {
-r33Pill(c, p.x, p.y + 64 * s, world.shownShipId === ship.id ? "✈ Flying this one" : "✈ Fly this ship", "#7dffb0", world.shownShipId !== ship.id, () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id }));
+const hurt = (Number(ship.lives) || 3) < 3;
+r33Pill(c, hurt ? p.x - 70 : p.x, p.y + 64 * s, world.shownShipId === ship.id ? "✈ Flying this one" : "✈ Fly this ship", "#7dffb0", world.shownShipId !== ship.id, () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id }));
+if (hurt)
+r33Pill(c, p.x + 72, p.y + 64 * s, "❤ Restore heart · " + SHIP_SERVICES["restore-heart"].cost + "¢", "#ff6b8a", !isShipInService(ship), () => r33ConfirmService(planetId, ship, "restore-heart"));
 world.hits.push({ x: p.x, y: p.y - 30 * s, r: 80 * s, z: 6, onTap: () => svcJob ? r30BuildBubble(planetId, svcJob, p.x, p.y - 90 * s) : r33ShipInfo(ship, p) });
 }
 else {
@@ -27250,7 +27253,7 @@ text: "Flip its switches on the right to retrofit upgrades (builders do the work
 buttons: []
 });
 }
-function r33Board(c, u, v, w, h, title, col) {
+function r33Board__r35(c, u, v, w, h, title, col) {
 const p = roomFloorPt(u, v), s = p.s;
 const bw = w * s, bh = h * s;
 const x = p.x - bw / 2, y = p.y - bh - 26 * s;
@@ -27385,11 +27388,7 @@ return showShipToast("As many shield hearts as this factory can fit");
 r33ConfirmService(planetId, ship, "shield-heart");
 } });
 const lives = Number(ship.lives) || 3;
-rows.push({ name: "Hull " + lives + "/3", on: lives >= 3, locked: false, tap: () => {
-if (lives >= 3)
-return showShipToast("Hull's in one piece");
-r33ConfirmService(planetId, ship, "restore-heart");
-} });
+void lives;
 }
 else {
 R33_TOGGLES.forEach(t => {
@@ -27415,7 +27414,7 @@ sound("click");
 c.save();
 const fs = Math.round(7 * s + 2);
 rows.forEach((r, i) => {
-const y = B.y + 28 * s + i * 19 * s;
+const y = B.y + 30 * s + i * 25 * s;
 c.font = "700 " + fs + "px system-ui,sans-serif";
 c.textAlign = "left";
 c.textBaseline = "middle";
@@ -27428,7 +27427,8 @@ c.fillStyle = "#ffcc33";
 c.fillText(r.count, sx - 16 * s, y);
 }
 r33Switch(c, sx, y, s * .85, r.on, r.locked, "#7dffb0");
-world.hits.push({ x: B.x + B.w / 2, y, r: Math.max(12 * s, B.w * .32), z: 9, onTap: r.tap });
+world.hits.push({ x: sx, y, r: 12 * s, z: 9, onTap: r.tap });
+world.hits.push({ x: B.x + B.w * .32, y, r: 12 * s, z: 9, onTap: r.tap });
 });
 c.font = "600 " + Math.round(6 * s + 2) + "px system-ui,sans-serif";
 c.textAlign = "center";
@@ -27689,7 +27689,7 @@ return;
 }
 return openShipBubble__orig__r34(shipId, x, y);
 }
-function openShipBubbleFromYard__orig(shipId, x, y) {
+function openShipBubbleFromYard__orig__r35(shipId, x, y) {
 if (worldShip(selectedStartPlanet, shipId)) {
 worldHideBubble();
 worldCloseHolo();
@@ -27757,7 +27757,7 @@ const rows = r34ShipRows(ship);
 const B = r33Board(c, .15, .6, 100, Math.max(132, 26 + rows.length * 17), "SHIP " + pick + " STATS", "#5ff3ff");
 r34DrawRows(c, B, rows, B.s);
 }
-function roomShipFixtures(c, list, planetId, st, time) {
+function roomShipFixtures__r35(c, list, planetId, st, time) {
 const real = roomTerminal;
 roomTerminal = function (cc, ll, wx, label, colour, tab, opts) {
 if (tab === "ships" && opts && opts.shipId)
@@ -27849,7 +27849,8 @@ r33SwitchBoard__r34(c, planetId, ship);
 const added = world.hits.slice(before).filter(h => h.z === 9);
 added.forEach((h, i) => {
 const orig = h.onTap;
-const up = i < 3 ? map[i] : i === 3 ? shieldUp : null;
+const row = Math.floor(i / 2);
+const up = row < 3 ? map[row] : row === 3 ? shieldUp : null;
 h.onTap = () => {
 if (up && !isUpgradePurchased(planetId, up))
 r34PendingUpgrade = up;
@@ -27862,7 +27863,8 @@ r34PendingUpgrade = null;
 };
 });
 const p = roomFloorPt(.85, .6);
-const bx = p.x, by = p.y - 26 * p.s - 140 * p.s;
+const LB = typeof r35LastBoard !== "undefined" && r35LastBoard;
+const bx = LB ? LB.cx : p.x, by = LB ? LB.y + LB.h + 14 : p.y - 26 * p.s - 140 * p.s;
 c.save();
 c.font = "800 " + Math.round(8 * p.s + 2) + "px system-ui,sans-serif";
 const label = "🛠 All upgrades";
@@ -28086,6 +28088,146 @@ c.fill();
 });
 } });
 }
+let r35LastBoard = null;
+function r33Board(c, u, v, w, h, title, col) {
+if (!roomState || roomState.id !== "ship-factory" || !roomGeo)
+return r33Board__r35(c, u, v, w, h, title, col);
+const left = u < .5;
+const a = roomWallPt(left ? .02 : .7, .05), b = roomWallPt(left ? .3 : .98, .97);
+const bw = b.x - a.x, bh = b.y - a.y;
+const s = Math.max(.7, Math.min(1.1, bw / 96));
+const x = a.x, y = a.y;
+c.save();
+c.fillStyle = "#15181e";
+c.fillRect(x - 5, y - 5, bw + 10, bh + 10);
+c.strokeStyle = "rgba(255,255,255,.12)";
+c.lineWidth = 1;
+c.strokeRect(x - 5, y - 5, bw + 10, bh + 10);
+const sg = c.createLinearGradient(0, y, 0, y + bh);
+sg.addColorStop(0, "#0c1a2e");
+sg.addColorStop(1, "#060b14");
+c.fillStyle = sg;
+c.fillRect(x, y, bw, bh);
+c.strokeStyle = col;
+c.globalAlpha = .55;
+c.strokeRect(x + .5, y + .5, bw - 1, bh - 1);
+c.globalAlpha = 1;
+c.fillStyle = col;
+c.font = "900 " + Math.round(8.5 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText(title, x + bw / 2, y + 5 * s);
+c.restore();
+const B = { x, y, w: bw, h: bh, s, cx: x + bw / 2 };
+if (!left)
+r35LastBoard = B;
+return B;
+}
+function r35ShouldStarMap(planet) {
+if (!planet)
+return false;
+if (getBuildQueue(planet.id).some(b => b.type === "ship"))
+return false;
+const anyShips = (typeof getTotalPlayerShipCount === "function" ? getTotalPlayerShipCount() : 0) > 0;
+return anyShips && getTotalAvailableCoins(planet.id) < computeShipBuildCost(planet.id);
+}
+function openShipBubbleFromYard__orig(shipId, x, y) {
+if (!worldShip(selectedStartPlanet, shipId))
+return openShipBubbleFromYard__orig__r35(shipId, x, y);
+const visiting = !!activePlanetOwnerId;
+const buttons = [
+{ label: "✈ Select ship", primary: true, action: () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": shipId }) }
+];
+if (visiting)
+buttons.push({ label: "🧑‍🚀 Co-pilot it", action: () => worldRunAction({ "data-action": "join-copilot", "data-ship": shipId }) });
+buttons.push({ label: "🔍 Ship details", action: () => {
+worldHideBubble();
+enterRoomView("ship", shipId);
+} });
+worldShowBubble({
+x, y,
+iconHtml: ROCKET_ICON_HTML,
+title: "Spare ship",
+text: visiting ? "Fly it yourself, or crew it alongside whoever's flying it." : "Put it on the launch pad, or step inside to look it over.",
+buttons
+});
+}
+function roomShipFixtures(c, list, planetId, st, time) {
+roomShipFixtures__r35(c, list, planetId, st, time);
+const ship = roomState && worldShip(planetId, roomState.id);
+if (!ship || !r33Theme())
+return;
+list.push({ v: .15, draw: () => {
+const p = roomWallPt(.5, .9);
+const selected = world.shownShipId === ship.id;
+r33Pill(c, p.x, p.y, selected ? "🚀 Selected · tap to launch" : "✈ Select for launch", selected ? "#7dffb0" : "#5ff3ff", true, () => {
+if (selected)
+roomLaunchShip(ship);
+else
+worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id });
+});
+} });
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent =
+'#phaseUI.r35-hide{opacity:0 !important;pointer-events:none !important;}' +
+'.r35-swipe{position:fixed;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;align-items:center;gap:2px;' +
+'background:none;border:none;color:#bff6ff;font:800 11px system-ui,sans-serif;letter-spacing:.14em;text-shadow:0 0 10px rgba(95,243,255,.8);' +
+'opacity:0;pointer-events:none;transition:opacity .6s;padding:10px 18px;cursor:pointer;}' +
+'.r35-swipe.on{opacity:.9;pointer-events:auto;}' +
+'.r35-swipe .r35-chev{font-size:18px;line-height:1;}' +
+'.r35-swipe.up{top:calc(env(safe-area-inset-top,0px) + 120px);}' +
+'.r35-swipe.down{bottom:calc(env(safe-area-inset-bottom,0px) + 70px);}' +
+'.r35-swipe.up .r35-chev{animation:r35Up 1.4s ease-in-out infinite;}' +
+'.r35-swipe.down .r35-chev{animation:r35Down 1.4s ease-in-out infinite;}' +
+'@keyframes r35Up{0%,100%{transform:translateY(4px);opacity:.6}50%{transform:translateY(-4px);opacity:1}}' +
+'@keyframes r35Down{0%,100%{transform:translateY(-4px);opacity:.6}50%{transform:translateY(4px);opacity:1}}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
+let r35PhaseSince = 0;
+function r35SwipeEl(dir) {
+const id = "r35Swipe_" + dir;
+let el = document.getElementById(id);
+if (!el) {
+el = document.createElement("button");
+el.id = id;
+el.className = "r35-swipe " + dir;
+el.innerHTML = dir === "up"
+? '<span class="r35-chev">▲</span><span>SWIPE UP TO DEPART</span>'
+: '<span>SWIPE DOWN TO LAND</span><span class="r35-chev">▼</span>';
+["pointerdown", "touchstart", "mousedown"].forEach(t => el.addEventListener(t, e => e.stopPropagation(), { passive: true }));
+el.addEventListener("click", e => {
+e.stopPropagation();
+try {
+handleSwipeGesture(0, dir === "up" ? -220 : 220, 60);
+}
+catch (error) { }
+});
+document.body.appendChild(el);
+}
+return el;
+}
+setInterval(() => {
+try {
+if (typeof phaseUI === "undefined" || !phaseUI)
+return;
+phaseUI.classList.add("r35-hide");
+const showing = phaseUI.classList.contains("show") && running && !gameOver;
+const now = performance.now();
+if (showing && !r35PhaseSince)
+r35PhaseSince = now;
+if (!showing)
+r35PhaseSince = 0;
+const ready = showing && now - r35PhaseSince > 1100;
+r35SwipeEl("up").classList.toggle("on", ready && !departButton.classList.contains("hidden"));
+r35SwipeEl("down").classList.toggle("on", ready && !landButton.classList.contains("hidden"));
+}
+catch (error) { }
+}, 200);
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -41725,9 +41867,14 @@ ROCKET_ICON_HTML +
 : " Launch Mission");
 }
 else if (hasFactory) {
+if (r35ShouldStarMap(planet)) {
+launchBtn.dataset.mode = "star-map";
+launchBtn.innerHTML = "★ Star Map";
+}
+else {
 launchBtn.dataset.mode = "build-ship";
-launchBtn.innerHTML =
-getStructureIconHtml("ship-factory") + " Build Ship";
+launchBtn.innerHTML = getStructureIconHtml("ship-factory") + " Build Ship";
+}
 }
 else {
 launchBtn.dataset.mode = "buy-factory";
@@ -54236,12 +54383,16 @@ event.preventDefault();
 event.stopPropagation();
 const mode = event.currentTarget.
 dataset.mode;
+if (mode === "star-map") {
+openStarMap("navigate");
+return;
+}
 if (mode === "buy-factory") {
-openPlanetDetail(selectedStartPlanet, "shop");
+enterRoomView("structure", "shop");
 return;
 }
 if (mode === "build-ship") {
-openPlanetDetail(selectedStartPlanet, "structure-ship-factory");
+enterRoomView("structure", "ship-factory");
 return;
 }
 if (mode === "select-ship") {
