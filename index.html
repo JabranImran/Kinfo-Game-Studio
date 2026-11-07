@@ -8262,7 +8262,7 @@ all[key] = [];
 return all[key];
 }
 let satOrbitDirty = false;
-function satSaveOrbits() {
+function satSaveOrbits__r38() {
 satOrbitDirty = false;
 try {
 localStorage.setItem(SAT_ORBIT_STORE_KEY, JSON.stringify(satOrbitAll(), (k, v) => k === "dep" || k === "dep0" || k === "fx" || k === "hit" || k === "flash" ? undefined : v));
@@ -13850,7 +13850,7 @@ floatingText("STUNNED", W / 2, H / 2 - 44, "#8fd8ff");
 }
 }, { capture: true });
 }, 0);
-function detonateAsteroid(index, chain = false, isEMP = false) {
+function detonateAsteroid__r38(index, chain = false, isEMP = false) {
 const a = asteroids[index];
 const info = a ? { x: a.x, y: a.y, r: a.radius, size: a.size, special: a.special } : null;
 const result = detonateAsteroid__orig(index, chain, isEMP);
@@ -13903,7 +13903,7 @@ return;
 }
 return fireRunPowerupNow__orig(part);
 }
-function handlePointer(event) {
+function handlePointer__r38(event) {
 if (typeof deathSeq !== "undefined" && deathSeq)
 return;
 if (bossStunned()) {
@@ -13931,7 +13931,7 @@ return;
 return enterPlanetPhase__orig(skipApproach);
 }
 let bossSatFiring = null;
-function satFire(sat, list, aimX, aimY) {
+function satFire__r38(sat, list, aimX, aimY) {
 bossSatFiring = sat;
 try {
 const r = satFire__orig(sat, list, aimX, aimY);
@@ -15895,7 +15895,7 @@ return mpResolveRemoteTap__orig(fromId, event);
 let smSnap = null;
 let smSnapAt = 0;
 let smWasZoom = false;
-function drawMultiplayerStarMap() {
+function drawMultiplayerStarMap__r38() {
 const zooming = typeof mp !== "undefined" && mp.connected && zoomProgress > .01;
 const r = drawMultiplayerStarMap__orig();
 const cv = document.getElementById("starMapCanvas");
@@ -16087,7 +16087,7 @@ c.fillRect(0, 0, W, H);
 c.restore();
 }
 }
-function drawPlayer() {
+function drawPlayer__r38() {
 if (deathSeq)
 return;
 return drawPlayer__orig();
@@ -16355,7 +16355,7 @@ const d = Math.hypot(orbitalX, orbitalY);
 const k = clamp((d - ORBITAL_RETURN_RADIUS) / (ORBITAL_ESCAPE_RADIUS - ORBITAL_RETURN_RADIUS), 0, 1);
 return Math.round(2 + 70 * Math.pow(k, 1.25));
 }
-function bgUpdate(now) {
+function bgUpdate__r38(now) {
 const dt = Math.min(.05, (now - (bg.last || now)) / 1000);
 bg.last = now;
 if (!running || (worldState !== "field" && worldState !== "orbital")) {
@@ -16569,7 +16569,7 @@ if (r18AllowPlanet && planetId === r18AllowPlanet)
 return true;
 return isPlanetUnlocked__orig(planetId);
 }
-function chooseDestination(id, ownerId) {
+function chooseDestination__r38(id, ownerId) {
 const current = getCurrentSystemOwnerId();
 let owner = ownerId || current;
 if (typeof mp !== "undefined" && mp.connected &&
@@ -28340,7 +28340,7 @@ let r36WrapAt = 0;
 let r36Gate = null;
 const R36_HOLD_MS = 650;
 const R36_LAUNCH_MS = 900;
-function r36OrbitEdge(distance) {
+function r36OrbitEdge__r38(distance) {
 if (worldState !== "orbital")
 return;
 const now = performance.now();
@@ -28615,7 +28615,7 @@ c.fillRect(0, 0, W, H);
 }
 c.restore();
 }
-function drawOrbitalScene() {
+function drawOrbitalScene__r38() {
 const r = drawOrbitalScene__r36();
 try {
 r36DrawRings();
@@ -28752,6 +28752,5049 @@ const have = r37BuiltCount(n.structureId);
 const name = (STRUCTURES[n.structureId] || { name: "structure" }).name;
 return '<div style="font-size:9px;color:' + (have >= n.need ? '#8dffb0' : '#ff8d8d') + ';margin-top:2px;">🏗 Build ' + n.need + ' ' + name + (n.need > 1 ? 's' : '') + ' across your planets: ' + Math.min(have, n.need) + '/' + n.need + '</div>';
 }
+const R38_NEXUS = "nexus";
+const R38_WORLD_R = 2300;
+const R38_MOD_R = 64;
+const R38_BRIDGE = 34;
+const R38_CANNON_R = 200;
+const R38_HOLD_MS = 1100;
+const R38_LAUNCH_MS = 1000;
+const R38_CLAIM_MS = 60000;
+const R38_GARDEN_CLAIM_MS = 180000;
+const R38_PSEUDO = { id: R38_NEXUS, name: "The Nexus", tier: 3, requirement: 0, unlockRank: 0, icon: "🌀", x: 50, y: 96, asteroid: "earth" };
+const r38 = {
+nexus: false,
+prevPlanet: null,
+world: null,
+ride: null,
+zoom: 1,
+zoomT: 1,
+cam: { x: 0, y: 0 },
+camT: { x: 0, y: 0 },
+hover: null,
+cannon: null,
+mapMode: null,
+net: null,
+bump: { x: 0, y: 0 },
+stunUntil: 0,
+lastSpawn: null,
+drawingMap: false,
+inside: null,
+walk: null,
+dockOffer: null,
+toastAt: {},
+gift: null
+};
+function r38Now() {
+return performance.now();
+}
+function r38Save() {
+const s = localPlanetSave || planetSave;
+if (!s.r38)
+s.r38 = {};
+const x = s.r38;
+if (!x.parked)
+x.parked = {};
+if (!x.case)
+x.case = {};
+if (!x.wins)
+x.wins = 0;
+if (!x.fuseTier)
+x.fuseTier = 0;
+return x;
+}
+function r38Persist() {
+try {
+withMySave(() => savePlanetProgress());
+}
+catch (error) {
+try {
+savePlanetProgress();
+}
+catch (e) { }
+}
+}
+function r38Uid(p) {
+return (p || "m") + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+}
+function r38MyId() {
+if (r38.net && r38.net.id)
+return r38.net.id;
+return (typeof mp !== "undefined" && mp.myId) || "me";
+}
+function r38MyName() {
+try {
+const n = (typeof mp !== "undefined" && mp.myName) || localStorage.getItem("mpPlayerName");
+if (n)
+return String(n).slice(0, 16);
+}
+catch (error) { }
+return "You";
+}
+const R38_COLOURS = ["#6ee7ff", "#ff9de6", "#ffd23f", "#7dffb0", "#ff8a5c", "#b98cff", "#5cc8ff", "#ff5c8a"];
+function r38MyColour() {
+if (typeof mp !== "undefined" && mp.connected && mp.myColour)
+return mp.myColour;
+let c = null;
+try {
+c = localStorage.getItem("r38Colour");
+}
+catch (error) { }
+if (!c) {
+c = R38_COLOURS[Math.floor(Math.random() * R38_COLOURS.length)];
+try {
+localStorage.setItem("r38Colour", c);
+}
+catch (error) { }
+}
+return c;
+}
+function r38Throttle(key, ms) {
+const now = r38Now();
+if (now - (r38.toastAt[key] || 0) < ms)
+return false;
+r38.toastAt[key] = now;
+return true;
+}
+function r38Toast(text, colour, key, ms) {
+if (key && !r38Throttle(key, ms || 1500))
+return;
+floatingText(text, W / 2, H * .3, colour || "#bfe9ff");
+}
+const R38_TOKENS = {
+shop: { name: "Shop Token", icon: "🛍", colour: "#ffd23f",
+desc: "Install it in a module's power core: the module doubles in size and opens a shop selling more upgrade tokens." },
+"ship-factory": { name: "Dry Dock Token", icon: "🏭", colour: "#8fd8ff", struct: "ship-factory", price: 16,
+desc: "A repair bay: a ship landing on this module gets its lost hearts back." },
+"pilot-training": { name: "Astronaut Training Token", icon: "🎓", colour: "#5fb4ff", struct: "pilot-training", price: 14,
+desc: "Trained astronauts at the controls — the whole station flies 30% faster (stacks up to +90%)." },
+"bio-dome": { name: "Bio Dome Token", icon: "🏝", colour: "#7dffb0", struct: "bio-dome", price: 14,
+desc: "A garden keeps the crew's claim alive: the station holds its claim for 3 minutes while you're away, not 1." },
+"powerup-forge": { name: "Forge Token", icon: "⚒", colour: "#ff9a3c", struct: "powerup-forge", price: 20,
+desc: "This module's satellite towers recharge twice as fast and their blasts reach much further." },
+"satellite-factory": { name: "Satellite Factory Token", icon: "🛰", colour: "#ff8a1a", struct: "satellite-factory", price: 22,
+desc: "Builds a fresh satellite for any empty tower on this module, one every 90 seconds." },
+tower: { name: "Satellite Tower", icon: "📡", colour: "#c9d6ff", price: 10,
+desc: "Mounts on the outside of a module. Load a satellite onto it and it fires its power at rocks — and at rival stations close by." }
+};
+function r38TokenInfo(id) {
+if (R38_TOKENS[id])
+return R38_TOKENS[id];
+const m = /^fuse:(\d+)$/.exec(id || "");
+if (m) {
+const t = Number(m[1]);
+const n = Math.pow(3, t);
+return {
+name: "Fusion Core ×" + n,
+icon: "⚛",
+colour: "#d79dff",
+fuse: t,
+price: 30 * t,
+desc: "Use it in a module docked to two others of size ×" + Math.pow(3, t - 1) +
+": the three fuse into one ×" + n + " module — interiors, cores, landing pads and towers all kept."
+};
+}
+return { name: id, icon: "❔", colour: "#fff", desc: "" };
+}
+function r38TokenIcon(id) {
+return r38TokenInfo(id).icon;
+}
+function r38CaseAdd(id, n) {
+const c = r38Save().case;
+c[id] = Math.max(0, (c[id] || 0) + (n === undefined ? 1 : n));
+if (!c[id])
+delete c[id];
+r38Persist();
+}
+function r38CaseCount(id) {
+return r38Save().case[id] || 0;
+}
+function r38NewModule(size) {
+size = size || 1;
+return {
+id: r38Uid("m"),
+size,
+rot: Math.random() * Math.PI * 2,
+cores: new Array(size).fill(null),
+towers: new Array(size).fill(null),
+shelf: { mats: {}, tok: {} },
+shop: null,
+satAt: 0
+};
+}
+function r38NewSet(x, y, mod) {
+const set = {
+id: r38Uid("s"),
+x, y, vx: 0, vy: 0,
+mods: [mod.id],
+pos: {},
+links: [],
+claim: null,
+landed: {},
+won: {}
+};
+set.pos[mod.id] = { x: 0, y: 0 };
+return set;
+}
+function r38HasCore(m, tok) {
+return !!(m && m.cores && m.cores.includes(tok));
+}
+function r38HasShop(m) {
+return r38HasCore(m, "shop");
+}
+function r38ModR(m) {
+return R38_MOD_R * Math.sqrt(m.size || 1) * (r38HasShop(m) ? 1.41 : 1);
+}
+function r38SetSize(set, w) {
+w = w || r38.world;
+return set.mods.reduce((s, id) => s + ((w.mods[id] || {}).size || 1), 0);
+}
+function r38ModWorld(set, mid) {
+const p = set.pos[mid] || { x: 0, y: 0 };
+return { x: set.x + p.x, y: set.y + p.y };
+}
+function r38PortAngle(m, k) {
+return m.rot + k * Math.PI * 2 / 3;
+}
+function r38UsedPorts(set, mid) {
+const used = [];
+set.links.forEach(l => {
+if (l[0] === mid)
+used.push(l[1]);
+if (l[2] === mid)
+used.push(l[3]);
+});
+return used;
+}
+function r38PadOffset(m, pad) {
+const n = m.size || 1;
+const R = r38ModR(m);
+if (n === 1)
+return { x: 0, y: -R * .34 };
+const a = -Math.PI / 2 + (pad - (n - 1) / 2) * (Math.PI * 1.6 / n);
+return { x: Math.cos(a) * R * .55, y: Math.sin(a) * R * .55 };
+}
+function r38HatchOffset(m) {
+const R = r38ModR(m);
+const a = r38PortAngle(m, 0) + Math.PI / 3 + Math.PI * 2 / 3;
+return { x: Math.cos(a) * R * .3, y: Math.sin(a) * R * .3 + R * .12 };
+}
+function r38TowerOffset(m, i) {
+const R = r38ModR(m);
+const n = m.size || 1;
+const a = r38PortAngle(m, 0) + Math.PI / 3 + (i % 3) * Math.PI * 2 / 3 + Math.floor(i / 3) * .35;
+return { x: Math.cos(a) * R * (.72 - Math.floor(i / 3) * .12), y: Math.sin(a) * R * (.72 - Math.floor(i / 3) * .12) };
+}
+function r38FreePad(set, mid) {
+const m = r38.world.mods[mid];
+const list = set.landed[mid] || [];
+for (let i = 0; i < (m.size || 1); i++)
+if (!list.some(e => e && e.pad === i))
+return i;
+return -1;
+}
+function r38OwnerShipsOn(set) {
+if (!set.claim)
+return 0;
+let n = 0;
+Object.keys(set.landed).forEach(mid => (set.landed[mid] || []).forEach(e => { if (e && e.pid === set.claim.pid)
+n++; }));
+return n;
+}
+function r38HoldMs(set) {
+const w = r38.world;
+return set.mods.some(id => r38HasCore(w.mods[id], "bio-dome")) ? R38_GARDEN_CLAIM_MS : R38_CLAIM_MS;
+}
+function r38SpeedBoost(set) {
+const w = r38.world;
+let n = 0;
+set.mods.forEach(id => {
+const m = w.mods[id];
+if (m)
+n += m.cores.filter(c => c === "pilot-training").length;
+});
+return 1 + Math.min(3, n) * .3;
+}
+function r38SetExtent(set, fx, fy) {
+let e = 0;
+set.mods.forEach(id => {
+const m = r38.world.mods[id];
+if (!m)
+return;
+const p = r38ModWorld(set, id);
+e = Math.max(e, Math.hypot(p.x - fx, p.y - fy) + r38ModR(m));
+});
+return e || R38_MOD_R;
+}
+function r38SetOf(mid) {
+const w = r38.world;
+if (!w)
+return null;
+for (const id in w.sets)
+if (w.sets[id].mods.includes(mid))
+return w.sets[id];
+return null;
+}
+function r38Pack(set, w) {
+w = w || r38.world;
+return { set: JSON.parse(JSON.stringify(set)), mods: set.mods.map(id => JSON.parse(JSON.stringify(w.mods[id]))) };
+}
+function r38Unpack(pk, w) {
+w = w || r38.world;
+const set = pk.set;
+pk.mods.forEach(m => { w.mods[m.id] = m; });
+w.sets[set.id] = set;
+return set;
+}
+function r38NewWorld(kind, planetId) {
+return { kind, planetId, sets: {}, mods: {}, patches: [], rank: 0, ver: 0 };
+}
+function r38RankFor(n) {
+if (!n)
+return 0;
+return 1 + Math.floor(Math.log(n) / Math.log(9) + 1e-9);
+}
+function r38Target(rank) {
+return Math.pow(9, Math.max(1, rank));
+}
+function r38RankName(rank) {
+return rank === 0 ? "Rank 0 · find your first module" : "Rank " + rank + " · stations of " + (rank === 1 ? "1–8" : Math.pow(9, rank - 1) + "–" + (Math.pow(9, rank) - 1)) + " modules";
+}
+function r38IsHost() {
+if (!r38.nexus)
+return true;
+const n = r38.net;
+return !n || n.solo || !n.online || n.hostId === n.id;
+}
+function r38Peers() {
+const n = r38.net;
+if (!n || n.solo || !n.online)
+return [];
+return Object.keys(n.peers).map(id => n.peers[id]).filter(p => p && p.id !== n.id);
+}
+function r38PeerName(pid) {
+if (pid === r38MyId())
+return "You";
+const p = r38.net && r38.net.peers[pid];
+return (p && p.name) || "A rival";
+}
+function r38NetRaw(net, m) {
+if (net && net.ws && net.ws.readyState === 1) {
+try {
+net.ws.send(JSON.stringify(m));
+}
+catch (error) { }
+}
+}
+function r38Send(d, to) {
+const n = r38.net;
+if (!n || n.solo || !n.online)
+return;
+r38NetRaw(n, to ? { type: "nxMsg", to, d } : { type: "nxMsg", d });
+}
+function r38Op(d) {
+if (r38IsHost()) {
+r38HostOp(r38MyId(), d);
+return;
+}
+r38Send({ k: "op", op: d }, r38.net.hostId);
+}
+function r38NetOpen(rank) {
+r38NetClose();
+const net = { ws: null, id: null, hostId: null, peers: {}, online: false, solo: false, rank, shard: null, openedAt: r38Now(), lastSt: 0, sentAt: {} };
+r38.net = net;
+let ws = null;
+try {
+if (typeof MULTIPLAYER_SERVER_URL === "string" && MULTIPLAYER_SERVER_URL)
+ws = new WebSocket(MULTIPLAYER_SERVER_URL);
+}
+catch (error) {
+ws = null;
+}
+if (!ws) {
+r38NetSolo(net, false);
+return net;
+}
+net.ws = ws;
+net.failTimer = setTimeout(() => {
+if (r38.net === net && !net.online)
+r38NetSolo(net, false);
+}, 3500);
+ws.onopen = () => {
+r38NetRaw(net, {
+type: "nxJoin",
+name: r38MyName(),
+colour: r38MyColour(),
+rank,
+roomCode: (typeof mp !== "undefined" && mp.connected && mp.roomCode) || null
+});
+};
+ws.onmessage = e => {
+let m = null;
+try {
+m = JSON.parse(e.data);
+}
+catch (error) {
+return;
+}
+if (r38.net !== net)
+return;
+try {
+r38NetMsg(net, m);
+}
+catch (error) {
+console.error("Nexus message failed:", error);
+}
+};
+ws.onclose = () => {
+if (r38.net !== net || net.closing)
+return;
+const was = net.online;
+net.online = false;
+r38NetSolo(net, was);
+};
+net.ping = setInterval(() => r38NetRaw(net, { type: "nxPing" }), 10000);
+return net;
+}
+function r38NetClose() {
+const n = r38.net;
+if (!n)
+return;
+n.closing = true;
+clearTimeout(n.failTimer);
+clearInterval(n.ping);
+try {
+if (n.ws) {
+r38NetRaw(n, { type: "nxLeave" });
+n.ws.close();
+}
+}
+catch (error) { }
+r38.net = null;
+}
+function r38NetSolo(net, lost) {
+if (net.solo)
+return;
+net.solo = true;
+clearTimeout(net.failTimer);
+if (!net.id)
+net.id = r38MyId() === "me" ? "me" : r38MyId();
+const wasHost = net.hostId === net.id;
+net.hostId = net.id;
+if (r38.world && r38.world.kind === "nexus") {
+Object.values(r38.world.sets).forEach(set => {
+if (set.claim && set.claim.pid !== net.id)
+r38DropPlayer(set.claim.pid);
+});
+}
+net.peers = {};
+if (lost)
+r38Toast("NEXUS LINK LOST — FLYING SOLO", "#ffb4b4");
+if (r38.nexus) {
+if (!wasHost || !r38.world.patches.length)
+r38HostInit();
+r38ApplyPendingBring();
+}
+}
+function r38NetMsg(net, m) {
+if (m.type === "welcome") {
+net.id = m.id;
+return;
+}
+if (m.type === "nxJoined") {
+clearTimeout(net.failTimer);
+net.online = true;
+net.id = m.id;
+net.hostId = m.hostId;
+net.shard = m.shard;
+net.rank = m.rank;
+r38.world.rank = m.rank;
+(m.members || []).forEach(p => {
+if (p.id !== net.id)
+net.peers[p.id] = { id: p.id, name: p.name, colour: p.colour, roomCode: p.roomCode };
+});
+r38SendHi();
+if (net.hostId === net.id) {
+r38HostInit();
+r38ApplyPendingBring();
+}
+else {
+r38Send({ k: "need" }, net.hostId);
+}
+const others = Object.keys(net.peers).length;
+r38Toast(others ? "THE NEXUS · " + (others + 1) + " ASTRONAUTS HERE" : "THE NEXUS · RANK " + net.rank, "#d79dff");
+return;
+}
+if (m.type === "nxPeer") {
+if (m.left) {
+const p = net.peers[m.id];
+delete net.peers[m.id];
+if (r38IsHost())
+r38DropPlayer(m.id);
+if (p)
+r38Toast((p.name || "A rival") + " left the Nexus", "#9fb4d8", "left" + m.id, 4000);
+return;
+}
+net.peers[m.id] = { id: m.id, name: m.name, colour: m.colour, roomCode: m.roomCode };
+r38Toast((m.name || "An astronaut") + " arrived", "#bfe9ff", "arr" + m.id, 4000);
+r38SendHi(m.id);
+if (r38IsHost())
+r38HostSendState(m.id);
+return;
+}
+if (m.type === "nxHost") {
+const was = r38IsHost();
+net.hostId = m.hostId;
+if (!was && r38IsHost()) {
+r38HostTakeOver();
+}
+return;
+}
+if (m.type === "nxMsg") {
+r38OnData(m.from, m.d || {});
+return;
+}
+}
+function r38SendHi(to) {
+r38Send({ k: "hi", name: r38MyName(), colour: r38MyColour(), raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null }, to);
+}
+function r38OnData(from, d) {
+const net = r38.net;
+if (!net)
+return;
+const w = r38.world;
+const peer = net.peers[from] || (from !== net.id ? (net.peers[from] = { id: from }) : null);
+switch (d.k) {
+case "hi":
+if (peer) {
+peer.name = d.name || peer.name;
+peer.colour = d.colour || peer.colour;
+if (d.raw !== undefined) {
+peer.raw = d.raw;
+peer.shapes = null;
+}
+}
+return;
+case "need":
+if (r38IsHost())
+r38HostSendState(from);
+return;
+case "me":
+if (peer) {
+peer.p = d;
+peer.at = r38Now();
+}
+return;
+case "st":
+if (from === net.hostId && !r38IsHost())
+r38ApplyState(d.w);
+return;
+case "pos":
+r38ApplyPos(from, d.s || []);
+return;
+case "ast":
+if (from === net.hostId && !r38IsHost())
+r38ApplyAsteroids(d.a || []);
+return;
+case "kill":
+if (r38IsHost())
+(d.ids || []).forEach(id => r38RemoteKill(id, true));
+return;
+case "hit":
+if (r38IsHost())
+r38RemoteKill(d.id, false);
+return;
+case "op":
+if (r38IsHost() && d.op)
+r38HostOp(from, d.op);
+return;
+case "zap":
+r38TakeZap(from, d);
+return;
+case "win":
+r38OnWin(d);
+return;
+case "toast":
+if (d.t)
+r38Toast(d.t, d.c || "#bfe9ff", "t" + d.t, 2500);
+return;
+}
+void w;
+}
+function r38WorldPayload() {
+const w = r38.world;
+return { rank: w.rank, patches: w.patches, sets: w.sets, mods: w.mods, ver: ++w.ver };
+}
+function r38HostSendState(to) {
+if (!r38.world || r38.world.kind !== "nexus")
+return;
+r38Send({ k: "st", w: r38WorldPayload() }, to);
+if (!to)
+r38.net.lastSt = r38Now();
+}
+function r38Dirty() {
+if (r38.world)
+r38.world.dirty = true;
+if (r38.world && r38.world.kind === "home")
+r38SaveHomeSoon();
+}
+function r38ApplyState(ws) {
+const w = r38.world;
+if (!w || w.kind !== "nexus")
+return;
+const mine = r38.ride && w.sets[r38.ride.setId];
+const keep = mine ? { x: mine.x, y: mine.y, vx: mine.vx, vy: mine.vy } : null;
+const old = w.sets;
+w.rank = ws.rank;
+w.patches = ws.patches || [];
+w.mods = ws.mods || {};
+w.sets = ws.sets || {};
+Object.values(w.sets).forEach(s => {
+const o = old[s.id];
+if (o && s.drv && s.drv !== r38MyId()) {
+s.x = o.x;
+s.y = o.y;
+s.tx = s.x;
+s.ty = s.y;
+}
+});
+if (keep && w.sets[r38.ride.setId])
+Object.assign(w.sets[r38.ride.setId], keep);
+r38.net.lastSt = r38Now();
+r38ApplyPendingBring();
+r38AfterState();
+}
+function r38ApplyPos(from, list) {
+const w = r38.world;
+if (!w)
+return;
+list.forEach(e => {
+const s = w.sets[e[0]];
+if (!s)
+return;
+if (r38.ride && r38.ride.setId === s.id)
+return;
+if (from !== r38.net.hostId && s.drv !== from)
+return;
+if (r38IsHost() && s.drv !== from)
+return;
+s.tx = e[1];
+s.ty = e[2];
+s.vx = e[3];
+s.vy = e[4];
+s.posAt = r38Now();
+if (s.x === undefined || Math.hypot(s.x - e[1], s.y - e[2]) > 400) {
+s.x = e[1];
+s.y = e[2];
+}
+});
+}
+function r38HostInit() {
+const w = r38.world;
+if (!w || w.kind !== "nexus")
+return;
+if (!w.patches.length)
+w.patches = r38MakePatches();
+w.rank = r38.net ? r38.net.rank : w.rank;
+w.hostAt = r38Now();
+r38Dirty();
+}
+function r38HostTakeOver() {
+const w = r38.world;
+if (!w)
+return;
+r38Toast("YOU'RE HOSTING THE NEXUS NOW", "#d79dff", "host", 5000);
+if (!w.patches.length)
+w.patches = r38MakePatches();
+asteroids.forEach(a => { a.r38Born = r38Now(); });
+const present = new Set([r38MyId(), ...r38Peers().map(p => p.id)]);
+Object.values(w.sets).forEach(s => {
+if (s.claim && !present.has(s.claim.pid))
+r38DropPlayer(s.claim.pid);
+if (s.drv && !present.has(s.drv))
+s.drv = null;
+});
+r38Dirty();
+}
+function r38DropPlayer(pid) {
+const w = r38.world;
+if (!w)
+return;
+Object.values(w.sets).forEach(s => {
+Object.keys(s.landed).forEach(mid => {
+s.landed[mid] = (s.landed[mid] || []).filter(e => e && e.pid !== pid);
+});
+if (s.drv === pid)
+s.drv = null;
+if (s.claim && s.claim.pid === pid && !s.claim.awayAt)
+s.claim.awayAt = Date.now();
+});
+r38Dirty();
+}
+function r38ApplyPendingBring() {
+const pb = r38.pendingBring;
+if (!pb || !r38.world)
+return;
+if (r38.world.sets[pb.pk.set.id]) {
+if (r38IsHost() || pb.sent)
+r38.pendingBring = null;
+return;
+}
+r38Unpack(JSON.parse(JSON.stringify(pb.pk)));
+if (r38IsHost()) {
+r38HostOp(r38MyId(), { k: "bring", pk: pb.pk, mid: pb.mid, pad: pb.pad });
+r38.pendingBring = null;
+}
+else if (!pb.sent) {
+pb.sent = true;
+r38Op({ k: "bring", pk: pb.pk, mid: pb.mid, pad: pb.pad });
+}
+}
+function r38Landing(from) {
+const p = from === r38MyId() ? { name: r38MyName(), colour: r38MyColour() } : (r38.net && r38.net.peers[from]) || {};
+return { pid: from, name: p.name || "Astronaut", colour: p.colour || "#6ee7ff" };
+}
+function r38HostOp(from, d) {
+const w = r38.world;
+if (!w)
+return;
+const set = d.set ? w.sets[d.set] : null;
+switch (d.k) {
+case "land": {
+if (!set || !set.mods.includes(d.mid))
+return r38Reply(from, "That station's gone");
+if (set.claim && set.claim.pid !== from)
+return r38Reply(from, "Claimed by " + set.claim.name + " — only their ships can land");
+const list = set.landed[d.mid] || (set.landed[d.mid] = []);
+if (list.some(e => e && e.pid === from))
+return;
+const pad = Number.isFinite(d.pad) && !list.some(e => e && e.pad === d.pad) ? d.pad : r38FreePad(set, d.mid);
+if (pad < 0)
+return r38Reply(from, "No free landing pad there");
+const who = r38Landing(from);
+list.push(Object.assign({ pad, raw: d.raw || null }, who));
+const fresh = !set.claim;
+set.claim = Object.assign({}, who, { awayAt: null });
+set.drv = from;
+if (fresh && w.kind === "nexus") {
+r38Broadcast(who.name + " claimed a station", "#ffe9a8");
+}
+r38Dirty();
+return;
+}
+case "launch": {
+if (!set)
+return;
+Object.keys(set.landed).forEach(mid => {
+set.landed[mid] = (set.landed[mid] || []).filter(e => e && e.pid !== from);
+});
+if (set.drv === from)
+set.drv = null;
+if (set.claim && set.claim.pid === from && !r38OwnerShipsOn(set))
+set.claim.awayAt = Date.now();
+if (Number.isFinite(d.x)) {
+set.x = d.x;
+set.y = d.y;
+set.vx = (d.vx || 0) * .4;
+set.vy = (d.vy || 0) * .4;
+}
+r38Dirty();
+return;
+}
+case "dock": {
+const a = w.sets[d.a], b = w.sets[d.b];
+if (!a || !b || a === b || !a.claim || !b.claim || a.claim.pid !== from || b.claim.pid !== from)
+return;
+if (!r38Touching(a, b, 26))
+return;
+if (!r38DockSets(a, b))
+return r38Reply(from, "No free docking ports line up");
+r38Dirty();
+return;
+}
+case "bring": {
+if (!d.pk || !d.pk.set || w.sets[d.pk.set.id] && w.sets[d.pk.set.id].claim && w.sets[d.pk.set.id].claim.pid !== from)
+return;
+const s = r38Unpack(JSON.parse(JSON.stringify(d.pk)));
+const who = r38Landing(from);
+s.landed = {};
+if (d.mid && s.mods.includes(d.mid))
+s.landed[d.mid] = [Object.assign({ pad: d.pad || 0, raw: d.pk.raw || null }, who)];
+s.claim = Object.assign({}, who, { awayAt: null });
+s.drv = from;
+s.won = s.won || {};
+r38Dirty();
+return;
+}
+case "take": {
+if (!set || !set.claim || set.claim.pid !== from)
+return;
+set.mods.forEach(id => { delete w.mods[id]; });
+delete w.sets[set.id];
+r38Dirty();
+return;
+}
+case "modset": {
+const s = r38SetOf(d.mid);
+if (!s || !s.claim || s.claim.pid !== from || !d.m)
+return;
+const m = w.mods[d.mid];
+if (!m)
+return;
+Object.keys(d.m).forEach(key => {
+if (key !== "id")
+m[key] = d.m[key];
+});
+r38Dirty();
+return;
+}
+case "setpos": {
+if (!set || !set.claim || set.claim.pid !== from || !d.pos)
+return;
+Object.keys(d.pos).forEach(id => {
+if (set.pos[id])
+set.pos[id] = d.pos[id];
+});
+r38Dirty();
+return;
+}
+case "fuse": {
+const s = r38SetOf(d.mid);
+if (!s || !s.claim || s.claim.pid !== from)
+return;
+if (!r38FuseApply(s, d.mid, d.with || [], d.t))
+return r38Reply(from, "Those modules can't fuse");
+r38Dirty();
+return;
+}
+}
+}
+function r38Reply(to, text) {
+if (to === r38MyId()) {
+r38Toast(text, "#ffb4b4", "reply", 1200);
+return;
+}
+r38Send({ k: "toast", t: text, c: "#ffb4b4" }, to);
+}
+function r38Broadcast(text, colour) {
+r38Toast(text, colour, "b" + text, 2500);
+r38Send({ k: "toast", t: text, c: colour });
+}
+let r38NextNid = 1;
+function r38AsteroidWorld(a) {
+return { x: a.x - W / 2 + orbitalX, y: a.y - H / 2 + orbitalY };
+}
+function r38HostSendAsteroids() {
+const out = [];
+asteroids.forEach(a => {
+if (!a.nid)
+a.nid = (r38.net && r38.net.id ? String(r38.net.id).slice(-4) : "h") + (r38NextNid++);
+const p = r38AsteroidWorld(a);
+out.push([a.nid, Math.round(p.x), Math.round(p.y), Math.round(a.vx), Math.round(a.vy), a.size, a.typeId, a.special || 0, a.durability]);
+});
+r38Send({ k: "ast", a: out });
+}
+function r38ApplyAsteroids(list) {
+const now = r38Now();
+const dead = r38.deadNids || (r38.deadNids = new Map());
+const map = new Map();
+asteroids.forEach(a => { if (a.nid)
+map.set(a.nid, a); });
+const seen = new Set();
+list.forEach(e => {
+const [nid, wx, wy, vx, vy, size, type, sp, dur] = e;
+if (dead.has(nid) && now - dead.get(nid) < 1600)
+return;
+seen.add(nid);
+const sx = W / 2 - orbitalX + wx, sy = H / 2 - orbitalY + wy;
+let a = map.get(nid);
+if (!a) {
+try {
+a = new Asteroid(sx, sy, size, type, sp || null);
+}
+catch (error) {
+return;
+}
+a.nid = nid;
+a.vx = vx;
+a.vy = vy;
+a.durability = dur;
+asteroids.push(a);
+return;
+}
+const dx = sx - a.x, dy = sy - a.y;
+if (Math.hypot(dx, dy) > 70) {
+a.x = sx;
+a.y = sy;
+}
+else {
+a.x += dx * .35;
+a.y += dy * .35;
+}
+a.vx = vx;
+a.vy = vy;
+a.durability = Math.min(a.durability, dur);
+});
+asteroids = asteroids.filter(a => a.nid ? seen.has(a.nid) : now - (a.r38Born || (a.r38Born = now)) < 500);
+r38.known = new Set(asteroids.filter(a => a.nid));
+dead.forEach((t, k) => { if (now - t > 3000)
+dead.delete(k); });
+}
+function r38ReportKills() {
+if (r38IsHost() || !r38.known)
+return;
+const now = new Set(asteroids);
+const ids = [];
+r38.known.forEach(a => {
+if (!now.has(a) && a.nid) {
+ids.push(a.nid);
+(r38.deadNids || (r38.deadNids = new Map())).set(a.nid, r38Now());
+}
+});
+if (ids.length)
+r38Send({ k: "kill", ids }, r38.net.hostId);
+r38.known = new Set(asteroids.filter(a => a.nid));
+}
+function r38RemoteKill(nid, destroy) {
+const i = asteroids.findIndex(a => a.nid === nid);
+if (i < 0)
+return;
+const s0 = score, c0 = combo, cp = coinPickups.length, mp0 = materialPickups.length;
+let ct = null;
+try {
+ct = comboTimer;
+}
+catch (error) { }
+r38.remoteKill = true;
+try {
+detonateAsteroid(i, false, !!destroy);
+}
+catch (error) { }
+r38.remoteKill = false;
+score = s0;
+combo = c0;
+try {
+if (ct !== null)
+comboTimer = ct;
+}
+catch (error) { }
+coinPickups.length = Math.min(coinPickups.length, cp);
+materialPickups.length = Math.min(materialPickups.length, mp0);
+}
+function r38Views() {
+const out = [{ x: orbitalX, y: orbitalY, z: r38.zoom, me: true }];
+const now = r38Now();
+r38Peers().forEach(p => {
+if (p.p && now - (p.at || 0) < 6000)
+out.push({ x: p.p.x, y: p.p.y, z: p.p.z || 1 });
+});
+return out;
+}
+function r38ViewR(v) {
+return Math.hypot(W, H) * .5 / Math.min(1, v.z || 1) + 40;
+}
+function r38HostSpawn(dt) {
+const views = r38Views();
+r38.views = views;
+views.forEach((v, i) => {
+const R = r38ViewR(v);
+const want = Math.min(34, Math.round(10 / Math.pow(Math.min(1, v.z || 1), 1.25)));
+let n = 0;
+asteroids.forEach(a => {
+const p = r38AsteroidWorld(a);
+if (Math.hypot(p.x - v.x, p.y - v.y) < R * 1.15)
+n++;
+});
+const key = "sp" + i;
+r38.spawnT = r38.spawnT || {};
+r38.spawnT[key] = (r38.spawnT[key] || 0) - dt;
+if (n >= want || r38.spawnT[key] > 0)
+return;
+r38.spawnT[key] = .35 + Math.random() * .35;
+const ang = Math.random() * Math.PI * 2;
+const wx = v.x + Math.cos(ang) * (R + 50), wy = v.y + Math.sin(ang) * (R + 50);
+if (Math.hypot(wx, wy) < R38_CANNON_R * 1.4)
+return;
+r38SpawnRockAt(wx, wy, v.x + (Math.random() - .5) * R, v.y + (Math.random() - .5) * R);
+});
+}
+function r38SpawnRockAt(wx, wy, tx, ty) {
+const patch = r38PatchAt(wx, wy);
+const planet = patch ? patch.planet : "earth";
+const prev = currentPlanetId;
+let size = 1, special = null, type = (getPlanet__r38(planet) || { asteroid: "earth" }).asteroid;
+try {
+currentPlanetId = planet;
+size = rollAsteroidSize();
+special = rollSpecialKind();
+}
+catch (error) { }
+finally {
+currentPlanetId = prev;
+}
+if (special === "twin")
+special = null;
+const sx = W / 2 - orbitalX + wx, sy = H / 2 - orbitalY + wy;
+let a;
+try {
+a = new Asteroid(sx, sy, size, type, special);
+}
+catch (error) {
+return;
+}
+const dx = tx - wx, dy = ty - wy, len = Math.hypot(dx, dy) || 1;
+const sp = Math.hypot(a.vx, a.vy) * ORBITAL_ASTEROID_DRIFT * 1.25;
+a.vx = dx / len * sp;
+a.vy = dy / len * sp;
+a.r38Patch = patch ? patch.id : null;
+asteroids.push(a);
+}
+function r38HostKeep(a) {
+const views = r38.views || r38Views();
+const p = r38AsteroidWorld(a);
+return views.some(v => Math.hypot(p.x - v.x, p.y - v.y) < r38ViewR(v) * 1.5 + (a.radius || 0));
+}
+const R38_PATCH_WORLDS = ["earth", "mars", "europa", "titan", "neptune", "kepler", "aurora", "helios", "nova", "zenith", "nemesis"];
+const R38_PATCH_BUDGET = 6;
+function r38MakePatches() {
+const pool = R38_PATCH_WORLDS.slice().sort(() => Math.random() - .5);
+const out = [];
+for (let i = 0; i < 6; i++) {
+const a = i / 6 * Math.PI * 2 + Math.random() * .6, rr = 500 + Math.random() * 1300;
+out.push({ id: r38Uid("p"), planet: pool[i], x: Math.cos(a) * rr, y: Math.sin(a) * rr, r: 1, vx: 0, vy: 0 });
+}
+return out;
+}
+function r38PatchAt(wx, wy) {
+const w = r38.world;
+if (!w || !w.patches.length)
+return null;
+let best = null, bd = Infinity;
+w.patches.forEach(p => {
+const d = Math.hypot(wx - p.x, wy - p.y) / Math.max(.05, p.r);
+if (d < bd) {
+bd = d;
+best = p;
+}
+});
+return best;
+}
+function r38PatchNeighbours(p, n) {
+return r38.world.patches.filter(q => q !== p).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y)).slice(0, n);
+}
+function r38PatchHit(wx, wy, size) {
+const w = r38.world;
+if (!w || w.kind !== "nexus" || !r38IsHost())
+return;
+const p = r38PatchAt(wx, wy);
+if (!p)
+return;
+const amount = .011 * (size || 1);
+p.r = Math.max(0, p.r - amount);
+const ns = r38PatchNeighbours(p, 2);
+ns.forEach(q => { q.r += amount / Math.max(1, ns.length); });
+w.patchDirty = true;
+}
+function r38PatchTick(dt) {
+const w = r38.world;
+const ps = w.patches;
+if (!ps.length)
+return;
+for (let i = ps.length - 1; i >= 0; i--) {
+if (ps[i].r < .34 && ps.length > 3) {
+const p = ps[i];
+const ns = r38PatchNeighbours(p, 2);
+ns.forEach(q => { q.r += p.r / Math.max(1, ns.length); });
+ps.splice(i, 1);
+r38Broadcast("The " + (getPlanet__r38(p.planet) || { name: p.planet }).name + " patch has been cleared", "#9fe0ff");
+w.patchDirty = true;
+}
+}
+ps.slice().forEach(p => {
+if (p.r < 1.75 || ps.length >= 9)
+return;
+const here = new Set(ps.map(q => q.planet));
+const fresh = R38_PATCH_WORLDS.filter(id => !here.has(id));
+const planet = fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : R38_PATCH_WORLDS.filter(id => id !== p.planet)[Math.floor(Math.random() * (R38_PATCH_WORLDS.length - 1))];
+const a = Math.random() * Math.PI * 2, off = 320 * p.r;
+const q = { id: r38Uid("p"), planet, x: p.x + Math.cos(a) * off, y: p.y + Math.sin(a) * off, r: p.r * .45, vx: Math.cos(a) * 8, vy: Math.sin(a) * 8 };
+p.r *= .55;
+p.x -= Math.cos(a) * off * .25;
+p.y -= Math.sin(a) * off * .25;
+ps.push(q);
+r38Broadcast("A " + (getPlanet__r38(planet) || { name: planet }).name + " patch split off", "#9fe0ff");
+w.patchDirty = true;
+});
+const sum = ps.reduce((s, p) => s + p.r, 0) || 1;
+ps.forEach(p => { p.r *= R38_PATCH_BUDGET / sum; });
+ps.forEach(p => {
+ps.forEach(q => {
+if (p === q)
+return;
+const dx = p.x - q.x, dy = p.y - q.y, d = Math.hypot(dx, dy) || 1;
+const want = 300 * (p.r + q.r);
+if (d < want) {
+p.vx += dx / d * (want - d) * .02 * dt;
+p.vy += dy / d * (want - d) * .02 * dt;
+}
+});
+const d = Math.hypot(p.x, p.y);
+if (d > R38_WORLD_R * .85) {
+p.vx -= p.x / d * 10 * dt;
+p.vy -= p.y / d * 10 * dt;
+}
+p.vx *= Math.exp(-.3 * dt);
+p.vy *= Math.exp(-.3 * dt);
+p.x += p.vx * dt;
+p.y += p.vy * dt;
+});
+}
+function r38SpawnModule(size) {
+const w = r38.world;
+const m = r38NewModule(size || 1);
+const a = Math.random() * Math.PI * 2;
+const set = r38NewSet(Math.cos(a) * R38_CANNON_R * .4, Math.sin(a) * R38_CANNON_R * .4, m);
+const rr = 650 + Math.random() * (R38_WORLD_R * .8 - 650);
+set.spawn = { tx: Math.cos(a) * rr, ty: Math.sin(a) * rr };
+w.mods[m.id] = m;
+w.sets[set.id] = set;
+r38Dirty();
+return set;
+}
+function r38Players() {
+return [r38MyId(), ...r38Peers().map(p => p.id)];
+}
+function r38HostRules() {
+const w = r38.world;
+if (!w || w.kind !== "nexus")
+return;
+const sets = Object.values(w.sets);
+const total = sets.reduce((s, x) => s + r38SetSize(x), 0);
+const unclaimed = sets.filter(s => !s.claim);
+const players = r38Players();
+const rank = w.rank || 0;
+const now = r38Now();
+if (now - (w.lastSpawnAt || 0) > 1400) {
+if (rank === 0) {
+if (total < 9) {
+r38SpawnModule(1);
+w.lastSpawnAt = now;
+}
+}
+else if (!unclaimed.length) {
+const n = rank === 1 ? 1 : players.length;
+const size = rank >= 3 ? Math.pow(3, rank - 2) : 1;
+for (let i = 0; i < n; i++)
+r38SpawnModule(size);
+w.lastSpawnAt = now;
+r38Broadcast(n > 1 ? n + " fresh modules launched from the cannon" : "A fresh module launched from the cannon", "#ffe9a8");
+}
+}
+let slots;
+if (rank === 0) {
+const claimants = new Set(sets.filter(s => s.claim).map(s => s.claim.pid));
+const without = players.filter(id => !claimants.has(id)).length;
+slots = Math.max(0, unclaimed.length - without);
+}
+else {
+slots = total < r38Target(rank) ? Math.max(0, 12 - players.length) : 0;
+}
+if (r38.net && r38.net.online && !r38.net.solo && slots !== w.slots) {
+w.slots = slots;
+r38NetRaw(r38.net, { type: "nxMeta", slots });
+}
+sets.forEach(s => {
+if (!s.claim)
+return;
+if (r38OwnerShipsOn(s)) {
+s.claim.awayAt = null;
+return;
+}
+if (!s.claim.awayAt)
+s.claim.awayAt = Date.now();
+if (Date.now() - s.claim.awayAt > r38HoldMs(s)) {
+r38Broadcast(s.claim.name + "'s station is up for grabs!", "#ffd23f");
+s.claim = null;
+s.drv = null;
+r38Dirty();
+}
+});
+const target = r38Target(rank);
+sets.forEach(s => {
+if (!s.claim || (s.won || {})[rank])
+return;
+if (r38SetSize(s) < target)
+return;
+if (players.length > 1)
+return;
+s.won = s.won || {};
+s.won[rank] = true;
+const msg = { k: "win", pid: s.claim.pid, rank, set: s.id, name: s.claim.name, why: "last" };
+r38Send(msg);
+r38OnWin(msg);
+r38Dirty();
+});
+}
+function r38HostPhysics(dt) {
+const w = r38.world;
+Object.values(w.sets).forEach(s => {
+if (s.drv)
+return;
+if (s.spawn) {
+const dx = s.spawn.tx - s.x, dy = s.spawn.ty - s.y, d = Math.hypot(dx, dy);
+if (d < 20) {
+s.spawn = null;
+const a = Math.random() * Math.PI * 2;
+s.vx = Math.cos(a) * 6;
+s.vy = Math.sin(a) * 6;
+}
+else {
+const sp = Math.min(190, 40 + d * .35);
+s.vx += (dx / d * sp - s.vx) * Math.min(1, dt * 2);
+s.vy += (dy / d * sp - s.vy) * Math.min(1, dt * 2);
+}
+}
+else {
+s.vx *= Math.exp(-.35 * dt);
+s.vy *= Math.exp(-.35 * dt);
+const d = Math.hypot(s.x, s.y) || 1;
+if (d < R38_CANNON_R * 2.4) {
+s.vx += s.x / d * 30 * dt;
+s.vy += s.y / d * 30 * dt;
+}
+if (d > R38_WORLD_R * .92) {
+s.vx -= s.x / d * 24 * dt;
+s.vy -= s.y / d * 24 * dt;
+}
+}
+s.x += s.vx * dt;
+s.y += s.vy * dt;
+s.tx = s.x;
+s.ty = s.y;
+});
+}
+function r38SmoothSets(dt) {
+const w = r38.world;
+Object.values(w.sets).forEach(s => {
+if (r38.ride && r38.ride.setId === s.id)
+return;
+if (r38IsHost() && !s.drv)
+return;
+if (s.tx === undefined) {
+s.tx = s.x;
+s.ty = s.y;
+}
+s.tx += (s.vx || 0) * dt;
+s.ty += (s.vy || 0) * dt;
+s.x += (s.tx - s.x) * Math.min(1, dt * 6);
+s.y += (s.ty - s.y) * Math.min(1, dt * 6);
+});
+}
+function r38Touching(a, b, slack) {
+const w = r38.world;
+for (const ia of a.mods) {
+const ma = w.mods[ia];
+if (!ma)
+continue;
+const pa = r38ModWorld(a, ia);
+for (const ib of b.mods) {
+const mb = w.mods[ib];
+if (!mb)
+continue;
+const pb = r38ModWorld(b, ib);
+if (Math.hypot(pa.x - pb.x, pa.y - pb.y) < r38ModR(ma) + r38ModR(mb) + (slack || 0))
+return true;
+}
+}
+return false;
+}
+function r38DockSets(a, b) {
+const w = r38.world;
+const options = [];
+a.mods.forEach(ia => {
+const ma = w.mods[ia];
+const usedA = r38UsedPorts(a, ia);
+const ca = r38ModWorld(a, ia);
+for (let pa = 0; pa < 3; pa++) {
+if (usedA.includes(pa))
+continue;
+const ta = r38PortAngle(ma, pa);
+b.mods.forEach(ib => {
+const mb = w.mods[ib];
+const usedB = r38UsedPorts(b, ib);
+const cb = r38ModWorld(b, ib);
+for (let pb = 0; pb < 3; pb++) {
+if (usedB.includes(pb))
+continue;
+const tb = r38PortAngle(mb, pb);
+const portA = { x: ca.x + Math.cos(ta) * r38ModR(ma), y: ca.y + Math.sin(ta) * r38ModR(ma) };
+const portB = { x: cb.x + Math.cos(tb) * r38ModR(mb), y: cb.y + Math.sin(tb) * r38ModR(mb) };
+options.push({ ia, pa, ib, pb, ta, tb, d: Math.hypot(portA.x - portB.x, portA.y - portB.y) });
+}
+});
+}
+});
+options.sort((x, y) => x.d - y.d);
+for (const o of options) {
+const ma = w.mods[o.ia], mb = w.mods[o.ib];
+let turn = (o.ta + Math.PI) - o.tb;
+const ca = r38ModWorld(a, o.ia);
+const cb = r38ModWorld(b, o.ib);
+const dist = r38ModR(ma) + R38_BRIDGE + r38ModR(mb);
+const target = { x: ca.x + Math.cos(o.ta) * dist, y: ca.y + Math.sin(o.ta) * dist };
+const c = Math.cos(turn), sn = Math.sin(turn);
+const placed = {};
+b.mods.forEach(ib => {
+const p = r38ModWorld(b, ib);
+const qx = p.x - cb.x, qy = p.y - cb.y;
+placed[ib] = { x: target.x + qx * c - qy * sn, y: target.y + qx * sn + qy * c };
+});
+let clash = false;
+b.mods.forEach(ib => {
+a.mods.forEach(ia => {
+const pa = r38ModWorld(a, ia);
+if (Math.hypot(pa.x - placed[ib].x, pa.y - placed[ib].y) < r38ModR(w.mods[ia]) + r38ModR(w.mods[ib]) + 6)
+clash = true;
+});
+});
+if (clash)
+continue;
+b.mods.forEach(ib => {
+w.mods[ib].rot += turn;
+a.pos[ib] = { x: placed[ib].x - a.x, y: placed[ib].y - a.y };
+a.mods.push(ib);
+if (b.landed[ib])
+a.landed[ib] = b.landed[ib];
+});
+a.links.push([o.ia, o.pa, o.ib, o.pb], ...b.links);
+a.won = Object.assign({}, b.won || {}, a.won || {});
+a.dockFx = { at: Date.now(), x: target.x, y: target.y };
+if (b.drv && !a.drv)
+a.drv = b.drv;
+delete w.sets[b.id];
+void mb;
+return true;
+}
+return false;
+}
+function r38FuseCandidates(set, mid) {
+const w = r38.world;
+const m = w.mods[mid];
+if (!m)
+return [];
+const out = [];
+set.links.forEach(l => {
+const other = l[0] === mid ? l[2] : l[2] === mid ? l[0] : null;
+if (other && w.mods[other] && w.mods[other].size === m.size && !out.includes(other))
+out.push(other);
+});
+return out;
+}
+function r38FuseApply(set, mid, withIds, t) {
+const w = r38.world;
+const m = w.mods[mid];
+if (!m || withIds.length !== 2)
+return false;
+const need = Math.pow(3, t - 1);
+const cand = r38FuseCandidates(set, mid);
+if (m.size !== need || !withIds.every(id => cand.includes(id)))
+return false;
+const parts = [m, ...withIds.map(id => w.mods[id])];
+let cx = 0, cy = 0;
+parts.forEach(p => { cx += set.pos[p.id].x / 3; cy += set.pos[p.id].y / 3; });
+const fused = r38NewModule(need * 3);
+fused.rot = m.rot;
+fused.cores = [].concat(...parts.map(p => p.cores));
+fused.towers = [].concat(...parts.map(p => p.towers));
+fused.shelf = { mats: {}, tok: {} };
+parts.forEach(p => {
+Object.keys(p.shelf.mats).forEach(k => { fused.shelf.mats[k] = (fused.shelf.mats[k] || 0) + p.shelf.mats[k]; });
+Object.keys(p.shelf.tok).forEach(k => { fused.shelf.tok[k] = (fused.shelf.tok[k] || 0) + p.shelf.tok[k]; });
+});
+fused.shop = parts.find(p => p.shop) ? Object.assign({}, parts.find(p => p.shop).shop) : null;
+const fi = fused.cores.indexOf("fuse:" + t);
+if (fi >= 0)
+fused.cores[fi] = null;
+const ids = parts.map(p => p.id);
+const keep = [];
+let port = 0;
+set.links.forEach(l => {
+const ia = ids.includes(l[0]), ib = ids.includes(l[2]);
+if (ia && ib)
+return;
+if (ia || ib) {
+if (port > 2)
+return;
+keep.push(ia ? [fused.id, port++, l[2], l[3]] : [l[0], l[1], fused.id, port++]);
+return;
+}
+keep.push(l);
+});
+set.links = keep;
+const landed = [];
+ids.forEach(id => {
+(set.landed[id] || []).forEach(e => landed.push(Object.assign({}, e, { pad: landed.length })));
+delete set.landed[id];
+delete set.pos[id];
+delete w.mods[id];
+});
+set.mods = set.mods.filter(id => !ids.includes(id));
+set.mods.push(fused.id);
+set.pos[fused.id] = { x: cx, y: cy };
+set.landed[fused.id] = landed;
+w.mods[fused.id] = fused;
+r38Relax(set);
+if (r38.ride && ids.includes(r38.ride.mid)) {
+const me = landed.find(e => e.pid === r38MyId());
+r38.ride.mid = fused.id;
+r38.ride.pad = me ? me.pad : 0;
+}
+set.dockFx = { at: Date.now(), x: set.x + cx, y: set.y + cy };
+return true;
+}
+function r38Relax(set) {
+const w = r38.world;
+for (let it = 0; it < 20; it++) {
+set.links.forEach(l => {
+const a = w.mods[l[0]], b = w.mods[l[2]];
+if (!a || !b)
+return;
+const pa = set.pos[l[0]], pb = set.pos[l[2]];
+const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.hypot(dx, dy) || 1;
+const want = r38ModR(a) + R38_BRIDGE + r38ModR(b);
+const k = (want - d) / 2;
+pa.x -= dx / d * k * .5;
+pa.y -= dy / d * k * .5;
+pb.x += dx / d * k * .5;
+pb.y += dy / d * k * .5;
+});
+}
+}
+function r38Bounce(dt) {
+const w = r38.world;
+if (!w)
+return;
+const sets = Object.values(w.sets);
+if (!sets.length)
+return;
+sets.forEach(set => {
+const svx = set.vx || 0, svy = set.vy || 0;
+const mine = r38.ride && r38.ride.setId === set.id;
+const mineAuth = mine || (r38IsHost() && !set.drv);
+const mass = 4 * r38SetSize(set);
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+if (!m)
+return;
+const c = r38ModWorld(set, mid);
+const R = r38ModR(m);
+const sx = W / 2 - orbitalX + c.x, sy = H / 2 - orbitalY + c.y;
+for (const a of asteroids) {
+const dx = a.x - sx, dy = a.y - sy, d = Math.hypot(dx, dy);
+const lim = R + (a.radius || 12);
+if (d >= lim || d < .01)
+continue;
+const nx = dx / d, ny = dy / d;
+a.x = sx + nx * lim;
+a.y = sy + ny * lim;
+const rvx = a.vx - svx, rvy = a.vy - svy;
+const dot = rvx * nx + rvy * ny;
+if (dot < 0) {
+a.vx = rvx - 1.8 * dot * nx + svx;
+a.vy = rvy - 1.8 * dot * ny + svy;
+a.hitFlash = .15;
+if (mineAuth) {
+const ma = a.size === 3 ? 6 : a.size === 2 ? 2.5 : 1;
+const imp = Math.min(26, -dot * ma / mass * .9);
+if (mine) {
+r38.bump.x -= nx * imp;
+r38.bump.y -= ny * imp;
+}
+else {
+set.vx -= nx * imp;
+set.vy -= ny * imp;
+}
+}
+if (r38Throttle("boing" + mid, 140)) {
+try {
+playShieldDeflectSound(a.x, a.y, a.vx, a.vy, a.size);
+}
+catch (error) { }
+}
+}
+}
+});
+});
+}
+function r38SetCollide(dt) {
+const w = r38.world;
+const sets = Object.values(w.sets);
+let offer = null;
+for (let i = 0; i < sets.length; i++) {
+for (let j = i + 1; j < sets.length; j++) {
+const a = sets[i], b = sets[j];
+const sameOwner = a.claim && b.claim && a.claim.pid === b.claim.pid;
+for (const ia of a.mods) {
+const ma = w.mods[ia];
+if (!ma)
+continue;
+const pa = r38ModWorld(a, ia);
+for (const ib of b.mods) {
+const mb = w.mods[ib];
+if (!mb)
+continue;
+const pb = r38ModWorld(b, ib);
+const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.hypot(dx, dy) || 1;
+const lim = r38ModR(ma) + r38ModR(mb);
+if (sameOwner && a.claim.pid === r38MyId() && d < lim + 22)
+offer = { a: r38.ride && r38.ride.setId === b.id ? b.id : a.id, b: r38.ride && r38.ride.setId === b.id ? a.id : b.id };
+if (d >= lim)
+continue;
+const push = (lim - d);
+const nx = dx / d, ny = dy / d;
+const aMine = r38.ride && r38.ride.setId === a.id;
+const bMine = r38.ride && r38.ride.setId === b.id;
+const aHost = r38IsHost() && !a.drv;
+const bHost = r38IsHost() && !b.drv;
+const share = (aMine || aHost) && (bMine || bHost) ? .5 : 1;
+if (aMine) {
+r38MoveMe(-nx * push * share, -ny * push * share);
+r38.bump.x -= nx * 20;
+r38.bump.y -= ny * 20;
+}
+else if (aHost) {
+a.x -= nx * push * share;
+a.y -= ny * push * share;
+a.vx -= nx * 30;
+a.vy -= ny * 30;
+}
+if (bMine) {
+r38MoveMe(nx * push * share, ny * push * share);
+r38.bump.x += nx * 20;
+r38.bump.y += ny * 20;
+}
+else if (bHost) {
+b.x += nx * push * share;
+b.y += ny * push * share;
+b.vx += nx * 30;
+b.vy += ny * 30;
+}
+}
+}
+}
+}
+r38.dockOffer = offer;
+}
+function r38MoveMe(dx, dy) {
+orbitalX += dx;
+orbitalY += dy;
+shiftOrbitalWorldObjects(-dx, -dy);
+}
+var r38MapDrawing = false;
+var r38PseudoPlanet = null;
+function getPlanet(id) {
+if (id === "nexus" && !r38MapDrawing)
+return r38PseudoPlanet || (r38PseudoPlanet = { id: "nexus", name: "The Nexus", tier: 3, requirement: 0, unlockRank: 0, icon: "🌀", x: 50, y: 96, asteroid: "earth" });
+return getPlanet__r38(id);
+}
+function r38OwnSystem() {
+try {
+if (typeof mp === "undefined" || !mp.connected)
+return true;
+const o = typeof getCurrentSystemOwnerId === "function" ? getCurrentSystemOwnerId() : null;
+return !o || o === mp.myId;
+}
+catch (error) {
+return true;
+}
+}
+function r38TravelToNexus() {
+floatingText("TRAVELLING TO THE NEXUS", W / 2, H * .35, "#d79dff");
+destinationPlanetId = R38_NEXUS;
+setTimeout(() => {
+if (!running || gameOver)
+return;
+destinationPlanetId = null;
+r38.prevPlanet = currentPlanetId === R38_NEXUS ? r38.prevPlanet : currentPlanetId;
+r38.entering = { nexus: true };
+currentPlanetId = R38_NEXUS;
+enterOrbitalSpace();
+}, 1400);
+}
+function r38StationToNexus() {
+const w = r38.world;
+const ride = r38.ride;
+const set = ride && w.sets[ride.setId];
+if (!set)
+return false;
+const pk = r38Pack(set, w);
+pk.raw = typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null;
+delete w.sets[set.id];
+set.mods.forEach(id => delete w.mods[id]);
+r38SaveHome();
+r38.prevPlanet = currentPlanetId;
+r38.entering = { nexus: true, pk, mid: ride.mid, pad: ride.pad };
+r38.ride = null;
+floatingText("STATION BOUND FOR THE NEXUS", W / 2, H * .3, "#d79dff");
+currentPlanetId = R38_NEXUS;
+enterOrbitalSpace();
+return true;
+}
+function enterOrbitalSpace() {
+const e = r38.entering;
+r38.entering = null;
+r38.cannon = null;
+r38.hover = null;
+r38.dockOffer = null;
+r38.zoom = r38.zoomT = 1;
+r38.cam = { x: 0, y: 0 };
+r38.camT = { x: 0, y: 0 };
+r38.bump = { x: 0, y: 0 };
+if (r38.inside)
+r38CloseInside(true);
+if (currentPlanetId !== R38_NEXUS && r38.nexus)
+r38LeaveNexus();
+const r = enterOrbitalSpace__r38();
+if (worldState !== "orbital")
+return r;
+try {
+if (currentPlanetId === R38_NEXUS)
+r38SetupNexus(e || {});
+else
+r38SetupHome(e || {});
+}
+catch (error) {
+console.error("Station setup failed:", error);
+}
+return r;
+}
+function r38SetupNexus(e) {
+r38.nexus = true;
+r38.ride = null;
+r38.world = r38NewWorld("nexus", R38_NEXUS);
+document.body.classList.add("r38-nexus");
+const a = Math.random() * Math.PI * 2;
+orbitalX = Math.cos(a) * 1250;
+orbitalY = Math.sin(a) * 1250;
+orbitalHeading = Math.atan2(-orbitalY, -orbitalX) + (Math.random() < .5 ? 1 : -1) * 1.1;
+let rank = 0;
+if (e.pk) {
+const set = e.pk.set;
+const m = e.pk.mods.find(x => x.id === e.mid) || e.pk.mods[0];
+const pad = r38PadOffset(m, e.pad || 0);
+const rel = set.pos[m.id] || { x: 0, y: 0 };
+set.x = orbitalX - rel.x - pad.x;
+set.y = orbitalY - rel.y - pad.y;
+set.vx = set.vy = 0;
+set.claim = { pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), awayAt: null };
+set.landed = {};
+set.landed[m.id] = [{ pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), pad: e.pad || 0, raw: e.pk.raw || null }];
+set.drv = r38MyId();
+rank = r38RankFor(e.pk.mods.reduce((s, x) => s + (x.size || 1), 0));
+r38Unpack(JSON.parse(JSON.stringify(e.pk)));
+r38.pendingBring = { pk: e.pk, mid: m.id, pad: e.pad || 0 };
+r38.ride = { setId: set.id, mid: m.id, pad: e.pad || 0, mode: "helm", t0: r38Now() };
+document.body.classList.add("r38-ride");
+}
+r38.world.rank = rank;
+r38.net = null;
+r38NetOpen(rank);
+setTimeout(() => floatingText("THE NEXUS", W / 2, H * .24, "#d79dff"), 50);
+updateHUD();
+}
+function r38LeaveNexus() {
+r38NetClose();
+r38.nexus = false;
+r38.world = null;
+r38.ride = null;
+r38.cannon = null;
+r38.known = null;
+document.body.classList.remove("r38-nexus", "r38-ride");
+if (currentPlanetId === R38_NEXUS && !r38.mapMode)
+currentPlanetId = r38.prevPlanet || "earth";
+}
+function r38SetupHome(e) {
+r38.nexus = false;
+r38.ride = null;
+document.body.classList.remove("r38-nexus", "r38-ride");
+if (!r38OwnSystem()) {
+r38.world = null;
+return;
+}
+const w = r38NewWorld("home", currentPlanetId);
+(r38Save().parked[currentPlanetId] || []).forEach(pk => {
+const s = r38Unpack(JSON.parse(JSON.stringify(pk)), w);
+s.claim = { pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), awayAt: null };
+s.landed = {};
+s.drv = null;
+});
+r38.world = w;
+if (e.homePk) {
+const pk = e.homePk;
+const set = pk.set;
+const m = pk.mods.find(x => x.id === e.mid) || pk.mods[0];
+orbitalX = 0;
+orbitalY = -720;
+orbitalHeading = -Math.PI / 2;
+const pad = r38PadOffset(m, e.pad || 0);
+const rel = set.pos[m.id] || { x: 0, y: 0 };
+set.x = orbitalX - rel.x - pad.x;
+set.y = orbitalY - rel.y - pad.y;
+set.vx = set.vy = 0;
+set.claim = { pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), awayAt: null };
+set.landed = {};
+set.landed[m.id] = [{ pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), pad: e.pad || 0 }];
+set.drv = r38MyId();
+r38Unpack(pk, w);
+r38.ride = { setId: set.id, mid: m.id, pad: e.pad || 0, mode: "helm", t0: r38Now() };
+document.body.classList.add("r38-ride");
+r38SaveHome();
+setTimeout(() => floatingText("STATION PARKED IN " + (getPlanet(currentPlanetId) || { name: "ORBIT" }).name.toUpperCase() + " ORBIT", W / 2, H * .3, "#bfe9ff"), 300);
+}
+}
+let r38HomeSaveT = null;
+function r38SaveHomeSoon() {
+clearTimeout(r38HomeSaveT);
+r38HomeSaveT = setTimeout(r38SaveHome, 400);
+}
+function r38SaveHome() {
+const w = r38.world;
+if (!w || w.kind !== "home")
+return;
+const out = Object.values(w.sets).map(s => {
+const pk = r38Pack(s, w);
+pk.set.landed = {};
+pk.set.drv = null;
+pk.set.vx = pk.set.vy = 0;
+pk.set.claim = { pid: "me", name: "You", colour: "#6ee7ff", awayAt: null };
+return pk;
+});
+const p = r38Save().parked;
+if (out.length)
+p[w.planetId] = out;
+else
+delete p[w.planetId];
+r38Persist();
+}
+function r38CannonTick() {
+const g = r38.cannon;
+const el = r38Now() - g.t0;
+orbitalDragging = false;
+orbitalSpeed = 0;
+const before = { x: orbitalX, y: orbitalY };
+if (el < R38_HOLD_MS) {
+const k = 1 - Math.pow(1 - Math.min(1, el / R38_HOLD_MS), 3);
+orbitalX = g.fx * (1 - k);
+orbitalY = g.fy * (1 - k);
+orbitalHeading = g.fh + r31AngDiff(-Math.PI / 2, g.fh) * k;
+}
+else {
+if (!g.fired) {
+g.fired = true;
+floatingText("FIRED!", W / 2, H * .3, "#ffffff");
+try {
+sound("arrival");
+}
+catch (error) { }
+shake = Math.max(shake || 0, 10);
+}
+const lt = (el - R38_HOLD_MS) / 1000;
+orbitalX = 0;
+orbitalY = -(360 * lt * lt * 3.4 + 60 * lt);
+orbitalHeading = -Math.PI / 2;
+if (el > R38_HOLD_MS + R38_LAUNCH_MS * .5)
+orbitalFadeTarget = 1;
+if (el > R38_HOLD_MS + R38_LAUNCH_MS) {
+r38.cannon = null;
+r38CannonFire();
+return;
+}
+}
+shiftOrbitalWorldObjects(before.x - orbitalX, before.y - orbitalY);
+r38FollowRide(0);
+}
+function r38CannonFire() {
+const w = r38.world;
+let pk = null;
+if (r38.ride && w && w.sets[r38.ride.setId]) {
+const set = w.sets[r38.ride.setId];
+pk = r38Pack(set, w);
+pk.mid = r38.ride.mid;
+pk.pad = r38.ride.pad;
+const rank = w.rank || 0;
+if (r38SetSize(set, w) >= r38Target(rank) && !(set.won || {})[rank]) {
+pk.set.won = Object.assign({}, pk.set.won || {});
+pk.set.won[rank] = true;
+const msg = { k: "win", pid: r38MyId(), rank, set: set.id, name: r38MyName(), why: "home" };
+r38Send(msg);
+r38OnWin(msg);
+}
+r38Op({ k: "take", set: set.id });
+}
+r38.exitPk = pk;
+r38.mapMode = pk ? "station" : "ship";
+r38.ride = null;
+r38LeaveNexus();
+currentPlanetId = R38_NEXUS;
+orbitalFade = 1;
+orbitalFadeTarget = 0;
+clearOrbitalFadeOverTime();
+enterInterplanetary();
+document.getElementById("starMapTitle").textContent = pk ? "WHERE TO PARK YOUR STATION?" : "SET COURSE FROM THE NEXUS";
+document.getElementById("starMapHint").textContent = pk ? "The cannon can send it to the orbit of any of your worlds" : "Any of your worlds is in range from here";
+}
+function getFallbackDestination() {
+if (r38.mapMode)
+return worldTimer > 14 ? getPlanet("earth") : null;
+return getFallbackDestination__r38();
+}
+function getStarMapSelectable() {
+if (r38.mapMode && starMapMode === "destination") {
+return PLANETS.filter(p => p.id !== NEM && isPlanetUnlocked(p.id)).map(p => p.id);
+}
+return getStarMapSelectable__r38();
+}
+function chooseDestination(id, ownerId) {
+if (r38.mapMode) {
+const mode = r38.mapMode;
+const p = getPlanet(id);
+if (!p)
+return;
+r38.mapMode = null;
+closeStarMap();
+destinationLayer.classList.remove("show");
+destinationPlanetId = id;
+destinationOwnerId = null;
+floatingText((mode === "station" ? "STATION BOUND FOR " : "TRAVELLING TO ") + p.name.toUpperCase(), W / 2, H * .35, "#72e5ff");
+const pk = r38.exitPk;
+r38.exitPk = null;
+setTimeout(() => {
+if (!running || gameOver)
+return;
+currentPlanetId = id;
+destinationPlanetId = null;
+if (mode === "station" && pk) {
+r38.entering = { homePk: pk, mid: pk.mid, pad: pk.pad };
+enterOrbitalSpace();
+}
+else {
+enterAsteroidField(true);
+}
+}, mode === "station" ? 1200 : 1600);
+return;
+}
+return chooseDestination__r38(id, ownerId);
+}
+function leaveOrbitForField() {
+if (r38.ride && !r38.nexus && r38.world && r38.world.sets[r38.ride.setId]) {
+orbitalFade = 1;
+orbitalFadeTarget = 0;
+clearOrbitalFadeOverTime();
+if (r38StationToNexus())
+return;
+}
+return leaveOrbitForField__r38();
+}
+function returnFromOrbitToPlanet() {
+if (r38.ride || r38.nexus) {
+orbitalArrivalTimer = 0;
+return;
+}
+return returnFromOrbitToPlanet__r38();
+}
+function r36OrbitEdge(distance) {
+if (r38.nexus) {
+if (distance >= R38_WORLD_R) {
+const k = (R38_WORLD_R * .94) / Math.max(1, distance);
+const nx = -orbitalX * k, ny = -orbitalY * k;
+const dx = nx - orbitalX, dy = ny - orbitalY;
+r38MoveMe(dx, dy);
+if (r38.ride)
+r38FollowRide(0);
+floatingText("LOOPED ROUND", W / 2, H * .3, "#8de7ff");
+}
+return;
+}
+return r36OrbitEdge__r38(distance);
+}
+function updateOrbital(dt) {
+if (!r38.world && !r38.nexus)
+return updateOrbital__r38(dt);
+const now = r38Now();
+if (r38.nexus)
+r38ReportKills();
+if (r38.cannon) {
+r38CannonTick();
+r38WorldTick(dt);
+return;
+}
+if (r38.nexus && Math.hypot(orbitalX, orbitalY) < R38_CANNON_R) {
+r38.cannon = { t0: now, fx: orbitalX, fy: orbitalY, fh: orbitalHeading };
+floatingText(r38.ride ? "STATION LOCKED IN THE CANNON" : "NEXUS CANNON LOCKED", W / 2, H * .32, "#d79dff");
+try {
+sound("click");
+}
+catch (error) { }
+r38HideArrows();
+return;
+}
+const ride = r38.ride;
+const set = ride && r38.world && r38.world.sets[ride.setId];
+if (ride && !set) {
+r38ExitRide();
+}
+if (r38.ride) {
+orbitalIdleTimer = 0;
+if (now < r38.stunUntil)
+orbitalDragging = false;
+if (r38.inside)
+orbitalDragging = false;
+if (!r38.nexus) {
+const d = Math.hypot(orbitalX, orbitalY);
+const lim = ORBITAL_RETURN_RADIUS * 2.1;
+if (d < lim) {
+const k = lim / Math.max(1, d);
+r38MoveMe(orbitalX * k - orbitalX, orbitalY * k - orbitalY);
+r38Toast("STATIONS CAN'T LAND — LAUNCH YOUR SHIP OFF IT TO LAND", "#ffd8a8", "noland", 3500);
+}
+}
+const bx = orbitalX, by = orbitalY;
+const r = updateOrbital__r38(dt);
+if (worldState !== "orbital" || !r38.ride)
+return r;
+if (!(typeof r36Gate !== "undefined" && r36Gate)) {
+const s = r38.world.sets[r38.ride.setId];
+const n = s ? r38SetSize(s) : 1;
+r38.slow = orbitalDragging ? 1 : Math.max(.22, (r38.slow || 1) - dt * .45);
+const f = .5 * (s ? r38SpeedBoost(s) : 1) / (1 + .05 * (n - 1)) * r38.slow;
+const dx = orbitalX - bx, dy = orbitalY - by;
+orbitalX = bx + dx * f + r38.bump.x * dt;
+orbitalY = by + dy * f + r38.bump.y * dt;
+shiftOrbitalWorldObjects(dx * (1 - f) - r38.bump.x * dt, dy * (1 - f) - r38.bump.y * dt);
+}
+r38.bump.x *= Math.exp(-1.6 * dt);
+r38.bump.y *= Math.exp(-1.6 * dt);
+r38FollowRide(dt);
+r38WorldTick(dt);
+return r;
+}
+r38HoverCheck(dt);
+const r = updateOrbital__r38(dt);
+if (worldState === "orbital")
+r38WorldTick(dt);
+return r;
+}
+function r38FollowRide(dt) {
+const ride = r38.ride;
+const w = r38.world;
+const set = ride && w && w.sets[ride.setId];
+if (!set)
+return;
+const m = w.mods[ride.mid];
+if (!m)
+return;
+const rel = set.pos[ride.mid] || { x: 0, y: 0 };
+const pad = r38PadOffset(m, ride.pad);
+const nx = orbitalX - rel.x - pad.x, ny = orbitalY - rel.y - pad.y;
+if (dt > 0) {
+set.vx = (nx - set.x) / dt;
+set.vy = (ny - set.y) / dt;
+}
+set.x = nx;
+set.y = ny;
+set.tx = nx;
+set.ty = ny;
+}
+function r38WorldTick(dt) {
+const w = r38.world;
+if (!w)
+return;
+const now = r38Now();
+if (r38.nexus) {
+if (r38IsHost()) {
+r38HostPhysics(dt);
+r38HostSpawn(dt);
+if (now - (w.ruleAt || 0) > 1000) {
+r38PatchTick((now - (w.ruleAt || now)) / 1000 || 1);
+w.ruleAt = now;
+r38HostRules();
+}
+if (now - (w.astAt || 0) > 160) {
+w.astAt = now;
+r38HostSendAsteroids();
+}
+if ((w.dirty || w.patchDirty) && now - (r38.net.lastSt || 0) > 250 || now - (r38.net.lastSt || 0) > 1500) {
+w.dirty = false;
+w.patchDirty = false;
+r38HostSendState();
+r38AfterState();
+}
+if (now - (w.posAt || 0) > 200) {
+w.posAt = now;
+const moving = Object.values(w.sets).filter(s => !s.drv && (Math.abs(s.vx) + Math.abs(s.vy) > .5)).map(s => [s.id, Math.round(s.x), Math.round(s.y), Math.round(s.vx), Math.round(s.vy)]);
+if (moving.length)
+r38Send({ k: "pos", s: moving });
+}
+}
+r38SmoothSets(dt);
+if (now - (r38.meAt || 0) > 120) {
+r38.meAt = now;
+r38Send({ k: "me", x: Math.round(orbitalX), y: Math.round(orbitalY), h: Math.round(orbitalHeading * 100) / 100, z: Math.round(r38.zoom * 100) / 100, ride: r38.ride ? r38.ride.setId : null, c: r38.cannon ? 1 : 0 });
+if (r38.ride && w.sets[r38.ride.setId]) {
+const s = w.sets[r38.ride.setId];
+r38Send({ k: "pos", s: [[s.id, Math.round(s.x), Math.round(s.y), Math.round(s.vx || 0), Math.round(s.vy || 0)]] });
+}
+}
+}
+else if (r38.ride && now - (r38.homeAt || 0) > 3000) {
+r38.homeAt = now;
+r38SaveHome();
+}
+r38Bounce(dt);
+r38SetCollide(dt);
+r38SurfaceTick(dt);
+r38CameraTick(dt);
+r38SatTick(dt);
+r38UiTick();
+}
+function r38Landable(set, mid) {
+if (!set || !set.mods.includes(mid))
+return false;
+if (set.claim && set.claim.pid !== r38MyId() && !(r38.world.kind === "home"))
+return false;
+return r38FreePad(set, mid) >= 0;
+}
+function r38HoverCheck(dt) {
+const w = r38.world;
+if (!w || r38.cannon) {
+r38.hover = null;
+return;
+}
+const now = r38Now();
+let best = null, bd = Infinity;
+Object.values(w.sets).forEach(s => {
+if (r38.noHover && r38.noHover.set === s.id && now < r38.noHover.until)
+return;
+s.mods.forEach(mid => {
+const m = w.mods[mid];
+if (!m)
+return;
+const c = r38ModWorld(s, mid);
+const d = Math.hypot(c.x - orbitalX, c.y - orbitalY);
+if (d < r38ModR(m) * .95 && d < bd) {
+bd = d;
+best = { setId: s.id, mid };
+}
+});
+});
+if (!best) {
+r38.hover = null;
+return;
+}
+const set = w.sets[best.setId];
+if (!r38.hover || r38.hover.setId !== best.setId || r38.hover.mid !== best.mid) {
+r38.hover = Object.assign(best, { at: now });
+if (set.claim && set.claim.pid !== r38MyId() && w.kind !== "home")
+r38Toast("CLAIMED BY " + String(set.claim.name).toUpperCase() + " — ONLY THEIR SHIPS CAN LAND", "#ffb4b4", "claimed" + set.id, 3000);
+else if (r38FreePad(set, best.mid) < 0)
+r38Toast("THAT MODULE'S LANDING PADS ARE FULL", "#ffb4b4", "full", 2500);
+}
+if (r38Landable(set, best.mid) && !orbitalDragging)
+orbitalSpeed = Math.max(ORBITAL_MIN_SPEED, orbitalSpeed - dt * 260);
+}
+function r38RequestLand() {
+const h = r38.hover;
+const w = r38.world;
+if (!h || !w)
+return;
+const set = w.sets[h.setId];
+if (!r38Landable(set, h.mid)) {
+r38Toast("CAN'T LAND THERE", "#ffb4b4", "noland2", 1200);
+return;
+}
+const pad = r38FreePad(set, h.mid);
+r38.landing = { setId: h.setId, mid: h.mid, pad, at: r38Now() };
+r38Op({ k: "land", set: h.setId, mid: h.mid, pad, raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null });
+if (w.kind === "home")
+r38AfterState();
+}
+function r38AfterState() {
+const w = r38.world;
+if (!w)
+return;
+const me = r38MyId();
+if (!r38.ride) {
+const L = r38.landing;
+if (!L)
+return;
+const set = w.sets[L.setId];
+const e = set && Object.keys(set.landed).map(mid => ({ mid, list: set.landed[mid] || [] })).find(x => x.list.some(q => q && q.pid === me));
+if (e) {
+const q = e.list.find(q => q.pid === me);
+r38.landing = null;
+r38EnterRide(set, e.mid, q.pad);
+}
+else if (r38Now() - L.at > 4000) {
+r38.landing = null;
+}
+return;
+}
+const set = w.sets[r38.ride.setId];
+if (!set) {
+const other = Object.values(w.sets).find(s => s.mods.includes(r38.ride.mid));
+if (other) {
+r38.ride.setId = other.id;
+r38RePin();
+return;
+}
+if (!r38.pendingBring)
+r38ExitRide();
+return;
+}
+const mine = Object.keys(set.landed).some(mid => (set.landed[mid] || []).some(q => q && q.pid === me));
+if (!mine && !r38.pendingBring) {
+r38ExitRide();
+return;
+}
+if (!set.mods.includes(r38.ride.mid)) {
+const mid = Object.keys(set.landed).find(k => (set.landed[k] || []).some(q => q && q.pid === me));
+if (mid) {
+r38.ride.mid = mid;
+r38.ride.pad = set.landed[mid].find(q => q.pid === me).pad;
+}
+}
+r38RePin();
+}
+function r38RePin() {
+const ride = r38.ride;
+const w = r38.world;
+const set = ride && w.sets[ride.setId];
+if (!set || !w.mods[ride.mid])
+return;
+const rel = set.pos[ride.mid];
+const pad = r38PadOffset(w.mods[ride.mid], ride.pad);
+const px = set.x + rel.x + pad.x, py = set.y + rel.y + pad.y;
+const dx = px - orbitalX, dy = py - orbitalY;
+if (Math.abs(dx) + Math.abs(dy) > .5)
+r38MoveMe(dx, dy);
+}
+function r38EnterRide(set, mid, pad) {
+const w = r38.world;
+const m = w.mods[mid];
+r38.ride = { setId: set.id, mid, pad, mode: "helm", t0: r38Now() };
+r38.hover = null;
+document.body.classList.add("r38-ride");
+r38RePin();
+orbitalSpeed = ORBITAL_MIN_SPEED;
+orbitalDragging = false;
+floatingText(set.claim && w.kind === "nexus" ? "STATION CLAIMED" : "LANDED ON THE STATION", W / 2, H * .3, "#ffe9a8");
+try {
+sound("arrival");
+}
+catch (error) { }
+if (r38HasCore(m, "ship-factory") && lives < 3) {
+lives = 3;
+floatingText("DRY DOCK: HULL REPAIRED", W / 2, H * .36, "#8fd8ff");
+updateHUD();
+}
+r38SatSync();
+}
+function r38ExitRide() {
+if (!r38.ride)
+return;
+r38.ride = null;
+r38.walk = null;
+document.body.classList.remove("r38-ride");
+r38.zoomT = 1;
+r38.camT = { x: 0, y: 0 };
+r38SatSync();
+}
+function r38Launch() {
+const ride = r38.ride;
+const w = r38.world;
+if (!ride)
+return;
+const set = w.sets[ride.setId];
+if (ride.mode === "walk") {
+r38Toast("YOUR ASTRONAUT IS OUT — BOARD THE SHIP FIRST", "#ffd8a8", "outfirst", 1500);
+return;
+}
+r38Op({ k: "launch", set: ride.setId, x: set ? set.x : 0, y: set ? set.y : 0, vx: set ? set.vx : 0, vy: set ? set.vy : 0 });
+r38.noHover = { set: ride.setId, until: r38Now() + 3000 };
+r38ExitRide();
+orbitalSpeed = ORBITAL_BASE_SPEED;
+playerInvulnerable = true;
+try {
+invulnerabilityTimer = 1.6;
+}
+catch (error) { }
+floatingText("LIFT OFF", W / 2, H * .3, "#bff6ff");
+if (w.kind === "home")
+r38SaveHome();
+}
+function r38CameraTick(dt) {
+const ride = r38.ride;
+const w = r38.world;
+if (ride && w && w.sets[ride.setId]) {
+const set = w.sets[ride.setId];
+if (ride.mode === "walk" && r38.walk) {
+const m = w.mods[r38.walk.mid] || w.mods[ride.mid];
+r38.zoomT = Math.min(2.4, Math.min(W, H) * .34 / r38ModR(m));
+const c = r38ModWorld(set, r38.walk.mid || ride.mid);
+r38.camT = { x: c.x - orbitalX, y: c.y - orbitalY };
+}
+else {
+const ext = r38SetExtent(set, orbitalX, orbitalY);
+r38.zoomT = Math.max(.24, Math.min(.62, Math.min(W, H) * .15 / ext));
+r38.camT = { x: 0, y: 0 };
+}
+}
+else {
+r38.zoomT = 1;
+r38.camT = { x: 0, y: 0 };
+}
+const k = Math.min(1, dt * 3.2);
+r38.zoom += (r38.zoomT - r38.zoom) * k;
+r38.cam.x += (r38.camT.x - r38.cam.x) * k;
+r38.cam.y += (r38.camT.y - r38.cam.y) * k;
+if (Math.abs(r38.zoom - 1) < .002 && r38.zoomT === 1)
+r38.zoom = 1;
+}
+function r38CameraOn() {
+return Math.abs(r38.zoom - 1) > .002 || Math.abs(r38.cam.x) > .5 || Math.abs(r38.cam.y) > .5;
+}
+function r38ApplyCamera(c) {
+if (!r38CameraOn())
+return;
+c.translate(W / 2, H / 2);
+c.scale(r38.zoom, r38.zoom);
+c.translate(-W / 2 - r38.cam.x, -H / 2 - r38.cam.y);
+}
+function r38ToLogical(cx, cy) {
+const r = canvas.getBoundingClientRect();
+const x = cx - r.left, y = cy - r.top;
+return { x: (x - W / 2) / r38.zoom + W / 2 + r38.cam.x, y: (y - H / 2) / r38.zoom + H / 2 + r38.cam.y };
+}
+function r38ToScreen(lx, ly) {
+return { x: (lx - W / 2 - r38.cam.x) * r38.zoom + W / 2, y: (ly - H / 2 - r38.cam.y) * r38.zoom + H / 2 };
+}
+function r38WorldToScreen(wx, wy) {
+return r38ToScreen(W / 2 - orbitalX + wx, H / 2 - orbitalY + wy);
+}
+function mpOrbitalPeers() {
+if (r38.nexus)
+return [];
+return mpOrbitalPeers__r38();
+}
+function mpIsOrbitalFollower() {
+if (r38.nexus)
+return false;
+return mpIsOrbitalFollower__r38();
+}
+function mpBroadcastOrbitalPresence() {
+if (r38.nexus)
+return;
+return mpBroadcastOrbitalPresence__r38();
+}
+function mpBroadcastOrbitalSnapshot() {
+if (r38.nexus)
+return;
+return mpBroadcastOrbitalSnapshot__r38();
+}
+function spawnOrbitalAsteroid() {
+if (r38.nexus)
+return;
+return spawnOrbitalAsteroid__r38();
+}
+function edgeSpawn() {
+const p = edgeSpawn__r38();
+if (worldState === "orbital" && r38.zoom < .98 && !r38.nexus) {
+const k = 1 / r38.zoom;
+p.x = W / 2 + (p.x - W / 2) * k;
+p.y = H / 2 + (p.y - H / 2) * k;
+}
+return p;
+}
+function detonateAsteroid(index, chain, isEMP) {
+const a = asteroids[index];
+const info = a && r38.nexus ? r38AsteroidWorld(a) : null;
+const size = a ? a.size : 1;
+const r = detonateAsteroid__r38(index, chain, isEMP);
+if (a && r38.nexus) {
+if (!asteroids.includes(a)) {
+r38PatchHit(info.x, info.y, size);
+}
+else if (a.nid && !r38IsHost() && !r38.remoteKill) {
+r38Send({ k: "hit", id: a.nid }, r38.net && r38.net.hostId);
+}
+}
+return r;
+}
+function checkPlayerCollisions() {
+if (worldState === "orbital" && (r38.ride || r38.cannon))
+return;
+return checkPlayerCollisions__r38();
+}
+function rollCoinDrop(a) {
+if (r38.remoteKill)
+return;
+return rollCoinDrop__r38(a);
+}
+function rollMaterialDrop(a) {
+if (r38.remoteKill)
+return;
+return rollMaterialDrop__r38(a);
+}
+setTimeout(function () {
+try {
+const up = Asteroid.prototype.update;
+Asteroid.prototype.update = function (dt) {
+const r = up.call(this, dt);
+if (worldState === "orbital") {
+if (r38.nexus) {
+this.exited = r38IsHost() ? !r38HostKeep(this) : false;
+}
+else if (r38.zoom < .98 || r38CameraOn()) {
+const hw = W / 2 / r38.zoom + this.radius + 90, hh = H / 2 / r38.zoom + this.radius + 90;
+const cx = W / 2 + r38.cam.x, cy = H / 2 + r38.cam.y;
+this.exited = Math.abs(this.x - cx) > hw || Math.abs(this.y - cy) > hh;
+}
+}
+return r;
+};
+}
+catch (error) { }
+}, 0);
+function bgUpdate(now) {
+const r = bgUpdate__r38(now);
+if (r38.nexus && bg.space === "orbital") {
+bg.rocks.forEach(rock => {
+if (rock.r38)
+return;
+const s = bgScreen(rock);
+const p = r38PatchAt(s.x - W / 2 + orbitalX, s.y - H / 2 + orbitalY);
+if (!p)
+return;
+const type = (getPlanet__r38(p.planet) || {}).asteroid || "earth";
+rock.r38 = p.id;
+if (!(rock.colour && rock.colour !== bg.colour))
+rock.colour = (ASTEROID_TYPES[type] || ASTEROID_TYPES.earth).color;
+rock.kind = r21KindFor(type);
+rock.model = null;
+});
+}
+return r;
+}
+function drawOrbitalScene() {
+r38ApplyCamera(ctx);
+if (r38.nexus)
+return r38DrawNexusScene();
+const ft = ctx.fillText;
+if (r38.ride) {
+ctx.fillText = function (text, ...rest) {
+return ft.call(this, text === "ACCELERATOR · TO THE FIELD" ? "ACCELERATOR · TO THE NEXUS" : text, ...rest);
+};
+}
+if (!r38CameraOn()) {
+try {
+return drawOrbitalScene__r38();
+}
+finally {
+delete ctx.fillText;
+}
+}
+const fr = ctx.fillRect;
+ctx.fillRect = function (x, y, w, h) {
+if (x === 0 && y === 0 && w === W && h === H) {
+const k = 1 / r38.zoom;
+return fr.call(this, W / 2 + r38.cam.x - W / 2 * k, H / 2 + r38.cam.y - H / 2 * k, W * k, H * k);
+}
+return fr.call(this, x, y, w, h);
+};
+try {
+return drawOrbitalScene__r38();
+}
+finally {
+delete ctx.fillRect;
+delete ctx.fillText;
+}
+}
+function drawPlayer() {
+if (worldState === "orbital" && r38.world) {
+try {
+r38DrawStations(ctx);
+if (r38.nexus)
+r38DrawPeers(ctx);
+}
+catch (error) {
+console.error("Station draw failed:", error);
+}
+}
+if (worldState === "orbital" && r38.ride) {
+ctx.save();
+ctx.translate(W / 2, H / 2);
+ctx.scale(.5, .5);
+ctx.translate(-W / 2, -H / 2);
+try {
+return drawPlayer__r38();
+}
+finally {
+ctx.restore();
+try {
+r38DrawWalker(ctx);
+}
+catch (error) { }
+}
+}
+return drawPlayer__r38();
+}
+function handlePointer(event) {
+if (worldState === "orbital" && r38.ride)
+return;
+if (worldState === "orbital" && r38.cannon)
+return;
+return handlePointer__r38(event);
+}
+function r38PatchColour(p) {
+const type = (getPlanet__r38(p.planet) || {}).asteroid || "earth";
+return (ASTEROID_TYPES[type] || ASTEROID_TYPES.earth).color;
+}
+function r38Hex(col, a) {
+const h = String(col || "#ffffff").replace("#", "");
+const n = parseInt(h.length === 3 ? h.split("").map(x => x + x).join("") : h.slice(0, 6), 16) || 0;
+return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+}
+function r38DrawNexusScene() {
+const c = ctx;
+const w = r38.world;
+const t = r38Now() / 1000;
+const ox = W / 2 - orbitalX, oy = H / 2 - orbitalY;
+(w.patches || []).forEach(p => {
+const x = ox + p.x, y = oy + p.y, R = 620 * Math.max(.3, p.r);
+const g = c.createRadialGradient(x, y, 0, x, y, R);
+g.addColorStop(0, r38Hex(r38PatchColour(p), .075));
+g.addColorStop(1, r38Hex(r38PatchColour(p), 0));
+c.fillStyle = g;
+c.fillRect(x - R, y - R, R * 2, R * 2);
+});
+r38DrawCannon(c, ox, oy, t);
+const s = r38WorldToScreen(0, 0);
+if (s.x < -60 || s.x > W + 60 || s.y < -60 || s.y > H + 60) {
+c.save();
+const a = Math.atan2(-orbitalY, -orbitalX);
+const ix = clamp(W / 2 + Math.cos(a) * Math.max(W, H), 34, W - 34), iy = clamp(H / 2 + Math.sin(a) * Math.max(W, H), 90, H - 90);
+c.translate((ix - W / 2) / r38.zoom + W / 2 + r38.cam.x, (iy - H / 2) / r38.zoom + H / 2 + r38.cam.y);
+c.scale(1 / r38.zoom, 1 / r38.zoom);
+c.rotate(a);
+c.globalAlpha = .8;
+c.fillStyle = "#d79dff";
+c.shadowBlur = 12;
+c.shadowColor = "#d79dff";
+c.beginPath();
+c.moveTo(14, 0);
+c.lineTo(-8, 9);
+c.lineTo(-4, 0);
+c.lineTo(-8, -9);
+c.closePath();
+c.fill();
+c.rotate(-a);
+c.shadowBlur = 0;
+c.font = "800 8px system-ui";
+c.textAlign = "center";
+c.fillText("CANNON", 0, -14);
+c.restore();
+}
+}
+function r38Gyro(c, x, y, R, t, gate) {
+const ft = c.fillText;
+c.fillText = function () { };
+try {
+r37DrawGate(c, x, y, R, t, gate);
+}
+catch (error) { }
+finally {
+delete c.fillText;
+if (c.fillText !== ft)
+c.fillText = ft;
+}
+}
+function r38DrawCannon(c, x, y, t) {
+const R = 250;
+const g = r38.cannon;
+let gate = null;
+if (g) {
+const t0 = g.t0 + R38_HOLD_MS - R36_HOLD_MS;
+gate = r38Now() >= t0 ? { t0 } : null;
+}
+c.save();
+c.strokeStyle = "rgba(150,170,210,.35)";
+c.lineWidth = 10;
+for (let k = 0; k < 6; k++) {
+const a = k * Math.PI / 3 + t * .05;
+c.beginPath();
+c.moveTo(x + Math.cos(a) * 60, y + Math.sin(a) * 60 * .55);
+c.lineTo(x + Math.cos(a) * R * 1.18, y + Math.sin(a) * R * 1.18 * .55);
+c.stroke();
+const cx = x + Math.cos(a) * R * 1.18, cy = y + Math.sin(a) * R * 1.18 * .55;
+c.fillStyle = (Math.floor(t * 2 + k) % 2) ? "#ff4d6a" : "#ffe9a8";
+c.shadowBlur = 10;
+c.shadowColor = c.fillStyle;
+c.beginPath();
+c.arc(cx, cy, 5, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+}
+c.restore();
+r38Gyro(c, x, y, R, t * .6, gate);
+const hr = 66;
+const hg = c.createRadialGradient(x - hr * .35, y - hr * .4, hr * .1, x, y, hr);
+hg.addColorStop(0, "#f2f6ff");
+hg.addColorStop(.45, "#9aa8c8");
+hg.addColorStop(1, "#2a3150");
+c.save();
+c.fillStyle = hg;
+c.shadowBlur = 30;
+c.shadowColor = "#b98cff";
+c.beginPath();
+c.arc(x, y, hr, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+c.strokeStyle = "rgba(40,50,90,.5)";
+c.lineWidth = 2;
+for (let k = -1; k <= 1; k++) {
+c.beginPath();
+c.ellipse(x, y + k * hr * .38, hr * Math.sqrt(1 - Math.pow(k * .38, 2)), hr * .18, 0, 0, Math.PI * 2);
+c.stroke();
+}
+const pulse = .6 + .4 * Math.sin(t * 3);
+const cg = c.createRadialGradient(x, y - hr * .15, 0, x, y - hr * .15, hr * .6);
+cg.addColorStop(0, "rgba(255,255,255," + (.9 * pulse) + ")");
+cg.addColorStop(.4, "rgba(200,140,255," + (.6 * pulse) + ")");
+cg.addColorStop(1, "rgba(120,60,255,0)");
+c.fillStyle = cg;
+c.beginPath();
+c.arc(x, y - hr * .15, hr * .6, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#e7d6ff";
+c.font = "900 13px system-ui";
+c.textAlign = "center";
+c.globalAlpha = .85;
+c.fillText("THE NEXUS", x, y + hr + R * .55);
+c.font = "700 9px system-ui";
+c.globalAlpha = .6;
+c.fillText("FLY IN TO BE FIRED HOME", x, y + hr + R * .55 + 13);
+c.restore();
+}
+const r38ShapeCache = {};
+function r38ShapesFor(raw) {
+const key = raw || "_default";
+if (!r38ShapeCache[key]) {
+try {
+r38ShapeCache[key] = getShipStyleShapes(null, null, raw || null) || [];
+}
+catch (error) {
+r38ShapeCache[key] = [];
+}
+}
+return r38ShapeCache[key];
+}
+function r38DrawShip(c, x, y, h, colour, name, raw, scale) {
+const shapes = r38ShapesFor(raw);
+c.save();
+c.translate(x, y);
+c.rotate(h + Math.PI / 2);
+if (shapes.length) {
+c.scale(.45 * scale, .45 * scale);
+c.translate(-200, -140);
+c.shadowBlur = 16;
+c.shadowColor = colour;
+shapes.forEach(s => { try {
+s.draw(c, true, null, null);
+}
+catch (error) { } });
+}
+else {
+c.scale(scale, scale);
+c.beginPath();
+c.moveTo(0, -22);
+c.lineTo(16, 18);
+c.lineTo(0, 11);
+c.lineTo(-16, 18);
+c.closePath();
+c.fillStyle = "#071522";
+c.fill();
+c.strokeStyle = colour;
+c.lineWidth = 2;
+c.stroke();
+}
+c.restore();
+if (name) {
+c.save();
+c.font = "700 10px sans-serif";
+c.textAlign = "center";
+c.fillStyle = colour;
+c.shadowColor = "rgba(0,0,0,.8)";
+c.shadowBlur = 4;
+c.fillText(name, x, y - 34 * scale);
+c.restore();
+}
+}
+function r38DrawPeers(c) {
+const now = r38Now();
+const ox = W / 2 - orbitalX, oy = H / 2 - orbitalY;
+r38Peers().forEach(p => {
+const q = p.p;
+if (!q || now - (p.at || 0) > 6000 || q.ride)
+return;
+if (p.sx === undefined) {
+p.sx = q.x;
+p.sy = q.y;
+}
+p.sx += (q.x - p.sx) * .25;
+p.sy += (q.y - p.sy) * .25;
+r38DrawShip(c, ox + p.sx, oy + p.sy, q.h || 0, p.colour || "#ff9de6", p.name || "Astronaut", p.raw, 1);
+});
+}
+function r38DrawStations(c) {
+const w = r38.world;
+if (!w)
+return;
+const t = r38Now() / 1000;
+const ox = W / 2 - orbitalX, oy = H / 2 - orbitalY;
+const view = Math.hypot(W, H) / Math.min(1, r38.zoom) * .6 + 400;
+Object.values(w.sets).forEach(set => {
+if (Math.hypot(set.x - orbitalX - r38.cam.x, set.y - orbitalY - r38.cam.y) > view + r38SetExtent(set, set.x, set.y))
+return;
+set.links.forEach(l => {
+const a = w.mods[l[0]], b = w.mods[l[2]];
+if (!a || !b)
+return;
+const ca = r38ModWorld(set, l[0]), cb = r38ModWorld(set, l[2]);
+const ta = r38PortAngle(a, l[1]), tb = r38PortAngle(b, l[3]);
+const pa = { x: ox + ca.x + Math.cos(ta) * r38ModR(a) * .9, y: oy + ca.y + Math.sin(ta) * r38ModR(a) * .9 };
+const pb = { x: ox + cb.x + Math.cos(tb) * r38ModR(b) * .9, y: oy + cb.y + Math.sin(tb) * r38ModR(b) * .9 };
+r38DrawTube(c, pa, pb, t);
+});
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+if (!m)
+return;
+const cw = r38ModWorld(set, mid);
+r38DrawModule(c, set, m, ox + cw.x, oy + cw.y, t);
+});
+r38DrawSetLabel(c, set, ox, oy, t);
+if (set.dockFx && Date.now() - set.dockFx.at < 1100) {
+const k = (Date.now() - set.dockFx.at) / 1100;
+c.save();
+c.globalAlpha = 1 - k;
+c.strokeStyle = "#ffe9a8";
+c.lineWidth = 4 * (1 - k) + 1;
+c.beginPath();
+c.arc(ox + set.dockFx.x, oy + set.dockFx.y, 30 + k * 120, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+}
+});
+}
+function r38DrawTube(c, a, b, t) {
+const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+const nx = -dy / len, ny = dx / len;
+c.save();
+c.lineCap = "round";
+c.strokeStyle = "#3a4562";
+c.lineWidth = 24;
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+const g = c.createLinearGradient(a.x + nx * 10, a.y + ny * 10, a.x - nx * 10, a.y - ny * 10);
+g.addColorStop(0, "#eef3fa");
+g.addColorStop(.5, "#aab6c8");
+g.addColorStop(1, "#5d6a82");
+c.strokeStyle = g;
+c.lineWidth = 19;
+c.stroke();
+c.strokeStyle = "rgba(50,60,90,.5)";
+c.lineWidth = 2;
+for (let s = 8; s < len - 4; s += 9) {
+const px = a.x + dx / len * s, py = a.y + dy / len * s;
+c.beginPath();
+c.moveTo(px + nx * 9, py + ny * 9);
+c.lineTo(px - nx * 9, py - ny * 9);
+c.stroke();
+}
+const k = (t * .8) % 1;
+c.fillStyle = "rgba(140,230,255,.9)";
+c.shadowBlur = 8;
+c.shadowColor = "#7fe8ff";
+c.beginPath();
+c.arc(a.x + dx * k, a.y + dy * k, 2.6, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r38DrawModule(c, set, m, x, y, t) {
+const R = r38ModR(m);
+const claim = set.claim;
+const tint = claim ? claim.colour : "#9fd8ff";
+c.save();
+c.shadowBlur = 26;
+c.shadowColor = r38Hex(tint, .5);
+const g = c.createRadialGradient(x - R * .38, y - R * .42, R * .08, x, y, R);
+g.addColorStop(0, "#ffffff");
+g.addColorStop(.35, "#dfe6f0");
+g.addColorStop(.78, "#93a1b8");
+g.addColorStop(1, "#4b5874");
+c.fillStyle = g;
+c.beginPath();
+c.arc(x, y, R, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+c.save();
+c.beginPath();
+c.arc(x, y, R, 0, Math.PI * 2);
+c.clip();
+c.strokeStyle = "rgba(70,90,125,.28)";
+c.lineWidth = Math.max(1, R * .025);
+const spin = t * .18 + m.rot;
+for (let k = 0; k < 6; k++) {
+const ph = spin + k * Math.PI / 6;
+const rx = Math.abs(Math.cos(ph)) * R;
+c.beginPath();
+c.ellipse(x, y, rx, R, 0, 0, Math.PI * 2);
+c.stroke();
+}
+c.strokeStyle = r38Hex(tint, claim ? .85 : .45);
+c.lineWidth = R * .13;
+c.beginPath();
+c.ellipse(x, y + R * .05, R * 1.02, R * .3, 0, 0, Math.PI);
+c.stroke();
+c.strokeStyle = r38Hex(tint, claim ? .4 : .2);
+c.beginPath();
+c.ellipse(x, y + R * .05, R * 1.02, R * .3, 0, Math.PI, Math.PI * 2);
+c.stroke();
+c.restore();
+const used = r38UsedPorts(set, m.id);
+for (let k = 0; k < 3; k++) {
+const a = r38PortAngle(m, k);
+const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R;
+c.save();
+c.translate(px, py);
+c.rotate(a);
+c.fillStyle = "#5d6a86";
+c.strokeStyle = "#2c3550";
+c.lineWidth = 2;
+c.beginPath();
+c.roundRect ? c.roundRect(-6, -10, 12, 20, 4) : c.rect(-6, -10, 12, 20);
+c.fill();
+c.stroke();
+if (!used.includes(k)) {
+c.fillStyle = (Math.floor(t * 1.5 + k) % 2) ? "#7dffb0" : "#2f6e52";
+c.beginPath();
+c.arc(4, 0, 2.6, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+}
+const hs = r38HatchOffset(m);
+const hr = Math.max(5, R * .1);
+c.fillStyle = "#2a3046";
+c.beginPath();
+c.arc(x + hs.x, y + hs.y, hr, 0, Math.PI * 2);
+c.fill();
+c.lineWidth = hr * .4;
+c.setLineDash([hr * .5, hr * .5]);
+c.strokeStyle = "#ffd23f";
+c.stroke();
+c.setLineDash([]);
+c.fillStyle = "#9aa6c0";
+c.beginPath();
+c.arc(x + hs.x, y + hs.y, hr * .45, 0, Math.PI * 2);
+c.fill();
+const landed = set.landed[m.id] || [];
+for (let i = 0; i < (m.size || 1); i++) {
+const p = r38PadOffset(m, i);
+const px = x + p.x, py = y + p.y, pr = Math.max(9, R * .19 / Math.sqrt(m.size || 1) * 1.3);
+c.strokeStyle = "rgba(255,255,255,.75)";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(px, py, pr, 0, Math.PI * 2);
+c.stroke();
+c.fillStyle = "rgba(40,50,80,.35)";
+c.fill();
+const e = landed.find(q => q && q.pad === i);
+if (!e) {
+c.fillStyle = "rgba(255,255,255,.7)";
+c.font = "900 " + Math.round(pr * .9) + "px system-ui";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("H", px, py + 1);
+c.textBaseline = "alphabetic";
+}
+else if (e.pid !== r38MyId()) {
+r38DrawShip(c, px, py, -Math.PI / 2, e.colour || "#ff9de6", null, e.raw, .62);
+}
+}
+(m.towers || []).forEach((tw, i) => {
+if (!tw)
+return;
+const p = r38TowerOffset(m, i);
+const tx = x + p.x, ty = y + p.y;
+c.strokeStyle = "#c9d6ff";
+c.lineWidth = 3;
+c.beginPath();
+c.moveTo(tx, ty + 6);
+c.lineTo(tx, ty - 10);
+c.stroke();
+c.fillStyle = "#e8eeff";
+c.beginPath();
+c.ellipse(tx, ty - 12, 7, 3.5, -.4, 0, Math.PI * 2);
+c.fill();
+if (tw.sat && !r38.towerSats[m.id + ":" + i]) {
+c.fillStyle = satColour(tw.sat.type);
+c.shadowBlur = 10;
+c.shadowColor = c.fillStyle;
+c.beginPath();
+c.arc(tx, ty - 20, 5, 0, Math.PI * 2);
+c.fill();
+c.shadowBlur = 0;
+}
+});
+if (r38HasShop(m)) {
+c.save();
+c.globalAlpha = .75 + .25 * Math.sin(t * 3);
+c.fillStyle = "#ffd23f";
+c.shadowBlur = 12;
+c.shadowColor = "#ffd23f";
+c.font = "900 " + Math.round(R * .2) + "px system-ui";
+c.textAlign = "center";
+c.fillText("🛍 SHOP", x, y + R * .62);
+c.restore();
+}
+const cores = (m.cores || []).filter(Boolean);
+cores.forEach((tok, i) => {
+if (tok === "shop")
+return;
+const a = i * 2.1 + t * .4;
+c.font = Math.round(R * .16) + "px system-ui";
+c.textAlign = "center";
+c.globalAlpha = .9;
+c.fillText(r38TokenIcon(tok), x + Math.cos(a) * R * .18, y + R * .25 + Math.sin(a) * R * .08);
+c.globalAlpha = 1;
+});
+if (r38.hover && r38.hover.mid === m.id && !r38.ride) {
+const ok = r38Landable(set, m.id);
+c.globalAlpha = .9;
+c.strokeStyle = ok ? "#7dffb0" : "#ff8d8d";
+c.lineWidth = 3;
+c.setLineDash([8, 6]);
+c.beginPath();
+c.arc(x, y, R + 10, 0, Math.PI * 2);
+c.stroke();
+c.setLineDash([]);
+}
+c.restore();
+}
+function r38DrawSetLabel(c, set, ox, oy, t) {
+const w = r38.world;
+let minY = Infinity, cx = 0, n = 0;
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+if (!m)
+return;
+const p = r38ModWorld(set, mid);
+minY = Math.min(minY, p.y - r38ModR(m));
+cx += p.x;
+n++;
+});
+if (!n)
+return;
+cx /= n;
+const x = ox + cx, y = oy + minY - 14;
+const size = r38SetSize(set);
+const k = 1 / Math.max(.35, r38.zoom);
+c.save();
+c.textAlign = "center";
+c.font = "800 " + Math.round(10 * k) + "px system-ui";
+if (set.claim) {
+const mine = set.claim.pid === r38MyId() || w.kind === "home";
+c.fillStyle = set.claim.colour || "#6ee7ff";
+c.shadowColor = "rgba(0,0,0,.8)";
+c.shadowBlur = 4;
+c.fillText((mine ? "YOUR STATION" : String(set.claim.name).toUpperCase()) + " · ×" + size, x, y);
+if (set.claim.awayAt && w.kind === "nexus") {
+const left = Math.max(0, r38HoldMs(set) - (Date.now() - set.claim.awayAt));
+const frac = left / r38HoldMs(set);
+c.font = "800 " + Math.round(9 * k) + "px system-ui";
+c.fillStyle = frac < .25 ? "#ff8d8d" : "#ffe9a8";
+const sec = Math.ceil(left / 1000);
+c.fillText("⏱ " + Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0") + " UNTIL IT'S UP FOR GRABS", x, y - 12 * k);
+}
+}
+else {
+c.globalAlpha = .6 + .3 * Math.sin(t * 2.4);
+c.fillStyle = "#bfe9ff";
+const near = Math.hypot(cx - orbitalX, minY - orbitalY) < 520;
+c.fillText("UNCLAIMED" + (size > 1 ? " · ×" + size : "") + (near && !r38.ride ? " — FLY OVER IT TO LAND" : ""), x, y);
+}
+c.restore();
+}
+function r38DrawWalker(c) {
+const wk = r38.walk;
+const ride = r38.ride;
+if (!wk || !ride || ride.mode !== "walk")
+return;
+const set = r38.world.sets[ride.setId];
+if (!set)
+return;
+const x = W / 2 - orbitalX + set.x + wk.x, y = H / 2 - orbitalY + set.y + wk.y;
+const pet = currentShipPendingPilot;
+const size = 15;
+const moving = Math.hypot(wk.tx - wk.x, wk.ty - wk.y) > 1;
+c.save();
+c.fillStyle = "rgba(0,0,0,.25)";
+c.beginPath();
+c.ellipse(x, y + size * .5, size * .5, size * .16, 0, 0, Math.PI * 2);
+c.fill();
+try {
+drawSpacePet(c, (pet && pet.homePlanetId) || "earth", x, y, size, pet ? pet.energy : 100, moving ? r38Now() / 1000 * 7 : 0, pet ? pet.species : 0, false, null, wk.face || 1);
+r34Helmet(c, x, y, size);
+}
+catch (error) {
+c.fillStyle = "#fff";
+c.beginPath();
+c.arc(x, y, 6, 0, Math.PI * 2);
+c.fill();
+}
+c.restore();
+if (moving) {
+const tx = W / 2 - orbitalX + set.x + wk.tx, ty = H / 2 - orbitalY + set.y + wk.ty;
+c.save();
+c.strokeStyle = "rgba(191,246,255,.6)";
+c.lineWidth = 1.2;
+c.beginPath();
+c.arc(tx, ty, 4 + Math.sin(r38Now() / 150) * 1.5, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+}
+}
+function r38ShipScreen() {
+return r38ToScreen(W / 2, H / 2);
+}
+(function () {
+const cv = typeof canvas !== "undefined" && canvas;
+if (!cv)
+return;
+cv.addEventListener("pointerdown", e => {
+if (worldState !== "orbital" || !running || !r38.world) {
+r38.ptr = null;
+return;
+}
+const r = cv.getBoundingClientRect();
+const s = r38ShipScreen();
+const onShip = Math.hypot(e.clientX - r.left - s.x, e.clientY - r.top - s.y) < 44 * Math.max(.6, r38.zoom);
+r38.ptr = { x: e.clientX, y: e.clientY, t: r38Now(), onShip };
+if (!r38.ride)
+return;
+e.stopImmediatePropagation();
+if (paused || gameOver || r38.inside)
+return;
+if (onShip)
+return;
+orbitalDragging = true;
+orbitalDragConfirmed = false;
+orbitalDragStartX = e.clientX;
+orbitalDragStartY = e.clientY;
+orbitalDragLastX = e.clientX;
+orbitalDragLastY = e.clientY;
+}, { capture: true });
+cv.addEventListener("pointerup", e => {
+const p = r38.ptr;
+r38.ptr = null;
+if (!p || worldState !== "orbital" || !r38.world)
+return;
+const dx = e.clientX - p.x, dy = e.clientY - p.y, dur = r38Now() - p.t;
+const vertical = Math.abs(dy) > 55 && Math.abs(dy) > Math.abs(dx) * 1.3 && dur < 1000;
+if (r38.ride) {
+if (p.onShip && vertical) {
+orbitalDragging = false;
+if (dy < 0)
+r38Launch();
+else
+r38AstroOut();
+return;
+}
+if (Math.hypot(dx, dy) < 14 && dur < 500)
+r38RideTap(e.clientX, e.clientY);
+return;
+}
+if (r38.hover && vertical && dy > 0)
+r38RequestLand();
+}, { capture: true });
+})();
+function r38RideTap(cx, cy) {
+const ride = r38.ride;
+const w = r38.world;
+const set = ride && w.sets[ride.setId];
+if (!set)
+return;
+const L = r38ToLogical(cx, cy);
+const wx = L.x - W / 2 + orbitalX, wy = L.y - H / 2 + orbitalY;
+const sx = wx - set.x, sy = wy - set.y;
+const r = canvas.getBoundingClientRect();
+const s = r38ShipScreen();
+const onShip = Math.hypot(cx - r.left - s.x, cy - r.top - s.y) < 40 * Math.max(.6, r38.zoom);
+let hatch = null;
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+const c = set.pos[mid];
+const h = r38HatchOffset(m);
+if (Math.hypot(sx - (c.x + h.x), sy - (c.y + h.y)) < Math.max(16, r38ModR(m) * .18))
+hatch = mid;
+});
+if (ride.mode === "helm") {
+if (onShip) {
+r38OpenInside(ride.mid, "ship");
+return;
+}
+if (hatch) {
+r38AstroOut(hatch);
+return;
+}
+r38Toast("SWIPE THE SHIP DOWN TO LET YOUR ASTRONAUT OUT", "#bfe9ff", "hint", 2500);
+return;
+}
+const wk = r38.walk;
+if (hatch) {
+const m = w.mods[hatch], c = set.pos[hatch], h = r38HatchOffset(m);
+r38WalkTo(c.x + h.x, c.y + h.y, { inside: hatch });
+return;
+}
+if (onShip || Math.hypot(sx - r38PadSetPos().x, sy - r38PadSetPos().y) < 26) {
+const p = r38PadSetPos();
+r38WalkTo(p.x, p.y, { board: true });
+return;
+}
+r38WalkTo(sx, sy, null);
+void wk;
+}
+function r38PadSetPos() {
+const ride = r38.ride;
+const w = r38.world;
+const set = w.sets[ride.setId];
+const m = w.mods[ride.mid];
+const c = set.pos[ride.mid];
+const p = r38PadOffset(m, ride.pad);
+return { x: c.x + p.x, y: c.y + p.y };
+}
+function r38AstroOut(goHatch) {
+const ride = r38.ride;
+if (!ride)
+return;
+if (ride.mode === "walk") {
+if (goHatch) {
+const w = r38.world, set = w.sets[ride.setId], m = w.mods[goHatch], c = set.pos[goHatch], h = r38HatchOffset(m);
+r38WalkTo(c.x + h.x, c.y + h.y, { inside: goHatch });
+}
+return;
+}
+if (!currentShipPendingPilot) {
+r38Toast("NO ASTRONAUT ABOARD", "#ffb4b4", "noastro", 1500);
+return;
+}
+const p = r38PadSetPos();
+ride.mode = "walk";
+r38.walk = { x: p.x, y: p.y + 8, tx: p.x, ty: p.y + 8, mid: ride.mid, face: 1, then: null };
+orbitalDragging = false;
+floatingText("ASTRONAUT OUT ON THE HULL", W / 2, H * .3, "#bff6ff");
+if (goHatch) {
+const w = r38.world, set = w.sets[ride.setId], m = w.mods[goHatch], c = set.pos[goHatch], h = r38HatchOffset(m);
+r38WalkTo(c.x + h.x, c.y + h.y, { inside: goHatch });
+}
+}
+function r38Board() {
+const ride = r38.ride;
+if (!ride)
+return;
+ride.mode = "helm";
+r38.walk = null;
+floatingText("BACK AT THE HELM", W / 2, H * .3, "#bff6ff");
+}
+function r38Walkable(set, x, y) {
+const w = r38.world;
+let best = null, bd = Infinity;
+for (const mid of set.mods) {
+const m = w.mods[mid];
+const c = set.pos[mid];
+const R = r38ModR(m) * .9;
+const d = Math.hypot(x - c.x, y - c.y);
+if (d <= R)
+return { x, y, mid };
+if (d - R < bd) {
+bd = d - R;
+best = { x: c.x + (x - c.x) / d * R, y: c.y + (y - c.y) / d * R, mid };
+}
+}
+for (const l of set.links) {
+const a = set.pos[l[0]], b = set.pos[l[2]];
+if (!a || !b)
+continue;
+const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+const k = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2));
+const px = a.x + dx * k, py = a.y + dy * k;
+if (Math.hypot(x - px, y - py) < 9)
+return { x, y, mid: k < .5 ? l[0] : l[2] };
+}
+return best;
+}
+function r38WalkTo(x, y, then) {
+const wk = r38.walk;
+const set = r38.world.sets[r38.ride.setId];
+if (!wk || !set)
+return;
+const p = r38Walkable(set, x, y) || { x, y };
+wk.tx = p.x;
+wk.ty = p.y;
+wk.then = then;
+}
+function r38SurfaceTick(dt) {
+const ride = r38.ride;
+const wk = r38.walk;
+if (!ride || ride.mode !== "walk" || !wk)
+return;
+const set = r38.world.sets[ride.setId];
+if (!set)
+return;
+const dx = wk.tx - wk.x, dy = wk.ty - wk.y, d = Math.hypot(dx, dy);
+if (d > .8) {
+const step = Math.min(d, 70 * dt);
+const nx = wk.x + dx / d * step, ny = wk.y + dy / d * step;
+const p = r38Walkable(set, nx, ny) || { x: nx, y: ny };
+wk.x = p.x;
+wk.y = p.y;
+if (p.mid)
+wk.mid = p.mid;
+if (Math.abs(dx) > .5)
+wk.face = dx > 0 ? 1 : -1;
+return;
+}
+const then = wk.then;
+wk.then = null;
+if (!then)
+return;
+if (then.board)
+r38Board();
+else if (then.inside)
+r38OpenInside(then.inside, "hatch");
+}
+function r38Arrow(dir) {
+const id = "r38Swipe_" + dir;
+let el = document.getElementById(id);
+if (!el) {
+el = document.createElement("button");
+el.id = id;
+el.className = "r35-swipe " + dir + " r38-swipe";
+["pointerdown", "touchstart", "mousedown"].forEach(t => el.addEventListener(t, e => e.stopPropagation(), { passive: true }));
+el.addEventListener("click", e => {
+e.stopPropagation();
+const act = el._act;
+if (act)
+try {
+act();
+}
+catch (error) {
+console.error(error);
+}
+});
+document.body.appendChild(el);
+}
+return el;
+}
+function r38SetArrow(dir, text, act) {
+const el = r38Arrow(dir);
+if (!text) {
+el.classList.remove("on");
+el._act = null;
+return;
+}
+const html = dir === "up" ? '<span class="r35-chev">▲</span><span>' + text + '</span>' : '<span>' + text + '</span><span class="r35-chev">▼</span>';
+if (el._html !== html) {
+el._html = html;
+el.innerHTML = html;
+}
+el._act = act;
+el.classList.add("on");
+}
+function r38HideArrows() {
+r38SetArrow("up", null);
+r38SetArrow("down", null);
+const d = document.getElementById("r38Dock");
+if (d)
+d.classList.remove("on");
+}
+function r38UiTick() {
+const now = r38Now();
+const live = running && !gameOver && worldState === "orbital" && r38.world && !r38.cannon && !r38.inside && !paused;
+if (!live) {
+r38HideArrows();
+r38Hud(null);
+return;
+}
+const ride = r38.ride;
+if (ride && now - ride.t0 > 600) {
+if (ride.mode === "walk") {
+r38SetArrow("up", "BOARD THE SHIP", () => { const p = r38PadSetPos(); r38WalkTo(p.x, p.y, { board: true }); });
+r38SetArrow("down", "TAP THE HATCH TO GO INSIDE", () => {
+const w = r38.world, set = w.sets[ride.setId], mid = r38.walk.mid || ride.mid, m = w.mods[mid], c = set.pos[mid], h = r38HatchOffset(m);
+r38WalkTo(c.x + h.x, c.y + h.y, { inside: mid });
+});
+}
+else {
+r38SetArrow("up", "SWIPE UP TO LIFT OFF", () => r38Launch());
+r38SetArrow("down", "SWIPE DOWN · ASTRONAUT OUT", () => r38AstroOut());
+}
+}
+else if (!ride && r38.hover && r38Landable(r38.world.sets[r38.hover.setId], r38.hover.mid) && now - r38.hover.at > 350) {
+r38SetArrow("up", null);
+r38SetArrow("down", "SWIPE DOWN TO LAND ON THE STATION", () => r38RequestLand());
+}
+else {
+r38SetArrow("up", null);
+r38SetArrow("down", null);
+}
+let dock = document.getElementById("r38Dock");
+if (!dock) {
+dock = document.createElement("button");
+dock.id = "r38Dock";
+dock.className = "r38-dock";
+dock.innerHTML = "🔗 DOCK STATIONS";
+["pointerdown", "touchstart", "mousedown"].forEach(t => dock.addEventListener(t, e => e.stopPropagation(), { passive: true }));
+dock.addEventListener("click", e => {
+e.stopPropagation();
+const o = r38.dockOffer;
+if (!o)
+return;
+r38Op({ k: "dock", a: o.a, b: o.b });
+if (r38.world.kind === "home")
+r38AfterState();
+try {
+sound("arrival");
+}
+catch (error) { }
+floatingText("DOCKED", W / 2, H * .32, "#ffe9a8");
+});
+document.body.appendChild(dock);
+}
+dock.classList.toggle("on", !!r38.dockOffer && !!ride);
+r38Hud(r38HudText());
+}
+function r38HudText() {
+const w = r38.world;
+const me = r38MyId();
+const mine = Object.values(w.sets).filter(s => s.claim && (s.claim.pid === me || w.kind === "home"));
+const biggest = mine.reduce((b, s) => Math.max(b, r38SetSize(s)), 0);
+if (w.kind === "nexus") {
+const rank = w.rank || 0;
+const n = r38Players().length;
+const net = r38.net;
+const status = !net ? "" : net.online && !net.solo ? n + " astronaut" + (n > 1 ? "s" : "") : "solo";
+let line2 = "";
+if (mine.length) {
+line2 = "Your station ×" + biggest + " of " + r38Target(rank);
+const away = mine.find(s => s.claim.awayAt);
+if (away) {
+const left = Math.max(0, r38HoldMs(away) - (Date.now() - away.claim.awayAt));
+const sec = Math.ceil(left / 1000);
+line2 += " · ⏱ " + Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0") + " left on an empty one";
+}
+}
+else {
+const free = Object.values(w.sets).filter(s => !s.claim).length;
+line2 = free ? free + " unclaimed module" + (free > 1 ? "s" : "") + " out there — fly over one to land" : "Every module is claimed — wait for one to come free";
+}
+const board = {};
+Object.values(w.sets).forEach(s => {
+if (!s.claim)
+return;
+board[s.claim.pid] = Math.max(board[s.claim.pid] || 0, r38SetSize(s));
+});
+const top = Object.keys(board).sort((a, b) => board[b] - board[a]).slice(0, 3).map(pid => (pid === me ? "You" : r38PeerName(pid)) + " ×" + board[pid]).join(" · ");
+return { t: "🌀 THE NEXUS · RANK " + rank + (status ? " · " + status : ""), s: line2, b: Object.keys(board).length > 1 ? top : "" };
+}
+if (r38.ride)
+return { t: "🛰 YOUR STATION · ×" + biggest, s: "Fly it through an accelerator ring to take it to the Nexus", b: "" };
+return null;
+}
+function r38Hud(info) {
+let el = document.getElementById("r38Hud");
+if (!info) {
+if (el)
+el.classList.remove("on");
+return;
+}
+if (!el) {
+el = document.createElement("div");
+el.id = "r38Hud";
+el.className = "r38-hud";
+document.body.appendChild(el);
+}
+const html = '<div class="r38-hud-t">' + info.t + '</div><div class="r38-hud-s">' + info.s + '</div>' + (info.b ? '<div class="r38-hud-b">' + info.b + '</div>' : '');
+if (el._html !== html) {
+el._html = html;
+el.innerHTML = html;
+}
+el.classList.add("on");
+}
+setInterval(() => {
+try {
+if (!(running && worldState === "orbital" && r38.world))
+r38UiTick();
+if (r38.nexus && (!running || gameOver || worldState !== "orbital"))
+r38LeaveNexus();
+if (!running && r38.mapMode) {
+r38.mapMode = null;
+r38.exitPk = null;
+}
+}
+catch (error) { }
+}, 300);
+r38.towerSats = {};
+function r38SatSync() {
+let list;
+try {
+list = satOrbitList();
+}
+catch (error) {
+return;
+}
+for (let i = list.length - 1; i >= 0; i--)
+if (list[i].r38tower)
+list.splice(i, 1);
+const w = r38.world;
+if (!w || worldState !== "orbital") {
+r38.towerSats = {};
+return;
+}
+const me = r38MyId();
+const keep = {};
+Object.values(w.sets).forEach(set => {
+if (!set.claim || (set.claim.pid !== me && w.kind !== "home"))
+return;
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+(m.towers || []).forEach((tw, i) => {
+if (!tw || !tw.sat)
+return;
+const key = mid + ":" + i;
+const sat = r38.towerSats[key] && r38.towerSats[key].id === tw.sat.id ? r38.towerSats[key] : Object.assign({}, tw.sat, { space: "orbit", mode: "auto", cd: 2, dep: null, dep0: 0 });
+sat.r38tower = { mid, i, set: set.id };
+list.push(sat);
+keep[key] = sat;
+});
+});
+});
+r38.towerSats = keep;
+}
+function r38SatTick(dt) {
+const w = r38.world;
+let list = null;
+try {
+list = satOrbitList();
+}
+catch (error) { }
+const now = Date.now();
+let changed = false;
+Object.keys(r38.towerSats).forEach(key => {
+const sat = r38.towerSats[key];
+const set = w.sets[sat.r38tower.set] || r38SetOf(sat.r38tower.mid);
+const m = w.mods[sat.r38tower.mid];
+if (!set || !m || !list) {
+delete r38.towerSats[key];
+return;
+}
+const c = r38ModWorld(set, m.id);
+const p = r38TowerOffset(m, sat.r38tower.i);
+sat.wx = c.x + p.x;
+sat.wy = c.y + p.y - 22;
+if (r38HasCore(m, "powerup-forge"))
+sat.cd = Math.max(0, (sat.cd || 0) - dt);
+if (!list.includes(sat)) {
+delete r38.towerSats[key];
+const tw = m.towers[sat.r38tower.i];
+if (tw && tw.sat && tw.sat.id === sat.id) {
+tw.sat = null;
+m.satAt = now;
+r38ModChanged(m);
+changed = true;
+}
+}
+});
+const me = r38MyId();
+Object.values(w.sets).forEach(set => {
+if (!set.claim || (set.claim.pid !== me && w.kind !== "home"))
+return;
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+if (!r38HasCore(m, "satellite-factory"))
+return;
+const i = (m.towers || []).findIndex(tw => tw && !tw.sat);
+if (i < 0)
+return;
+if (!m.satAt)
+m.satAt = now;
+if (now - m.satAt < 90000)
+return;
+m.satAt = now;
+m.towers[i].sat = { id: satNewId(), type: bossPickPower(BOSS_RING_POWERS), mode: "auto", hp: SAT_HP };
+r38ModChanged(m);
+changed = true;
+r38Toast("SATELLITE FACTORY: A NEW SATELLITE IS ON ITS TOWER", "#ffb46b", "satf", 3000);
+});
+});
+if (changed || Object.keys(r38.towerSats).length !== r38CountMySats())
+r38SatSync();
+}
+function r38CountMySats() {
+const w = r38.world;
+const me = r38MyId();
+let n = 0;
+Object.values(w.sets).forEach(set => {
+if (!set.claim || (set.claim.pid !== me && w.kind !== "home"))
+return;
+set.mods.forEach(mid => (w.mods[mid].towers || []).forEach(tw => { if (tw && tw.sat)
+n++; }));
+});
+return n;
+}
+function r38ModChanged(m) {
+const w = r38.world;
+if (!w)
+return;
+if (w.kind === "home") {
+r38SaveHomeSoon();
+return;
+}
+if (r38IsHost()) {
+r38Dirty();
+return;
+}
+r38Op({ k: "modset", mid: m.id, m: JSON.parse(JSON.stringify(m)) });
+}
+function satSaveOrbits() {
+let all = null;
+const saved = {};
+try {
+all = satOrbitAll();
+Object.keys(all).forEach(k => {
+if (Array.isArray(all[k]) && all[k].some(s => s.r38tower)) {
+saved[k] = all[k];
+all[k] = all[k].filter(s => !s.r38tower);
+}
+});
+}
+catch (error) { }
+try {
+return satSaveOrbits__r38();
+}
+finally {
+if (all)
+Object.keys(saved).forEach(k => { all[k] = saved[k]; });
+}
+}
+function satFire(sat, list, aimX, aimY) {
+const r = satFire__r38(sat, list, aimX, aimY);
+try {
+if (sat && sat.r38tower && r38.nexus) {
+const m = r38.world.mods[sat.r38tower.mid];
+const reach = r38HasCore(m, "powerup-forge") ? 460 : 300;
+const me = r38MyId();
+const hitPids = new Set();
+Object.values(r38.world.sets).forEach(s => {
+if (!s.claim || s.claim.pid === me || !s.drv)
+return;
+if (Math.hypot(s.x - sat.wx, s.y - sat.wy) < reach + r38SetExtent(s, s.x, s.y) * .5)
+hitPids.add(s.drv);
+});
+r38Peers().forEach(p => {
+if (p.p && !p.p.ride && Math.hypot(p.p.x - sat.wx, p.p.y - sat.wy) < reach)
+hitPids.add(p.id);
+});
+hitPids.forEach(pid => r38Send({ k: "zap", x: sat.wx, y: sat.wy, r: reach, type: sat.type, name: r38MyName() }, pid));
+if (hitPids.size)
+r38Toast("YOUR TOWER HIT " + hitPids.size + " RIVAL" + (hitPids.size > 1 ? "S" : ""), "#ffb46b", "zapout", 2000);
+}
+}
+catch (error) { }
+return r;
+}
+function r38TakeZap(from, d) {
+if (!r38.nexus || worldState !== "orbital")
+return;
+const dx = orbitalX - d.x, dy = orbitalY - d.y, dist = Math.hypot(dx, dy) || 1;
+const push = r38.ride ? 150 : 260;
+if (r38.ride) {
+r38.bump.x += dx / dist * push;
+r38.bump.y += dy / dist * push;
+}
+else {
+orbitalHeading = Math.atan2(dy, dx);
+orbitalSpeed = Math.min(ORBITAL_MAX_SPEED, orbitalSpeed + push * .6);
+}
+r38.stunUntil = r38Now() + 1500;
+shake = Math.max(shake || 0, 8);
+floatingText("ZAPPED BY " + String(d.name || "A RIVAL").toUpperCase() + "'S TOWER", W / 2, H * .34, "#ff9de6");
+}
+r38.wonKeys = {};
+function r38OnWin(d) {
+if (d.pid !== r38MyId()) {
+r38Toast("🏆 " + String(d.name || "Someone").toUpperCase() + " WON THIS NEXUS", "#ffd23f", "win" + d.pid, 5000);
+return;
+}
+const key = d.set + ":" + d.rank;
+if (r38.wonKeys[key])
+return;
+r38.wonKeys[key] = true;
+const s = r38Save();
+s.wins = (s.wins || 0) + 1;
+let tok = "shop", extra = "";
+if (d.rank >= 2) {
+const t = d.rank - 1;
+tok = "fuse:" + t;
+if ((s.fuseTier || 0) < t) {
+s.fuseTier = t;
+extra = "Station shops now sell " + r38TokenInfo(tok).name + " tokens.";
+}
+}
+r38CaseAdd(tok, 1);
+try {
+addRankPoints(40, "Won the Nexus");
+}
+catch (error) { }
+r38WinBanner(tok, d.why, extra);
+}
+function r38WinBanner(tok, why, extra) {
+const info = r38TokenInfo(tok);
+let el = document.getElementById("r38Win");
+if (!el) {
+el = document.createElement("div");
+el.id = "r38Win";
+el.className = "r38-win";
+document.body.appendChild(el);
+}
+el.innerHTML =
+'<div class="r38-win-cup">🏆</div>' +
+'<div class="r38-win-t">YOU WON THE NEXUS</div>' +
+'<div class="r38-win-s">' + (why === "home" ? "You flew your station home at full size." : "Last station standing.") + '</div>' +
+'<div class="r38-win-tok"><span>' + info.icon + '</span> ' + info.name + ' collected by your ship</div>' +
+(extra ? '<div class="r38-win-s">' + extra + '</div>' : '') +
+'<div class="r38-win-s dim">Tokens are kept in your token case — install them from a station\'s power core.</div>';
+el.classList.remove("on");
+void el.offsetWidth;
+el.classList.add("on");
+clearTimeout(el._t);
+el._t = setTimeout(() => el.classList.remove("on"), 6500);
+try {
+sound("arrival");
+}
+catch (error) { }
+try {
+const s = r38ShipScreen();
+for (let i = 0; i < 8; i++)
+setTimeout(() => floatingText(info.icon, s.x + (Math.random() - .5) * 160, s.y - 80 - Math.random() * 60, info.colour), i * 90);
+}
+catch (error) { }
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent =
+'body.r38-ride #empButton{visibility:hidden !important;}' +
+'.r38-hud{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 74px);z-index:70;pointer-events:none;' +
+'text-align:center;padding:6px 14px;border-radius:14px;background:rgba(10,6,26,.62);border:1px solid rgba(215,157,255,.45);' +
+'box-shadow:0 0 14px rgba(170,110,255,.25);color:#efe4ff;font:800 10px system-ui,sans-serif;letter-spacing:.08em;opacity:0;transition:opacity .4s;max-width:calc(100vw - 32px);}' +
+'.r38-hud.on{opacity:1;}' +
+'.r38-hud-s{font-weight:700;letter-spacing:.02em;color:#cdb8f5;margin-top:2px;}' +
+'.r38-hud-b{font-weight:700;letter-spacing:.02em;color:#ffe9a8;margin-top:2px;}' +
+'.r38-dock{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(env(safe-area-inset-bottom,0px) + 132px);z-index:82;' +
+'padding:10px 18px;border-radius:999px;border:1.5px solid #ffe9a8;background:rgba(30,22,6,.85);color:#ffe9a8;font:900 12px system-ui;letter-spacing:.1em;' +
+'box-shadow:0 0 18px rgba(255,210,63,.45);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;}' +
+'.r38-dock.on{opacity:1;pointer-events:auto;transform:translateX(-50%) scale(1);animation:r38Pulse 1.2s ease-in-out infinite;}' +
+'@keyframes r38Pulse{0%,100%{box-shadow:0 0 12px rgba(255,210,63,.35)}50%{box-shadow:0 0 26px rgba(255,210,63,.8)}}' +
+'.r38-win{position:fixed;left:50%;top:22%;transform:translate(-50%,-10px) scale(.92);z-index:120;pointer-events:none;text-align:center;' +
+'padding:16px 22px;border-radius:20px;background:rgba(18,10,2,.9);border:2px solid #ffd23f;box-shadow:0 0 40px rgba(255,210,63,.55);' +
+'color:#fff4cc;font:800 12px system-ui;opacity:0;transition:opacity .4s,transform .4s;width:min(320px,calc(100vw - 32px));}' +
+'.r38-win.on{opacity:1;transform:translate(-50%,0) scale(1);}' +
+'.r38-win-cup{font-size:40px;line-height:1.1;}' +
+'.r38-win-t{font:900 18px system-ui;letter-spacing:.12em;color:#ffd23f;text-shadow:0 0 12px rgba(255,210,63,.7);}' +
+'.r38-win-s{margin-top:6px;font-weight:600;color:#f3e2b0;}' +
+'.r38-win-s.dim{opacity:.7;font-size:11px;}' +
+'.r38-win-tok{margin-top:10px;padding:8px 10px;border-radius:12px;background:rgba(255,210,63,.12);border:1px solid rgba(255,210,63,.5);font-weight:900;}' +
+'.r38-win-tok span{font-size:20px;vertical-align:-3px;}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
+const R38_K = 2.4;
+function r38InsideBuild() {
+const I = r38.inside;
+const w = r38.world;
+const set = w && w.sets[I.setId];
+if (!set)
+return null;
+const rooms = {};
+set.mods.forEach(mid => {
+const m = w.mods[mid];
+const p = set.pos[mid];
+rooms[mid] = { mid, m, x: p.x * R38_K, y: p.y * R38_K, R: r38ModR(m) * R38_K * .9 };
+});
+const objs = [];
+set.mods.forEach(mid => {
+const rm = rooms[mid], m = rm.m, R = rm.R;
+const slot = k => m.rot + Math.PI / 3 + k * Math.PI * 2 / 3;
+const at = (a, r) => ({ x: rm.x + Math.cos(a) * R * r, y: rm.y + Math.sin(a) * R * r });
+const n = m.size || 1;
+for (let i = 0; i < n; i++) {
+const p = n === 1 ? { x: rm.x, y: rm.y } : at(i / n * Math.PI * 2 + m.rot, Math.min(.36, .12 + n * .02));
+objs.push({ kind: "core", mid, i, x: p.x, y: p.y, r: 24, label: "POWER CORE" });
+}
+const locks = Math.min(3, n);
+for (let k = 0; k < locks; k++) {
+const p = at(slot(k), .9);
+objs.push({ kind: "airlock", mid, i: k, x: p.x, y: p.y, r: 24, a: slot(k), label: "AIRLOCK" });
+}
+const shelf = at(slot(1) + (n > 1 ? .42 : 0), n > 1 ? .62 : .6);
+objs.push({ kind: "shelf", mid, x: shelf.x, y: shelf.y, r: 30, label: "STORAGE SHELF" });
+const atm = at(slot(2) - (n > 1 ? .42 : 0), n > 1 ? .62 : .6);
+objs.push({ kind: "atm", mid, x: atm.x, y: atm.y, r: 24, label: "ATM" });
+if (r38HasShop(m)) {
+const sp = at(slot(0) + Math.PI, .5);
+objs.push({ kind: "shop", mid, x: sp.x, y: sp.y, r: 34, label: "STATION SHOP" });
+}
+});
+let cabin = null;
+const ride = r38.ride;
+if (ride && ride.setId === set.id && rooms[ride.mid]) {
+const rm = rooms[ride.mid], m = rm.m;
+const k = (ride.pad || 0) % Math.min(3, m.size || 1);
+const a = m.rot + Math.PI / 3 + k * Math.PI * 2 / 3;
+const lock = { x: rm.x + Math.cos(a) * rm.R, y: rm.y + Math.sin(a) * rm.R };
+const c = { x: rm.x + Math.cos(a) * (rm.R + 92), y: rm.y + Math.sin(a) * (rm.R + 92) };
+cabin = { x: c.x, y: c.y, a, lock, w: 150, h: 96, mid: ride.mid };
+const seat = { x: c.x + Math.cos(a) * 32, y: c.y + Math.sin(a) * 32 };
+objs.push({ kind: "seat", x: seat.x, y: seat.y, r: 22, label: "ASTRONAUT SEAT" });
+const hold = { x: c.x - Math.cos(a) * 10 + Math.cos(a + Math.PI / 2) * 40, y: c.y - Math.sin(a) * 10 + Math.sin(a + Math.PI / 2) * 40 };
+objs.push({ kind: "hold", x: hold.x, y: hold.y, r: 22, label: "SHIP'S HOLD" });
+}
+return { set, rooms, objs, cabin };
+}
+function r38InsideNode(L, x, y) {
+if (L.cabin && r38InCabin(L.cabin, x, y, 0))
+return "cabin";
+let best = null, bd = Infinity;
+Object.values(L.rooms).forEach(rm => {
+const d = Math.hypot(x - rm.x, y - rm.y) - rm.R;
+if (d < bd) {
+bd = d;
+best = rm.mid;
+}
+});
+return best;
+}
+function r38InCabin(cb, x, y, pad) {
+const dx = x - cb.x, dy = y - cb.y;
+const u = dx * Math.cos(cb.a) + dy * Math.sin(cb.a), v = -dx * Math.sin(cb.a) + dy * Math.cos(cb.a);
+return Math.abs(u) <= cb.h / 2 + pad && Math.abs(v) <= cb.w / 2 + pad;
+}
+function r38InsideWalkable(L, x, y) {
+if (L.cabin && r38InCabin(L.cabin, x, y, -8))
+return true;
+if (L.cabin) {
+const cb = L.cabin;
+const ax = cb.lock.x, ay = cb.lock.y, bx = cb.x, by = cb.y;
+const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+if (Math.hypot(x - (ax + dx * k), y - (ay + dy * k)) < 20)
+return true;
+}
+for (const rm of Object.values(L.rooms))
+if (Math.hypot(x - rm.x, y - rm.y) < rm.R - 10)
+return true;
+for (const l of L.set.links) {
+const a = L.rooms[l[0]], b = L.rooms[l[2]];
+if (!a || !b)
+continue;
+const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+const k = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2));
+if (Math.hypot(x - (a.x + dx * k), y - (a.y + dy * k)) < 20)
+return true;
+}
+return false;
+}
+function r38InsidePath(L, fx, fy, tx, ty) {
+const from = r38InsideNode(L, fx, fy), to = r38InsideNode(L, tx, ty);
+if (from === to)
+return [{ x: tx, y: ty }];
+const adj = {};
+const add = (a, b, via) => { (adj[a] = adj[a] || []).push({ to: b, via }); };
+L.set.links.forEach(l => {
+add(l[0], l[2], null);
+add(l[2], l[0], null);
+});
+if (L.cabin) {
+add("cabin", L.cabin.mid, L.cabin.lock);
+add(L.cabin.mid, "cabin", L.cabin.lock);
+}
+const prev = {};
+prev[from] = { n: null };
+const q = [from];
+while (q.length) {
+const n = q.shift();
+if (n === to)
+break;
+(adj[n] || []).forEach(e => {
+if (prev[e.to])
+return;
+prev[e.to] = { n, via: e.via };
+q.push(e.to);
+});
+}
+if (!prev[to])
+return [{ x: tx, y: ty }];
+const chain = [];
+let n = to;
+while (n !== from) {
+chain.unshift({ n, via: prev[n].via });
+n = prev[n].n;
+}
+const pts = [];
+const centre = id => id === "cabin" ? { x: L.cabin.x, y: L.cabin.y } : { x: L.rooms[id].x, y: L.rooms[id].y };
+if (from !== "cabin")
+pts.push(centre(from));
+chain.forEach(c => {
+if (c.via)
+pts.push({ x: c.via.x, y: c.via.y });
+if (c.n !== to)
+pts.push(centre(c.n));
+});
+pts.push({ x: tx, y: ty });
+return pts;
+}
+function r38OpenInside(mid, entry) {
+const ride = r38.ride;
+const w = r38.world;
+if (!ride || !w)
+return;
+const set = w.sets[ride.setId];
+if (!set)
+return;
+let el = document.getElementById("r38Inside");
+if (!el) {
+el = document.createElement("div");
+el.id = "r38Inside";
+el.className = "r38-inside";
+el.innerHTML =
+'<canvas class="r38-in-cv"></canvas>' +
+'<div class="r38-in-top"><button class="r38-in-back">⬅ BACK OUT</button><div class="r38-in-title"></div><div class="r38-in-hold"></div></div>' +
+'<div class="r38-in-hint">Tap anywhere to walk · tap something to use it</div>';
+document.body.appendChild(el);
+el.querySelector(".r38-in-back").addEventListener("click", e => { e.stopPropagation(); r38CloseInside(); });
+const cv = el.querySelector(".r38-in-cv");
+cv.addEventListener("pointerdown", e => { e.stopPropagation(); r38InsideTap(e); });
+["pointerdown", "touchstart", "mousedown", "pointerup", "click"].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+}
+r38.inside = { setId: set.id, entry, x: 0, y: 0, tx: 0, ty: 0, path: [], then: null, cam: null, face: 1, open: true };
+const L = r38InsideBuild();
+const I = r38.inside;
+if (entry === "ship" && L.cabin) {
+const s = L.objs.find(o => o.kind === "seat");
+I.x = s.x;
+I.y = s.y;
+}
+else {
+const lock = L.objs.find(o => o.kind === "airlock" && o.mid === mid) || L.objs.find(o => o.mid === mid);
+const rm = L.rooms[mid];
+I.x = lock.x + (rm.x - lock.x) * .15;
+I.y = lock.y + (rm.y - lock.y) * .15;
+}
+I.tx = I.x;
+I.ty = I.y;
+I.cam = { x: I.x, y: I.y };
+el.classList.add("on");
+orbitalDragging = false;
+r38HideArrows();
+floatingText(entry === "ship" ? "ABOARD YOUR SHIP" : "INSIDE THE STATION", W / 2, H * .3, "#bff6ff");
+cancelAnimationFrame(r38.insideRaf);
+const loop = () => {
+if (!r38.inside)
+return;
+try {
+r38InsideFrame();
+}
+catch (error) {
+console.error("Station interior draw failed:", error);
+}
+r38.insideRaf = requestAnimationFrame(loop);
+};
+loop();
+}
+function r38CloseInside(silent) {
+const I = r38.inside;
+r38.inside = null;
+cancelAnimationFrame(r38.insideRaf);
+const el = document.getElementById("r38Inside");
+if (el)
+el.classList.remove("on");
+r38HideBubble();
+if (silent || !I)
+return;
+const ride = r38.ride;
+if (!ride)
+return;
+if (I.entry === "ship") {
+ride.mode = "helm";
+r38.walk = null;
+return;
+}
+const w = r38.world, set = w.sets[ride.setId];
+const mid = I.lastRoom && set && set.mods.includes(I.lastRoom) ? I.lastRoom : ride.mid;
+if (!set || !w.mods[mid])
+return;
+const c = set.pos[mid], h = r38HatchOffset(w.mods[mid]);
+ride.mode = "walk";
+r38.walk = { x: c.x + h.x, y: c.y + h.y + 6, tx: c.x + h.x, ty: c.y + h.y + 6, mid, face: 1, then: null };
+}
+function r38InsideSize(cv) {
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+const w = cv.clientWidth, h = cv.clientHeight;
+if (cv.width !== Math.floor(w * dpr) || cv.height !== Math.floor(h * dpr)) {
+cv.width = Math.floor(w * dpr);
+cv.height = Math.floor(h * dpr);
+}
+return { w, h, dpr };
+}
+function r38InsideScale(w, h) {
+return Math.min(w, h) / (R38_MOD_R * R38_K * .9 * 2.3);
+}
+function r38InsideFrame() {
+const I = r38.inside;
+const el = document.getElementById("r38Inside");
+const cv = el.querySelector(".r38-in-cv");
+const { w, h, dpr } = r38InsideSize(cv);
+const c = cv.getContext("2d");
+const L = r38InsideBuild();
+if (!L) {
+r38CloseInside(true);
+return;
+}
+const now = r38Now();
+const dt = Math.min(.05, (now - (I.last || now)) / 1000);
+I.last = now;
+let target = I.path[0];
+if (target) {
+const dx = target.x - I.x, dy = target.y - I.y, d = Math.hypot(dx, dy);
+const step = Math.min(d, 230 * dt);
+if (d > .5) {
+I.x += dx / d * step;
+I.y += dy / d * step;
+if (Math.abs(dx) > .5)
+I.face = dx > 0 ? 1 : -1;
+}
+if (d <= step + .5) {
+I.path.shift();
+if (!I.path.length && I.then) {
+const then = I.then;
+I.then = null;
+r38InsideUse(then);
+}
+}
+}
+const node = r38InsideNode(L, I.x, I.y);
+if (node && node !== "cabin")
+I.lastRoom = node;
+I.cam.x += (I.x - I.cam.x) * Math.min(1, dt * 4);
+I.cam.y += (I.y - I.cam.y) * Math.min(1, dt * 4);
+const s = r38InsideScale(w, h);
+I.view = { s, w, h };
+c.setTransform(dpr, 0, 0, dpr, 0, 0);
+c.fillStyle = "#02040c";
+c.fillRect(0, 0, w, h);
+if (!r38.inStars) {
+r38.inStars = [];
+for (let i = 0; i < 160; i++)
+r38.inStars.push({ x: Math.random() * 2000 - 1000, y: Math.random() * 2000 - 1000, r: Math.random() * 1.4 + .3, a: Math.random() * .6 + .2 });
+}
+r38.inStars.forEach(st => {
+const x = ((st.x - I.cam.x * .3) % 1000 + 1500) % 1000 / 1000 * w, y = ((st.y - I.cam.y * .3) % 1000 + 1500) % 1000 / 1000 * h;
+c.globalAlpha = st.a;
+c.fillStyle = "#cfe6ff";
+c.fillRect(x, y, st.r, st.r);
+});
+c.globalAlpha = 1;
+c.save();
+c.translate(w / 2, h / 2);
+c.scale(s, s);
+c.translate(-I.cam.x, -I.cam.y);
+const t = now / 1000;
+L.set.links.forEach(l => {
+const a = L.rooms[l[0]], b = L.rooms[l[2]];
+if (!a || !b)
+return;
+r38DrawCorridor(c, a, b, t);
+});
+if (L.cabin)
+r38DrawCabin(c, L.cabin, t);
+Object.values(L.rooms).forEach(rm => r38DrawRoom(c, rm, t));
+L.objs.forEach(o => r38DrawObject(c, o, L, t));
+const pet = currentShipPendingPilot;
+const moving = I.path.length > 0;
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(I.x, I.y + 14, 12, 4, 0, 0, Math.PI * 2);
+c.fill();
+try {
+drawSpacePet(c, (pet && pet.homePlanetId) || "earth", I.x, I.y, 30, pet ? pet.energy : 100, moving ? t * 7 : 0, pet ? pet.species : 0, false, null, I.face);
+r34Helmet(c, I.x, I.y, 30);
+}
+catch (error) {
+c.fillStyle = "#fff";
+c.beginPath();
+c.arc(I.x, I.y, 10, 0, Math.PI * 2);
+c.fill();
+}
+if (moving) {
+const end = I.path[I.path.length - 1];
+c.strokeStyle = "rgba(191,246,255,.6)";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(end.x, end.y, 7 + Math.sin(t * 6) * 2, 0, Math.PI * 2);
+c.stroke();
+}
+c.restore();
+const set = L.set;
+const size = r38SetSize(set);
+const title = el.querySelector(".r38-in-title");
+const tt = "SPACE STATION · ×" + size + (set.claim ? " · " + (set.claim.pid === r38MyId() || r38.world.kind === "home" ? "YOURS" : set.claim.name) : "");
+if (title.textContent !== tt)
+title.textContent = tt;
+const hold = el.querySelector(".r38-in-hold");
+const hh = COIN_ICON_HTML + " " + (runCoins || 0) + " aboard · 📦 " + r38HoldUsed() + "/" + r38HoldCap();
+if (hold._h !== hh) {
+hold._h = hh;
+hold.innerHTML = hh;
+}
+}
+function r38DrawCorridor(c, a, b, t) {
+const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+const nx = -dy / len, ny = dx / len;
+c.save();
+c.lineCap = "butt";
+c.strokeStyle = "#39435e";
+c.lineWidth = 58;
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+c.strokeStyle = "#262f47";
+c.lineWidth = 44;
+c.stroke();
+c.strokeStyle = "rgba(140,170,220,.16)";
+c.lineWidth = 2;
+for (let s = a.R || 0; s < len; s += 12) {
+const px = a.x + dx / len * s, py = a.y + dy / len * s;
+c.beginPath();
+c.moveTo(px + nx * 20, py + ny * 20);
+c.lineTo(px - nx * 20, py - ny * 20);
+c.stroke();
+}
+c.strokeStyle = "rgba(111,214,255,.5)";
+c.lineWidth = 3;
+[1, -1].forEach(sd => {
+c.beginPath();
+c.moveTo(a.x + nx * 25 * sd, a.y + ny * 25 * sd);
+c.lineTo(b.x + nx * 25 * sd, b.y + ny * 25 * sd);
+c.stroke();
+});
+const k = (t * .5) % 1;
+c.fillStyle = "#7fe8ff";
+c.shadowBlur = 10;
+c.shadowColor = "#7fe8ff";
+[1, -1].forEach(sd => {
+c.beginPath();
+c.arc(a.x + dx * k + nx * 18 * sd, a.y + dy * k + ny * 18 * sd, 2.5, 0, Math.PI * 2);
+c.fill();
+});
+c.restore();
+}
+function r38DrawRoom(c, rm, t) {
+const m = rm.m, R = rm.R;
+const shop = r38HasShop(m);
+c.save();
+c.fillStyle = "#3a4562";
+c.beginPath();
+c.arc(rm.x, rm.y, R + 14, 0, Math.PI * 2);
+c.fill();
+c.lineWidth = 8;
+for (let k = 0; k < 3; k++) {
+const a = m.rot + Math.PI / 3 + k * Math.PI * 2 / 3;
+c.strokeStyle = "rgba(111,214,255,.55)";
+[-1, 1].forEach(sd => {
+c.beginPath();
+c.arc(rm.x, rm.y, R + 7, a + sd * .22, a + sd * .62, sd < 0);
+c.stroke();
+});
+}
+const g = c.createRadialGradient(rm.x, rm.y, 0, rm.x, rm.y, R);
+g.addColorStop(0, shop ? "#3a3424" : "#2f3a58");
+g.addColorStop(1, shop ? "#211c12" : "#1b2236");
+c.fillStyle = g;
+c.beginPath();
+c.arc(rm.x, rm.y, R, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "rgba(140,170,220,.11)";
+c.lineWidth = 1.5;
+for (let r = 36; r < R; r += 36) {
+c.beginPath();
+c.arc(rm.x, rm.y, r, 0, Math.PI * 2);
+c.stroke();
+}
+for (let k = 0; k < 12; k++) {
+const a = k * Math.PI / 6 + m.rot;
+c.beginPath();
+c.moveTo(rm.x + Math.cos(a) * 36, rm.y + Math.sin(a) * 36);
+c.lineTo(rm.x + Math.cos(a) * R, rm.y + Math.sin(a) * R);
+c.stroke();
+}
+c.strokeStyle = shop ? "rgba(255,210,63,.6)" : "rgba(95,243,255,.35)";
+c.lineWidth = 3;
+c.beginPath();
+c.arc(rm.x, rm.y, R - 4, 0, Math.PI * 2);
+c.stroke();
+c.fillStyle = "#262f47";
+c.restore();
+}
+function r38DrawCabin(c, cb, t) {
+c.save();
+c.strokeStyle = "#39435e";
+c.lineWidth = 52;
+c.beginPath();
+c.moveTo(cb.lock.x, cb.lock.y);
+c.lineTo(cb.x, cb.y);
+c.stroke();
+c.strokeStyle = "#262f47";
+c.lineWidth = 38;
+c.stroke();
+c.translate(cb.x, cb.y);
+c.rotate(cb.a);
+c.fillStyle = "#24304c";
+c.strokeStyle = "rgba(111,214,255,.5)";
+c.lineWidth = 2;
+[1, -1].forEach(sd => {
+c.beginPath();
+c.moveTo(-cb.h * .3, sd * cb.w / 2);
+c.lineTo(-cb.h * .55, sd * (cb.w / 2 + 30));
+c.lineTo(cb.h * .05, sd * cb.w / 2);
+c.closePath();
+c.fill();
+c.stroke();
+});
+c.fillStyle = "#2c3a5c";
+c.strokeStyle = "#6fd6ff";
+c.lineWidth = 3;
+c.beginPath();
+c.moveTo(-cb.h / 2, -cb.w / 2);
+c.lineTo(cb.h * .2, -cb.w / 2);
+c.quadraticCurveTo(cb.h * .75, -cb.w * .32, cb.h * .75, 0);
+c.quadraticCurveTo(cb.h * .75, cb.w * .32, cb.h * .2, cb.w / 2);
+c.lineTo(-cb.h / 2, cb.w / 2);
+c.closePath();
+c.fill();
+c.stroke();
+c.strokeStyle = "rgba(111,214,255,.7)";
+c.lineWidth = 6;
+c.beginPath();
+c.arc(cb.h * .3, 0, cb.w * .38, -.9, .9);
+c.stroke();
+c.fillStyle = "rgba(191,246,255,.75)";
+c.font = "800 10px system-ui";
+c.textAlign = "center";
+c.rotate(-cb.a);
+c.fillText("YOUR SHIP", 0, -cb.w * .62);
+c.restore();
+}
+function r38DrawObject(c, o, L, t) {
+const w = r38.world;
+const m = o.mid ? w.mods[o.mid] : null;
+c.save();
+c.translate(o.x, o.y);
+const pulse = .5 + .5 * Math.sin(t * 2.5 + o.x * .01);
+if (o.kind === "core") {
+const tok = m.cores[o.i];
+const col = tok ? r38TokenInfo(tok).colour : "#5fd8ff";
+const g = c.createRadialGradient(0, 0, 0, 0, 0, 30);
+g.addColorStop(0, r38Hex(col, tok ? .75 : .25));
+g.addColorStop(1, r38Hex(col, 0));
+c.fillStyle = g;
+c.beginPath();
+c.arc(0, 0, 30, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#1a2034";
+c.strokeStyle = col;
+c.lineWidth = 3;
+c.beginPath();
+c.arc(0, 0, 18, 0, Math.PI * 2);
+c.fill();
+c.stroke();
+if (tok) {
+c.font = "18px system-ui";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(r38TokenIcon(tok), 0, 1);
+}
+else {
+c.setLineDash([4, 4]);
+c.strokeStyle = "rgba(95,243,255," + (.4 + pulse * .5) + ")";
+c.beginPath();
+c.arc(0, 0, 11, 0, Math.PI * 2);
+c.stroke();
+c.setLineDash([]);
+}
+}
+else if (o.kind === "shelf") {
+c.save();
+c.rotate(Math.atan2(o.y - L.rooms[o.mid].y, o.x - L.rooms[o.mid].x) + Math.PI / 2);
+c.fillStyle = "#4a3b2a";
+c.strokeStyle = "#c9a46a";
+c.lineWidth = 2;
+c.fillRect(-32, -11, 64, 22);
+c.strokeRect(-32, -11, 64, 22);
+c.beginPath();
+c.moveTo(-32, 0);
+c.lineTo(32, 0);
+c.stroke();
+const items = [...Object.keys(m.shelf.mats).filter(k => m.shelf.mats[k] > 0).map(k => (MATERIALS[k] || {}).color || "#fff"), ...Object.keys(m.shelf.tok).filter(k => m.shelf.tok[k] > 0).map(k => r38TokenInfo(k).colour)];
+items.slice(0, 8).forEach((col, i) => {
+c.fillStyle = col;
+c.fillRect(-28 + (i % 4) * 15, i < 4 ? -8 : 3, 9, 6);
+});
+c.restore();
+}
+else if (o.kind === "atm") {
+c.fillStyle = "#1c2a22";
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 2;
+c.fillRect(-15, -20, 30, 40);
+c.strokeRect(-15, -20, 30, 40);
+c.fillStyle = "rgba(125,255,176," + (.5 + pulse * .4) + ")";
+c.fillRect(-11, -16, 22, 14);
+c.fillStyle = "#04140a";
+c.font = "900 8px system-ui";
+c.textAlign = "center";
+c.fillText("ATM", 0, -6);
+c.font = "12px system-ui";
+c.fillText("🪙", 0, 12);
+}
+else if (o.kind === "airlock") {
+c.save();
+c.rotate(o.a + Math.PI / 2);
+c.fillStyle = "#2a3046";
+c.fillRect(-22, -7, 44, 14);
+for (let i = -22; i < 22; i += 8) {
+c.fillStyle = "#ffd23f";
+c.beginPath();
+c.moveTo(i, -7);
+c.lineTo(i + 4, -7);
+c.lineTo(i, 7);
+c.lineTo(i - 4, 7);
+c.closePath();
+c.fill();
+}
+c.strokeStyle = "#ffd23f";
+c.lineWidth = 2;
+c.strokeRect(-22, -7, 44, 14);
+c.restore();
+const tw = (m.towers || [])[o.i];
+if (tw) {
+c.font = "13px system-ui";
+c.textAlign = "center";
+c.fillText(tw.sat ? "🛰" : "📡", 0, -14);
+}
+}
+else if (o.kind === "shop") {
+c.fillStyle = "#3a2d10";
+c.strokeStyle = "#ffd23f";
+c.lineWidth = 3;
+c.beginPath();
+c.arc(0, 10, 34, Math.PI * 1.1, Math.PI * 1.9);
+c.stroke();
+c.beginPath();
+c.arc(0, 10, 26, Math.PI * 1.1, Math.PI * 1.9);
+c.stroke();
+c.globalAlpha = .6 + pulse * .4;
+c.font = "16px system-ui";
+c.textAlign = "center";
+["🏭", "🎓", "🏝", "⚒", "🛰", "📡"].forEach((ic, i) => {
+const a = Math.PI * 1.18 + i * .13 * Math.PI;
+c.fillText(ic, Math.cos(a) * 44, 10 + Math.sin(a) * 44);
+});
+c.globalAlpha = 1;
+}
+else if (o.kind === "seat") {
+c.fillStyle = "#5a2c2c";
+c.strokeStyle = "#ff8a7a";
+c.lineWidth = 2;
+c.beginPath();
+c.roundRect ? c.roundRect(-14, -14, 28, 28, 8) : c.rect(-14, -14, 28, 28);
+c.fill();
+c.stroke();
+}
+else if (o.kind === "hold") {
+c.fillStyle = "#3b3322";
+c.strokeStyle = "#c9a46a";
+c.lineWidth = 2;
+[[-14, -8], [2, -8], [-6, 4]].forEach(p => {
+c.fillRect(p[0], p[1], 14, 12);
+c.strokeRect(p[0], p[1], 14, 12);
+});
+}
+c.globalAlpha = .85;
+c.fillStyle = "#cfe6ff";
+c.font = "800 9px system-ui";
+c.textAlign = "center";
+c.fillText(o.label, 0, (o.r || 20) + 12);
+c.globalAlpha = .25 + pulse * .25;
+c.strokeStyle = "#bff6ff";
+c.lineWidth = 1.5;
+c.beginPath();
+c.arc(0, 0, (o.r || 20) + 4 + pulse * 3, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+}
+function r38InsideTap(e) {
+const I = r38.inside;
+if (!I || !I.view)
+return;
+r38HideBubble();
+const cv = e.currentTarget;
+const r = cv.getBoundingClientRect();
+const x = (e.clientX - r.left - I.view.w / 2) / I.view.s + I.cam.x;
+const y = (e.clientY - r.top - I.view.h / 2) / I.view.s + I.cam.y;
+const L = r38InsideBuild();
+const hit = L.objs.find(o => Math.hypot(o.x - x, o.y - y) < (o.r || 20) + 10);
+let tx = x, ty = y;
+if (hit) {
+const rm = hit.mid ? L.rooms[hit.mid] : null;
+const cx = rm ? rm.x : (L.cabin ? L.cabin.x : hit.x), cy = rm ? rm.y : (L.cabin ? L.cabin.y : hit.y);
+const d = Math.hypot(cx - hit.x, cy - hit.y) || 1;
+const back = Math.min(d, (hit.r || 20) + 14);
+tx = hit.x + (cx - hit.x) / d * back;
+ty = hit.y + (cy - hit.y) / d * back;
+if (hit.kind === "core" && (hit.r || 0) > 0 && d < 5) {
+tx = hit.x;
+ty = hit.y + 30;
+}
+}
+if (!r38InsideWalkable(L, tx, ty)) {
+let best = null, bd = Infinity;
+for (let i = 0; i <= 20; i++) {
+const k = i / 20;
+const px = I.x + (tx - I.x) * k, py = I.y + (ty - I.y) * k;
+if (r38InsideWalkable(L, px, py)) {
+const dd = Math.hypot(px - tx, py - ty);
+if (dd < bd) {
+bd = dd;
+best = { x: px, y: py };
+}
+}
+}
+const node = r38InsideNode(L, tx, ty);
+if (node && node !== "cabin" && L.rooms[node] && !best) {
+const rm = L.rooms[node];
+const d = Math.hypot(tx - rm.x, ty - rm.y) || 1;
+best = { x: rm.x + (tx - rm.x) / d * (rm.R - 16), y: rm.y + (ty - rm.y) / d * (rm.R - 16) };
+}
+if (best) {
+tx = best.x;
+ty = best.y;
+}
+else if (!hit) {
+return;
+}
+}
+I.path = r38InsidePath(L, I.x, I.y, tx, ty);
+I.then = hit ? { kind: hit.kind, mid: hit.mid, i: hit.i, x: hit.x, y: hit.y } : null;
+}
+function r38ObjScreen(o) {
+const I = r38.inside;
+return { x: (o.x - I.cam.x) * I.view.s + I.view.w / 2, y: (o.y - I.cam.y) * I.view.s + I.view.h / 2 };
+}
+function r38ShowBubble(spec) {
+const host = document.getElementById("r38Inside");
+let el = document.getElementById("r38Bubble");
+if (!el) {
+el = document.createElement("div");
+el.id = "r38Bubble";
+el.className = "world-bubble r38-bubble hidden";
+host.appendChild(el);
+el.addEventListener("pointerdown", e => e.stopPropagation());
+}
+let html = '<button class="world-bubble-close" data-wb="close">✕</button>' +
+'<div class="world-bubble-head">' +
+(spec.icon ? '<span class="world-bubble-icon">' + spec.icon + '</span>' : '') +
+'<span class="world-bubble-title">' + spec.title + '</span></div>' +
+(spec.meta ? '<div class="world-bubble-meta">' + spec.meta + '</div>' : '') +
+(spec.text ? '<div class="world-bubble-text">' + spec.text + '</div>' : '') +
+(spec.html ? '<div class="r38-b-body">' + spec.html + '</div>' : '') +
+'<div class="world-bubble-buttons">';
+(spec.buttons || []).forEach((b, i) => {
+html += '<button class="neon-btn' + (b.primary ? ' primary' : '') + '" data-wb="' + i + '" ' + (b.disabled ? 'disabled' : '') + '>' + b.label + '</button>';
+});
+html += '</div>';
+el.innerHTML = html;
+el._spec = spec;
+el.onclick = e => {
+const act = e.target.closest("[data-r38]");
+if (act && spec.onAct) {
+try {
+sound("click");
+}
+catch (error) { }
+spec.onAct(act.getAttribute("data-r38"), act);
+return;
+}
+const btn = e.target.closest("[data-wb]");
+if (!btn || btn.disabled)
+return;
+const which = btn.getAttribute("data-wb");
+if (which === "close") {
+r38HideBubble();
+return;
+}
+const b = spec.buttons[Number(which)];
+try {
+sound("click");
+}
+catch (error) { }
+if (b && b.action)
+b.action();
+if (b && !b.keepOpen)
+r38HideBubble();
+};
+el.classList.remove("hidden");
+const W2 = host.clientWidth, H2 = host.clientHeight;
+const bw = Math.min(300, W2 - 24);
+el.style.width = bw + "px";
+const bh = el.offsetHeight;
+let left = Math.max(12, Math.min(W2 - bw - 12, spec.x - bw / 2));
+let top = spec.y - bh - 22;
+if (top < 70)
+top = Math.min(H2 - bh - 12, spec.y + 30);
+el.style.left = left + "px";
+el.style.top = Math.max(60, top) + "px";
+el.style.setProperty("--tail-x", Math.max(16, Math.min(bw - 16, spec.x - left)) + "px");
+r38.bubbleObj = spec.obj || null;
+}
+function r38HideBubble() {
+const el = document.getElementById("r38Bubble");
+if (el)
+el.classList.add("hidden");
+r38.bubbleObj = null;
+}
+function r38Refresh() {
+const o = r38.bubbleObj;
+if (o)
+r38InsideUse(o);
+}
+function r38HoldCap() {
+try {
+return getShipCargoCapacity(currentShipMaterialCapBonus);
+}
+catch (error) {
+return 20;
+}
+}
+function r38HoldUsed() {
+try {
+return getCargoUsed(runMaterials || {}) + runExtraCargoUsed();
+}
+catch (error) {
+return 0;
+}
+}
+function r38MatName(id) {
+const m = MATERIALS[id];
+return (m ? getMaterialIconHtml(id) + " " + m.name : id);
+}
+function r38MatPrice(id) {
+const m = MATERIALS[id];
+return Math.max(1, computeSellPrice((m && m.planetId) || "kepler"));
+}
+function r38Row(left, right) {
+return '<div class="r38-row"><span>' + left + '</span><span class="r38-row-r">' + right + '</span></div>';
+}
+function r38Btn(act, label, disabled) {
+return '<button class="r38-mini" data-r38="' + act + '"' + (disabled ? ' disabled' : '') + '>' + label + '</button>';
+}
+function r38CaseHtml() {
+const c = r38Save().case;
+const keys = Object.keys(c).filter(k => c[k] > 0);
+if (!keys.length)
+return '<div class="r38-empty">Token case: empty</div>';
+return '<div class="r38-case">' + keys.map(k => '<span class="r38-chip" title="' + r38TokenInfo(k).name + '">' + r38TokenIcon(k) + " ×" + c[k] + '</span>').join("") + '</div>';
+}
+function r38InsideUse(o) {
+const I = r38.inside;
+if (!I)
+return;
+const L = r38InsideBuild();
+const w = r38.world;
+const set = L.set;
+const m = o.mid ? w.mods[o.mid] : null;
+const obj = L.objs.find(x => x.kind === o.kind && x.mid === o.mid && x.i === o.i) || o;
+const p = r38ObjScreen(obj);
+const base = { x: p.x, y: p.y - (obj.r || 20) * I.view.s, obj: o };
+if (o.kind === "core")
+return r38CorePanel(base, set, m, o.i);
+if (o.kind === "shelf")
+return r38ShelfPanel(base, set, m);
+if (o.kind === "atm")
+return r38AtmPanel(base, set, m);
+if (o.kind === "shop")
+return r38ShopPanel(base, set, m);
+if (o.kind === "airlock")
+return r38AirlockPanel(base, set, m, o.i);
+if (o.kind === "seat") {
+r38ShowBubble(Object.assign(base, {
+icon: "🧑‍🚀", title: "Astronaut seat",
+text: "Take the helm to fly the station again, or lift your ship off it.",
+buttons: [
+{ label: "🕹 Take the helm", primary: true, action: () => { I.entry = "ship"; r38CloseInside(); } },
+{ label: "🚀 Lift off now", action: () => { r38CloseInside(true); r38.ride.mode = "helm"; r38.walk = null; r38Launch(); } }
+]
+}));
+return;
+}
+if (o.kind === "hold") {
+const mats = Object.keys(runMaterials || {}).filter(k => runMaterials[k] > 0);
+r38ShowBubble(Object.assign(base, {
+icon: "📦", title: "Ship's hold",
+meta: COIN_ICON_HTML + " " + (runCoins || 0) + " aboard · 📦 " + r38HoldUsed() + "/" + r38HoldCap(),
+html: (mats.length ? mats.map(k => r38Row(r38MatName(k), "×" + runMaterials[k])).join("") : '<div class="r38-empty">No materials aboard</div>') + r38CaseHtml(),
+text: "Upgrade tokens ride in your token case, however full the hold is.",
+buttons: []
+}));
+}
+}
+function r38CorePanel(base, set, m, i) {
+const tok = m.cores[i];
+const cs = r38Save().case;
+if (tok) {
+const info = r38TokenInfo(tok);
+r38ShowBubble(Object.assign(base, {
+icon: info.icon, title: "Power core — " + info.name,
+text: info.desc,
+buttons: tok === "shop" ? [] : [{ label: "↩ Take it out (back to your case)", action: () => {
+m.cores[i] = null;
+r38CaseAdd(tok, 1);
+r38ModChanged(m);
+r38SatSync();
+} }]
+}));
+return;
+}
+const usable = Object.keys(cs).filter(k => cs[k] > 0 && k !== "tower");
+const rows = usable.map(k => {
+const info = r38TokenInfo(k);
+let why = "";
+if (info.fuse) {
+const need = Math.pow(3, info.fuse - 1);
+if ((m.size || 1) !== need)
+why = "needs a ×" + need + " module";
+else if (r38FuseCandidates(set, m.id).length < 2)
+why = "needs two ×" + need + " modules docked to it";
+}
+if (k === "shop" && r38HasShop(m))
+why = "already a shop";
+return r38Row(info.icon + " " + info.name + " ×" + cs[k], why ? '<span class="r38-dim">' + why + '</span>' : r38Btn("inst:" + k, "Install"));
+}).join("");
+r38ShowBubble(Object.assign(base, {
+icon: "🔌", title: "Power core" + ((m.size || 1) > 1 ? " " + (i + 1) + " of " + m.size : ""),
+text: "An empty slot. Install an upgrade token from your case to give this module its power.",
+html: rows || '<div class="r38-empty">No tokens in your case. Win the Nexus for a Shop token, or buy them at a station shop.</div>',
+onAct: (act) => {
+const k = act.slice(5);
+const info = r38TokenInfo(k);
+if (info.fuse) {
+r38FusePanel(base, set, m, info.fuse);
+return;
+}
+if (!r38CaseCount(k))
+return;
+r38CaseAdd(k, -1);
+m.cores[i] = k;
+if (k === "shop") {
+m.shop = r38NewShopStock();
+r38Relax(set);
+r38SendSetPos(set);
+floatingText("MODULE EXPANDED — A SHOP OPENED", W / 2, H * .3, "#ffd23f");
+}
+else {
+floatingText(info.name.toUpperCase() + " INSTALLED", W / 2, H * .3, info.colour);
+}
+r38ModChanged(m);
+r38SatSync();
+r38HideBubble();
+}
+}));
+}
+function r38SendSetPos(set) {
+const w = r38.world;
+if (w.kind === "home") {
+r38SaveHomeSoon();
+r38RePin();
+return;
+}
+r38Op({ k: "setpos", set: set.id, pos: set.pos });
+r38RePin();
+}
+function r38FusePanel(base, set, m, t) {
+const cand = r38FuseCandidates(set, m.id);
+const pick = r38.fusePick = r38.fusePick && r38.fusePick.mid === m.id ? r38.fusePick : { mid: m.id, sel: cand.slice(0, 2) };
+const w = r38.world;
+const c0 = set.pos[m.id];
+let svg = '<svg viewBox="-110 -80 220 160" class="r38-fuse">';
+cand.forEach(id => {
+const p = set.pos[id];
+const dx = p.x - c0.x, dy = p.y - c0.y, d = Math.hypot(dx, dy) || 1;
+const x = dx / d * 70, y = dy / d * 55;
+svg += '<line x1="0" y1="0" x2="' + x + '" y2="' + y + '" stroke="#8fa0c0" stroke-width="8"/>';
+});
+cand.forEach((id, n) => {
+const p = set.pos[id];
+const dx = p.x - c0.x, dy = p.y - c0.y, d = Math.hypot(dx, dy) || 1;
+const x = dx / d * 70, y = dy / d * 55;
+const on = pick.sel.includes(id);
+svg += '<g data-r38="pick:' + id + '" style="cursor:pointer"><circle cx="' + x + '" cy="' + y + '" r="22" fill="' + (on ? '#d79dff' : '#3a4562') + '" stroke="' + (on ? '#fff' : '#8fa0c0') + '" stroke-width="3"/>' +
+'<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="11" font-weight="900" fill="#fff">' + (on ? '✓' : '×' + (w.mods[id].size || 1)) + '</text></g>';
+void n;
+});
+svg += '<circle cx="0" cy="0" r="26" fill="#d79dff" stroke="#fff" stroke-width="3"/><text x="0" y="5" text-anchor="middle" font-size="16">⚛</text></svg>';
+r38ShowBubble(Object.assign(base, {
+icon: "⚛", title: r38TokenInfo("fuse:" + t).name,
+text: "Tap two of the modules docked here to fuse them with this one. Cores, towers, landing pads and everything on the shelves are kept.",
+html: svg,
+buttons: [{ label: "⚛ Fuse these three", primary: true, disabled: pick.sel.length !== 2, action: () => {
+r38CaseAdd("fuse:" + t, -1);
+if (r38.world.kind === "home" || r38IsHost()) {
+if (r38FuseApply(set, m.id, pick.sel, t)) {
+r38Dirty();
+r38RePin();
+}
+}
+else {
+r38Op({ k: "fuse", mid: m.id, with: pick.sel, t });
+}
+r38.fusePick = null;
+floatingText("MODULES FUSED", W / 2, H * .3, "#d79dff");
+try {
+sound("arrival");
+}
+catch (error) { }
+} }],
+onAct: (act) => {
+const id = act.slice(5);
+const i = pick.sel.indexOf(id);
+if (i >= 0)
+pick.sel.splice(i, 1);
+else {
+pick.sel.push(id);
+if (pick.sel.length > 2)
+pick.sel.shift();
+}
+r38FusePanel(base, set, m, t);
+}
+}));
+}
+function r38ShelfPanel(base, set, m) {
+const sh = m.shelf;
+const cs = r38Save().case;
+const stored = Object.keys(sh.mats).filter(k => sh.mats[k] > 0).map(k => r38Row(r38MatName(k) + " ×" + sh.mats[k], r38Btn("take:" + k, "Take 1") + r38Btn("takeall:" + k, "All"))).join("") +
+Object.keys(sh.tok).filter(k => sh.tok[k] > 0).map(k => r38Row(r38TokenIcon(k) + " " + r38TokenInfo(k).name + " ×" + sh.tok[k], r38Btn("ttake:" + k, "Take"))).join("");
+const aboard = Object.keys(runMaterials || {}).filter(k => runMaterials[k] > 0).map(k => r38Row(r38MatName(k) + " ×" + runMaterials[k], r38Btn("put:" + k, "Store all"))).join("") +
+Object.keys(cs).filter(k => cs[k] > 0).map(k => r38Row(r38TokenIcon(k) + " " + r38TokenInfo(k).name + " ×" + cs[k], r38Btn("tput:" + k, "Store"))).join("");
+r38ShowBubble(Object.assign(base, {
+icon: "🗄", title: "Storage shelf",
+meta: "📦 hold " + r38HoldUsed() + "/" + r38HoldCap(),
+html: '<div class="r38-sub">On the shelf</div>' + (stored || '<div class="r38-empty">Nothing stored here yet</div>') +
+'<div class="r38-sub">Aboard your ship</div>' + (aboard || '<div class="r38-empty">Nothing aboard to store</div>'),
+text: "Whatever's on the shelf goes with the module — if someone else claims it, so are its shelves.",
+onAct: (act) => {
+const [op, k] = act.split(":");
+if (op === "take" || op === "takeall") {
+const room = r38HoldCap() - r38HoldUsed();
+const n = Math.min(sh.mats[k] || 0, op === "take" ? 1 : 999, room);
+if (n <= 0) {
+r38Toast("THE HOLD IS FULL", "#ffb4b4", "full2", 1200);
+return;
+}
+sh.mats[k] -= n;
+if (!sh.mats[k])
+delete sh.mats[k];
+runMaterials[k] = (runMaterials[k] || 0) + n;
+}
+else if (op === "put") {
+const n = runMaterials[k] || 0;
+sh.mats[k] = (sh.mats[k] || 0) + n;
+delete runMaterials[k];
+}
+else if (op === "ttake") {
+sh.tok[k]--;
+if (!sh.tok[k])
+delete sh.tok[k];
+r38CaseAdd(k, 1);
+}
+else if (op === "tput") {
+if (!r38CaseCount(k))
+return;
+r38CaseAdd(k, -1);
+sh.tok[k] = (sh.tok[k] || 0) + 1;
+}
+r38ModChanged(m);
+updateHUD();
+r38Refresh();
+}
+}));
+}
+function r38NewShopStock() {
+const stock = {}, prog = {};
+["ship-factory", "pilot-training", "bio-dome", "powerup-forge", "satellite-factory"].forEach(k => { stock[k] = 1; prog[k] = 0; });
+stock.tower = 3;
+prog.tower = 0;
+return { stock, prog };
+}
+function r38ShopKeys() {
+const keys = ["ship-factory", "pilot-training", "bio-dome", "powerup-forge", "satellite-factory", "tower"];
+for (let t = 1; t <= (r38Save().fuseTier || 0); t++)
+keys.push("fuse:" + t);
+return keys;
+}
+function r38RestockNeed(k) {
+const info = r38TokenInfo(k);
+if (info.struct && STRUCTURES[info.struct])
+return { mats: STRUCTURES[info.struct].buildMaterials.map(b => b.materialId), n: STRUCTURES[info.struct].buildMaterials.reduce((s, b) => s + b.amount, 0) };
+if (k === "tower")
+return { mats: null, n: 4 };
+return { mats: null, n: 12 };
+}
+function r38Restock(set, mid, n) {
+const w = r38.world;
+set.mods.forEach(id => {
+const m = w.mods[id];
+if (!r38HasShop(m))
+return;
+if (!m.shop)
+m.shop = r38NewShopStock();
+let changed = false;
+r38ShopKeys().forEach(k => {
+const need = r38RestockNeed(k);
+if (need.mats && !need.mats.includes(mid))
+return;
+m.shop.prog[k] = (m.shop.prog[k] || 0) + n;
+while (m.shop.prog[k] >= need.n) {
+m.shop.prog[k] -= need.n;
+if ((m.shop.stock[k] || 0) < 3) {
+m.shop.stock[k] = (m.shop.stock[k] || 0) + 1;
+floatingText(r38TokenIcon(k) + " RESTOCKED", W / 2, H * .36, "#ffd23f");
+}
+}
+changed = true;
+});
+if (changed)
+r38ModChanged(m);
+});
+}
+function r38AtmPanel(base, set, m) {
+const mats = Object.keys(runMaterials || {}).filter(k => runMaterials[k] > 0);
+const total = mats.reduce((s, k) => s + r38MatPrice(k) * runMaterials[k], 0);
+const shops = set.mods.some(id => r38HasShop(r38.world.mods[id]));
+r38ShowBubble(Object.assign(base, {
+icon: "🏧", title: "ATM",
+meta: COIN_ICON_HTML + " " + (runCoins || 0) + " aboard",
+html: mats.length ? mats.map(k => r38Row(r38MatName(k) + " ×" + runMaterials[k] + ' <span class="r38-dim">@' + r38MatPrice(k) + '</span>', r38Btn("sell:" + k, "Sell"))).join("") : '<div class="r38-empty">Nothing in the hold to sell</div>',
+text: shops ? "Selling a structure's materials restocks that token at this station's shop." : "Coins go straight aboard your ship.",
+buttons: mats.length ? [{ label: "Sell everything for " + total + " " + COIN_ICON_HTML, primary: true, keepOpen: true, action: () => {
+mats.slice().forEach(k => r38Sell(set, k));
+r38Refresh();
+} }] : [],
+onAct: (act) => {
+r38Sell(set, act.slice(5));
+r38Refresh();
+}
+}));
+}
+function r38Sell(set, k) {
+const n = runMaterials[k] || 0;
+if (!n)
+return;
+const coins = r38MatPrice(k) * n;
+delete runMaterials[k];
+runCoins = (runCoins || 0) + coins;
+r38Restock(set, k, n);
+try {
+trackResourceSold(null, k, n);
+}
+catch (error) { }
+floatingText("+" + coins + " " + COIN_ICON_HTML, W / 2, H * .4, "#ffd76b");
+updateHUD();
+}
+function r38ShopPanel(base, set, m) {
+if (!m.shop)
+m.shop = r38NewShopStock();
+const rows = r38ShopKeys().map(k => {
+const info = r38TokenInfo(k);
+const st = m.shop.stock[k] || 0;
+const need = r38RestockNeed(k);
+const prog = m.shop.prog[k] || 0;
+const mats = need.mats ? need.mats.map(id => getMaterialIconHtml(id)).join("") : "any material";
+return '<div class="r38-shoprow">' +
+r38Row(info.icon + " <b>" + info.name + "</b>", st ? r38Btn("buy:" + k, info.price + " " + COIN_ICON_HTML, (runCoins || 0) < info.price) : '<span class="r38-dim">sold out</span>') +
+'<div class="r38-dim r38-small">' + (st ? st + " in stock · " : "") + "restock " + prog + "/" + need.n + " — sell " + mats + '</div></div>';
+}).join("");
+r38ShowBubble(Object.assign(base, {
+icon: "🛍", title: "Station shop",
+meta: COIN_ICON_HTML + " " + (runCoins || 0) + " aboard",
+html: rows,
+text: "Tokens go to your token case. Install them in any module's power core.",
+onAct: (act) => {
+const k = act.slice(4);
+const info = r38TokenInfo(k);
+if ((runCoins || 0) < info.price || !(m.shop.stock[k] > 0))
+return;
+runCoins -= info.price;
+m.shop.stock[k]--;
+r38CaseAdd(k, 1);
+r38ModChanged(m);
+floatingText(info.icon + " BOUGHT", W / 2, H * .36, info.colour);
+updateHUD();
+r38Refresh();
+}
+}));
+}
+function r38AirlockPanel(base, set, m, k) {
+const n = m.size || 1;
+const slots = [];
+for (let i = k; i < n; i += Math.min(3, n))
+slots.push(i);
+const rows = slots.map(i => {
+const tw = m.towers[i];
+if (!tw)
+return r38Row("📡 Tower spot" + (n > 1 ? " " + (i + 1) : ""), r38CaseCount("tower") ? r38Btn("mount:" + i, "Mount tower") : '<span class="r38-dim">no tower in your case</span>');
+if (!tw.sat) {
+const sats = (satRun.cargo || []).map((s, j) => r38Btn("load:" + i + ":" + j, satTypeName(s.type))).join("");
+return r38Row("📡 Tower" + (n > 1 ? " " + (i + 1) : "") + " — empty", sats || '<span class="r38-dim">no satellites aboard</span>');
+}
+return r38Row("🛰 " + satTypeName(tw.sat.type) + " on its tower", r38Btn("unload:" + i, "Unload"));
+}).join("");
+r38ShowBubble(Object.assign(base, {
+icon: "🚪", title: "Airlock",
+text: "Satellites on a tower fire their power on their own — at rocks, and at rival stations and ships that come close.",
+html: rows,
+buttons: [{ label: "🚶 Out onto the hull", primary: true, action: () => { r38.inside.lastRoom = m.id; r38.inside.entry = "hatch"; r38CloseInside(); } }],
+onAct: (act) => {
+const parts = act.split(":");
+const i = Number(parts[1]);
+if (parts[0] === "mount") {
+if (!r38CaseCount("tower"))
+return;
+r38CaseAdd("tower", -1);
+m.towers[i] = { sat: null };
+floatingText("📡 TOWER MOUNTED", W / 2, H * .3, "#c9d6ff");
+}
+else if (parts[0] === "load") {
+const j = Number(parts[2]);
+const s = satRun.cargo[j];
+if (!s)
+return;
+satRun.cargo.splice(j, 1);
+m.towers[i].sat = { id: s.id || satNewId(), type: s.type, mode: "auto", hp: s.hp || SAT_HP };
+floatingText("🛰 SATELLITE ON THE TOWER", W / 2, H * .3, "#ffb46b");
+}
+else if (parts[0] === "unload") {
+const s = m.towers[i].sat;
+if (!s)
+return;
+satRun.cargo.push({ id: s.id, type: s.type, mode: "manual", hp: s.hp || SAT_HP });
+m.towers[i].sat = null;
+}
+r38ModChanged(m);
+r38SatSync();
+updateHUD();
+r38Refresh();
+}
+}));
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent =
+'.r38-inside{position:fixed;inset:0;z-index:95;display:none;background:#02040c;}' +
+'.r38-inside.on{display:block;animation:r38In .35s ease-out;}' +
+'@keyframes r38In{from{opacity:0}to{opacity:1}}' +
+'.r38-in-cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}' +
+'.r38-in-top{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;display:flex;align-items:center;gap:10px;' +
+'background:linear-gradient(rgba(2,4,12,.92),rgba(2,4,12,0));pointer-events:none;}' +
+'.r38-in-back{pointer-events:auto;padding:8px 12px;border-radius:12px;border:1.5px solid #5ff3ff;background:rgba(4,12,28,.85);color:#bff6ff;font:900 11px system-ui;letter-spacing:.08em;}' +
+'.r38-in-title{flex:1;color:#e6f6ff;font:900 11px system-ui;letter-spacing:.1em;text-shadow:0 0 8px rgba(95,243,255,.5);}' +
+'.r38-in-hold{color:#ffe9a8;font:800 11px system-ui;white-space:nowrap;}' +
+'.r38-in-hold img{height:.9em;vertical-align:-.1em;}' +
+'.r38-in-hint{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);text-align:center;color:rgba(191,246,255,.6);font:700 11px system-ui;pointer-events:none;}' +
+'.r38-bubble{position:absolute;z-index:3;max-height:62vh;overflow:auto;}' +
+'.r38-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid rgba(95,243,255,.12);font-size:12px;}' +
+'.r38-row img{height:1em;vertical-align:-.15em;}' +
+'.r38-row-r{display:flex;gap:4px;flex-shrink:0;align-items:center;}' +
+'.r38-mini{padding:5px 9px;border-radius:9px;border:1px solid #5ff3ff;background:rgba(10,30,60,.8);color:#dff8ff;font:800 11px system-ui;cursor:pointer;white-space:nowrap;}' +
+'.r38-mini img{height:.95em;vertical-align:-.15em;}' +
+'.r38-mini:disabled{opacity:.4;}' +
+'.r38-dim{color:#8ea6c8;font-size:11px;}' +
+'.r38-small{font-size:10px;margin-top:-2px;padding-bottom:4px;}' +
+'.r38-small img{height:.95em;vertical-align:-.15em;}' +
+'.r38-sub{margin-top:8px;font:900 10px system-ui;letter-spacing:.12em;color:#ffd23f;}' +
+'.r38-empty{color:#8ea6c8;font-size:11.5px;padding:4px 0;}' +
+'.r38-case{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}' +
+'.r38-chip{padding:3px 8px;border-radius:999px;background:rgba(215,157,255,.14);border:1px solid rgba(215,157,255,.5);font:800 11px system-ui;}' +
+'.r38-fuse{width:100%;height:150px;margin-top:6px;}' +
+'.r38-shoprow .r38-row{border-bottom:none;}' +
+'.r38-shoprow{border-bottom:1px solid rgba(255,210,63,.18);}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
+function drawMultiplayerStarMap() {
+r38MapDrawing = true;
+let r;
+try {
+r = drawMultiplayerStarMap__r38();
+}
+finally {
+r38MapDrawing = false;
+}
+try {
+r38DrawMapNode();
+}
+catch (error) {
+console.error("Nexus map node failed:", error);
+}
+return r;
+}
+function r38MapNodePos(cv) {
+const areas = (cv._starHitAreas || []).filter(a => a.planetId === "earth");
+const w = cv.clientWidth, h = cv.clientHeight;
+if (!areas.length)
+return null;
+let x = 0, y = 0;
+areas.forEach(a => { x += a.x; y += a.y; });
+x /= areas.length;
+y /= areas.length;
+const near = areas.some(a => Math.hypot(a.x - x, a.y - y) < 70);
+if (near || areas.length === 1)
+y = Math.max(...areas.map(a => a.y)) + Math.max(64, h * .1);
+return { x: clamp(x, 40, w - 40), y: clamp(y, 60, h - 58), earths: areas };
+}
+function r38DrawMapNode() {
+const cv = document.getElementById("starMapCanvas");
+if (!cv || !cv.clientWidth)
+return;
+const zoom = easeZoom(zoomProgress);
+const alpha = Math.max(0, 1 - zoom * 3);
+r38.mapNode = null;
+if (alpha <= 0)
+return;
+const pos = r38MapNodePos(cv);
+if (!pos)
+return;
+const c = cv.getContext("2d");
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+const t = r38Now() / 1000;
+c.save();
+c.setTransform(dpr, 0, 0, dpr, 0, 0);
+c.globalAlpha = alpha;
+c.setLineDash([3, 6]);
+c.strokeStyle = "rgba(215,157,255,.45)";
+c.lineWidth = 1.4;
+pos.earths.forEach(a => {
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(pos.x, pos.y);
+c.stroke();
+});
+c.setLineDash([]);
+const dest = starMapMode === "destination";
+const leaving = !!r38.mapMode;
+const ok = dest && !leaving && isOrbitalUnlocked();
+const dim = dest && !leaving && !ok;
+c.globalAlpha = alpha * (dim ? .55 : 1);
+r38Gyro(c, pos.x, pos.y, 15, t * .8, null);
+const g = c.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 9);
+g.addColorStop(0, "#ffffff");
+g.addColorStop(.5, "#d79dff");
+g.addColorStop(1, "rgba(120,60,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(pos.x, pos.y, 9, 0, Math.PI * 2);
+c.fill();
+if (ok) {
+c.strokeStyle = "rgba(215,157,255," + (.4 + .4 * Math.sin(t * 3)) + ")";
+c.lineWidth = 2;
+c.beginPath();
+c.arc(pos.x, pos.y, 24 + Math.sin(t * 3) * 2, 0, Math.PI * 2);
+c.stroke();
+}
+c.textAlign = "center";
+c.fillStyle = dim ? "#9a86b8" : "#efe2ff";
+c.font = "900 10px system-ui";
+c.fillText("THE NEXUS", pos.x, pos.y + 34);
+c.font = "700 8px system-ui";
+let sub;
+if (leaving)
+sub = "YOU ARE HERE";
+else if (dest)
+sub = ok ? "🧑‍🚀 ASTRONAUT AT THE HELM" : "🔒 NEEDS AN ASTRONAUT AT THE HELM";
+else
+sub = r38.stats && r38.stats.players ? "● " + r38.stats.players + " IN THE NEXUS NOW" : "SHARED BY EVERY PLAYER";
+c.fillStyle = ok ? "#9dffc8" : dim ? "#8a7aa6" : "#c9b2ef";
+c.fillText(sub, pos.x, pos.y + 45);
+if (leaving) {
+c.save();
+c.translate(pos.x + 26, pos.y - 18 + Math.sin(t * 3) * 1.5);
+c.scale(.16, .16);
+c.translate(-200, -140);
+c.shadowBlur = 18;
+c.shadowColor = "#5ce4ff";
+try {
+getShipStyleShapes(currentShipStyleId, currentShipStyleOwnerId, currentShipStyleRaw).forEach(s => s.draw(c, true, null, null));
+}
+catch (error) { }
+c.restore();
+}
+c.restore();
+r38.mapNode = { x: pos.x, y: pos.y, r: 30, ok, dest, leaving };
+}
+(function () {
+const cv = document.getElementById("starMapCanvas");
+if (!cv)
+return;
+let down = null;
+cv.addEventListener("pointerdown", e => {
+const r = cv.getBoundingClientRect();
+down = { x: e.clientX - r.left, y: e.clientY - r.top };
+}, { capture: true });
+cv.addEventListener("pointerup", e => {
+const n = r38.mapNode;
+const d = down;
+down = null;
+if (!n || !d)
+return;
+const r = cv.getBoundingClientRect();
+const x = e.clientX - r.left, y = e.clientY - r.top;
+if (Math.hypot(x - d.x, y - d.y) > 12 || Math.hypot(x - n.x, y - n.y) > n.r)
+return;
+e.stopImmediatePropagation();
+e.preventDefault();
+try {
+sound("click");
+}
+catch (error) { }
+if (n.leaving) {
+r38MapInfo(n, "You're leaving the Nexus — pick one of your worlds to head for.");
+return;
+}
+if (n.dest) {
+if (!n.ok) {
+r38MapInfo(n, "Only a ship with an astronaut at the helm can fly to the Nexus. Train an astronaut, put it in the seat, and set course from orbit.");
+return;
+}
+startZoomIn(null, () => {
+closeStarMap();
+startZoomOut();
+r38TravelToNexus();
+});
+return;
+}
+r38MapInfo(n, null);
+}, { capture: true });
+})();
+function r38MapInfo(n, msg) {
+const view = document.getElementById("starMapView");
+if (!view)
+return;
+let el = document.getElementById("r38MapInfo");
+if (!el) {
+el = document.createElement("div");
+el.id = "r38MapInfo";
+el.className = "world-bubble r38-mapinfo hidden";
+view.appendChild(el);
+el.addEventListener("pointerdown", e => e.stopPropagation());
+el.addEventListener("click", e => {
+e.stopPropagation();
+if (e.target.closest("[data-wb=close]"))
+el.classList.add("hidden");
+});
+}
+const s = r38Save();
+const parked = Object.keys(s.parked).map(pid => {
+const n = s.parked[pid].reduce((a, pk) => a + pk.mods.reduce((b, m) => b + (m.size || 1), 0), 0);
+return (getPlanet(pid) || { name: pid }).name + " ×" + n;
+});
+const best = Math.max(0, ...Object.values(s.parked).map(list => Math.max(0, ...list.map(pk => pk.mods.reduce((b, m) => b + (m.size || 1), 0)))));
+el.innerHTML =
+'<button class="world-bubble-close" data-wb="close">✕</button>' +
+'<div class="world-bubble-head"><span class="world-bubble-icon">🌀</span><span class="world-bubble-title">The Nexus</span></div>' +
+'<div class="world-bubble-meta">' + (msg || "A giant accelerator cannon, shared by every player") + '</div>' +
+(msg ? '' : '<div class="world-bubble-text">Fly there in a ship with an astronaut at the helm — it takes you straight into its orbit. Space station modules drift out of the cannon: land on one to claim it, steer it, dock your modules together. Collect enough and you win an upgrade token. Fly into the cannon to be fired back to your worlds.</div>') +
+'<div class="world-bubble-text">' +
+'🏆 Wins: <b>' + (s.wins || 0) + '</b> · next visit: <b>' + r38RankName(0).split(" · ")[0] + '</b> by ship' + (best ? ', <b>Rank ' + r38RankFor(best) + '</b> riding your ×' + best + ' station' : '') +
+(parked.length ? '<br>🛰 Stations parked: ' + parked.join(", ") : '') +
+'</div>' + r38CaseHtml();
+el.classList.remove("hidden");
+const W2 = view.clientWidth;
+const bw = Math.min(300, W2 - 24);
+el.style.width = bw + "px";
+const bh = el.offsetHeight;
+const left = Math.max(12, Math.min(W2 - bw - 12, n.x - bw / 2));
+let top = n.y - bh - 36;
+if (top < 60)
+top = n.y + 50;
+el.style.left = left + "px";
+el.style.top = top + "px";
+el.style.setProperty("--tail-x", Math.max(16, Math.min(bw - 16, n.x - left)) + "px");
+}
+setInterval(() => {
+try {
+const v = document.getElementById("starMapView");
+if (!v || v.classList.contains("hidden")) {
+const el = document.getElementById("r38MapInfo");
+if (el)
+el.classList.add("hidden");
+return;
+}
+if (typeof mp !== "undefined" && mp.connected)
+mpSend({ type: "nxStats" });
+}
+catch (error) { }
+}, 8000);
+function mpHandleMessage(message) {
+if (message && message.type === "nxStats") {
+r38.stats = message;
+return;
+}
+return mpHandleMessage__r38(message);
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent = '.r38-mapinfo{z-index:30;}.r38-mapinfo b{color:#ffe9a8;}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -29518,7 +34561,7 @@ coinPickups.forEach(c => c.update(dt));
 materialPickups.forEach(m => m.update(dt));
 mpCoPilotVisualsTick(dt);
 }
-function mpBroadcastOrbitalPresence() {
+function mpBroadcastOrbitalPresence__r38() {
 if (!mp.connected)
 return;
 const now = performance.now();
@@ -29589,7 +34632,7 @@ let mpLastOrbitalSnapshotAt = 0;
 const mpOrbitalPendingDestroyed = new Map();
 const mpOrbitalPendingAdded = new Map();
 let mpOrbitalPrev = new Map();
-function mpOrbitalPeers() {
+function mpOrbitalPeers__r38() {
 if (typeof mp === "undefined" ||
 !mp.connected ||
 worldState !== "orbital" ||
@@ -29643,7 +34686,7 @@ return true;
 }
 return false;
 }
-function mpIsOrbitalFollower() {
+function mpIsOrbitalFollower__r38() {
 return (worldState === "orbital" &&
 mpOrbitalPeers().length > 0 &&
 !mpIsOrbitalAuthority());
@@ -29737,7 +34780,7 @@ m.delete(id);
 }
 }));
 }
-function mpBroadcastOrbitalSnapshot() {
+function mpBroadcastOrbitalSnapshot__r38() {
 const isRunner = mpIsOrbitalAuthority();
 if (!isRunner ||
 !mpOrbitalPeers().length) {
@@ -30265,7 +35308,7 @@ name: mp.myName,
 colour: mp.myColour
 });
 }
-function mpHandleMessage(message) {
+function mpHandleMessage__r38(message) {
 if (message.type === "welcome") {
 mp.myId = message.id;
 return;
@@ -32048,7 +37091,7 @@ return Infinity;
 ensurePlanetArray(planetId);
 return planetSave.ships[planetId].length;
 }
-function getPlanet(id) {
+function getPlanet__r38(id) {
 return PLANETS.find(p => p.id === id);
 }
 function isRoute(a, b) {
@@ -34826,7 +39869,7 @@ c.restore();
 let starMapMode = "navigate";
 let starMapRaf = null;
 let starMapSelectable = [];
-function getStarMapSelectable() {
+function getStarMapSelectable__r38() {
 if (starMapMode === "destination") {
 const current = getPlanet(currentPlanetId);
 if (!current)
@@ -48360,7 +53403,7 @@ ctx.shadowBlur = 0;
 ctx.restore();
 }
 }
-function rollCoinDrop(asteroid) {
+function rollCoinDrop__r38(asteroid) {
 if (Math.random() <
 computeHeartDropChance()) {
 coinPickups.push(new CoinPickup(asteroid.x, asteroid.y, 0, true));
@@ -48389,7 +53432,7 @@ Math.round((value + 2) * 1.8);
 }
 coinPickups.push(new CoinPickup(asteroid.x, asteroid.y, value));
 }
-function rollMaterialDrop(asteroid) {
+function rollMaterialDrop__r38(asteroid) {
 const material = getMaterialForSpecialKind(asteroid.special);
 if (!material)
 return;
@@ -48846,7 +53889,7 @@ c.restore();
 }
 let recentSpawnSides = [];
 const RECENT_SPAWN_SIDES_MAX = 6;
-function edgeSpawn() {
+function edgeSpawn__r38() {
 const sideCounts = [0, 0, 0, 0];
 for (const s of recentSpawnSides) {
 sideCounts[s]++;
@@ -49497,7 +54540,7 @@ Array.isArray(currentShipCargoPets)
 savePlanetProgress();
 }
 }
-function checkPlayerCollisions() {
+function checkPlayerCollisions__r38() {
 if (capsuleMode ===
 "death")
 return;
@@ -52363,7 +57406,7 @@ updateHUD();
 function isOrbitalUnlocked() {
 return !!currentShipPendingPilot;
 }
-function enterOrbitalSpace() {
+function enterOrbitalSpace__r38() {
 if (!running ||
 gameOver)
 return;
@@ -52483,7 +57526,7 @@ return (1 / (1 + .12 * (getOrbitalWave() - 1))) * (ORBITAL_SPAWN_INTERVAL_MAX -
 (ORBITAL_SPAWN_INTERVAL_MAX -
 ORBITAL_SPAWN_INTERVAL_MIN) * density);
 }
-function spawnOrbitalAsteroid() {
+function spawnOrbitalAsteroid__r38() {
 if (mpIsOrbitalFollower())
 return;
 const peers = mpOrbitalPeers();
@@ -52524,7 +57567,7 @@ asteroid;
 asteroids.push(partner);
 }
 }
-function updateOrbital(dt) {
+function updateOrbital__r38(dt) {
 if (orbitalFade !==
 orbitalFadeTarget) {
 const fadeStep = dt * 4.5;
@@ -52593,7 +57636,7 @@ return;
 orbitalArrivalTimer = 0;
 r36OrbitEdge(distance);
 }
-function returnFromOrbitToPlanet() {
+function returnFromOrbitToPlanet__r38() {
 orbitalDragging = false;
 orbitalDragConfirmed = false;
 orbitalArrivalTimer = 0;
@@ -52603,7 +57646,7 @@ orbitalFade = 1;
 orbitalFadeTarget = 0;
 clearOrbitalFadeOverTime();
 }
-function leaveOrbitForField() {
+function leaveOrbitForField__r38() {
 orbitalDragging = false;
 orbitalDragConfirmed = false;
 orbitalArrivalTimer = 0;
@@ -52954,7 +57997,7 @@ openStarMap("destination");
 destinationShown = true;
 floatingText("INTERPLANETARY SPACE", W / 2, H * .28, "#73ddff");
 }
-function getFallbackDestination() {
+function getFallbackDestination__r38() {
 const current = getPlanet(currentPlanetId);
 if (!current)
 return null;
