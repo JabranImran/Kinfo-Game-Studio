@@ -449,6 +449,322 @@ const server=http.createServer(
     }
 );
 
+
+/* =====================================================================
+   THE NEXUS — one shared orbital space for everyone who plays.
+
+   It lives beside the rooms rather than inside them: a client opens a
+   separate connection for it and is placed into a "shard" (an instance
+   of the Nexus). Shards are split by station rank, so players meet
+   others bringing stations of a similar size. Placement:
+
+     1. a shard where someone from your own room already is (friends
+        stay together, right up to the hard cap);
+     2. otherwise the busiest shard of your rank that's still under its
+        split point (two-thirds full) — so arrivals pile into a lively
+        shard instead of an empty one;
+     3. no shard of your rank has anyone in it: the busiest shard one
+        rank up (tougher company, better rewards) that's under its
+        split point;
+     4. every shard of your rank is past its split point: start a fresh
+        one — the next arrivals will find it, long before the old one
+        is actually full.
+
+   A shard also closes itself to newcomers through its host's "slots"
+   report: the game's own rules (how many unclaimed stations are left,
+   how many modules are already in play) decide how many more can join.
+   The first member is the shard's host: it runs the shared simulation
+   and everyone else follows it; if it leaves, the longest-standing
+   member takes over. Nothing is stored — a shard lives while someone is
+   in it.
+===================================================================== */
+
+const nexusShards=new Map();
+
+let nexusSeq=1;
+
+const NEXUS_STALE_MS=45*1000;
+
+function nexusHardCap(rank){
+
+    return rank===0?9:12;
+
+}
+
+function nexusSoftCap(rank){
+
+    return Math.max(2,Math.ceil(nexusHardCap(rank)*2/3));
+
+}
+
+function nexusOpen(shard){
+
+    return shard.members.size<nexusHardCap(shard.rank) && shard.slots>0;
+
+}
+
+function nexusPick(rank,roomCode){
+
+    const all=[...nexusShards.values()];
+
+    const near=all.filter(s => (s.rank===rank || s.rank===rank+1) && nexusOpen(s));
+
+    if(roomCode){
+
+        const friends=near.filter(s => [...s.members.values()].some(m => m.roomCode===roomCode));
+
+        if(friends.length)
+            return friends.sort((a,b) => (a.rank-b.rank) || (b.members.size-a.members.size))[0];
+
+    }
+
+    const mine=all.filter(s => s.rank===rank && s.members.size>0);
+
+    const below=mine.filter(s => nexusOpen(s) && s.members.size<nexusSoftCap(s.rank)).sort((a,b) => b.members.size-a.members.size);
+
+    if(below.length)
+        return below[0];
+
+    const up=all.filter(s => s.rank===rank+1 && s.members.size>0 && nexusOpen(s) && s.members.size<nexusSoftCap(s.rank)).sort((a,b) => b.members.size-a.members.size);
+
+    if(up.length)
+        return up[0];
+
+    const shard={id:"nx"+(nexusSeq++),rank,members:new Map(),hostId:null,slots:99,createdAt:Date.now()};
+
+    nexusShards.set(shard.id,shard);
+
+    return shard;
+
+}
+
+function nexusSend(ws,message){
+
+    if(ws && ws.readyState===WebSocket.OPEN){
+
+        try{ws.send(JSON.stringify(message));}catch(error){}
+
+    }
+
+}
+
+function nexusBroadcast(shard,message,exceptId){
+
+    const text=JSON.stringify(message);
+
+    shard.members.forEach(m=>{
+
+        if(m.id!==exceptId && m.ws && m.ws.readyState===WebSocket.OPEN){
+
+            try{m.ws.send(text);}catch(error){}
+
+        }
+
+    });
+
+}
+
+function nexusRoster(shard){
+
+    return [...shard.members.values()].map(m => ({id:m.id,name:m.name,colour:m.colour,roomCode:m.roomCode || null}));
+
+}
+
+function nexusLeave(conn){
+
+    const nx=conn.nx;
+
+    if(!nx)
+        return;
+
+    conn.nx=null;
+
+    const shard=nexusShards.get(nx.shardId);
+
+    if(!shard)
+        return;
+
+    shard.members.delete(nx.id);
+
+    if(!shard.members.size){
+
+        nexusShards.delete(shard.id);
+
+        return;
+
+    }
+
+    nexusBroadcast(shard,{type:"nxPeer",id:nx.id,left:true});
+
+    if(shard.hostId===nx.id){
+
+        /* the longest-standing member takes over the simulation */
+        const next=[...shard.members.values()].sort((a,b) => a.joinedAt-b.joinedAt)[0];
+
+        shard.hostId=next.id;
+
+        nexusBroadcast(shard,{type:"nxHost",hostId:shard.hostId});
+
+    }
+
+}
+
+function nexusStats(){
+
+    let players=0;
+
+    const ranks={};
+
+    nexusShards.forEach(s=>{
+
+        players+=s.members.size;
+
+        ranks[s.rank]=(ranks[s.rank] || 0)+s.members.size;
+
+    });
+
+    return{type:"nxStats",players,shards:nexusShards.size,ranks};
+
+}
+
+/* true when the message was a Nexus one (handled here, whatever the outcome) */
+function handleNexus(conn,ws,message){
+
+    const t=message.type;
+
+    if(t==="nxStats"){
+
+        nexusSend(ws,nexusStats());
+
+        return true;
+
+    }
+
+    if(t==="nxJoin"){
+
+        nexusLeave(conn);
+
+        const rank=Math.max(0,Math.min(12,Math.floor(Number(message.rank) || 0)));
+
+        const roomCode=message.roomCode?String(message.roomCode).slice(0,12).toUpperCase():null;
+
+        const shard=nexusPick(rank,roomCode);
+
+        const id=conn.player.id;
+
+        shard.members.set(id,{
+            id,ws,conn,
+            name:sanitizeName(message.name),
+            colour:sanitizeColour(message.colour),
+            roomCode,
+            joinedAt:Date.now(),
+            lastSeen:Date.now()
+        });
+
+        if(!shard.hostId || !shard.members.has(shard.hostId))
+            shard.hostId=id;
+
+        conn.nx={shardId:shard.id,id};
+
+        nexusSend(ws,{type:"nxJoined",shard:shard.id,id,rank:shard.rank,hostId:shard.hostId,members:nexusRoster(shard)});
+
+        const me=shard.members.get(id);
+
+        nexusBroadcast(shard,{type:"nxPeer",id,name:me.name,colour:me.colour,roomCode},id);
+
+        return true;
+
+    }
+
+    if(!t.startsWith("nx"))
+        return false;
+
+    const nx=conn.nx;
+
+    const shard=nx && nexusShards.get(nx.shardId);
+
+    if(!shard)
+        return true;
+
+    const me=shard.members.get(nx.id);
+
+    if(me)
+        me.lastSeen=Date.now();
+
+    if(t==="nxLeave"){
+
+        nexusLeave(conn);
+
+        return true;
+
+    }
+
+    if(t==="nxPing"){
+
+        nexusSend(ws,{type:"nxPong"});
+
+        return true;
+
+    }
+
+    if(t==="nxMeta"){
+
+        if(shard.hostId===nx.id)
+            shard.slots=Math.max(0,Math.floor(Number(message.slots) || 0));
+
+        return true;
+
+    }
+
+    if(t==="nxMsg"){
+
+        const out={type:"nxMsg",from:nx.id,d:message.d || {}};
+
+        if(message.to){
+
+            const target=shard.members.get(String(message.to));
+
+            if(target)
+                nexusSend(target.ws,out);
+
+        }else{
+
+            nexusBroadcast(shard,out,nx.id);
+
+        }
+
+        return true;
+
+    }
+
+    return true;
+
+}
+
+setInterval(()=>{
+
+    const now=Date.now();
+
+    nexusShards.forEach(shard=>{
+
+        shard.members.forEach(m=>{
+
+            if(now-m.lastSeen>NEXUS_STALE_MS){
+
+                try{m.ws.terminate();}catch(error){}
+
+                if(m.conn)
+                    nexusLeave(m.conn);
+
+            }
+
+        });
+
+    });
+
+},15*1000);
+
+
 const wss=new WebSocket.Server({
     server,
     maxPayload:MAX_MESSAGE_BYTES
@@ -515,6 +831,9 @@ wss.on(
 
                 conn.player.lastSeen=Date.now();
 
+                if(handleNexus(conn,ws,message))
+                    return;
+
                 if(message.type==='resume'){
 
                     resumePlayer(conn,ws,message);
@@ -579,12 +898,18 @@ wss.on(
 
         ws.on(
             'close',
-            ()=>markPlayerOffline(conn.player,ws)
+            ()=>{
+                nexusLeave(conn);
+                markPlayerOffline(conn.player,ws);
+            }
         );
 
         ws.on(
             'error',
-            ()=>markPlayerOffline(conn.player,ws)
+            ()=>{
+                nexusLeave(conn);
+                markPlayerOffline(conn.player,ws);
+            }
         );
 
     }
