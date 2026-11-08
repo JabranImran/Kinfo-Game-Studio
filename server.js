@@ -598,8 +598,10 @@ function nexusLeave(conn){
 
     if(shard.hostId===nx.id){
 
-        /* the longest-standing member takes over the simulation */
-        const next=[...shard.members.values()].sort((a,b) => a.joinedAt-b.joinedAt)[0];
+        /* the longest-standing member still flying takes over the simulation */
+        const all=[...shard.members.values()].sort((a,b) => a.joinedAt-b.joinedAt);
+
+        const next=all.find(m => !m.away) || all[0];
 
         shard.hostId=next.id;
 
@@ -702,6 +704,31 @@ function handleNexus(conn,ws,message){
     if(t==="nxPing"){
 
         nexusSend(ws,{type:"nxPong"});
+
+        return true;
+
+    }
+
+    /* a member who's landed on a station (out of the flight) can't run the rocks:
+       it hands hosting to someone still flying, if there is anyone */
+    if(t==="nxAway"){
+
+        if(me)
+            me.away=!!message.away;
+
+        if(me && me.away && shard.hostId===nx.id){
+
+            const next=[...shard.members.values()].filter(m => m.id!==nx.id && !m.away).sort((a,b) => a.joinedAt-b.joinedAt)[0];
+
+            if(next){
+
+                shard.hostId=next.id;
+
+                nexusBroadcast(shard,{type:"nxHost",hostId:shard.hostId});
+
+            }
+
+        }
 
         return true;
 
