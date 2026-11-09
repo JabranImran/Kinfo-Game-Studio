@@ -4637,13 +4637,7 @@ perkUnitsGranted: {},
 perkStock: {},
 unlockedStructures: {},
 soldCounts: {},
-structures: {
-earth: {
-"ship-factory": {
-level: 1
-}
-}
-},
+structures: { earth: { "ship-factory": { level: 1 }, "pilot-training": { level: 1 } } },
 buildQueue: {},
 pets: {
 earth: [
@@ -4804,6 +4798,9 @@ if (!saved.structures.earth ||
 typeof saved.structures.earth !==
 "object") {
 saved.structures.earth = {};
+}
+if (!saved.structures.earth["pilot-training"]) {
+saved.structures.earth["pilot-training"] = { level: 1 };
 }
 if (!saved.structures.earth["ship-factory"]) {
 saved.structures.earth["ship-factory"] = {
@@ -7029,7 +7026,7 @@ upgrade.id + '" ' +
 (canBuy
 ? ''
 : 'disabled') +
-'>Buy ' + upgrade.buyCost + ' ' + COIN_ICON_HTML + '</button>' +
+'>Install</button>' +
 '</div>';
 }
 else {
@@ -9591,7 +9588,7 @@ if (getPets(planetId).some(p => (p.role || "builder") === "builder" && p.energy 
 steps.push({ icon: "🏗", text: r30JobName(job) + " is paused", btn: "🔨 Build", attrs: 'data-action="r30-build" data-job="' + r30Key(job) + '"' });
 });
 if (steps.length < 2) {
-const unlockedNotBuilt = Object.keys(STRUCTURES).find(id => isStructureUnlocked(planetId, id) && !hasStructure(planetId, id) && !getSiteJob(planetId, id) && !(id === "ship-factory" && planetId === "earth"));
+const unlockedNotBuilt = Object.keys(STRUCTURES).find(id => isStructureUnlocked(planetId, id) && !hasStructure(planetId, id) && !getSiteJob(planetId, id) && !((id === "ship-factory" || id === "pilot-training") && planetId === "earth"));
 if (unlockedNotBuilt) {
 const cost = computeStructureBuildCost(unlockedNotBuilt);
 steps.push({ icon: getStructureIconHtml(unlockedNotBuilt), text: STRUCTURES[unlockedNotBuilt].name + " is unlocked", btn: "Build · " + cost + " " + COIN_ICON_HTML, attrs: 'data-action="build-structure" data-structure="' + unlockedNotBuilt + '"' + (getTotalAvailableCoins(planetId) < cost ? ' disabled' : '') });
@@ -9599,7 +9596,7 @@ steps.push({ icon: getStructureIconHtml(unlockedNotBuilt), text: STRUCTURES[unlo
 else {
 let best = null;
 Object.keys(STRUCTURES).forEach(id => {
-if (hasStructure(planetId, id) || isStructureUnlocked(planetId, id) || (id === "ship-factory" && planetId === "earth"))
+if (hasStructure(planetId, id) || isStructureUnlocked(planetId, id) || ((id === "ship-factory" || id === "pilot-training") && planetId === "earth"))
 return;
 const reqs = STRUCTURES[id].buildMaterials;
 const left = reqs.reduce((a, r) => a + Math.max(0, r.amount - getSoldProgress(planetId, r.materialId)), 0);
@@ -15550,7 +15547,7 @@ st.revive = null;
 st.reward = null;
 savePlanetProgress();
 }
-function trapSurfaceEntries(queue, p) {
+function trapSurfaceEntries__r40(queue, p) {
 if (roomState)
 return;
 const planetId = selectedStartPlanet;
@@ -27845,10 +27842,10 @@ worldShowBubble({
 x, y,
 iconHtml: u.icon || "🛠",
 title: u.name,
-meta: bought ? "✓ installed" : unlocked ? u.buyCost + " " + COIN_ICON_HTML + " to install" : r37ReqText(planetId, u),
+meta: bought ? "✓ installed" : unlocked ? "free to install" : r37ReqText(planetId, u),
 text: u.description,
 buttons: bought ? [] : [{
-label: unlocked ? "🛠 Install · " + u.buyCost + " " + COIN_ICON_HTML : "🔒 Build more of these to unlock",
+label: unlocked ? "🛠 Install" : "🔒 Build more of these to unlock",
 primary: unlocked,
 disabled: !unlocked || getTotalAvailableCoins(planetId) < u.buyCost,
 action: () => {
@@ -28186,7 +28183,7 @@ text: visiting ? "Fly it yourself, or crew it alongside whoever's flying it." : 
 buttons
 });
 }
-function roomShipFixtures(c, list, planetId, st, time) {
+function roomShipFixtures__r40(c, list, planetId, st, time) {
 roomShipFixtures__r35(c, list, planetId, st, time);
 const ship = roomState && worldShip(planetId, roomState.id);
 if (!ship || !r33Theme())
@@ -30655,7 +30652,7 @@ return;
 }
 return r36OrbitEdge__r38(distance);
 }
-function updateOrbital(dt) {
+function updateOrbital__r40(dt) {
 if (!r38.world && !r38.nexus)
 return updateOrbital__r38(dt);
 const now = r38Now();
@@ -30802,7 +30799,7 @@ if (set.claim && set.claim.pid !== r38MyId() && !(r38.world.kind === "home"))
 return false;
 return r38FreePad(set, mid) >= 0;
 }
-function r38HoverCheck(dt) {
+function r38HoverCheck__r40(dt) {
 const w = r38.world;
 if (!w || r38.cannon) {
 r38.hover = null;
@@ -31256,7 +31253,7 @@ if (c.fillText !== ft)
 c.fillText = ft;
 }
 }
-function r38DrawCannon(c, x, y, t) {
+function r38DrawCannon__r40(c, x, y, t) {
 const R = 250;
 const g = r38.cannon;
 let gate = null;
@@ -31949,7 +31946,7 @@ document.body.appendChild(el);
 }
 return el;
 }
-function r38SetArrow(dir, text, act) {
+function r38SetArrow__r40(dir, text, act) {
 const el = r38Arrow(dir);
 if (!text) {
 el.classList.remove("on");
@@ -32027,7 +32024,7 @@ document.body.appendChild(dock);
 dock.classList.toggle("on", !!r38.dockOffer && !!ride);
 r38Hud(r38HudText());
 }
-function r38HudText() {
+function r38HudText__r40() {
 const w = r38.world;
 const me = r38MyId();
 const mine = Object.values(w.sets).filter(s => s.claim && (s.claim.pid === me || w.kind === "home"));
@@ -34715,7 +34712,7 @@ console.error(error);
 }
 return r;
 }
-function r39FocusChrome() {
+function r39FocusChrome__r40() {
 if (typeof r39 === "undefined" || !r39)
 return;
 const pid = selectedStartPlanet;
@@ -35185,7 +35182,7 @@ return r33Theme__r39();
 }
 function roomDrawShell(c, W, H, st, time) {
 const r = roomDrawShell__r39(c, W, H, st, time);
-if (!roomState || !r39IsStn(selectedStartPlanet))
+if (!roomState || !r39IsStn(selectedStartPlanet) || roomState.kind !== "structure")
 return r;
 const g = roomGeo;
 c.save();
@@ -35849,6 +35846,146 @@ document.head.appendChild(css);
 }
 catch (error) { }
 })();
+setTimeout(function () {
+try {
+Object.values(STRUCTURE_UPGRADES).forEach(list => (list || []).forEach(u => { u.buyCost = 0; }));
+}
+catch (error) { }
+}, 0);
+function updateOrbital(dt) {
+if (playerInvulnerable && !r38.ride && !r38.cannon) {
+invulnerabilityTimer += dt;
+if (invulnerabilityTimer >= (invulnerabilityDuration || 2))
+playerInvulnerable = false;
+}
+return updateOrbital__r40(dt);
+}
+function r38HoverCheck(dt) {
+const r = r38HoverCheck__r40(dt);
+const h = r38.hover;
+const w = r38.world;
+if (h && !r38.ride && !r38.cannon && !r39.landing && w && running && worldState === "orbital" && r38Now() - h.at > 250) {
+const set = w.sets[h.setId];
+if (r38Landable(set, h.mid)) {
+r38.hover = null;
+r39LandOn(h.setId, h.mid, false);
+}
+}
+return r;
+}
+function r39LandBtn() {
+const el = document.getElementById("r39Land");
+if (el)
+el.classList.remove("on");
+}
+function r38SetArrow(dir, text, act) {
+if (text === "SWIPE DOWN TO LAND ON THE STATION")
+text = null;
+return r38SetArrow__r40(dir, text, act);
+}
+function r38HudText() {
+if (r38.world && r38.world.kind === "nexus")
+return null;
+return r38HudText__r40();
+}
+function r38DrawCannon(c, x, y, t) {
+r38DrawCannon__r40(c, x, y, t);
+const w = r38.world;
+if (!w || w.kind !== "nexus")
+return;
+const me = r38MyId();
+const rank = w.rank || 0;
+const n = r38Players().length;
+const net = r38.net;
+const online = net && net.online && !net.solo;
+const mine = Object.values(w.sets).filter(s => s.claim && s.claim.pid === me);
+const biggest = mine.reduce((b, s) => Math.max(b, r38SetSize(s)), 0);
+const free = Object.values(w.sets).filter(s => !s.claim).length;
+const lines = [];
+lines.push(["RANK " + rank + " · " + (online ? n + " ASTRONAUT" + (n > 1 ? "S" : "") + " HERE" : "FLYING SOLO"), "#e7d6ff"]);
+if (mine.length)
+lines.push(["YOUR STATION ×" + biggest + " OF " + r38Target(rank), "#ffe9a8"]);
+else
+lines.push([free ? free + " UNCLAIMED MODULE" + (free > 1 ? "S" : "") + " OUT THERE" : "EVERY MODULE IS CLAIMED", "#bfe9ff"]);
+const board = {};
+Object.values(w.sets).forEach(s => {
+if (s.claim)
+board[s.claim.pid] = Math.max(board[s.claim.pid] || 0, r38SetSize(s));
+});
+const top = Object.keys(board).sort((a, b) => board[b] - board[a]).slice(0, 4);
+if (top.length > 1)
+lines.push([top.map(pid => (pid === me ? "YOU" : String(r38PeerName(pid)).toUpperCase()) + " ×" + board[pid]).join("  ·  "), "#ffd23f"]);
+c.save();
+c.textAlign = "center";
+const y0 = y + 66 + 250 * .55 + 34;
+lines.forEach((ln, i) => {
+c.font = (i === 0 ? "900 " : "800 ") + (i === 0 ? 15 : 12) + "px system-ui";
+c.fillStyle = ln[1];
+c.globalAlpha = .9;
+c.shadowColor = "rgba(0,0,0,.8)";
+c.shadowBlur = 6;
+c.fillText(ln[0], x, y0 + i * 19);
+});
+c.restore();
+}
+function r40ShipsHere(pid) {
+return (getShips(pid) || []).length;
+}
+function r39FocusChrome() {
+r39FocusChrome__r40();
+const pid = selectedStartPlanet;
+const btn = document.getElementById("focusLaunchBtn");
+if (!btn)
+return;
+const stn = r39IsStn(pid) && !!r39.landed && !running;
+const fly = stn && !r40ShipsHere(pid);
+if (fly) {
+if (btn.dataset.mode !== "r40-fly") {
+btn._r40old = { mode: btn.dataset.mode, html: btn.innerHTML };
+}
+btn.dataset.mode = "r40-fly";
+if (btn.textContent !== "🛰 Fly Space Station")
+btn.textContent = "🛰 Fly Space Station";
+btn.disabled = false;
+btn.classList.remove("hidden");
+}
+const bf = document.querySelector("#r39Bar .r39-fly");
+if (bf)
+bf.style.display = fly ? "none" : "";
+}
+(function () {
+const btn = document.getElementById("focusLaunchBtn");
+if (!btn)
+return;
+btn.addEventListener("click", e => {
+if (btn.dataset.mode !== "r40-fly")
+return;
+e.stopImmediatePropagation();
+e.preventDefault();
+try {
+sound("click");
+}
+catch (error) { }
+r39FlyStation();
+}, { capture: true });
+})();
+function roomShipFixtures(c, list, planetId, st, time) {
+roomShipFixtures__r40(c, list, planetId, st, time);
+if (!r39IsStn(planetId) || !r39.landed)
+return;
+list.push({ v: .14, draw: () => {
+const p = roomWallPt(.5, .72);
+r33Pill(c, p.x, p.y, "🛰 Fly Space Station", "#ffe9a8", true, () => {
+roomState = null;
+r39FlyStation();
+});
+} });
+}
+function trapSurfaceEntries(queue, p) {
+if (r39IsStn(selectedStartPlanet))
+return;
+return trapSurfaceEntries__r40(queue, p);
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -45690,7 +45827,7 @@ c.fillText("buy something", box.x, box.top - 8);
 c.restore();
 }
 } });
-const blueprints = Object.keys(STRUCTURES).filter(id => !hasStructure(planetId, id) && !(id === "ship-factory" && planetId === "earth"));
+const blueprints = Object.keys(STRUCTURES).filter(id => !hasStructure(planetId, id) && !((id === "ship-factory" || id === "pilot-training") && planetId === "earth"));
 blueprints.forEach((id, i) => {
 roomBlueprintFixture(c, list, planetId, st, id, .5 + .2 * (i % 3), .36 + .26 * Math.floor(i / 3), i);
 });
