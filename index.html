@@ -5953,7 +5953,7 @@ showShipToast("Pilot's " + statName +
 pet[fieldName] + "!");
 renderPlanetDetail(planetId);
 }
-function computeHopDistance(fromId, toId) {
+function computeHopDistance__r44(fromId, toId) {
 if (fromId === toId)
 return 0;
 const visited = new Set([fromId]);
@@ -6000,7 +6000,7 @@ return 45 + hops * 45 +
 ? 0
 : PET_RANGE_BONUS_SECONDS[rangeLevel] || 0);
 }
-function computeMissionYield(hops, enduranceLevel, rangeLevel) {
+function computeMissionYield__r44(hops, enduranceLevel, rangeLevel) {
 return 2 + hops * 3 +
 (PET_ENDURANCE_BONUS_YIELD[enduranceLevel] || 0) +
 (rangeLevel === undefined
@@ -6324,7 +6324,7 @@ planetSave.missions[planetId] = stillFlying;
 savePlanetProgress();
 }
 }
-function resolveAllMissions() {
+function resolveAllMissions__r44() {
 for (const planet of PLANETS) {
 resolveMissions(planet.id);
 }
@@ -7529,7 +7529,7 @@ return title.name;
 const PET_CARGO_SLOTS = 10;
 const SAT_CARGO_SLOTS = 15;
 const CARGO_TIER_BONUS = { cargoHold: 10, petBay: 25, dualPerk: 45 };
-function getShipExtraCargoUsed(ship) {
+function getShipExtraCargoUsed__r44(ship) {
 if (!ship)
 return 0;
 return ((Array.isArray(ship.cargoPets) ? ship.cargoPets.length : 0) * PET_CARGO_SLOTS +
@@ -9456,7 +9456,7 @@ addRankPoints(Math.min(40, coins), "Cashed in points");
 savePlanetProgress();
 showShipToast("Sold " + (coins * POINTS_PER_COIN).toLocaleString() + " points for " + coins + " " + COIN_ICON_HTML + " — banked in the vault · the ship is back to wave 1");
 }
-function shipUnloadAll(planetId, shipId) {
+function shipUnloadAll__r44(planetId, shipId) {
 const ship = (getShips(planetId) || []).find(s => s.id === shipId);
 if (!ship)
 return;
@@ -10386,7 +10386,7 @@ function transporterPick(d, src, x, y) {
 const ships = transporterShips();
 if (!d || !src)
 return;
-if (d.k === "snack" || d.k === "extra") {
+if (false) {
 showShipToast("Ships don't carry " + worldItemInfo(d).name + " — feed it to a pet or sell it");
 return;
 }
@@ -10406,7 +10406,7 @@ const cap = getShipCargoCapacity(ship.materialCapBonus);
 const room = cap - used;
 const sameFit = isPowerup && (ship.equipment || "emp") === d.r;
 const ok = !sameFit && (isCoin || isPowerup || room >= 1);
-const name = (ships.length > 1 ? "Ship " + (i + 1) : "Your ship") + (world.shownShipId === ship.id ? " · on the pad" : "");
+const name = r44ShipName(ship, i, ships.length) + (world.shownShipId === ship.id ? " · on the pad" : "");
 buttons.push({
 label: transporterShipRow(ship, name, isPowerup, isCoin),
 disabled: !ok,
@@ -14636,7 +14636,7 @@ text: planet === "kepler"
 buttons
 });
 }
-function worldPlaceTake(planetId, place, d) {
+function worldPlaceTake__r44(planetId, place, d) {
 if (place && place.t === "corpse") {
 const f = findCorpse(place.p);
 if (!f || f.pet.carriedBy)
@@ -21595,7 +21595,7 @@ finally {
 r30VaultOpen--;
 }
 }
-function worldPlacePut(planetId, place, d) {
+function worldPlacePut__r44(planetId, place, d) {
 if (place && place.t === "vault" && !r30VaultOpen && r30Ruined(planetId, "stock")) {
 r30Toast("🏦 The Vault is in ruins — rebuild it before storing anything");
 return false;
@@ -25266,7 +25266,7 @@ return;
 }
 return drawWorldItem__r32(c, d, x, y, size, opts);
 }
-function worldItemInfo(d) {
+function worldItemInfo__r44(d) {
 if (d && d.k === "nm") {
 return d.r === "pebble"
 ? { name: "Pebble", iconHtml: "🪨", colour: "#cfd6e2", text: "Tap your pet to throw it — whatever's hunting you will go and look." }
@@ -26987,7 +26987,7 @@ buttons: hasStructure(planetId, "satellite-factory")
 world.drops.push({
 x: (a.x + b.x) / 2, y: a.y - h / 2, r: Math.max(b.x - a.x, h) * .7,
 kind: "cargo",
-accept: (d, src) => d.k !== "item" && d.k !== "snack" && d.k !== "extra" && !(src && src.t === "ship" && src.s === ship.id),
+accept: (d, src) => !(src && src.t === "ship" && src.s === ship.id),
 drop: (d, src) => worldMove(src, { t: "ship", s: ship.id }, d)
 });
 } });
@@ -27217,8 +27217,10 @@ c.textAlign = "center";
 c.fillStyle = "#f6f2ea";
 c.shadowColor = "#000";
 c.shadowBlur = 6;
-const title = ship ? "Ship " + pick + " of " + ships.length + (svcJob ? " · servicing · " + formatRemainingText(svcJob) : "") : (newJob ? "Building a ship · " + formatRemainingText(newJob) : "New ship");
+const title = ship ? r44ShipName(ship, pick - 1, ships.length) + "  ✎ · " + pick + " of " + ships.length + (svcJob ? " · servicing · " + formatRemainingText(svcJob) : "") : (newJob ? "Building a ship · " + formatRemainingText(newJob) : "New ship");
 c.fillText(title, p.x, p.y + 40 * s);
+if (ship)
+world.hits.push({ x: p.x, y: p.y + 36 * s, r: 56, z: 10, onTap: () => r44RenameShip(ship, p.x, p.y + 40 * s) });
 c.restore();
 [-1, 1].forEach(dir => {
 const ax = p.x + dir * 96 * s, ay = p.y - 78 * s;
@@ -30583,7 +30585,7 @@ if (r38.mapMode)
 return worldTimer > 14 ? getPlanet("earth") : null;
 return getFallbackDestination__r38();
 }
-function getStarMapSelectable() {
+function getStarMapSelectable__r44() {
 if (r38.mapMode && starMapMode === "destination") {
 return PLANETS.filter(p => p.id !== NEM && isPlanetUnlocked(p.id)).map(p => p.id);
 }
@@ -35853,7 +35855,7 @@ Object.values(STRUCTURE_UPGRADES).forEach(list => (list || []).forEach(u => { u.
 }
 catch (error) { }
 }, 0);
-function updateOrbital(dt) {
+function updateOrbital__r44(dt) {
 if (playerInvulnerable && !r38.ride && !r38.cannon) {
 invulnerabilityTimer += dt;
 if (invulnerabilityTimer >= (invulnerabilityDuration || 2))
@@ -35970,7 +35972,7 @@ catch (error) { }
 r39FlyStation();
 }, { capture: true });
 })();
-function roomShipFixtures(c, list, planetId, st, time) {
+function roomShipFixtures__r44(c, list, planetId, st, time) {
 roomShipFixtures__r40(c, list, planetId, st, time);
 if (!r39IsStn(planetId) || !r39.landed)
 return;
@@ -36724,7 +36726,7 @@ function r41Pet() {
 const wk = r41.walk;
 return wk ? wk.pet : null;
 }
-function r41VaultAdd(pid, d, n) {
+function r41VaultAdd__r44(pid, d, n) {
 if (d.k === "mat")
 addToMaterialBank(pid, d.r, n);
 else if (d.k === "item") {
@@ -37164,6 +37166,10 @@ r41Move(src, { t: "r41floor", mid, x: f.x, y: f.y }, d);
 });
 }
 r41DrawSet(c, set, view, t, opts);
+try {
+r44HullDrops(set, view, inside);
+}
+catch (error) { }
 if (wk && !inside) {
 const P = r41Proj(view.cx, view.cy, view.s, view.tilt, view.yaw);
 const h = r41Height(set, wk.x, wk.y, false) || { z: 0 };
@@ -37510,7 +37516,7 @@ function r38TokenInfo(id) {
 const info = r38TokenInfo__r42(id);
 return Object.assign({}, info, { icon: r42TokHtml(id) });
 }
-function drawWorldItem(c, d, x, y, size, opts) {
+function drawWorldItem__r44(c, d, x, y, size, opts) {
 if (d && d.k === "mat" && /^tok-/.test(String(d.r))) {
 opts = opts || {};
 const tok = r39MatTok(d.r);
@@ -37925,7 +37931,7 @@ if (tower)
 put(4, { kind: "tower", label: "TOWER BOARD" });
 }
 else if (st === "pilot-training") {
-put(3, { kind: "console", label: "MISSION BOARD", tab: "structure-pilot-training", title: "PILOT TRAINING" });
+put(3, { kind: "console", label: "MISSION CONTROL", tab: "structure-pilot-training", title: "PILOT TRAINING" });
 put(2, { kind: "pod", label: "RANGE", stat: "range" });
 put(4, { kind: "pod", label: "ENDURANCE", stat: "endurance" });
 put(6, { kind: "pod", label: "SURVIVAL", stat: "survival" });
@@ -38270,7 +38276,7 @@ c.globalAlpha = .16;
 c.fillRect(x - w * .45, top + ((t * 12 * s) % h), w * .9, 1);
 c.restore();
 r42Label(c, label, x, y + Math.max(11, 5 * s), col);
-world.hits.push({ x, y: top + h * .6, r: Math.max(22, 18 * s), z: 6, onTap: () => worldOpenHolo(tab, { title: label }) });
+world.hits.push({ x, y: top + h * .6, r: Math.max(22, 18 * s), z: 6, onTap: () => tab === "structure-pilot-training" ? r44CtlOverlay(selectedStartPlanet) : worldOpenHolo(tab, { title: label }) });
 }
 function r41DrawThing(c, set, m, o, s, tilt, t, pid, opts) {
 s *= .8;
@@ -38983,7 +38989,7 @@ r43Transit({ from, pk: r38.exitPk });
 }
 r43MapTitles();
 }
-function chooseDestination(id, ownerId) {
+function chooseDestination__r44(id, ownerId) {
 if (r38.mapMode) {
 const p = getPlanet(id);
 if (p && r38.mapMode === "ship" && id === r43.from) {
@@ -39122,7 +39128,7 @@ c.fillStyle = ok ? "#9dffc8" : dim ? "#8a7aa6" : "#c9b2ef";
 c.fillText(sub, pos.x, pos.y + 62);
 c.restore();
 r38.mapNode = { x: pos.x, y: pos.y, r: 52, ok, dest, leaving: false };
-if (leaving && r43.from && r43.from !== R38_NEXUS) {
+if (leaving && r43.from && r43.from !== R38_NEXUS && r38.mapMode !== "station") {
 const a = (cv._starHitAreas || []).find(a => a.planetId === r43.from && (!a.ownerId || typeof mp === "undefined" || a.ownerId === mp.myId));
 if (a) {
 c.save();
@@ -39268,17 +39274,6 @@ r34Helmet(c, x, gy - 11, 24);
 catch (error) { }
 c.globalAlpha = 1;
 }
-c.globalAlpha = .3;
-try {
-drawSpacePet(c, "earth", xs[0], gy - 11, 24, 100, 0, sp, false, null, 1);
-}
-catch (error) { }
-try {
-drawSpacePet(c, "earth", xs[2], gy - 11, 24, 100, 0, sp, false, null, 1);
-r34Helmet(c, xs[2], gy - 11, 24);
-}
-catch (error) { }
-c.globalAlpha = 1;
 c.fillStyle = "rgba(191,233,255,.7)";
 for (let i = 0; i < 4; i++) {
 const ax = (xs[i] + xs[i + 1]) / 2;
@@ -39595,6 +39590,1266 @@ document.head.appendChild(css);
 }
 catch (error) { }
 })();
+var r44 = { ctl: {}, rename: null, feed: {}, ov: null };
+function getStarMapSelectable() {
+if (r38.mapMode && starMapMode === "destination" && r43.from && r43.from !== R38_NEXUS) {
+if (r38.mapMode === "station")
+return [];
+const from = r43.from;
+return PLANETS.filter(p => p.id !== NEM && isPlanetUnlocked(p.id) && (p.id === from || isRoute(from, p.id))).map(p => p.id);
+}
+return getStarMapSelectable__r44();
+}
+function chooseDestination(id, ownerId) {
+if (r38.mapMode && starMapMode === "destination" && r43.from && r43.from !== R38_NEXUS && !getStarMapSelectable().includes(id))
+return;
+return chooseDestination__r44(id, ownerId);
+}
+function r43MapTitles() {
+const pk = r38.exitPk;
+const fromPlanet = r43.from && r43.from !== R38_NEXUS;
+const t = document.getElementById("starMapTitle");
+const h = document.getElementById("starMapHint");
+if (t)
+t.textContent = pk ? (fromPlanet ? "TAKE YOUR STATION TO THE NEXUS" : "WHERE TO TAKE YOUR STATION?") : "SET COURSE";
+if (h)
+h.textContent = pk
+? (fromPlanet ? "A planet's accelerator can only fling a station to the Nexus — the Nexus cannon can send it anywhere" : "Park it in any of your worlds' orbits — or take it back to the Nexus")
+: (fromPlanet ? "This world's rings reach its neighbours — and the Nexus" : "The Nexus cannon reaches any world you've unlocked");
+}
+function r44SatKey(sat) {
+return (sat.type || "emp") + "|" + (sat.mode === "manual" ? "manual" : "auto");
+}
+function r44SatOf(r) {
+const p = String(r || "emp|auto").split("|");
+return { type: p[0] || "emp", mode: p[1] === "manual" ? "manual" : "auto" };
+}
+function r44SatGroups(list) {
+const g = {};
+(list || []).forEach(s => {
+const k = r44SatKey(s);
+g[k] = (g[k] || 0) + 1;
+});
+return Object.keys(g).map(k => ({ k: "sat", r: k, n: g[k] }));
+}
+function worldItemInfo(d) {
+if (d && d.k === "sat") {
+const s = r44SatOf(d.r);
+return {
+name: satTypeName(s.type) + " satellite",
+iconHtml: r44SatIconHtml(s.type),
+colour: satColour(s.type),
+text: "Power: " + satPowerText(s.type) + ". " + satModeLabel(s.mode) + ". Load it in a ship's hold to throw out in flight (" + SAT_CARGO_SLOTS + " slots), or drop it on a satellite tower to keep it on guard."
+};
+}
+return worldItemInfo__r44(d);
+}
+var r44SatIcons = {};
+function r44SatIconHtml(type) {
+if (r44SatIcons[type])
+return r44SatIcons[type];
+let html = "🛰";
+try {
+const cv = document.createElement("canvas");
+cv.width = cv.height = 72;
+const c = cv.getContext("2d");
+r44DrawSat(c, type, 36, 36, 64);
+html = '<img class="r42-ico" alt="" src="' + cv.toDataURL() + '">';
+}
+catch (error) { }
+r44SatIcons[type] = html;
+return html;
+}
+function r44DrawSat(c, type, x, y, size) {
+c.save();
+c.translate(x, y);
+c.scale(size / 52, size / 52);
+c.translate(-W / 2, -H / 2);
+try {
+satDrawOne(c, { id: "icon", type, mode: "auto", hp: SAT_HP, cd: 0, space: "field", ox: 0, oy: 0, dep0: 1 });
+}
+catch (error) { }
+c.restore();
+}
+function drawWorldItem(c, d, x, y, size, opts) {
+if (d && d.k === "sat") {
+opts = opts || {};
+c.save();
+if (opts.dim)
+c.globalAlpha *= .45;
+const g = c.createRadialGradient(x, y, 1, x, y, size * .6);
+g.addColorStop(0, r38Hex(satColour(r44SatOf(d.r).type), .35));
+g.addColorStop(1, "rgba(0,0,0,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(x, y, size * .6, 0, Math.PI * 2);
+c.fill();
+r44DrawSat(c, r44SatOf(d.r).type, x, y, size * .95);
+c.restore();
+const count = opts.count !== undefined ? opts.count : d.n;
+if (count > 1) {
+c.save();
+c.fillStyle = "rgba(4,8,22,.92)";
+c.font = "800 " + Math.max(8, Math.round(size * .24)) + "px system-ui";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.beginPath();
+c.arc(x + size * .36, y + size * .36, size * .18, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#eafcff";
+c.fillText(String(count), x + size * .36, y + size * .37);
+c.restore();
+}
+return;
+}
+return drawWorldItem__r44(c, d, x, y, size, opts);
+}
+function worldVaultContents(planetId) {
+const out = worldVaultContents__r44(planetId);
+try {
+r44SatGroups(satHangar(planetId)).forEach(g => out.push(g));
+}
+catch (error) { }
+return out;
+}
+function r44Hold(ship) {
+if (!ship.r44Cargo)
+ship.r44Cargo = {};
+return ship.r44Cargo;
+}
+function worldShipCargo(ship) {
+const out = worldShipCargo__r44(ship);
+if (!ship)
+return out;
+Object.keys(ship.r44Cargo || {}).forEach(key => {
+const n = ship.r44Cargo[key];
+if (!(n > 0))
+return;
+const i = key.indexOf(":");
+out.push({ k: key.slice(0, i), r: key.slice(i + 1), n });
+});
+r44SatGroups(ship.satCargo).forEach(g => out.push(g));
+return out;
+}
+function getShipExtraCargoUsed(ship) {
+let n = getShipExtraCargoUsed__r44(ship);
+if (ship && ship.r44Cargo)
+Object.values(ship.r44Cargo).forEach(v => { n += Math.max(0, v || 0); });
+return n;
+}
+const R44_HOLD_KINDS = ["item", "snack", "extra"];
+function worldPlaceTake(planetId, place, d) {
+if (place && d) {
+if (place.t === "vault" && d.k === "sat") {
+const h = satHangar(planetId);
+const i = h.findIndex(s => r44SatKey(s) === d.r);
+if (i < 0)
+return null;
+h.splice(i, 1);
+return { k: "sat", r: d.r, n: 1 };
+}
+if (place.t === "ship" && (d.k === "sat" || R44_HOLD_KINDS.includes(d.k))) {
+const ship = worldShip(planetId, place.s);
+if (!ship)
+return null;
+if (d.k === "sat") {
+const list = ship.satCargo || [];
+const i = list.findIndex(s => r44SatKey(s) === d.r);
+if (i < 0)
+return null;
+list.splice(i, 1);
+return { k: "sat", r: d.r, n: 1 };
+}
+const hold = r44Hold(ship), key = d.k + ":" + d.r;
+if (!(hold[key] > 0))
+return null;
+hold[key]--;
+if (hold[key] <= 0)
+delete hold[key];
+return { k: d.k, r: d.r, n: 1 };
+}
+}
+return worldPlaceTake__r44(planetId, place, d);
+}
+function worldPlacePut(planetId, place, d) {
+if (place && d) {
+if (place.t === "vault" && d.k === "sat") {
+const s = r44SatOf(d.r);
+for (let i = 0; i < (d.n || 1); i++)
+satHangar(planetId).push({ id: satNewId(), type: s.type, mode: s.mode, hp: SAT_HP });
+return true;
+}
+if (place.t === "ship" && (d.k === "sat" || R44_HOLD_KINDS.includes(d.k))) {
+const ship = worldShip(planetId, place.s);
+if (!ship)
+return false;
+if (d.k === "sat") {
+if (shipCargoRoom(ship) < SAT_CARGO_SLOTS * (d.n || 1))
+return false;
+if (!Array.isArray(ship.satCargo))
+ship.satCargo = [];
+const s = r44SatOf(d.r);
+for (let i = 0; i < (d.n || 1); i++)
+ship.satCargo.push({ id: satNewId(), type: s.type, mode: s.mode, hp: SAT_HP });
+return true;
+}
+if (shipCargoRoom(ship) < (d.n || 1))
+return false;
+const hold = r44Hold(ship), key = d.k + ":" + d.r;
+hold[key] = (hold[key] || 0) + (d.n || 1);
+return true;
+}
+}
+return worldPlacePut__r44(planetId, place, d);
+}
+function shipUnloadAll(planetId, shipId) {
+const r = shipUnloadAll__r44(planetId, shipId);
+try {
+const ship = (getShips(planetId) || []).find(s => s.id === shipId);
+if (ship && ship.r44Cargo) {
+Object.keys(ship.r44Cargo).forEach(key => {
+const n = ship.r44Cargo[key];
+const i = key.indexOf(":");
+if (n > 0)
+worldPlacePut(planetId, { t: "vault" }, { k: key.slice(0, i), r: key.slice(i + 1), n });
+});
+ship.r44Cargo = {};
+savePlanetProgress();
+}
+}
+catch (error) { }
+return r;
+}
+function r41VaultAdd(pid, d, n) {
+if (d && d.k === "sat") {
+const h = satHangar(pid);
+if (n > 0) {
+const s = r44SatOf(d.r);
+for (let i = 0; i < n; i++)
+h.push({ id: satNewId(), type: s.type, mode: s.mode, hp: SAT_HP });
+}
+else {
+for (let i = 0; i < -n; i++) {
+const j = h.findIndex(s => r44SatKey(s) === d.r);
+if (j >= 0)
+h.splice(j, 1);
+}
+}
+return;
+}
+return r41VaultAdd__r44(pid, d, n);
+}
+const R44_TOWER_PRICE = 60;
+function r44Towers(pid) {
+if (!planetSave.r44Towers)
+planetSave.r44Towers = {};
+if (!Array.isArray(planetSave.r44Towers[pid]))
+planetSave.r44Towers[pid] = [];
+return planetSave.r44Towers[pid];
+}
+function r44AddShopTower(planetId, forSale) {
+if (r39IsStn(planetId))
+return;
+forSale.push({ k: "mat", r: r39TokMat("tower"), n: 1, price: R44_TOWER_PRICE, buy: { "data-action": "r44-buy-tower" } });
+}
+function worldRunAction(attrs) {
+if (attrs && attrs["data-action"] === "r44-buy-tower") {
+const pid = selectedStartPlanet;
+if (!spendCoins(pid, R44_TOWER_PRICE)) {
+showShipToast("Not enough coins — a tower token is " + R44_TOWER_PRICE + " " + COIN_ICON_HTML);
+return;
+}
+addToMaterialBank(pid, r39TokMat("tower"), 1);
+savePlanetProgress();
+sound("arrival");
+showShipToast(r42TokHtml("tower") + " Tower token bought — it's in the vault. Put it down anywhere on the planet and tap it to build.");
+return;
+}
+return worldRunAction__r44(attrs);
+}
+function r44IsTowerTok(d) {
+return d && d.k === "mat" && d.r === r39TokMat("tower");
+}
+function worldGroundBubble(g, x, y) {
+if (r44IsTowerTok(g) && g.at && g.at.t === "planet" && !r39IsStn(selectedStartPlanet)) {
+worldShowBubble({
+x, y,
+iconHtml: r42TokHtml("tower"),
+title: "Satellite tower",
+text: "Build a tower right here. Drop a satellite on it and it stands guard over this world's orbit, firing its power at rocks.",
+buttons: [
+{ label: "Build tower here", primary: true, action: () => r44BuildPlanetTower(selectedStartPlanet, g) },
+{ label: "Pick it up", action: () => {
+const pet = getRoamingPet();
+if (pet && !pet.carry)
+worldMove({ t: "ground", id: g.id }, { t: "pet", p: pet.id }, g);
+} }
+]
+});
+return;
+}
+return worldGroundBubble__r44(g, x, y);
+}
+function r44BuildPlanetTower(pid, g) {
+const took = worldPlaceTake(pid, { t: "ground", id: g.id }, { k: g.k, r: g.r, n: 1 });
+if (!took)
+return;
+if (g.n > 1)
+worldPlacePut(pid, { t: "ground", at: g.at }, { k: g.k, r: g.r, n: g.n - 1 });
+r44Towers(pid).push({ id: "pt" + Date.now().toString(36), lat: g.at.lat, lon: g.at.lon, sat: null });
+savePlanetProgress();
+worldHideBubble();
+sound("arrival");
+showShipToast("Satellite tower built — drop a satellite on it to arm it");
+}
+function r44DrawTowerShape(c, x, y, size, sat, t) {
+c.save();
+c.strokeStyle = "#c9d6ff";
+c.lineWidth = Math.max(1.5, size * .06);
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(x - size * .22, y);
+c.lineTo(x, y - size * .8);
+c.lineTo(x + size * .22, y);
+c.moveTo(x - size * .13, y - size * .3);
+c.lineTo(x + size * .13, y - size * .3);
+c.moveTo(x - size * .07, y - size * .55);
+c.lineTo(x + size * .07, y - size * .55);
+c.stroke();
+c.fillStyle = "#e8eeff";
+c.beginPath();
+c.ellipse(x, y - size * .82, size * .2, size * .07, -.3, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = (Math.floor(t * 2) % 2) ? "#ff5d7a" : "#5a2030";
+c.beginPath();
+c.arc(x, y - size * .9, size * .04, 0, Math.PI * 2);
+c.fill();
+c.restore();
+if (sat)
+r44DrawSat(c, sat.type, x, y - size * 1.12 + Math.sin(t * 2) * size * .04, size * .6);
+}
+function worldDrawPlanetGround(composeQueue, p) {
+worldDrawPlanetGround__r44(composeQueue, p);
+const pid = selectedStartPlanet;
+if (r39IsStn(pid))
+return;
+r44Towers(pid).forEach(tw => {
+const proj = projectSphere(tw.lat, tw.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+if (!proj.visible)
+return;
+const size = Math.max(40, p.width * .13);
+composeQueue.push({
+anchor: proj,
+z: p.groundDepthAt(proj.x, proj.y),
+alpha: 1,
+draw: () => r44DrawTowerShape(p.c, proj.x, proj.y, size, tw.sat, performance.now() / 1000)
+});
+world.hits.push({ x: proj.x, y: proj.y - size * .6, r: size * .6, z: 9, onTap: () => r44PlanetTowerBubble(pid, tw, proj.x, proj.y - size * 1.2) });
+world.drops.push({ x: proj.x, y: proj.y - size * .7, r: size * .8, kind: "structure",
+accept: d => d && d.k === "sat" && !tw.sat,
+drop: (d, src) => {
+const took = worldPlaceTake(pid, src, { k: "sat", r: d.r, n: 1 });
+if (!took)
+return;
+const s = r44SatOf(took.r);
+tw.sat = { id: satNewId(), type: s.type, mode: "auto", hp: SAT_HP };
+savePlanetProgress();
+sound("arrival");
+showShipToast(satTypeName(s.type) + " satellite on guard over " + ((getPlanet(pid) || {}).name || "the planet"));
+} });
+});
+}
+function r44PlanetTowerBubble(pid, tw, x, y) {
+worldShowBubble({
+x, y,
+iconHtml: tw.sat ? r44SatIconHtml(tw.sat.type) : r42TokHtml("tower"),
+title: "Satellite tower",
+meta: tw.sat ? satTypeName(tw.sat.type) + " satellite on guard" : "Empty",
+text: tw.sat ? "It fires its power at rocks around this world's orbit whenever you fly there." : "Drag a satellite onto the tower to arm it.",
+buttons: tw.sat ? [{ label: "Take the satellite down to the vault", action: () => {
+worldPlacePut(pid, { t: "vault" }, { k: "sat", r: r44SatKey(tw.sat), n: 1 });
+tw.sat = null;
+savePlanetProgress();
+} }] : []
+});
+}
+function r44TowerSatTick() {
+if (worldState !== "orbital" || r38.nexus || r39IsStn(currentPlanetId))
+return;
+if (typeof mp !== "undefined" && mp.connected && !r38OwnSystem())
+return;
+let list;
+try {
+list = satOrbitList();
+}
+catch (error) {
+return;
+}
+const towers = r44Towers(currentPlanetId);
+const want = {};
+towers.forEach((tw, i) => {
+if (tw.sat)
+want[tw.id] = tw;
+});
+for (let i = list.length - 1; i >= 0; i--) {
+const s = list[i];
+if (!s.r44pt)
+continue;
+const tw = towers.find(x => x.id === s.r44pt);
+if (!tw || !tw.sat || tw.sat.id !== s.id) {
+list.splice(i, 1);
+continue;
+}
+delete want[tw.id];
+}
+Object.values(want).forEach(tw => {
+if (r44.spent && r44.spent[tw.sat.id])
+return;
+const a = tw.lon * 2 - Math.PI / 2;
+list.push(Object.assign({}, tw.sat, { space: "orbit", mode: "auto", cd: 2, wx: Math.cos(a) * 175, wy: Math.sin(a) * 175, r44pt: tw.id, dep: null, dep0: 0 }));
+});
+}
+function r44TowerSatCheck() {
+if (worldState !== "orbital")
+return;
+let list;
+try {
+list = satOrbitList();
+}
+catch (error) {
+return;
+}
+r44Towers(currentPlanetId).forEach(tw => {
+if (!tw.sat)
+return;
+if (r44.seen && r44.seen[tw.sat.id] && !list.some(s => s.id === tw.sat.id && s.r44pt)) {
+tw.sat = null;
+savePlanetProgress();
+}
+});
+r44.seen = {};
+list.forEach(s => {
+if (s.r44pt)
+r44.seen[s.id] = true;
+});
+}
+function updateOrbital(dt) {
+try {
+r44TowerSatCheck();
+r44TowerSatTick();
+}
+catch (error) { }
+return updateOrbital__r44(dt);
+}
+function r44HullDrops(set, view, inside) {
+if (inside || !r41.walk || r41.walk.mode !== "out")
+return;
+const P = r41Proj(view.cx, view.cy, view.s, view.tilt, view.yaw);
+set.mods.forEach(mid => {
+const m = r38.world.mods[mid];
+const p = set.pos[mid];
+const R = r38ModR(m);
+const q = P(p.x - view.ox, p.y - view.oy, R * .4);
+const pid = r39Pid(mid);
+world.drops.push({ x: q.X, y: q.Y, r: R * .75 * view.s, kind: "hull",
+accept: (d, src) => src && src.t === "r41pet" && (r44IsTowerTok(d) || d.k === "sat"),
+drop: (d, src) => {
+if (r44IsTowerTok(d)) {
+worldShowBubble({
+x: q.X, y: q.Y - R * .6 * view.s,
+iconHtml: r42TokHtml("tower"),
+title: "Satellite tower",
+text: "Build a tower on this module's hull? Drop satellites on it to arm it.",
+buttons: [{ label: "Build tower here", primary: true, action: () => r41Install(pid, m, d, src) }]
+});
+return;
+}
+const i = (m.towers || []).findIndex(tw => tw && !tw.sat);
+if (i < 0) {
+showShipToast("No empty tower on this module");
+return;
+}
+if (!r41Take(src, { k: "sat", r: d.r, n: 1 }))
+return;
+const s = r44SatOf(d.r);
+m.towers[i].sat = { id: satNewId(), type: s.type, mode: s.mode, hp: SAT_HP };
+r38ModChanged(m);
+savePlanetProgress();
+sound("arrival");
+showShipToast(satTypeName(s.type) + " satellite loaded onto the tower");
+} });
+});
+}
+function r44ShipName(ship, i, n) {
+if (ship && ship.name)
+return ship.name;
+return n === 1 ? "Your ship" : "Ship " + ((i || 0) + 1);
+}
+function r44RenameShip(ship, x, y) {
+if (!ship)
+return;
+let box = document.getElementById("r44Rename");
+if (!box) {
+box = document.createElement("div");
+box.id = "r44Rename";
+box.innerHTML = '<input type="text" maxlength="18" autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="Name this ship"><button type="button">Save</button>';
+document.body.appendChild(box);
+const input = box.querySelector("input");
+const done = () => {
+const s = r44.rename;
+r44.rename = null;
+box.classList.remove("on");
+if (!s)
+return;
+const v = input.value.trim().slice(0, 18);
+s.name = v || undefined;
+if (!v)
+delete s.name;
+savePlanetProgress();
+try {
+shipThumbCache && Object.keys(shipThumbCache).forEach(k => delete shipThumbCache[k]);
+}
+catch (error) { }
+if (v)
+showShipToast("Renamed to " + v);
+input.blur();
+};
+input.addEventListener("keydown", e => {
+if (e.key === "Enter")
+done();
+if (e.key === "Escape") {
+r44.rename = null;
+box.classList.remove("on");
+input.blur();
+}
+e.stopPropagation();
+});
+box.querySelector("button").addEventListener("click", done);
+["pointerdown", "click", "touchstart"].forEach(ev => box.addEventListener(ev, e => e.stopPropagation()));
+input.addEventListener("blur", () => setTimeout(() => {
+if (r44.rename && document.activeElement !== input)
+done();
+}, 150));
+}
+r44.rename = ship;
+const input = box.querySelector("input");
+input.value = ship.name || "";
+box.style.left = Math.max(10, Math.min(window.innerWidth - 250, (x || window.innerWidth / 2) - 120)) + "px";
+box.style.top = Math.max(10, (y || 200) - 24) + "px";
+box.classList.add("on");
+input.focus();
+input.select();
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent = '#r44Rename{position:fixed;z-index:9999;display:none;gap:6px;padding:8px;border-radius:14px;background:rgba(8,12,24,.96);border:1px solid #5ff3ff;box-shadow:0 0 18px rgba(95,243,255,.35);}' +
+'#r44Rename.on{display:flex;}' +
+'#r44Rename input{width:160px;font:700 16px system-ui;color:#eafcff;background:#0d1730;border:1px solid #2a4a6a;border-radius:9px;padding:7px 9px;outline:none;}' +
+'#r44Rename button{font:800 13px system-ui;color:#04121c;background:#5ff3ff;border:0;border-radius:9px;padding:0 12px;}' +
+'.r44-name{cursor:pointer;text-decoration:underline dotted rgba(140,220,255,.6);text-underline-offset:3px;}';
+document.head.appendChild(css);
+document.addEventListener("click", e => {
+const el = e.target.closest && e.target.closest("[data-r44-ship]");
+if (!el)
+return;
+const id = el.getAttribute("data-r44-ship");
+let ship = null;
+Object.values(planetSave.ships || {}).forEach(list => (list || []).forEach(s => {
+if (s.id === id)
+ship = s;
+}));
+if (!ship)
+return;
+e.stopPropagation();
+e.preventDefault();
+const r = el.getBoundingClientRect();
+r44RenameShip(ship, r.left + r.width / 2, r.top);
+}, true);
+}
+catch (error) { }
+})();
+function roomShipFixtures(c, list, planetId, st, time) {
+roomShipFixtures__r44(c, list, planetId, st, time);
+try {
+const ship = (getShips(planetId) || []).find(s => s.id === (roomState && (roomState.shipId || roomState.id)));
+if (!ship)
+return;
+const coins = shipPointsValue(ship);
+list.push({ v: .15, draw: () => {
+const p = roomWallPt(.5, 1.0);
+r33Pill(c, p.x, p.y, coins > 0 ? "★ Sell " + (coins * POINTS_PER_COIN).toLocaleString() + " pts · " + coins + "¢" : "★ " + (Number(ship.score) || 0).toLocaleString() + " pts — not enough to sell", "#ffd76b", coins > 0, () => {
+worldRunAction({ "data-action": "sell-ship-points", "data-ship": ship.id });
+});
+} });
+list.push({ v: .14, draw: () => {
+const ships = getShips(planetId) || [];
+const p = roomWallPt(.5, .06);
+const name = r44ShipName(ship, ships.indexOf(ship), ships.length);
+c.save();
+c.font = "800 13px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = "#eafcff";
+c.shadowColor = "#000";
+c.shadowBlur = 6;
+c.fillText(name + "  ✎", p.x, p.y);
+c.restore();
+world.hits.push({ x: p.x, y: p.y - 4, r: 70, z: 10, onTap: () => r44RenameShip(ship, p.x, p.y) });
+} });
+}
+catch (error) { }
+}
+function r44CtlShips(pid) {
+return pid === "earth" ? (planetSave.ships.earth || []) : (getShips(pid) || []);
+}
+function r44CtlEntries(pid) {
+const out = r44CtlShips(pid).filter(s => s.pendingPilot).map(s => ({ kind: "ready", ship: s, id: "s:" + s.id }));
+getMissions(pid).forEach((m, i) => out.push({ kind: "flying", mission: m, id: "m:" + (m.ship && m.ship.id || i) }));
+return out;
+}
+function r44CtlState(pid) {
+if (!r44.ctl[pid])
+r44.ctl[pid] = { i: 0, pick: false };
+return r44.ctl[pid];
+}
+function r44CtlBtn(c, push, x, y, w, h, label, col, on, act) {
+c.save();
+c.globalAlpha = on ? 1 : .4;
+c.fillStyle = on ? r38Hex(col, .2) : "rgba(255,255,255,.04)";
+c.strokeStyle = col;
+c.lineWidth = 1.5;
+c.shadowColor = col;
+c.shadowBlur = on ? 8 : 0;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+else
+c.rect(x - w / 2, y - h / 2, w, h);
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = on ? "#eafcff" : "#9fb4d6";
+c.font = "800 " + Math.round(Math.min(12, h * .42)) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, x, y + .5);
+c.restore();
+push({ x, y, r: Math.max(h * .8, Math.min(w / 2, 44)), z: 11, onTap: () => {
+if (!on)
+return;
+try {
+sound("click");
+}
+catch (error) { }
+act();
+} });
+}
+function r44CtlDraw(c, R, pid, push, col) {
+col = col || "#5fb4ff";
+const t = performance.now() / 1000;
+const st = r44CtlState(pid);
+const list = r44CtlEntries(pid);
+if (st.i >= list.length)
+st.i = Math.max(0, list.length - 1);
+const e = list[st.i];
+c.save();
+c.fillStyle = "#0b0f17";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(R.x - 6, R.y - 6, R.w + 12, R.h + 12, 10);
+else
+c.rect(R.x - 6, R.y - 6, R.w + 12, R.h + 12);
+c.fill();
+c.strokeStyle = col;
+c.lineWidth = 2;
+c.shadowColor = col;
+c.shadowBlur = 14;
+c.stroke();
+c.shadowBlur = 0;
+const g = c.createLinearGradient(0, R.y, 0, R.y + R.h);
+g.addColorStop(0, "#06142a");
+g.addColorStop(1, "#020711");
+c.fillStyle = g;
+c.fillRect(R.x, R.y, R.w, R.h);
+c.beginPath();
+c.rect(R.x, R.y, R.w, R.h);
+c.clip();
+if (e && e.kind === "flying")
+r44CtlFeed(c, R, pid, e, t, push);
+else if (e && st.pick)
+r44CtlPick(c, R, pid, e.ship, t, push, col);
+else if (e)
+r44CtlReady(c, R, pid, e.ship, t, push, col);
+else
+r44CtlTutorial(c, R, pid, t, push, col);
+c.globalAlpha = .06;
+c.fillStyle = "#bfe9ff";
+for (let y = R.y; y < R.y + R.h; y += 3)
+c.fillRect(R.x, y, R.w, 1);
+c.globalAlpha = .1;
+c.fillRect(R.x, R.y + ((t * 40) % R.h), R.w, 2);
+c.restore();
+c.save();
+c.font = "900 10px system-ui,sans-serif";
+c.fillStyle = col;
+c.textAlign = "left";
+c.fillText("MISSION CONTROL", R.x + 8, R.y + 14);
+if (list.length) {
+c.textAlign = "right";
+c.fillStyle = "#9fb4d6";
+c.fillText((st.i + 1) + " / " + list.length, R.x + R.w - 8, R.y + 14);
+}
+c.restore();
+if (list.length > 1 && !st.pick) {
+[-1, 1].forEach(dir => {
+const ax = dir < 0 ? R.x - 2 : R.x + R.w + 2, ay = R.y + R.h * .44;
+c.save();
+c.fillStyle = "rgba(10,14,22,.92)";
+c.beginPath();
+c.arc(ax, ay, 13, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = col;
+c.lineWidth = 2;
+c.stroke();
+c.fillStyle = "#eafcff";
+c.beginPath();
+c.moveTo(ax + dir * 5, ay);
+c.lineTo(ax - dir * 4, ay - 6);
+c.lineTo(ax - dir * 4, ay + 6);
+c.closePath();
+c.fill();
+c.restore();
+push({ x: ax, y: ay, r: 20, z: 12, onTap: () => {
+st.i = (st.i + dir + list.length) % list.length;
+st.pick = false;
+try {
+sound("click");
+}
+catch (error) { }
+} });
+});
+}
+}
+function r44Stars(c, R, t, speed, seed) {
+c.save();
+for (let i = 0; i < 46; i++) {
+const k = (i * 97 + seed) % 1000 / 1000, l = (i * 53 + seed * 3) % 1000 / 1000;
+const sp = (.3 + ((i * 31) % 10) / 10) * speed;
+const x = R.x + R.w - (((k * R.w) + t * sp * 60) % R.w);
+const y = R.y + l * R.h;
+c.globalAlpha = .35 + .5 * ((i * 17) % 10) / 10;
+c.fillStyle = "#dff3ff";
+if (speed > 1.2)
+c.fillRect(x, y, Math.max(1, sp * 1.6), 1);
+else
+c.fillRect(x, y, 1.3, 1.3);
+}
+c.restore();
+}
+function r44Hearts(ship) {
+const n = Math.max(0, Math.min(3, Number(ship.lives) || 3));
+return "♥".repeat(n) + "♡".repeat(3 - n);
+}
+function r44CtlRoute(pid, ship) {
+const dest = ship.pendingDestinationId;
+if (!dest)
+return [];
+return [dest].concat(ship.pendingRouteStops || []);
+}
+function r44CtlMissionMeta(pid, ship) {
+const route = r44CtlRoute(pid, ship);
+if (!route.length)
+return null;
+const pet = ship.pendingPilot;
+let hops = 0, from = pid;
+route.forEach(s => {
+hops += computeHopDistance(from, s);
+from = s;
+});
+const rangeLevel = getPetStatLevel(pet, "range");
+const dur = computeMissionDuration(hops, getPetStatLevel(pet, "endurance"), rangeLevel) + (route.length - 1) * MULTI_STOP_OVERHEAD_SECONDS;
+const surv = computeSurvivalChance(getPetStatLevel(pet, "survival"), dur, pet.energy);
+return { route, dur, surv };
+}
+function r44PlanetName(id, pid) {
+if (id === pid)
+return "Local";
+return (getPlanet(id) || { name: id }).name;
+}
+function r44CtlReady(c, R, pid, ship, t, push, col) {
+const pet = ship.pendingPilot;
+const ships = r44CtlShips(pid);
+r44Stars(c, R, t, .25, 7);
+const sx = R.x + R.w * .25, sy = R.y + R.h * .62;
+const sc = Math.min(R.w * .0016, R.h * .0028);
+c.save();
+c.translate(sx, sy + Math.sin(t * 1.5) * 2);
+c.shadowColor = col;
+c.shadowBlur = 10;
+try {
+drawShipAtScale(c, ship, sc, false);
+}
+catch (error) { }
+c.restore();
+try {
+drawSpacePet(c, pet.homePlanetId || "earth", sx + R.w * .13, sy - 6, 22, pet.energy, t * 2, pet.species, false, null, -1);
+r34Helmet(c, sx + R.w * .13, sy - 6, 22);
+}
+catch (error) { }
+const x0 = R.x + R.w * .5;
+let y = R.y + 32;
+const name = r44ShipName(ship, ships.indexOf(ship), ships.length);
+c.save();
+c.textAlign = "left";
+c.font = "900 14px system-ui,sans-serif";
+c.fillStyle = "#eafcff";
+c.fillText(name + " ✎", x0, y);
+const nw = c.measureText(name + " ✎").width;
+push({ x: x0 + nw / 2, y: y - 5, r: Math.max(18, nw / 2), z: 12, onTap: () => r44RenameShip(ship, x0 + nw / 2, y) });
+y += 16;
+c.font = "800 12px system-ui,sans-serif";
+c.fillStyle = "#ff8da1";
+c.fillText(r44Hearts(ship), x0, y);
+y += 15;
+c.font = "700 10px system-ui,sans-serif";
+c.fillStyle = "#bfe9ff";
+c.font = "700 9px system-ui,sans-serif";
+c.fillText((SPECIES_DISPLAY_NAMES[pet.species] || "Pet") + " · energy " + Math.round(pet.energy) + "%", x0, y);
+y += 6;
+c.fillStyle = "rgba(255,255,255,.1)";
+c.fillRect(x0, y, R.w * .42, 4);
+c.fillStyle = pet.energy > 40 ? "#7dffb0" : "#ffb46b";
+c.fillRect(x0, y, R.w * .42 * Math.max(0, Math.min(1, pet.energy / 100)), 4);
+y += 14;
+[["RANGE", "range"], ["ENDURANCE", "endurance"], ["SURVIVAL", "survival"]].forEach(([lab, key]) => {
+const lv = getPetStatLevel(pet, key);
+c.fillStyle = "#9fb4d6";
+c.font = "800 8px system-ui,sans-serif";
+c.fillText(lab, x0, y);
+c.fillStyle = "rgba(255,255,255,.08)";
+c.fillRect(x0 + 58, y - 6, R.w * .42 - 80, 5);
+c.fillStyle = col;
+c.fillRect(x0 + 58, y - 6, (R.w * .42 - 80) * Math.min(1, lv / Math.max(1, getPetStatMaxLevel(pid))), 5);
+c.fillStyle = "#eafcff";
+c.textAlign = "right";
+c.fillText("L" + lv, x0 + R.w * .42, y);
+c.textAlign = "left";
+y += 11;
+});
+const meta = r44CtlMissionMeta(pid, ship);
+y += 3;
+c.font = "800 10px system-ui,sans-serif";
+if (meta) {
+c.fillStyle = "#7dffb0";
+c.fillText("→ " + meta.route.map(id => r44PlanetName(id, pid)).join(" → "), x0, y);
+y += 12;
+c.fillStyle = "#9fb4d6";
+c.font = "700 9px system-ui,sans-serif";
+c.fillText(meta.dur + "s out · " + Math.round(meta.surv * 100) + "% survival", x0, y);
+}
+else {
+c.fillStyle = "#ffd76b";
+c.fillText("No mission chosen yet", x0, y);
+}
+const log = getMissionLog(pid)[0];
+if (log) {
+c.font = "700 8px system-ui,sans-serif";
+c.fillStyle = log.survived ? "#9dffc8" : "#ff9db0";
+c.fillText("LAST: " + r44PlanetName(log.destinationId, pid) + (log.survived ? " ✓ " + (log.materials ? log.materials + " " + (log.materialName || "mats") + " · " : "") + log.coins + "¢" : " ✗ lost"), R.x + 8, R.y + R.h - 44);
+}
+c.restore();
+const by = R.y + R.h - 20;
+const two = getTotalPlayerShipCount() >= 2;
+r44CtlBtn(c, push, R.x + R.w * .27, by, R.w * .44, 24, "SELECT MISSION", col, true, () => { r44CtlState(pid).pick = true; });
+r44CtlBtn(c, push, R.x + R.w * .73, by, R.w * .44, 24, "SEND ON MISSION", "#7dffb0", !!meta && two, () => {
+launchPendingMission(pid, ship.id);
+r44CtlState(pid).i = Math.max(0, r44CtlEntries(pid).findIndex(e => e.kind === "flying" && e.mission.ship === ship));
+});
+const canFeed = pet.energy < 100 && getSnackStock(pid) > 0;
+r44CtlBtn(c, push, R.x + R.w - 80, by - 27, 44, 17, "FEED", col, canFeed, () => {
+addSnackStock(pid, -1);
+pet.energy = Math.min(100, pet.energy + PET_ENERGY_PER_FOOD);
+savePlanetProgress();
+});
+r44CtlBtn(c, push, R.x + R.w - 30, by - 27, 48, 17, "UNSEAT", "#ff9db0", true, () => cancelPendingPilot(pid, ship.id));
+if (!two) {
+c.save();
+c.font = "700 8px system-ui,sans-serif";
+c.fillStyle = "#ffb46b";
+c.textAlign = "center";
+c.fillText("Keep another ship docked for yourself to send this one off", R.x + R.w / 2, by - 18);
+c.restore();
+}
+}
+function r44CtlPick(c, R, pid, ship, t, push, col) {
+const pet = ship.pendingPilot;
+const rangeLevel = getPetStatLevel(pet, "range");
+const range = PET_RANGE_HOPS[rangeLevel] || 0;
+const route = r44CtlRoute(pid, ship);
+const maxStops = getMaxRouteStops(rangeLevel);
+const multi = rangeLevel >= MULTI_STOP_UNLOCK_LEVEL;
+const home = r39IsStn(pid) ? (r39.landed && r39.landed.orbit) || "earth" : pid;
+const pad = { l: R.x + 20, r: R.x + R.w - 20, t: R.y + 26, b: R.y + R.h - 56 };
+const pos = id => {
+const p = getPlanet(id);
+return { x: pad.l + (p.x / 100) * (pad.r - pad.l), y: pad.t + (p.y / 100) * (pad.b - pad.t) };
+};
+r44Stars(c, R, t, .12, 3);
+c.save();
+c.strokeStyle = "rgba(140,190,255,.12)";
+c.lineWidth = 1;
+(typeof ROUTES !== "undefined" ? ROUTES : []).forEach(rt => {
+if (!getPlanet(rt[0]) || !getPlanet(rt[1]))
+return;
+const a = pos(rt[0]), b = pos(rt[1]);
+c.beginPath();
+c.moveTo(a.x, a.y);
+c.lineTo(b.x, b.y);
+c.stroke();
+});
+if (route.length) {
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 2;
+c.setLineDash([5, 4]);
+c.lineDashOffset = -t * 20;
+c.beginPath();
+let a = pos(home);
+c.moveTo(a.x, a.y);
+route.forEach(id => {
+const b = id === pid ? pos(home) : pos(id);
+c.lineTo(b.x, b.y);
+});
+c.stroke();
+c.setLineDash([]);
+}
+c.restore();
+const last = route.length ? route[route.length - 1] : pid;
+const lastPos = last === pid ? home : last;
+PLANETS.forEach(p => {
+if (p.id === NEM)
+return;
+const q = pos(p.id);
+const fromHome = computeHopDistance(pid, p.id);
+const inRoute = route.indexOf(p.id === home ? pid : p.id);
+const reachHome = fromHome <= range && isPlanetUnlocked(p.id);
+const reachNext = multi && route.length && route.length < maxStops && computeHopDistance(lastPos, p.id) <= range && isPlanetUnlocked(p.id) && !route.includes(p.id);
+const live = inRoute >= 0 || (!route.length && reachHome) || reachNext || (!multi && reachHome);
+const r = p.id === home ? 11 : 8;
+c.save();
+c.globalAlpha = live ? 1 : .25;
+try {
+drawSpacePlanet(c, p.id, q.x, q.y, r, {});
+}
+catch (error) {
+c.fillStyle = "#5fb4ff";
+c.beginPath();
+c.arc(q.x, q.y, r, 0, Math.PI * 2);
+c.fill();
+}
+if (live && inRoute < 0) {
+c.strokeStyle = r38Hex(col, .5 + .3 * Math.sin(t * 3 + q.x));
+c.lineWidth = 1.5;
+c.beginPath();
+c.arc(q.x, q.y, r + 4, 0, Math.PI * 2);
+c.stroke();
+}
+if (inRoute >= 0) {
+c.fillStyle = "#7dffb0";
+c.beginPath();
+c.arc(q.x + r, q.y - r, 6, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#04140a";
+c.font = "900 8px system-ui";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(String(inRoute + 1), q.x + r, q.y - r + .5);
+}
+c.font = "700 7px system-ui";
+c.textAlign = "center";
+c.textBaseline = "alphabetic";
+c.fillStyle = live ? "#dfeeff" : "#6f84a6";
+c.fillText(p.id === home ? (r39IsStn(pid) ? "STATION" : "HOME") : p.name.toUpperCase(), q.x, q.y + r + 9);
+c.restore();
+if (!live)
+return;
+push({ x: q.x, y: q.y, r: Math.max(14, r + 6), z: 12, onTap: () => {
+const id = p.id === home ? pid : p.id;
+const rt = r44CtlRoute(pid, ship);
+const at = rt.indexOf(id);
+if (at >= 0) {
+if (at === rt.length - 1) {
+if (rt.length > 1)
+removePendingStop(pid, ship.id);
+else {
+ship.pendingDestinationId = null;
+ship.pendingRouteStops = [];
+savePlanetProgress();
+}
+}
+}
+else if (!rt.length || !multi)
+setPendingMissionDestination(pid, ship.id, id);
+else
+addPendingStop(pid, ship.id, id);
+try {
+sound("click");
+}
+catch (error) { }
+} });
+});
+c.save();
+c.font = "700 9px system-ui,sans-serif";
+c.fillStyle = "#9fb4d6";
+c.textAlign = "center";
+c.fillText(multi ? "Tap worlds in order — up to " + maxStops + " stops" : "Tap a world to send the pilot there", R.x + R.w / 2, R.y + R.h - 34);
+c.restore();
+const meta = r44CtlMissionMeta(pid, ship);
+r44CtlBtn(c, push, R.x + R.w * .3, R.y + R.h - 16, R.w * .34, 22, "DONE", col, true, () => { r44CtlState(pid).pick = false; });
+r44CtlBtn(c, push, R.x + R.w * .7, R.y + R.h - 16, R.w * .34, 22, "SEND ON MISSION", "#7dffb0", !!meta && getTotalPlayerShipCount() >= 2, () => {
+launchPendingMission(pid, ship.id);
+r44CtlState(pid).pick = false;
+});
+}
+function r44CtlFeed(c, R, pid, e, t, push) {
+const m = e.mission;
+let seed = 0;
+String(m.startedAt).split("").forEach(ch => { seed += ch.charCodeAt(0); });
+r44Stars(c, R, t, 3.2, seed);
+const sx = R.x + R.w * .42, sy = R.y + R.h * .62;
+c.save();
+c.translate(sx + Math.sin(t * .9) * 4, sy + Math.sin(t * 1.7) * 3);
+c.rotate(Math.PI / 2);
+c.shadowColor = "#5ce4ff";
+c.shadowBlur = 12;
+try {
+drawShipAtScale(c, m.ship, Math.min(R.w * .0016, R.h * .0028), true);
+}
+catch (error) { }
+c.restore();
+const left = Math.max(0, Math.ceil((m.startedAt + m.durationSeconds * 1000 - Date.now()) / 1000));
+const k = Math.min(1, (Date.now() - m.startedAt) / (m.durationSeconds * 1000));
+c.save();
+c.fillStyle = "#ff5d7a";
+if (Math.floor(t * 1.5) % 2) {
+c.beginPath();
+c.arc(R.x + R.w - 60, R.y + 11, 3, 0, Math.PI * 2);
+c.fill();
+}
+c.font = "900 8px system-ui,sans-serif";
+c.textAlign = "left";
+c.fillText("LIVE", R.x + R.w - 54, R.y + 14);
+c.fillStyle = "#eafcff";
+c.font = "900 13px system-ui,sans-serif";
+c.fillText("EN ROUTE TO " + r44PlanetName(m.destinationId, pid).toUpperCase(), R.x + 10, R.y + 34);
+c.font = "700 9px system-ui,sans-serif";
+c.fillStyle = "#bfe9ff";
+const ships = r44CtlShips(pid);
+c.fillText(r44ShipName(m.ship, 0, 2) + " · " + (SPECIES_DISPLAY_NAMES[m.pet.species] || "Pet") + " at the controls", R.x + 10, R.y + 48);
+if ((m.route || []).length > 1)
+c.fillText("Route: " + m.route.map(id => r44PlanetName(id, pid)).join(" → "), R.x + 10, R.y + 60);
+c.fillStyle = "rgba(255,255,255,.1)";
+c.fillRect(R.x + 10, R.y + R.h - 22, R.w - 20, 5);
+c.fillStyle = "#7dffb0";
+c.fillRect(R.x + 10, R.y + R.h - 22, (R.w - 20) * k, 5);
+c.fillStyle = "#eafcff";
+c.font = "800 9px system-ui,sans-serif";
+c.fillText(left > 0 ? "Back in " + (left >= 60 ? Math.floor(left / 60) + "m " + left % 60 + "s" : left + "s") : "Coming home…", R.x + 10, R.y + R.h - 28);
+c.restore();
+void ships;
+if (left <= 0) {
+try {
+resolveAllMissions();
+}
+catch (error) { }
+}
+}
+function r44CtlTutorial(c, R, pid, t, push, col) {
+r44Stars(c, R, t, .2, 11);
+const xs = [.1, .3, .5, .7, .9].map(k => R.x + k * R.w);
+const gy = R.y + R.h * .56;
+const T = 4.6, ph = t % T;
+let sp = 0;
+try {
+const p = (getPets(pid) || []).find(p => p && !p.dead);
+if (p)
+sp = p.species;
+}
+catch (error) { }
+c.save();
+c.strokeStyle = "rgba(140,200,255,.3)";
+c.setLineDash([3, 4]);
+c.beginPath();
+c.moveTo(xs[0], gy + 2);
+c.lineTo(xs[4], gy + 2);
+c.stroke();
+c.setLineDash([]);
+c.fillStyle = "#3a3324";
+c.fillRect(xs[1] - 18, gy - 14, 36, 14);
+c.strokeStyle = "#ffd76b";
+c.lineWidth = 1.5;
+c.strokeRect(xs[1] - 18, gy - 14, 36, 14);
+c.save();
+c.translate(xs[1], gy - 26);
+c.scale(Math.cos(t * 1.3), 1);
+c.fillStyle = "rgba(255,215,107,.25)";
+c.strokeStyle = "#ffd76b";
+c.fillRect(-11, -7, 22, 14);
+c.strokeRect(-11, -7, 22, 14);
+c.restore();
+c.save();
+c.translate(xs[3] + (ph > 3.4 ? (ph - 3.4) * 40 : 0), gy);
+c.shadowColor = "#5ce4ff";
+c.shadowBlur = 10;
+try {
+drawShipAtScale(c, { id: "tut", styleId: currentShipStyleId, styleOwnerId: currentShipStyleOwnerId, cargoPets: [] }, Math.max(.1, R.w * .00045), ph > 3.4);
+}
+catch (error) { }
+c.restore();
+c.save();
+c.fillStyle = ph > 3 ? "#7dffb0" : "rgba(125,255,176,.25)";
+c.fillRect(xs[4] - 9, gy - 10, 18, 10);
+c.fillRect(xs[4] - 9, gy - 24, 5, 16);
+c.restore();
+const walk = (a, b, k) => a + (b - a) * k;
+let x = null, helm = false, sz = 20;
+if (ph < 1)
+x = walk(xs[0], xs[1], ph);
+else if (ph < 1.6) {
+x = xs[1];
+helm = ph > 1.3;
+}
+else if (ph < 2.6) {
+x = walk(xs[1], xs[3], ph - 1.6);
+helm = true;
+}
+else if (ph < 3.2) {
+x = walk(xs[3], xs[4], (ph - 2.6) / .6);
+helm = true;
+}
+else {
+x = xs[4];
+helm = true;
+sz = 18;
+}
+try {
+drawSpacePet(c, "earth", x, gy - 10, sz, 100, t * 7, sp, false, null, 1);
+if (helm)
+r34Helmet(c, x, gy - 10, sz);
+}
+catch (error) { }
+const labels = ["PET", "LICENCE|DESK", "ASTRO-|NAUT", "SHIP", "SEAT"];
+const on = ph < 1 ? 0 : ph < 1.6 ? 1 : ph < 2.2 ? 2 : ph < 3.2 ? 3 : 4;
+c.font = "800 8px system-ui,sans-serif";
+c.textAlign = "center";
+labels.forEach((l, i) => {
+c.fillStyle = i === on ? "#ffffff" : "#7f93b4";
+l.split("|").forEach((w, j) => c.fillText(w, xs[i], gy + 16 + j * 9));
+});
+c.restore();
+const pilot = (getPets(pid) || []).find(p => p && !p.dead && (p.role || "builder") === "pilot" && p.energy > 0);
+const ship = r44CtlShips(pid).find(s => !s.pendingPilot && s.id !== selectedLaunchShipId) || r44CtlShips(pid).find(s => !s.pendingPilot);
+c.save();
+c.font = "700 9px system-ui,sans-serif";
+c.fillStyle = "#bfe9ff";
+c.textAlign = "center";
+c.fillText(pilot ? "A pilot is ready — seat it in a ship to plan a mission" : "Licence a pet at the desk, then seat it in a ship", R.x + R.w / 2, R.y + 30);
+c.restore();
+if (pilot && ship)
+r44CtlBtn(c, push, R.x + R.w / 2, R.y + R.h - 18, R.w * .6, 24, "SEAT " + (SPECIES_DISPLAY_NAMES[pilot.species] || "PILOT").toUpperCase() + " IN " + r44ShipName(ship, r44CtlShips(pid).indexOf(ship), r44CtlShips(pid).length).toUpperCase(), col, true, () => assignPendingPilot(pid, ship.id, pilot.id));
+}
+function r44ControlScreen(c, list, planetId, st) {
+list.push({ v: -1, draw: () => {
+const a = roomWallPt(.06, .04), b = roomWallPt(.94, .86);
+const R = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+r44CtlDraw(c, R, planetId, h => world.hits.push(h), st && st.colour || "#5fb4ff");
+} });
+}
+function r44CtlOverlay(pid) {
+let ov = document.getElementById("r44Ctl");
+if (!ov) {
+ov = document.createElement("div");
+ov.id = "r44Ctl";
+ov.innerHTML = '<canvas></canvas><button type="button" class="r44-ctl-x">✕</button>';
+document.body.appendChild(ov);
+const cv = ov.querySelector("canvas");
+cv.addEventListener("pointerup", e => {
+const r = cv.getBoundingClientRect();
+const x = e.clientX - r.left, y = e.clientY - r.top;
+const hits = (r44.ov && r44.ov.hits) || [];
+let best = null;
+hits.forEach(h => {
+const d = Math.hypot(h.x - x, h.y - y);
+if (d <= h.r && (!best || (h.z || 0) > (best.z || 0) || ((h.z || 0) === (best.z || 0) && d < best.d)))
+best = Object.assign({ d }, h);
+});
+if (best)
+best.onTap();
+e.stopPropagation();
+});
+["pointerdown", "click", "touchstart"].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation()));
+ov.querySelector(".r44-ctl-x").addEventListener("click", () => {
+ov.classList.remove("on");
+r44.ov = null;
+});
+}
+ov.classList.add("on");
+r44.ov = { pid, hits: [] };
+const cv = ov.querySelector("canvas");
+const loop = () => {
+if (!r44.ov || r44.ov.pid !== pid)
+return;
+const w = Math.min(window.innerWidth - 24, 520), h = Math.min(window.innerHeight * .5, 320);
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+if (cv.width !== Math.round(w * dpr)) {
+cv.width = Math.round(w * dpr);
+cv.height = Math.round(h * dpr);
+cv.style.width = w + "px";
+cv.style.height = h + "px";
+}
+const c = cv.getContext("2d");
+c.setTransform(dpr, 0, 0, dpr, 0, 0);
+c.clearRect(0, 0, w, h);
+const hits = [];
+try {
+r44CtlDraw(c, { x: 16, y: 10, w: w - 32, h: h - 20 }, pid, hh => hits.push(hh), "#5fb4ff");
+}
+catch (error) {
+console.error(error);
+}
+r44.ov.hits = hits;
+requestAnimationFrame(loop);
+};
+loop();
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent = '#r44Ctl{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(2,5,12,.72);}' +
+'#r44Ctl.on{display:flex;}' +
+'#r44Ctl canvas{display:block;touch-action:none;}' +
+'#r44Ctl .r44-ctl-x{position:absolute;top:calc(50% - min(25vh,160px) - 44px);right:max(12px,calc(50% - 260px));width:34px;height:34px;border-radius:50%;border:1px solid #5fb4ff;background:#0b0f17;color:#eafcff;font:800 14px system-ui;}';
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
+function resolveAllMissions() {
+resolveAllMissions__r44();
+try {
+Object.keys(r39.mounted || {}).forEach(mid => resolveMissions(r39Pid(mid)));
+}
+catch (error) { }
+}
+function computeMissionYield(hops, enduranceLevel, rangeLevel) {
+return Math.round(computeMissionYield__r44(hops, enduranceLevel, rangeLevel) * 3);
+}
+function r44Home(id) {
+if (!r39IsStn(id))
+return id;
+return (r39.landed && r39.landed.orbit) || (r38.world && r38.world.kind === "home" && r38.world.planetId) || "earth";
+}
+function computeHopDistance(a, b) {
+return computeHopDistance__r44(r44Home(a), r44Home(b));
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -47511,7 +48766,7 @@ return planetSave.groundItems[planetId];
 function worldMaterialBank(planetId) {
 return ((planetSave.materialBanks || {})[planetId] || {});
 }
-function worldVaultContents(planetId) {
+function worldVaultContents__r44(planetId) {
 const out = [];
 const coins = getBank(planetId);
 if (coins > 0)
@@ -47539,7 +48794,7 @@ out.push({ k: "food", r: id, n: foods[id] });
 });
 return out;
 }
-function worldShipCargo(ship) {
+function worldShipCargo__r44(ship) {
 const out = [];
 if (!ship)
 return out;
@@ -47811,7 +49066,7 @@ addPerkStock(planetId, d.r, 1);
 feedPerkFoodToPet(planetId, eaterId, d.r);
 savePlanetProgress();
 }
-function worldRunAction(attrs) {
+function worldRunAction__r44(attrs) {
 const planetId = selectedStartPlanet;
 try {
 runPlanetActionOn(planetId, attrs);
@@ -48358,7 +49613,7 @@ if (!place || !pet.carry)
 return;
 worldMove({ t: "pet", p: pet.id }, place, pet.carry);
 }
-function worldDrawPlanetGround(composeQueue, p) {
+function worldDrawPlanetGround__r44(composeQueue, p) {
 const list = (planetSave.groundItems || {})[selectedStartPlanet] || [];
 list.forEach(g => {
 if (!g.at || g.at.t !== "planet")
@@ -48394,7 +49649,7 @@ onTap: () => worldGroundBubble(g, proj.x, proj.y - size * .6)
 });
 });
 }
-function worldGroundBubble(g, x, y) {
+function worldGroundBubble__r44(g, x, y) {
 const info = worldItemInfo(g);
 const pet = getRoamingPet();
 worldShowBubble({
@@ -48456,7 +49711,7 @@ if (e.kind === "ship") {
 world.drops.push({
 x: proj.x, y: proj.y - r * .8, r,
 kind: "structure",
-accept: (d, src) => d.k !== "item" && d.k !== "snack" && d.k !== "extra" && !(src && src.t === "ship"),
+accept: (d, src) => !(src && src.t === "ship"),
 drop: (d, src) => worldMove(src, { t: "ship", s: e.id }, d)
 });
 }
@@ -49364,6 +50619,7 @@ buttons: []
 }
 function roomShopFixtures__r33(c, list, planetId, st, time) {
 const forSale = [{ k: "snack", r: "berry", n: SNACK_BUNDLE, price: SNACK_BUNDLE_COST, buy: { "data-action": "buy-snacks" } }];
+r44AddShopTower(planetId, forSale);
 const local = getShopSaleItemForPlanet(planetId);
 if (local)
 forSale.push({ k: "item", r: local.id, n: 1, price: local.cost, buy: { "data-action": "buy", "data-item": local.id } });
@@ -49539,7 +50795,7 @@ onTap: () => worldPetBubble(pet, p.x, p.y - size)
 });
 }
 function roomTrainingFixtures__r33(c, list, planetId, st, time) {
-roomTerminal(c, list, .5, "MISSION BOARD", st.colour, "structure-pilot-training");
+r44ControlScreen(c, list, planetId, st);
 roomLicenceDeskFixture(c, list, planetId, st);
 const pods = [
 { stat: "range", label: "RANGE", icon: "🧭", u: .22 },
@@ -49806,7 +51062,7 @@ buttons: hasStructure(planetId, "satellite-factory")
 world.drops.push({
 x: box.x, y: box.y, r: Math.max(box.w, box.h) * .7,
 kind: "cargo",
-accept: (d, src) => d.k !== "item" && d.k !== "snack" && d.k !== "extra" && !(src && src.t === "ship" && src.s === ship.id),
+accept: (d, src) => !(src && src.t === "ship" && src.s === ship.id),
 drop: (d, src) => worldMove(src, { t: "ship", s: ship.id }, d)
 });
 } });
@@ -56388,8 +57644,7 @@ dockedShip.id +
 '" width="60" height="60"></canvas>' +
 '<div class="ship-card-stats">' +
 '<div class="ship-card-name">' +
-(Number(dockedShip.score) || 0).toLocaleString() + ' pts · Ship ' +
-(shipNumber + 1) + '</div>' +
+'<span class="r44-name" data-r44-ship="' + dockedShip.id + '">' + r44ShipName(dockedShip, shipNumber, 2) + '</span> · ' + (Number(dockedShip.score) || 0).toLocaleString() + ' pts</div>' +
 '<div class="ship-card-stat-row">' +
 '<span style="color:#ff8d8d;' +
 'letter-spacing:2px;">' +
