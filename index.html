@@ -40850,6 +40850,166 @@ return (r39.landed && r39.landed.orbit) || (r38.world && r38.world.kind === "hom
 function computeHopDistance(a, b) {
 return computeHopDistance__r44(r44Home(a), r44Home(b));
 }
+(function () {
+try {
+const okHost = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+if (!("serviceWorker" in navigator) || !okHost)
+return;
+window.addEventListener("load", () => {
+navigator.serviceWorker.register("asteroid-impact-sw.js", { updateViaCache: "none", scope: /\.html?$/i.test(location.pathname) ? location.pathname : "./" }).then(reg => {
+const keep = () => {
+const sw = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+if (sw)
+sw.postMessage({ type: "keep", urls: [location.href.split("#")[0]] });
+};
+keep();
+navigator.serviceWorker.ready.then(keep).catch(() => { });
+setInterval(() => { if (navigator.onLine)
+reg.update().catch(() => { }); }, 30 * 60 * 1000);
+}).catch(() => { });
+});
+}
+catch (error) { }
+})();
+window.addEventListener("online", () => {
+try {
+if (typeof mp !== "undefined" && !mp.connected && !mp.connecting && typeof mpLoadSession === "function" && mpLoadSession() && typeof mpScheduleReconnect === "function")
+mpScheduleReconnect();
+}
+catch (error) { }
+});
+async function fetchLeaderboard() {
+if (navigator.onLine === false)
+throw new Error("offline");
+return fetchLeaderboard__r45();
+}
+(function () {
+const say = () => {
+try {
+if (navigator.onLine !== false)
+return;
+document.querySelectorAll("#leaderboardStatus,.leaderboard-status").forEach(el => {
+if (/could not|failed|error|loading/i.test(el.textContent))
+el.textContent = "You're offline — the leaderboard will load when you're back online.";
+});
+}
+catch (error) { }
+};
+setInterval(say, 1500);
+})();
+var r45Icon = { sig: null };
+function r45DrawIcon(S) {
+const cv = document.createElement("canvas");
+cv.width = cv.height = S;
+const c = cv.getContext("2d");
+const g = c.createRadialGradient(S * .5, S * .35, S * .05, S * .5, S * .5, S * .75);
+g.addColorStop(0, "#1a1250");
+g.addColorStop(.55, "#070a24");
+g.addColorStop(1, "#02040a");
+c.fillStyle = g;
+c.fillRect(0, 0, S, S);
+for (let i = 0; i < 140; i++) {
+c.globalAlpha = .3 + ((i * 37) % 10) / 14;
+c.fillStyle = "#dff3ff";
+const r = (((i * 13) % 3) + 1) * S / 1024;
+c.fillRect((i * 397) % 1024 * S / 1024, (i * 751) % 1024 * S / 1024, r, r);
+}
+c.globalAlpha = 1;
+const pid = selectedStartPlanet || "earth";
+const world = typeof r44Home === "function" ? r44Home(pid) : pid;
+try {
+drawSpacePlanet(c, getPlanet(world) ? world : "earth", S * .5, S * 1.18, S * .62, {});
+}
+catch (error) { }
+[[.2, .26, .07], [.83, .3, .05], [.76, .62, .035]].forEach(([x, y, r]) => {
+c.save();
+c.shadowColor = "#ff9a3c";
+c.shadowBlur = S * .03;
+c.fillStyle = "#5a4a40";
+c.beginPath();
+for (let k = 0; k < 9; k++) {
+const a = k / 9 * Math.PI * 2, rr = r * S * (.8 + .25 * Math.sin(k * 2.3));
+c.lineTo(x * S + Math.cos(a) * rr, y * S + Math.sin(a) * rr);
+}
+c.closePath();
+c.fill();
+c.strokeStyle = "#ffb46b";
+c.lineWidth = S * .006;
+c.stroke();
+c.restore();
+});
+let ship = null;
+try {
+const list = getShips(pid) || [];
+ship = list.find(s => s.id === selectedLaunchShipId) || list[0] || ((planetSave.ships || {}).earth || [])[0] || null;
+}
+catch (error) { }
+c.save();
+c.translate(S * .52, S * .66);
+c.rotate(.5);
+c.shadowColor = "#5ce4ff";
+c.shadowBlur = S * .05;
+try {
+drawShipAtScale(c, ship || { id: "icon" }, S * .003, true);
+}
+catch (error) { }
+c.restore();
+return cv.toDataURL("image/png");
+}
+function r45SetLink(rel, href, sizes) {
+let el = document.querySelector('link[rel="' + rel + '"]' + (sizes ? '[sizes="' + sizes + '"]' : ''));
+if (!el) {
+el = document.createElement("link");
+el.rel = rel;
+if (sizes)
+el.setAttribute("sizes", sizes);
+document.head.appendChild(el);
+}
+if (el.href !== href)
+el.href = href;
+}
+function r45UpdateIcon() {
+try {
+let style = "";
+try {
+const list = getShips(selectedStartPlanet) || [];
+const s = list.find(s => s.id === selectedLaunchShipId) || list[0];
+style = s ? JSON.stringify([s.styleId, s.styleOwnerId, s.styleRaw || null]) : "";
+}
+catch (error) { }
+const sig = (selectedStartPlanet || "") + "|" + style;
+if (sig === r45Icon.sig)
+return;
+r45Icon.sig = sig;
+const big = r45DrawIcon(512);
+const touch = r45DrawIcon(180);
+r45SetLink("apple-touch-icon", touch);
+r45SetLink("icon", r45DrawIcon(192));
+const here = location.href.split("#")[0].split("?")[0];
+const scope = here.slice(0, here.lastIndexOf("/") + 1);
+const manifest = {
+name: "Asteroid Impact",
+short_name: "Asteroid Impact",
+start_url: here,
+scope,
+display: "standalone",
+orientation: "portrait",
+background_color: "#02040a",
+theme_color: "#02040a",
+icons: [
+{ src: touch, sizes: "180x180", type: "image/png" },
+{ src: big, sizes: "512x512", type: "image/png", purpose: "any maskable" }
+]
+};
+r45SetLink("manifest", "data:application/manifest+json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest)));
+}
+catch (error) { }
+}
+setTimeout(r45UpdateIcon, 1500);
+setInterval(() => {
+if (!running && !document.hidden)
+r45UpdateIcon();
+}, 8000);
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -68702,7 +68862,7 @@ selectStartPlanet(option.ownerId
 container.appendChild(button);
 });
 }
-async function fetchLeaderboard() {
+async function fetchLeaderboard__r45() {
 const response = await fetch(LEADERBOARD_URL, {
 method: "GET",
 cache: "no-store"
