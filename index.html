@@ -3302,13 +3302,26 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
            height follows how far round the band you are — just as the flat logo draws them */
         var HT=278/220,DEPTH=121/220,VX=85/220,R=1;
 
+        /* while it spins it's a proper crown — four even, sharp points — and as it lands
+           the points settle into the logo's exact outline */
+        var MORPH=0;
+
         function spikeY(th){
 
             var x=Math.abs(Math.sin(th));
 
-            var f=x<=VX?x/VX:1-(x-VX)/(1-VX);
+            var fl=x<=VX?x/VX:1-(x-VX)/(1-VX);
 
-            return -HT/2+DEPTH*f;
+            var f=(th/(PI/2))%1;
+
+            if(f<0)
+                f+=1;
+
+            var fe=1-Math.abs(2*f-1);
+
+            var depth=.82+(DEPTH-.82)*MORPH;
+
+            return -HT/2+depth*(fe+(fl-fe)*MORPH);
 
         }
 
@@ -3320,7 +3333,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
         var va=Math.asin(VX);
 
-        [0,va,PI/2,PI-va,PI,PI+va,PI*1.5,2*PI-va].forEach(function(a){TH.push(a);});
+        [0,va,PI/4,PI/2,PI*.75,PI-va,PI,PI+va,PI*1.25,PI*1.5,PI*1.75,2*PI-va].forEach(function(a){TH.push(a);});
 
         TH.sort(function(a,b){return a-b;});
 
@@ -3500,35 +3513,35 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
         function drawEyes(t,phi,ps){
 
-            /* little drops falling out first, from wherever the front valleys are right now */
-            for(var d=0;d<14;d++){
+            /* a few drops trickle out of each notch first, from inside the crown */
+            EYES.forEach(function(e,side){
 
-                var born=2.68+d*.028,age=t-born;
+                for(var d=0;d<3;d++){
 
-                if(age<0 || age>.32)
-                    continue;
+                    var age=t-(2.74+side*.05+d*.07);
 
-                var side=d%2?1:-1;
+                    if(age<0 || age>.26)
+                        continue;
 
-                var th=PI+side*va-phi;
+                    var k=age/.26;
 
-                var src=project(Math.sin(th),spikeY(th),Math.cos(th),phi,ps);
+                    var from=L(e.valley[0],e.valley[1]-14),to=L(e.c[0],e.c[1]-30);
 
-                var e=EYES[side<0?0:1],dst=L(e.c[0],e.c[1]-40);
+                    var x=from.X+(to.X-from.X)*k,y=from.Y+(to.Y-from.Y)*k*k;
 
-                var k=age/.32;
+                    var r=(7-d*1.5)*P.u;
 
-                var x=src.X+(dst.X-src.X)*k,y=src.Y+(dst.Y-src.Y)*k*k;
+                    ctx.fillStyle="#000";
 
-                ctx.fillStyle="#000";
+                    ctx.beginPath();
 
-                ctx.beginPath();
+                    ctx.ellipse(x,y,r,r*(1.25+k*.6),0,0,PI*2);
 
-                ctx.ellipse(x,y,(8+d%3*3)*P.u*(1-k*.3),(13+d%3*4)*P.u*(1+k*.4),0,0,PI*2);
+                    ctx.fill();
 
-                ctx.fill();
+                }
 
-            }
+            });
 
             /* then each eye drips down, stretches and settles */
             EYES.forEach(function(e){
@@ -3544,7 +3557,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
                 var drop=30+122*sp;
 
-                var tip=L(e.valley[0]+(e.tip[0]-e.valley[0])*Math.min(1,u*1.6),e.valley[1]+(e.tip[1]-e.valley[1])*Math.min(1,u*1.6));
+                var tu=Math.min(1,u*1.6);var tip=L(e.valley[0]+(e.tip[0]-e.valley[0])*tu,e.valley[1]-30+(e.tip[1]-e.valley[1]+30)*tu);
 
                 var c=L(e.c[0],0);
 
@@ -3560,7 +3573,17 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
                 teardrop(tip.X,tip.Y,cx,cy,rr);
 
-                ctx.stroke();
+                var sa=seg(t,3.0,3.2);
+
+                if(sa>0){
+
+                    ctx.globalAlpha=sa;
+
+                    ctx.stroke();
+
+                    ctx.globalAlpha=1;
+
+                }
 
                 ctx.fillStyle="#000";
 
@@ -3602,6 +3625,8 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
         return function frame(t){
 
             var phi=spin(t),ps=pose(t);
+
+            MORPH=ease(seg(t,2.92,3.24));
 
             var suck=ease(seg(t,1.82,2.62));
 
@@ -3757,6 +3782,10 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
             if(capFace<=0)
                 cap();
 
+            /* the black pours out of the notches as the eyes: drawn behind the band so it comes from inside */
+            if(t>=2.7)
+                drawEyes(t,phi,ps);
+
             /* as it lands, a white edge round the front, like the logo's */
             if(flat>0){
 
@@ -3892,10 +3921,6 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
             }
 
             ctx.restore();
-
-            /* the drops: they pour out below the crown, clear of it */
-            if(t>=2.7)
-                drawEyes(t,phi,ps);
 
         };
 
