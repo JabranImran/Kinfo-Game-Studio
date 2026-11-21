@@ -22,9 +22,9 @@ content="yes">
 content="black-translucent">
 
 <meta name="apple-mobile-web-app-title"
-content="Asteroid Impact">
+content="Destroid">
 
-<title>Asteroid Impact</title>
+<title>Destroid</title>
 
 <style>:root{
 --state-good:#8dffb0;
@@ -3793,29 +3793,34 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
                 ctx.globalAlpha*=flat;
 
+                /* the front half's outline, walked round in order: rim across the top, points along the bottom */
+                var PS=[];
+
+                for(var g0=0;g0<=48;g0++)
+                    PS.push(PI/2+g0/48*PI);
+
+                [PI-va,PI,PI+va,PI*.75,PI*1.25].forEach(function(a){PS.push(a);});
+
+                PS.sort(function(a,b){return a-b;});
+
                 ctx.beginPath();
 
-                var first=true;
+                PS.forEach(function(psi,g1){
 
-                for(var k0=0;k0<TH.length;k0++){
+                    var th=psi-phi,b=project(Math.sin(th),HT/2,Math.cos(th),phi,ps);
 
-                    var ps0=(TH[k0]+phi)%(2*PI);
+                    if(g1)
+                        ctx.lineTo(b.X,b.Y);
+                    else
+                        ctx.moveTo(b.X,b.Y);
 
-                    if(ps0<PI/2-1e-6 || ps0>PI*1.5+1e-6)
-                        continue;
+                });
 
-                    if(first){ctx.moveTo(base[k0].X,base[k0].Y);first=false;}else ctx.lineTo(base[k0].X,base[k0].Y);
+                for(var g2=PS.length-1;g2>=0;g2--){
 
-                }
+                    var th2=PS[g2]-phi,tp=project(Math.sin(th2),spikeY(th2),Math.cos(th2),phi,ps);
 
-                for(var k1=TH.length-1;k1>=0;k1--){
-
-                    var ps1=(TH[k1]+phi)%(2*PI);
-
-                    if(ps1<PI/2-1e-6 || ps1>PI*1.5+1e-6)
-                        continue;
-
-                    ctx.lineTo(top[k1].X,top[k1].Y);
+                    ctx.lineTo(tp.X,tp.Y);
 
                 }
 
@@ -4260,7 +4265,6 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 </script>
 
 
-
 <canvas id="game"></canvas>
 
 
@@ -4492,7 +4496,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
         <canvas id="planetFocusFade"></canvas>
 
         <div class="focus-logo" id="focusLogo">
-            ASTEROID<br>IMPACT
+            DESTROID
         </div>
 
         <button class="focus-btn focus-leaderboard-top" id="focusLeaderboardBtn">
@@ -5018,11 +5022,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
     <div class="card">
 
-        <div class="game-over-title">
-
-            Asteroid Impact
-
-        </div>
+        <div class="game-over-title"> Destroid </div>
 
         <div
             class="mp-tab-row"
@@ -42044,8 +42044,8 @@ r45SetLink("icon", r45DrawIcon(192));
 const here = location.href.split("#")[0].split("?")[0];
 const scope = here.slice(0, here.lastIndexOf("/") + 1);
 const manifest = {
-name: "Asteroid Impact",
-short_name: "Asteroid Impact",
+name: "Destroid",
+short_name: "Destroid",
 start_url: here,
 scope,
 display: "standalone",
@@ -42066,6 +42066,130 @@ setInterval(() => {
 if (!running && !document.hidden)
 r45UpdateIcon();
 }, 8000);
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent = `
+#focusTip{display:none !important;}
+#focusLogo{top:7%;perspective:600px;height:clamp(64px,19vw,104px);}
+#focusLogo .d-title,#focusLogo .d-tip{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;
+    transition:opacity .55s ease,transform .7s cubic-bezier(.2,.9,.3,1),filter .55s ease;}
+#focusLogo .d-title{transform-style:preserve-3d;}
+#focusLogo .d-word{position:relative;display:inline-block;font:italic 900 clamp(44px,14vw,78px)/1 system-ui,-apple-system,"SF Pro Display","Helvetica Neue",Arial,sans-serif;
+    letter-spacing:.03em;transform:rotateX(16deg) skewX(-4deg);transform-origin:50% 80%;}
+/* the face: a bright neon tube of a letter, cyan into violet */
+#focusLogo .d-face{position:relative;z-index:2;color:transparent;
+    background:linear-gradient(180deg,#ffffff 0%,#b8fbff 28%,#4fe3ff 52%,#b06bff 78%,#ff5fd8 100%);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-stroke:1.4px rgba(235,255,255,.9);}
+/* the sheen that sweeps across now and then */
+#focusLogo .d-sheen{position:absolute;inset:0;z-index:3;color:transparent;pointer-events:none;
+    background:linear-gradient(105deg,transparent 0%,transparent 40%,rgba(255,255,255,.95) 50%,transparent 60%,transparent 100%);
+    background-size:300% 100%;background-position:150% 0;-webkit-background-clip:text;background-clip:text;
+    animation:dSheen 6.5s ease-in-out 2.5s infinite;}
+/* the 3D depth: stacked layers sinking back into violet, with the glow behind */
+#focusLogo .d-depth{position:absolute;inset:0;z-index:1;color:#2a0f56;
+    text-shadow:0 1px 0 #3b1675,0 2px 0 #36136c,0 3px 0 #311163,0 4px 0 #2c0f5a,0 5px 0 #270d51,0 6px 0 #220b48,0 7px 0 #1d093f,
+        0 9px 6px rgba(0,0,0,.55),0 0 18px rgba(176,107,255,.85),0 0 42px rgba(79,227,255,.55),0 0 80px rgba(255,95,216,.35);}
+#focusLogo .d-glow{position:absolute;inset:0;z-index:0;color:transparent;-webkit-text-stroke:6px rgba(79,227,255,.5);filter:blur(9px);}
+#focusLogo .d-tip{opacity:0;transform:translateZ(-60px) scale(.86);filter:blur(5px);padding:0 9%;
+    font:800 clamp(12px,3.6vw,15px)/1.45 system-ui,-apple-system,sans-serif;letter-spacing:.09em;text-transform:uppercase;text-align:center;
+    color:#e4fbff;text-shadow:0 0 6px rgba(120,230,255,.95),0 0 16px rgba(79,227,255,.7),0 0 30px rgba(176,107,255,.5);pointer-events:none;}
+#focusLogo.tipping .d-title,#focusLogo.lit.tipping .d-title{opacity:0;transform:translateZ(80px) scale(1.12);filter:blur(8px);}
+#focusLogo.tipping .d-tip{opacity:1;transform:none;filter:none;}
+/* switching on: the neon flickers into life */
+#focusLogo .d-title{opacity:0;}
+#focusLogo.lit .d-title{opacity:1;}
+#focusLogo.igniting .d-word{animation:dIgnite 1.25s steps(1,end) both;}
+#focusLogo.igniting .d-title{transition:none;opacity:1;}
+@keyframes dIgnite{0%{opacity:0;}8%{opacity:.85;}12%{opacity:.1;}20%{opacity:1;}26%{opacity:.25;}34%{opacity:1;}62%{opacity:.6;}66%{opacity:1;}100%{opacity:1;}}
+@keyframes dSheen{0%{background-position:150% 0;}35%,100%{background-position:-50% 0;}}
+@media (prefers-reduced-motion:reduce){#focusLogo .d-sheen{animation:none;}#focusLogo.igniting .d-word{animation:none;}}
+`;
+document.head.appendChild(css);
+const logo = document.getElementById("focusLogo");
+if (logo) {
+const w = "DESTROID";
+logo.setAttribute("aria-label", "Destroid");
+logo.innerHTML =
+'<div class="d-title"><span class="d-word">' +
+'<span class="d-glow" aria-hidden="true">' + w + '</span>' +
+'<span class="d-depth" aria-hidden="true">' + w + '</span>' +
+'<span class="d-face">' + w + '</span>' +
+'<span class="d-sheen" aria-hidden="true">' + w + '</span>' +
+'</span></div><div class="d-tip"></div>';
+}
+}
+catch (error) { }
+})();
+(function () {
+let done = false;
+const ignite = () => {
+if (done)
+return;
+done = true;
+const logo = document.getElementById("focusLogo");
+if (!logo)
+return;
+logo.classList.add("igniting");
+try {
+if (typeof audioContext !== "undefined" && audioContext && audioContext.state === "running") {
+const now = audioContext.currentTime;
+[0, .1, .25, .42].forEach((o, i) => {
+const osc = audioContext.createOscillator(), g = audioContext.createGain();
+osc.type = "square";
+osc.frequency.value = i % 2 ? 120 : 100;
+g.gain.setValueAtTime(0.0001, now + o);
+g.gain.exponentialRampToValueAtTime(.035, now + o + .01);
+g.gain.exponentialRampToValueAtTime(0.0001, now + o + .09);
+osc.connect(g);
+g.connect(audioContext.destination);
+osc.start(now + o);
+osc.stop(now + o + .12);
+});
+}
+}
+catch (error) { }
+setTimeout(() => {
+logo.classList.remove("igniting");
+logo.classList.add("lit");
+}, 1300);
+};
+const watch = setInterval(() => {
+const sp = document.getElementById("kgsSplash");
+if (!sp || sp.classList.contains("kgs-out")) {
+clearInterval(watch);
+setTimeout(ignite, sp ? 250 : 0);
+}
+}, 120);
+setTimeout(ignite, 16000);
+})();
+function hideHomeTip(fast) {
+const logo = document.getElementById("focusLogo");
+if (logo)
+logo.classList.remove("tipping");
+homeTipVisible = false;
+clearTimeout(homeTipHideTimer);
+}
+function showNextHomeTip() {
+if (roamingActive || roomState || roomHoloOpen)
+return;
+if (document.body.classList.contains("r39-stn"))
+return;
+const logo = document.getElementById("focusLogo");
+const tipEl = logo && logo.querySelector(".d-tip");
+if (!tipEl || !logo.classList.contains("lit"))
+return;
+const tip = HOME_SCREEN_TIPS[homeTipIndex % HOME_SCREEN_TIPS.length];
+homeTipIndex++;
+tipEl.textContent = tip.text;
+logo.classList.add("tipping");
+homeTipVisible = true;
+clearTimeout(homeTipHideTimer);
+homeTipHideTimer = setTimeout(() => {
+hideHomeTip(false);
+homeTipLastInteraction = performance.now();
+}, HOME_TIP_SHOW_DURATION + 800);
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -55520,7 +55644,7 @@ homeTipLastInteraction =
 performance.now();
 hideHomeTip(true);
 }
-function hideHomeTip(fast) {
+function hideHomeTip__r50(fast) {
 const el = document.getElementById("focusTip");
 if (el) {
 el.style.transition =
@@ -55534,7 +55658,7 @@ el.style.transform =
 homeTipVisible = false;
 clearTimeout(homeTipHideTimer);
 }
-function showNextHomeTip() {
+function showNextHomeTip__r50() {
 if (roamingActive || roomState || roomHoloOpen)
 return;
 const tip = HOME_SCREEN_TIPS[homeTipIndex %
