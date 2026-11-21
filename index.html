@@ -3206,60 +3206,48 @@ color:var(--ink);transition:transform .12s ease;}
 
 <!-- =======================================================
      KINFO GAME STUDIO — the opening logo, shown while the game loads.
-     Plain CSS animations on their own layers, so it keeps moving even
-     while the game's big script is starting up behind it.
+     A 3D gold crown spins, wobbles, tilts up into a spinning ring that
+     sucks the black background into itself, then tips back over upside
+     down; the horns spin out, the drops drip out, and the logo pops.
+     The 3D part is drawn in a background worker where the phone allows,
+     so it stays smooth while the game itself is starting up.
 ======================================================= -->
 <style>#startScreenCard{display:none !important;}
-#kgsSplash{position:fixed;inset:0;z-index:100000;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;
+#kgsSplash{position:fixed;inset:0;z-index:100000;background:#000;overflow:hidden;
 transition:opacity .45s ease;-webkit-user-select:none;user-select:none;touch-action:none;}
 #kgsSplash.kgs-out{opacity:0;pointer-events:none;}
-#kgsSplash .kgs-white{position:absolute;left:50%;top:46%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#fff;
-transform:scale(0);will-change:transform;animation:kgsWhite 1.6s cubic-bezier(.55,0,.25,1) .85s forwards;}
-#kgsSplash .kgs-words{position:absolute;inset:-30%;display:flex;flex-direction:column;justify-content:center;gap:2.2vh;
-mix-blend-mode:difference;will-change:transform;transform:scale(2.1);animation:kgsZoom 2.8s cubic-bezier(.3,0,.2,1) .1s forwards;}
-#kgsSplash .kgs-row{white-space:nowrap;display:flex;justify-content:center;font:900 clamp(20px,5.8vw,38px)/1 system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase;}
-#kgsSplash .kgs-row:nth-child(even){transform:translateX(-1.4em);}
-#kgsSplash .kgs-row span{display:inline-block;margin-right:.7em;color:transparent;-webkit-text-stroke:1.2px #fff;opacity:0;
-animation:kgsTwinkle 2.6s ease-in-out infinite;}
-#kgsSplash .kgs-logo{position:relative;width:min(64vw,330px);aspect-ratio:853/635;margin-top:-6vh;
-transform:scale(.35);opacity:0;will-change:transform,opacity;animation:kgsIn .6s cubic-bezier(.2,1.4,.4,1) .05s forwards;}
+#kgsSplash canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+#kgsSplash .kgs-logo{position:absolute;left:50%;top:44%;width:min(64vw,330px);aspect-ratio:853/635;transform:translate(-50%,-50%);}
+#kgsSplash .kgs-pop{position:absolute;inset:0;animation:kgsPop .5s cubic-bezier(.3,1.6,.5,1) 3.86s both;}
 #kgsSplash .kgs-part{position:absolute;inset:0;will-change:transform,opacity;}
 #kgsSplash .kgs-part svg{width:100%;height:100%;display:block;overflow:visible;}
-#kgsSplash .kgs-eyes{z-index:1;opacity:0;transform-origin:50% 40%;transform:translateY(-34%) scaleY(1.25);
-animation:kgsDroop .85s cubic-bezier(.3,1.5,.5,1) 1.55s forwards;}
-#kgsSplash .kgs-horn-l{z-index:2;transform-origin:27% 22%;transform:scale(0) rotate(30deg);animation:kgsHorn .5s cubic-bezier(.3,1.7,.5,1) 1.22s forwards;}
-#kgsSplash .kgs-horn-r{z-index:2;transform-origin:73% 22%;transform:scale(0) rotate(-30deg);animation:kgsHorn .5s cubic-bezier(.3,1.7,.5,1) 1.34s forwards;}
-#kgsSplash .kgs-body{z-index:3;transform-origin:50.6% 41.5%;transform:rotate(180deg);animation:kgsSpin .95s cubic-bezier(.7,-0.35,.25,1.35) .62s forwards;}
-#kgsSplash .kgs-glint{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff6c8;box-shadow:0 0 12px 4px rgba(255,236,150,.85);
+#kgsSplash .kgs-body{z-index:3;opacity:0;animation:kgsFade .12s linear 3.18s forwards;}
+#kgsSplash .kgs-eyes{z-index:1;opacity:0;transform-origin:50% 44%;transform:translateY(-30%) scale(.2,.5);animation:kgsDrip .62s cubic-bezier(.35,1.45,.5,1) 3.34s forwards;}
+#kgsSplash .kgs-horn-l{z-index:2;transform-origin:27% 22%;transform:rotate(-420deg) scale(0);animation:kgsHorn .55s cubic-bezier(.25,1.3,.5,1) 3.2s forwards;}
+#kgsSplash .kgs-horn-r{z-index:2;transform-origin:73% 22%;transform:rotate(420deg) scale(0);animation:kgsHorn .55s cubic-bezier(.25,1.3,.5,1) 3.3s forwards;}
+#kgsSplash .kgs-glint{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff6c8;box-shadow:0 0 12px 4px rgba(255,220,120,.9);
 opacity:0;transform:scale(0);animation:kgsGlint .7s ease-out forwards;}
-#kgsSplash .kgs-name{position:absolute;left:0;right:0;z-index:2;top:calc(50% + min(26vw,135px));text-align:center;font:800 12px/1 system-ui,-apple-system,sans-serif;
-letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-content;margin:0 auto;padding:7px 10px 7px 16px;background:#fff;border-radius:20px;box-shadow:0 0 18px 10px #fff;animation:kgsName .7s ease 2.25s forwards;}
+#kgsSplash .kgs-name{position:absolute;left:0;right:0;top:calc(44% + min(25vw,128px));z-index:2;text-align:center;
+font:800 12px/1 system-ui,-apple-system,sans-serif;letter-spacing:.42em;text-transform:uppercase;color:#111;
+width:max-content;margin:0 auto;padding:7px 10px 7px 16px;background:#fff;border-radius:20px;box-shadow:0 0 18px 10px #fff;
+opacity:0;transform:translateY(6px);animation:kgsName .6s ease 4.05s forwards;}
 #kgsSplash .kgs-skip{position:absolute;bottom:max(22px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;font:600 11px system-ui,sans-serif;color:#999;opacity:0;transition:opacity .4s;}
 #kgsSplash.kgs-can-skip .kgs-skip{opacity:.75;}
-#kgsSplash.kgs-done .kgs-logo{animation:kgsBreath 2.4s ease-in-out infinite;opacity:1;transform:none;}
-@keyframes kgsWhite{to{transform:scale(70);}}
-@keyframes kgsZoom{to{transform:scale(1);}}
-@keyframes kgsTwinkle{0%,100%{opacity:0;}45%,60%{opacity:.42;}}
-@keyframes kgsIn{to{transform:scale(1);opacity:1;}}
-@keyframes kgsSpin{to{transform:rotate(0deg);}}
-@keyframes kgsHorn{to{transform:scale(1) rotate(0deg);}}
-@keyframes kgsDroop{0%{opacity:0;transform:translateY(-34%) scaleY(1.25);}25%{opacity:1;}70%{transform:translateY(3%) scaleY(.88) scaleX(1.05);}100%{opacity:1;transform:none;}}
+#kgsSplash.kgs-done .kgs-pop{animation:kgsBreath 2.4s ease-in-out infinite;}
+@keyframes kgsFade{to{opacity:1;}}
+@keyframes kgsHorn{to{transform:rotate(0deg) scale(1);}}
+@keyframes kgsDrip{0%{opacity:0;transform:translateY(-30%) scale(.2,.5);}18%{opacity:1;transform:translateY(-18%) scale(.45,1.5);}62%{transform:translateY(4%) scale(1.06,.86);}100%{opacity:1;transform:none;}}
+@keyframes kgsPop{0%{transform:scale(1);}35%{transform:scale(1.16);}65%{transform:scale(.95);}100%{transform:scale(1);}}
 @keyframes kgsGlint{0%{opacity:0;transform:scale(0);}40%{opacity:1;transform:scale(1.3);}100%{opacity:0;transform:scale(.2);}}
-@keyframes kgsName{to{opacity:1;}}
-@keyframes kgsBreath{0%,100%{transform:scale(1);}50%{transform:scale(1.025);}}
-@media (prefers-reduced-motion:reduce){
-#kgsSplash *{animation-duration:.01s !important;animation-delay:0s !important;}
-}</style>
+@keyframes kgsName{to{opacity:1;transform:none;}}
+@keyframes kgsBreath{0%,100%{transform:scale(1);}50%{transform:scale(1.025);}}</style>
 
 <div id="kgsSplash" aria-label="Kinfo Game Studio">
 
-    <div class="kgs-white"></div>
+    <canvas id="kgsCanvas"></canvas>
 
-    <div class="kgs-words" aria-hidden="true"></div>
+    <div class="kgs-logo"><div class="kgs-pop">
 
-    <div class="kgs-logo">
-
-        <!-- the eyes: two water droplets, waiting inside the crown -->
         <div class="kgs-part kgs-eyes">
             <svg viewBox="0 0 853 635">
                 <g stroke="#fff" stroke-width="12" paint-order="stroke">
@@ -3273,7 +3261,6 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
             </svg>
         </div>
 
-        <!-- the horns -->
         <div class="kgs-part kgs-horn-l">
             <svg viewBox="0 0 853 635"><path d="M8,22 L266,104 L222,130 L201,208 Z" fill="#d6c874" stroke="#fff" stroke-width="12" stroke-linejoin="round" paint-order="stroke"/></svg>
         </div>
@@ -3281,7 +3268,6 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
             <svg viewBox="0 0 853 635"><path d="M845,22 L587,104 L631,130 L652,208 Z" fill="#d6c874" stroke="#fff" stroke-width="12" stroke-linejoin="round" paint-order="stroke"/></svg>
         </div>
 
-        <!-- the crown -->
         <div class="kgs-part kgs-body">
             <svg viewBox="0 0 853 635">
                 <path d="M212,150 Q432,72 652,150 L652,428 L517,270 L432,386 L347,270 L212,428 Z" fill="#d6c874" stroke="#fff" stroke-width="14" stroke-linejoin="round" paint-order="stroke"/>
@@ -3289,7 +3275,7 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
             </svg>
         </div>
 
-    </div>
+    </div></div>
 
     <div class="kgs-name">Kinfo Game Studio</div>
 
@@ -3307,26 +3293,435 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
     var t0=Date.now();
 
-    /* the background: rows of the studio's name, each word fading in and out on its own beat */
-    var words=el.querySelector(".kgs-words"),html="";
+    /* ---------- the 3D crown, the vacuum and the words: one renderer, run in a worker if possible ---------- */
+    function kgsRenderer(ctx,W,H,P){
 
-    for(var r=0;r<20;r++){
+        var PI=Math.PI,GOLD=[214,200,116];
 
-        html+='<div class="kgs-row">';
+        function clamp(v,a,b){return v<a?a:v>b?b:v;}
 
-        for(var i=0;i<6;i++)
-            html+='<span style="animation-delay:'+(((r*7+i*5)%13)/13*2.6).toFixed(2)+'s">Kinfo Game Studio</span>';
+        function ease(u){u=clamp(u,0,1);return u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;}
 
-        html+="</div>";
+        function seg(t,a,b){return clamp((t-a)/(b-a),0,1);}
+
+        /* the spin: speeds up, holds, then slows to a stop with a spike facing you */
+        var W0=0,W1=10.5,TA=.25,TB=1.3,TC=2.62,TD=3.24;
+
+        function spinPre(t){
+
+            if(t<TA)
+                return 0;
+
+            if(t<TB){
+
+                var u=t-TA;
+
+                return .5*(W1/(TB-TA))*u*u;
+
+            }
+
+            return .5*W1*(TB-TA)+W1*(Math.min(t,TC)-TB);
+
+        }
+
+        var phiC=spinPre(TC),dist=W1*(TD-TC)/3,phiEnd=Math.ceil((phiC+dist)/(PI/3))*(PI/3);
+
+        function spin(t){
+
+            if(t<=TC)
+                return spinPre(t);
+
+            var u=seg(t,TC,TD);
+
+            return phiC+(phiEnd-phiC)*(1-Math.pow(1-u,3));
+
+        }
+
+        /* the tilt: a wobble that grows, up into a ring, then over and down upside down */
+        var A0=-.3,AEND=-PI-.05;
+
+        function pose(t){
+
+            var wob=seg(t,.8,1.45)*(1-seg(t,1.55,1.95)),amp=.24*wob*wob;
+
+            var a=A0+amp*Math.sin(t*9),roll=amp*.8*Math.cos(t*9);
+
+            a+=(-PI/2-A0)*ease(seg(t,1.4,2.0));
+
+            a+=(AEND+PI/2)*ease(seg(t,2.56,3.2));
+
+            return{a:a,roll:roll};
+
+        }
+
+        var R=1,HT=1.5,DEPTH=.72,D=5.2,N=72;
+
+        function topY(th){
+
+            var f=(th/(PI/3))%1;
+
+            if(f<0)
+                f+=1;
+
+            var tri=Math.abs(2*f-1);
+
+            return -HT/2+DEPTH*(1-tri);
+
+        }
+
+        function project(x,y,z,phi,ps,cx,cy,sc){
+
+            /* spin about the crown's own axis */
+            var c=Math.cos(phi),s=Math.sin(phi);
+
+            var x1=x*c+z*s,z1=-x*s+z*c;
+
+            /* tilt about the horizontal */
+            var ca=Math.cos(ps.a),sa=Math.sin(ps.a);
+
+            var y2=y*ca-z1*sa,z2=y*sa+z1*ca;
+
+            /* and a little roll while it's unsteady */
+            var cr=Math.cos(ps.roll),sr=Math.sin(ps.roll);
+
+            var x3=x1*cr-y2*sr,y3=x1*sr+y2*cr;
+
+            var k=D/(D-z2);
+
+            return{X:cx+x3*sc*k,Y:cy+y3*sc*k,Z:z2};
+
+        }
+
+        /* the words: rows of the studio's name, twinkling, pulled toward the ring as it drinks the black in */
+        var rows=[];
+
+        var fs=clamp(W*.058,20,38);
+
+        ctx.font="900 "+fs+"px system-ui,-apple-system,Helvetica,Arial,sans-serif";
+
+        var txt="KINFO GAME STUDIO",tw=ctx.measureText(txt).width+fs*.7;
+
+        for(var r=-2;r<Math.ceil(H/(fs*1.45))+3;r++){
+
+            for(var i=-1;i<Math.ceil(W/tw)+2;i++)
+                rows.push({x:i*tw+(r%2?-tw*.45:0),y:r*fs*1.45,ph:(r*7+i*5)%13/13*PI*2});
+
+        }
+
+        return function frame(t){
+
+            var cx=P.cx,cy=P.cy,sc=P.hw;
+
+            var phi=spin(t),ps=pose(t);
+
+            var suck=ease(seg(t,1.82,2.62));
+
+            /* the black, being drawn into the ring */
+            var base=[];
+
+            for(var k=0;k<N;k++){
+
+                var th=k/N*PI*2;
+
+                base.push(project(Math.sin(th)*R,HT/2,Math.cos(th)*R,phi,ps,cx,cy,sc));
+
+            }
+
+            ctx.globalCompositeOperation="source-over";
+
+            ctx.globalAlpha=1;
+
+            if(suck<=0){
+
+                ctx.fillStyle="#000";
+
+                ctx.fillRect(0,0,W,H);
+
+            }else{
+
+                ctx.fillStyle="#fff";
+
+                ctx.fillRect(0,0,W,H);
+
+                if(suck<1 || t<3.22){
+
+                    var big=Math.hypot(W,H),swirl=(1-suck)*2.2;
+
+                    ctx.fillStyle="#000";
+
+                    ctx.beginPath();
+
+                    for(var j=0;j<=N;j++){
+
+                        var b=base[j%N],ang=Math.atan2(b.Y-cy,b.X-cx)+swirl;
+
+                        var wob=1+.08*Math.sin(j/N*PI*10+t*12)*Math.sin(suck*PI);
+
+                        var bx=cx+Math.cos(ang)*big*wob,by=cy+Math.sin(ang)*big*wob;
+
+                        var px=bx+(b.X-bx)*suck,py=by+(b.Y-by)*suck;
+
+                        if(j)
+                            ctx.lineTo(px,py);
+                        else
+                            ctx.moveTo(px,py);
+
+                    }
+
+                    ctx.closePath();
+
+                    ctx.globalAlpha=1-seg(t,2.95,3.22);
+
+                    ctx.fill();
+
+                    ctx.globalAlpha=1;
+
+                }
+
+            }
+
+            /* the words, inverted against whatever's behind them */
+            var pull=Math.sin(suck*PI)*.18,rot=suck*(1-suck)*.5;
+
+            var zoom=1.6-.6*ease(seg(t,0,3.6));
+
+            ctx.save();
+
+            ctx.globalCompositeOperation="difference";
+
+            ctx.strokeStyle="#fff";
+
+            ctx.lineWidth=1.2;
+
+            ctx.font="900 "+fs+"px system-ui,-apple-system,Helvetica,Arial,sans-serif";
+
+            ctx.textBaseline="middle";
+
+            ctx.translate(cx,cy);
+
+            ctx.rotate(rot);
+
+            ctx.scale(zoom*(1-pull),zoom*(1-pull));
+
+            ctx.translate(-cx,-cy);
+
+            for(var q=0;q<rows.length;q++){
+
+                var w=rows[q];
+
+                var al=clamp(.5+.5*Math.sin(t*2.3+w.ph),0,1)*.42*seg(t,.1,.6);
+
+                if(al<.02)
+                    continue;
+
+                ctx.globalAlpha=al;
+
+                ctx.strokeText(txt,w.x,w.y);
+
+            }
+
+            ctx.restore();
+
+            /* the crown itself, until the flat logo takes over */
+            if(t>3.3)
+                return;
+
+            var appear=ease(seg(t,0,.45));
+
+            var fadeOut=1;
+
+            ctx.save();
+
+            ctx.globalAlpha=appear*fadeOut;
+
+            ctx.translate(cx,cy);
+
+            var s0=.4+.6*appear;
+
+            ctx.scale(s0,s0);
+
+            ctx.translate(-cx,-cy);
+
+            /* the inside: black, so it shows once the background's white */
+            var capFace=project(0,HT/2+1,0,phi,ps,cx,cy,sc).Z-project(0,HT/2,0,phi,ps,cx,cy,sc).Z;
+
+            var capA=1-seg(t,2.8,3.12);
+
+            function cap(){
+
+                if(capA<=0)
+                    return;
+
+                ctx.save();
+
+                ctx.globalAlpha*=capA;
+
+                ctx.fillStyle="#000";
+
+                ctx.beginPath();
+
+                for(var j=0;j<N;j++){
+
+                    if(j)
+                        ctx.lineTo(base[j].X,base[j].Y);
+                    else
+                        ctx.moveTo(base[j].X,base[j].Y);
+
+                }
+
+                ctx.closePath();
+
+                ctx.fill();
+
+                ctx.restore();
+
+            }
+
+            if(capFace<=0)
+                cap();
+
+            /* the band: each strip shaded like polished gold */
+            var quads=[];
+
+            for(var k2=0;k2<N;k2++){
+
+                var a0=k2/N*PI*2,a1=(k2+1)/N*PI*2,am=(a0+a1)/2;
+
+                var p0=base[k2],p1=base[(k2+1)%N];
+
+                var q0=project(Math.sin(a0)*R,topY(a0),Math.cos(a0)*R,phi,ps,cx,cy,sc);
+
+                var q1=project(Math.sin(a1)*R,topY(a1),Math.cos(a1)*R,phi,ps,cx,cy,sc);
+
+                var nIn=project(Math.sin(am)*R*1.2,0,Math.cos(am)*R*1.2,phi,ps,cx,cy,sc);
+
+                var nOut=project(Math.sin(am)*R,0,Math.cos(am)*R,phi,ps,cx,cy,sc);
+
+                var facing=nIn.Z-nOut.Z;
+
+                quads.push({pts:[p0,p1,q1,q0],z:(p0.Z+p1.Z+q0.Z+q1.Z)/4,outer:facing>0,lit:clamp(facing*4,-1,1),a:am+phi});
+
+            }
+
+            quads.sort(function(a,b){return(a.outer-b.outer)||(a.z-b.z);});
+
+            for(var m=0;m<quads.length;m++){
+
+                var qd=quads[m];
+
+                var l=qd.outer?.55+.55*qd.lit+.5*Math.pow(Math.max(0,Math.sin(qd.a*1+.9)),18)+.25*Math.pow(Math.max(0,qd.lit),8):.32+.18*Math.max(0,-qd.lit);
+
+                var rr=clamp(GOLD[0]*l,0,255)|0,gg=clamp(GOLD[1]*l,0,255)|0,bb=clamp(GOLD[2]*l*(qd.outer?1:.8),0,255)|0;
+
+                ctx.fillStyle="rgb("+rr+","+gg+","+bb+")";
+
+                ctx.strokeStyle=ctx.fillStyle;
+
+                ctx.lineWidth=1;
+
+                ctx.beginPath();
+
+                ctx.moveTo(qd.pts[0].X,qd.pts[0].Y);
+
+                for(var v=1;v<4;v++)
+                    ctx.lineTo(qd.pts[v].X,qd.pts[v].Y);
+
+                ctx.closePath();
+
+                ctx.fill();
+
+                ctx.stroke();
+
+            }
+
+            if(capFace>0)
+                cap();
+
+            ctx.restore();
+
+        };
 
     }
 
-    words.innerHTML=html;
+    /* where the flat logo's crown sits, so the 3D one lands exactly on it */
+    var logoBox=el.querySelector(".kgs-logo").getBoundingClientRect();
 
-    /* sparkles round the crown as it settles */
-    var logo=el.querySelector(".kgs-logo");
+    var P={
+        cx:logoBox.left+logoBox.width*(432/853),
+        cy:logoBox.top+logoBox.height*(258/635),
+        hw:logoBox.width*(220/853)
+    };
 
-    [[18,8,.25],[86,4,.4],[50,-6,.55],[8,60,2.05],[94,58,2.2]].forEach(function(g){
+    var cv=document.getElementById("kgsCanvas"),dpr=Math.min(window.devicePixelRatio || 1,3);
+
+    var Wd=window.innerWidth,Hd=window.innerHeight;
+
+    var END=4.6,stopped=false;
+
+    var worker=null;
+
+    try{
+
+        if(cv.transferControlToOffscreen && window.Worker && window.OffscreenCanvas){
+
+            var src="var R="+kgsRenderer.toString()+";"+
+                "onmessage=function(e){var d=e.data;if(d.stop){self.close();return;}var c=d.canvas,x=c.getContext('2d');"+
+                "x.scale(d.dpr,d.dpr);var f=R(x,d.W,d.H,d.P);"+
+                "function loop(){var t=(Date.now()-d.t0)/1000;f(t);if(t<d.END+.3)requestAnimationFrame(loop);}loop();};";
+
+            var url=URL.createObjectURL(new Blob([src],{type:"text/javascript"}));
+
+            worker=new Worker(url);
+
+            var off=cv.transferControlToOffscreen();
+
+            off.width=Math.round(Wd*dpr);
+
+            off.height=Math.round(Hd*dpr);
+
+            worker.postMessage({canvas:off,dpr:dpr,W:Wd,H:Hd,P:P,t0:t0,END:END},[off]);
+
+        }
+
+    }catch(e){
+
+        worker=null;
+
+    }
+
+    if(!worker){
+
+        /* no worker canvas on this device: draw it right here instead */
+        cv.width=Math.round(Wd*dpr);
+
+        cv.height=Math.round(Hd*dpr);
+
+        var x=cv.getContext("2d");
+
+        x.scale(dpr,dpr);
+
+        var f=kgsRenderer(x,Wd,Hd,P);
+
+        (function loop(){
+
+            if(stopped)
+                return;
+
+            var t=(Date.now()-t0)/1000;
+
+            f(t);
+
+            if(t<END+.3)
+                requestAnimationFrame(loop);
+
+        })();
+
+    }
+
+    /* sparkles at the pop */
+    var pop=el.querySelector(".kgs-pop");
+
+    [[14,6,3.9],[88,2,3.95],[50,-8,4.0],[6,62,4.05],[96,60,3.92],[50,96,4.1]].forEach(function(g){
 
         var d=document.createElement("div");
 
@@ -3338,12 +3733,22 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
         d.style.animationDelay=g[2]+"s";
 
-        logo.appendChild(d);
+        pop.appendChild(d);
 
     });
 
     /* ---------- sound: synthesised, scheduled ahead so it stays in time ---------- */
     var AC=window.AudioContext || window.webkitAudioContext,ctx=null,played={};
+
+    function env(g,at,peak,att,dur){
+
+        g.gain.setValueAtTime(0.0001,at);
+
+        g.gain.exponentialRampToValueAtTime(peak,at+att);
+
+        g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
+
+    }
 
     function tone(at,freq,to,dur,type,vol){
 
@@ -3356,11 +3761,7 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
         if(to)
             o.frequency.exponentialRampToValueAtTime(to,at+dur*.9);
 
-        g.gain.setValueAtTime(0.0001,at);
-
-        g.gain.exponentialRampToValueAtTime(vol || .2,at+.012);
-
-        g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
+        env(g,at,vol || .2,.012,dur);
 
         o.connect(g);
 
@@ -3372,7 +3773,7 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
     }
 
-    function whoosh(at,dur){
+    function noise(at,dur,f0,f1,f2,vol,q){
 
         var n=Math.floor(ctx.sampleRate*dur),buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
 
@@ -3385,17 +3786,17 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
         f.type="bandpass";
 
-        f.Q.value=1.4;
+        f.Q.value=q || 1.2;
 
-        f.frequency.setValueAtTime(260,at);
+        f.frequency.setValueAtTime(f0,at);
 
-        f.frequency.exponentialRampToValueAtTime(2600,at+dur*.55);
+        f.frequency.exponentialRampToValueAtTime(f1,at+dur*.6);
 
-        f.frequency.exponentialRampToValueAtTime(700,at+dur);
+        f.frequency.exponentialRampToValueAtTime(f2,at+dur);
 
         g.gain.setValueAtTime(0.0001,at);
 
-        g.gain.exponentialRampToValueAtTime(.28,at+dur*.5);
+        g.gain.exponentialRampToValueAtTime(vol,at+dur*.55);
 
         g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
 
@@ -3411,15 +3812,65 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
     }
 
-    /* each moment of the animation, and the sound that goes with it */
+    /* a metallic whir that follows the crown's spin speed */
+    function whir(at,dur,f0,f1,vol){
+
+        var o=ctx.createOscillator(),lfo=ctx.createOscillator(),lg=ctx.createGain(),fl=ctx.createBiquadFilter(),g=ctx.createGain();
+
+        o.type="sawtooth";
+
+        o.frequency.setValueAtTime(f0,at);
+
+        o.frequency.exponentialRampToValueAtTime(f1,at+dur);
+
+        lfo.frequency.setValueAtTime(f0/9,at);
+
+        lfo.frequency.exponentialRampToValueAtTime(f1/9,at+dur);
+
+        lg.gain.value=vol*.6;
+
+        fl.type="lowpass";
+
+        fl.frequency.value=900;
+
+        g.gain.setValueAtTime(0.0001,at);
+
+        g.gain.exponentialRampToValueAtTime(vol,at+dur*.35);
+
+        g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
+
+        lfo.connect(lg);
+
+        lg.connect(g.gain);
+
+        o.connect(fl);
+
+        fl.connect(g);
+
+        g.connect(ctx.destination);
+
+        o.start(at);
+
+        lfo.start(at);
+
+        o.stop(at+dur+.05);
+
+        lfo.stop(at+dur+.05);
+
+    }
+
     var cues=[
-        [0.05,function(a){tone(a,1318,0,.5,"sine",.12);tone(a+.08,1568,0,.5,"sine",.11);tone(a+.16,2093,0,.7,"sine",.1);}],
-        [0.62,function(a){whoosh(a,.95);}],
-        [1.24,function(a){tone(a,180,620,.16,"triangle",.3);tone(a,2400,0,.03,"square",.05);}],
-        [1.36,function(a){tone(a,200,700,.16,"triangle",.3);tone(a,2600,0,.03,"square",.05);}],
-        [1.62,function(a){tone(a,1250,380,.17,"sine",.32);}],
-        [1.78,function(a){tone(a,1150,340,.17,"sine",.3);}],
-        [2.3,function(a){tone(a,659,0,1.6,"sine",.14);tone(a,988,0,1.5,"sine",.1);tone(a,1319,0,1.3,"triangle",.06);}]
+        [0.05,function(a){tone(a,1318,0,.5,"sine",.11);tone(a+.08,1568,0,.5,"sine",.1);tone(a+.16,2093,0,.7,"sine",.09);}],
+        [0.3,function(a){whir(a,1.6,70,260,.07);}],
+        [1.0,function(a){tone(a,520,470,.22,"triangle",.06);tone(a+.24,560,500,.22,"triangle",.06);}],
+        [1.8,function(a){noise(a,.85,3200,900,160,.32,1.6);tone(a+.1,220,55,.8,"sine",.18);}],
+        [2.62,function(a){tone(a,110,42,.28,"sine",.32);noise(a,.18,400,200,120,.18,.9);}],
+        [2.6,function(a){whir(a,.7,240,60,.06);}],
+        [3.2,function(a){tone(a,1900,0,.25,"triangle",.07);tone(a,240,720,.15,"triangle",.24);}],
+        [3.3,function(a){tone(a,2100,0,.25,"triangle",.07);tone(a,260,760,.15,"triangle",.24);}],
+        [3.4,function(a){tone(a,1250,380,.17,"sine",.3);}],
+        [3.55,function(a){tone(a,1150,340,.17,"sine",.28);}],
+        [3.88,function(a){tone(a,880,1760,.09,"square",.05);tone(a+.03,659,0,1.5,"sine",.14);tone(a+.03,988,0,1.4,"sine",.1);tone(a+.03,1319,0,1.2,"triangle",.06);}]
     ];
 
     function schedule(){
@@ -3434,7 +3885,6 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
             if(played[i])
                 return;
 
-            /* a moment that has already passed: only the finale is worth playing late */
             if(c[0]<now-.15 && i!==cues.length-1)
                 return;
 
@@ -3461,7 +3911,6 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
     }catch(e){}
 
-    /* phones only allow sound after a touch: the first tap brings the sound in */
     function unlock(){
 
         try{
@@ -3474,7 +3923,7 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
     }
 
     /* ---------- done when the animation's finished and the game is ready ---------- */
-    var minMs=3100,ready=document.readyState==="complete",closed=false;
+    var minMs=4500,ready=document.readyState==="complete",closed=false;
 
     function close(){
 
@@ -3483,9 +3932,13 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
         closed=true;
 
+        stopped=true;
+
         el.classList.add("kgs-out");
 
         setTimeout(function(){
+
+            try{if(worker)worker.terminate();}catch(e){}
 
             if(el.parentNode)
                 el.parentNode.removeChild(el);
@@ -3518,7 +3971,7 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
         if(!closed)
             el.classList.add("kgs-can-skip");
 
-    },2600);
+    },4400);
 
     el.addEventListener("pointerdown",function(e){
 
@@ -3526,13 +3979,12 @@ letter-spacing:.42em;text-transform:uppercase;color:#111;opacity:0;width:max-con
 
         unlock();
 
-        if(ready && Date.now()-t0>900)
+        if(ready && Date.now()-t0>1200)
             close();
 
     });
 
-    /* never get stuck in front of the game */
-    setTimeout(close,12000);
+    setTimeout(close,14000);
 
 })();
 </script>
