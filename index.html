@@ -5434,6 +5434,7 @@ let roamingShipId = null;
 let roamingPetId = null;
 let roamingHeadingUp = false;
 let roamingTerrainPace = 1;
+var R53C = .4;
 const ROAM_BASE_PACE = .42;
 const PET_SPECIES_PACE = {
 penguin: .8,
@@ -5513,7 +5514,7 @@ const WANDER_WALK_FRACTION = .55;
 const ROAM_CAMERA_TILT = .78;
 const SHIP_LAT = Math.PI / 2 -
 SURFACE_ITEM_LAT_OFFSET + .03;
-const ROAM_START_LAT_OFFSET = .42;
+const ROAM_START_LAT_OFFSET = .42 * R53C;
 const HOME_VIEW_TILT = .915;
 const PLANET_VIEW_LAT = SHIP_LAT - HOME_VIEW_TILT;
 const EARTH_CONTINENTS_3D = [
@@ -15528,7 +15529,7 @@ p.at = null;
 if (p.carry) {
 const spot = corpseDefaultSpot(p.id);
 try {
-worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .05, lon: spot.lon + .04 } }, p.carry);
+worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .05 * R53C, lon: spot.lon + .04 * R53C } }, p.carry);
 }
 catch (error) { }
 p.carry = null;
@@ -16592,7 +16593,7 @@ bossSfx("revive");
 st.lily = false;
 }
 else if (st.reward) {
-const at = { t: "planet", lat: spot.lat - .045, lon: spot.lon + .05 };
+const at = { t: "planet", lat: spot.lat - .045 * R53C, lon: spot.lon + .05 * R53C };
 if (!worldPlacePut(planetId, { t: "ground", at }, st.reward))
 worldPlacePut(planetId, { t: "vault" }, st.reward);
 showShipToast("🌺 The plant drops " + (st.reward.n > 1 ? st.reward.n + "× " : "") + worldItemInfo(st.reward).name + " at its feet");
@@ -19631,10 +19632,10 @@ return null;
 let lat = spot.lat, lon = spot.lon;
 const blockers = Object.values(world.structureLatLon || {}).concat([{ lat: SHIP_LAT, lon: 0 }]);
 for (let i = 0; i < 6; i++) {
-const near = blockers.some(b => Math.hypot(b.lat - lat, (b.lon - lon) * Math.cos(lat)) < .13);
+const near = blockers.some(b => Math.hypot(b.lat - lat, (b.lon - lon) * Math.cos(lat)) < .13 * R53C);
 if (!near)
 break;
-lat -= .045;
+lat -= .045 * R53C;
 }
 return { lat, lon };
 }
@@ -20469,7 +20470,7 @@ return ('<div class="pet-vend">' +
 '<div class="pv-tray"></div>' +
 '</div>');
 }
-const R26_PEN = { drop: .38, r: .105, posts: 20 };
+const R26_PEN = { drop: .38, r: .105 * R53C, posts: 20 };
 function r26PenCentre__r53() {
 return { lat: SHIP_LAT - R26_PEN.drop, lon: 0 };
 }
@@ -20941,7 +20942,7 @@ drawGlobeNeonRim(c, g.gcx, g.gcy, g.R, getPlanetLook(planetId).atmosphere, 2.4);
 }
 catch (error) { }
 try {
-const pad = r27PenProject(SHIP_LAT - .06, 0);
+const pad = r27PenProject(SHIP_LAT - .06 * R53C, 0);
 if (pad.visible) {
 const k = .9;
 c.save();
@@ -21335,13 +21336,13 @@ const drops = part.heart ? 3 : 1;
 for (let i = 0; i < drops; i++) {
 const id = R28_DROPS[Math.floor(Math.random() * R28_DROPS.length)];
 try {
-worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat - .05 + i * .02, lon: part.lon + (i - 1) * .05 } }, { k: "item", r: id, n: 1 });
+worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat + (-.05 + i * .02) * R53C, lon: part.lon + (i - 1) * .05 * R53C } }, { k: "item", r: id, n: 1 });
 }
 catch (error) { }
 }
 if (part.heart) {
 try {
-worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat - .08, lon: part.lon } }, { k: "coin", r: "coin", n: 25 });
+worldPlacePut(selectedStartPlanet, { t: "ground", at: { t: "planet", lat: part.lat - .08 * R53C, lon: part.lon } }, { k: "coin", r: "coin", n: 25 });
 }
 catch (error) { }
 }
@@ -21571,7 +21572,7 @@ const spot = (world.structureLatLon || {}).stock || { lat: SHIP_LAT - .25, lon: 
 let piles = 0;
 const drop = d => {
 const a = piles * 2.4, r = .04 + .025 * Math.sqrt(piles);
-worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .03 + Math.cos(a) * r, lon: spot.lon + Math.sin(a) * r * 1.4 } }, d);
+worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat + (-.03 + Math.cos(a) * r) * R53C, lon: spot.lon + Math.sin(a) * r * 1.4 * R53C } }, d);
 piles++;
 };
 let bags = Math.min(8, Math.ceil(getBank(planetId) / 20));
@@ -21643,7 +21644,11 @@ const col = f > .6 ? "#7dffb0" : f > .3 ? "#ffd76b" : "#ff5c5c";
 c.save();
 c.font = "800 " + fs + "px system-ui,sans-serif";
 const tw = c.measureText(name).width + 12;
-x = Math.max(tw / 2 + 4, Math.min((c.canvas.clientWidth || 1e5) - tw / 2 - 4, x));
+{
+const r53W = c.canvas.clientWidth || 1e5;
+if (x > -tw * .3 && x < r53W + tw * .3)
+x = Math.max(tw / 2 + 4, Math.min(r53W - tw / 2 - 4, x));
+}
 const bx = x - tw / 2, by = y - fs * .8, bw = tw, bh = fs * 1.6;
 c.fillStyle = "rgba(6,10,26,.82)";
 c.beginPath();
@@ -22071,7 +22076,7 @@ bossMark(true);
 bossAnnounce("🛡 The raid on " + bossPlanetName(a.target) + " is repelled! +" + reward + " coins banked there, and everything they stole came back.");
 }
 function r29Landing(k) {
-return { lat: SHIP_LAT - .02 - (Math.floor(k / 2)) * .07, lon: (k % 2 ? 1 : -1) * (.66 + .16 * Math.floor(k / 2)) };
+return { lat: SHIP_LAT - (.02 + (Math.floor(k / 2)) * .07) * R53C, lon: (k % 2 ? 1 : -1) * (.66 + .16 * Math.floor(k / 2)) * R53C };
 }
 const r29R = {};
 const r29Beams = [];
@@ -22083,7 +22088,7 @@ const dLat = t.lat - s.lat, dLon = r28Wrap(t.lon - s.lon);
 const d = Math.hypot(dLat, dLon * Math.cos(s.lat));
 if (d < 1e-4)
 return 0;
-const step = Math.min(d, speed * dt);
+const step = Math.min(d, speed * R53C * dt);
 s.dLat = dLat / d * step;
 s.dLon = dLon / d * step;
 s.lat += s.dLat;
@@ -22098,7 +22103,7 @@ return null;
 const home = r29Landing(en.i);
 let s = r29R[f.id];
 if (!s)
-s = r29R[f.id] = { lat: home.lat - .03, lon: home.lon, at: now, lastHp: en.hp, dmgAt: 0, cd: 0, dLat: 0, dLon: 0, carry: null, goal: null };
+s = r29R[f.id] = { lat: home.lat - .03 * R53C, lon: home.lon, at: now, lastHp: en.hp, dmgAt: 0, cd: 0, dLat: 0, dLon: 0, carry: null, goal: null };
 const dt = Math.min(.1, Math.max(0, (now - s.at) / 1000));
 s.at = now;
 if (en.hp < s.lastHp)
@@ -22136,7 +22141,7 @@ goal = { kind: "item", id: g.x.id, p: g.p };
 }
 else if (hurt && f.power && roamingActive) {
 const me = { lat: roamingLat, lon: roamingLon };
-if (r29Dist(s, me) < .3)
+if (r29Dist(s, me) < .3 * R53C)
 goal = { kind: "fight", p: me };
 }
 if (!goal && ground.length) {
@@ -22175,7 +22180,7 @@ f.power = g.r;
 }
 else {
 if (f.power) {
-worldPlacePut(planet, { t: "ground", at: { t: "planet", lat: s.lat - .02, lon: s.lon + .03 } }, { k: "item", r: f.power, n: 1 });
+worldPlacePut(planet, { t: "ground", at: { t: "planet", lat: s.lat - .02 * R53C, lon: s.lon + .03 * R53C } }, { k: "item", r: f.power, n: 1 });
 f.power = null;
 }
 s.carry = { k: g.k, r: g.r, n: g.n || 1 };
@@ -22665,7 +22670,7 @@ if (!r30Ruined(planetId, "stock"))
 return worldPlacePut(planetId, { t: "vault" }, d);
 const spot = ((world && world.structureLatLon) || {}).stock || { lat: SHIP_LAT - .25, lon: -.235 };
 const a = Math.random() * Math.PI * 2;
-return worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat - .03 + Math.cos(a) * .04, lon: spot.lon + Math.sin(a) * .05 } }, d);
+return worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: spot.lat + (-.03 + Math.cos(a) * .04) * R53C, lon: spot.lon + Math.sin(a) * .05 * R53C } }, d);
 }
 function r30RuinedNotice(planetId, id) {
 r30Toast(R30_CORE[id].icon + " The " + R30_CORE[id].name + " is in ruins — tap it on the planet and press Build");
@@ -40113,7 +40118,7 @@ const all = cv._starHitAreas || [];
 const ey = Math.max(...areas.map(a => a.y));
 let best = null;
 [[0, 110], [-120, 70], [120, 70], [-140, 0], [140, 0], [-110, 120], [110, 120], [0, 150]].forEach(o => {
-const cx = clamp(x + o[0], 60, w - 60), cy = clamp(ey + o[1], 80, h - 140);
+const cx = clamp(x + o[0], 84, w - 84), cy = clamp(ey + o[1], 80, h - (w > h * 1.15 ? 70 : 140));
 const clear = Math.min(...all.map(a => Math.hypot(a.x - cx, a.y - cy) - (a.r || 30) * .6), 999);
 if (!best || clear > best.clear + 4)
 best = { x: cx, y: cy, clear };
@@ -43025,7 +43030,7 @@ var r53U = 420, r53K = 1, r53UP = 420, r53Zs = 1, r53ZT = 0, r53Rim = null;
 function r53Fwd(x, y, z) {
 const V = R53V;
 let y1 = y * V.c0 - z * V.s0, z1 = y * V.s0 + z * V.c0;
-const r = Math.sqrt(x * x + y1 * y1);
+const r = V.s === 1 ? 0 : Math.sqrt(x * x + y1 * y1);
 if (r > 1e-9) {
 const h = Math.atan2(r, z1) * .5;
 const d = 2 * Math.atan2(V.s * Math.sin(h), Math.cos(h)), f = Math.sin(d) / r;
@@ -43041,7 +43046,7 @@ return R53O;
 function r53Inv(x, y, z) {
 const V = R53V;
 let y1 = y * V.cp - z * V.sp, z1 = y * V.sp + z * V.cp;
-const r = Math.sqrt(x * x + y1 * y1);
+const r = V.s === 1 ? 0 : Math.sqrt(x * x + y1 * y1);
 if (r > 1e-9) {
 const h = Math.atan2(r, z1) * .5;
 const d = 2 * Math.atan2(Math.sin(h), V.s * Math.cos(h)), f = Math.sin(d) / r;
@@ -43125,38 +43130,44 @@ return r53Match(R) && R53V.inScene;
 function r53Setup(width, height) {
 const land = width > height * 1.08;
 const U = land ? Math.min(width * .4, height * .7) : Math.min(width, height * .56);
-const Hs = U * (land ? 2.05 : 1.45);
-const Tp = land ? 1.18 : .94;
-const Fy = height * (land ? .64 : .665);
-const Rbig = land ? Math.max(width * 1.6, height * .34 / (1 - Math.sin(Tp))) : Math.max(width * 2.6, U * 2.6);
 const now = performance.now(), dt = r53ZT ? Math.min(.1, (now - r53ZT) / 1000) : 0;
 r53ZT = now;
 const zt = roamingActive && !roomState ? 1.6 : 1;
 r53Zs += (zt - r53Zs) * (dt ? 1 - Math.exp(-dt * 5) : 1);
-R53P = { U, K: Math.min(1, U / 420), Hs: Hs * r53Zs, Tp, Rbig, cy: Fy + Rbig * Math.sin(Tp), land, Z: r53Zs };
-r53U = U * r53Zs;
+const Z = r53Zs, roamK = Math.max(0, Math.min(1, (Z - 1) / .6));
+const Hs = U * (land ? 2.05 : 1.45) * Z;
+const R = Hs / R53C;
+const Fy = height * (land ? .64 : .665);
+const depth = height * ((land ? .26 : .225) + ((land ? .34 : .3) - (land ? .26 : .225)) * roamK);
+const Tp = Math.max(.6, Math.min(1.4, Math.asin(Math.max(-1, Math.min(1, 1 - depth / R)))));
+R53P = { U, K: Math.min(1, U / 420), Hs, Tp, Rbig: R, cy: Fy + R * Math.sin(Tp), land, Z };
+r53U = U * Z;
 r53UP = U;
 r53K = R53P.K;
-return Rbig;
+return R;
 }
 function r53SkyY(height) {
-const rim = r53Rim == null ? height * .42 : r53Rim;
-return Math.max(height * .12, rim - Math.max(13 * r53K, r53UP * .038) * .55);
+const rim = r53Rim == null ? height * .44 : r53Rim;
+return Math.max(height * .1, rim - Math.max(13, r53UP * .038) * 1.45 - 6);
 }
 function r53Engage(radius, flight) {
 const P = R53P;
 const T0 = roamingActive ? ROAM_CAMERA_TILT : HOME_VIEW_TILT;
 const e = Math.min(1, Math.max(0, flight * 1.4));
 const ease = e * e * (3 - 2 * e);
-const s = (P.Hs / P.Rbig) + (1 - P.Hs / P.Rbig) * ease;
 const Tp = P.Tp + (T0 - P.Tp) * ease;
 R53V.R = radius;
-R53V.s = s;
+R53V.s = 1;
+R53V.T0 = T0;
+R53V.Tp = Tp;
 R53V.c0 = Math.cos(T0);
 R53V.s0 = Math.sin(T0);
 R53V.cp = Math.cos(Tp);
 R53V.sp = Math.sin(Tp);
-R53V.key = s.toFixed(4) + "|" + Tp.toFixed(4) + "|" + T0;
+R53V.key = Tp.toFixed(4) + "|" + T0;
+}
+function r53Walk() {
+return (typeof r31Run !== "undefined" && r31Run) || (typeof r32Run !== "undefined" && r32Run) ? 1 : R53C;
 }
 function r53Persp(proj) {
 if (!R53V || !(R53V.R > 0) || !proj)
@@ -43168,6 +43179,8 @@ return r53Scene(R) ? R53V.key : "";
 }
 function r53LL(east, north, fromLat, fromLon) {
 const L = fromLat == null ? SHIP_LAT : fromLat, L0 = fromLon || 0;
+east *= R53C;
+north *= R53C;
 const d = Math.hypot(east, north);
 if (d < 1e-9)
 return { lat: L, lon: L0 };
@@ -43246,7 +43259,7 @@ const list = [];
 r53SceneryCache[planetId] = list;
 if (typeof r39IsStn === "function" && r39IsStn(planetId))
 return list;
-const rng = exploreRng("r53scenery|" + planetId);
+const rng = exploreRng("r53scenery2|" + planetId);
 const kinds = (EXPLORE_DECOR[planetId] || EXPLORE_DECOR.earth).filter(k => k !== "bush");
 const forest = R53_FOREST[planetId] || kinds;
 const reserved = r53Reserved();
@@ -43259,15 +43272,38 @@ catch (error) {
 return TERRAIN.GROUND;
 }
 };
+const add = (lat, lon, inForest) => {
+const t = terrainAt(lat, lon);
+const wet = t === TERRAIN.WATER;
+if (!groundLike(t) && !(wet && planetId === "neptune"))
+return;
+let type = inForest ? forest[Math.floor(rng() * forest.length)] : kinds[Math.floor(rng() * kinds.length)];
+if (wet)
+type = rng() < .5 ? "kelp" : "coral";
+const cl = Math.cos(lat);
+list.push({
+id: "r53s" + list.length,
+type,
+lat,
+lon,
+vx: cl * Math.sin(lon),
+vy: Math.sin(lat),
+vz: cl * Math.cos(lon),
+scale: inForest ? .85 + rng() * .45 : .6 + rng() * .45,
+flip: rng() < .5 ? -1 : 1,
+seed: Math.floor(rng() * 4) * 25 + 3
+});
+};
+const HOME = { e: 1.5, s: -.65, n: 1.65 };
 const blobs = [];
-const nb = 4 + Math.floor(rng() * 3);
+const nb = 7 + Math.floor(rng() * 3);
 for (let i = 0; i < nb; i++) {
 const side = i % 2 ? 1 : -1;
-const far = rng() < .45;
+const far = rng() < .4;
 blobs.push({
-e: far ? (rng() * 1.1 - .55) : side * (.42 + rng() * .38),
-n: far ? (.62 + rng() * .45) : (-.3 + rng() * .85),
-r: .11 + rng() * .1
+e: far ? (rng() * 2.2 - 1.1) : side * (.45 + rng() * .95),
+n: far ? (.7 + rng() * .9) : (-.55 + rng() * 1.2),
+r: .13 + rng() * .16
 });
 }
 const forestAt = (e, n) => {
@@ -43279,59 +43315,44 @@ f = Math.max(f, 1 - q * q);
 return f;
 };
 const near = (e, n) => reserved.some(r => Math.hypot(e - r[0], n - r[1]) < r[2]);
-const step = .062;
-for (let n = -.48; n < 1.12; n += step) {
-for (let e = -.95; e < .95; e += step) {
+const step = .064;
+for (let n = HOME.s; n < HOME.n; n += step) {
+for (let e = -HOME.e; e < HOME.e; e += step) {
 const je = e + (rng() - .5) * step * .9, jn = n + (rng() - .5) * step * .9;
 const f = forestAt(je, jn);
 const roll = rng();
 const inForest = f > 0 && roll < .35 + f * .6;
-if (!inForest && roll > (Math.abs(je) > .36 || jn > .42 ? .16 : .07))
+if (!inForest && roll > (Math.abs(je) > .36 || jn > .42 ? .13 : .07))
 continue;
 if (near(je, jn))
 continue;
 const ll = r53LL(je, jn);
-const t = terrainAt(ll.lat, ll.lon);
-const wet = t === TERRAIN.WATER;
-if (!groundLike(t) && !(wet && planetId === "neptune"))
-continue;
-let type = inForest ? forest[Math.floor(rng() * forest.length)] : kinds[Math.floor(rng() * kinds.length)];
-if (wet)
-type = rng() < .5 ? "kelp" : "coral";
-list.push({
-id: "r53s" + list.length,
-type,
-lat: ll.lat,
-lon: ll.lon,
-scale: inForest ? .85 + rng() * .45 : .6 + rng() * .45,
-flip: rng() < .5 ? -1 : 1,
-seed: Math.floor(rng() * 4) * 25 + 3
-});
+add(ll.lat, ll.lon, inForest);
 }
 }
-for (let i = 0; i < 70; i++) {
-const lat = Math.asin(rng() * 1.9 - .95), lon = rng() * Math.PI * 2 - Math.PI;
+const inHome = (lat, lon) => {
 const en = r53EN(lat, lon);
-if (en.d < 1.15)
+const e = en.e / R53C, n = en.n / R53C;
+return Math.abs(e) < HOME.e + .05 && n > HOME.s - .05 && n < HOME.n + .05;
+};
+const woods = Math.round(70 / R53C);
+for (let i = 0; i < woods; i++) {
+const lat = Math.asin(rng() * 1.92 - .96), lon = rng() * Math.PI * 2 - Math.PI;
+if (inHome(lat, lon) || !groundLike(terrainAt(lat, lon)))
 continue;
-const t = terrainAt(lat, lon);
-if (!groundLike(t))
-continue;
-const cluster = rng() < .35;
-const count = cluster ? 4 + Math.floor(rng() * 5) : 1;
+const r = (.1 + rng() * .2) * R53C, count = Math.round(6 + rng() * 16);
 for (let j = 0; j < count; j++) {
-const a = rng() * Math.PI * 2, r = cluster ? rng() * .09 : 0;
-const la = lat + Math.cos(a) * r, lo = lon + Math.sin(a) * r / Math.max(.2, Math.cos(lat));
-list.push({
-id: "r53g" + list.length,
-type: cluster ? forest[Math.floor(rng() * forest.length)] : kinds[Math.floor(rng() * kinds.length)],
-lat: la,
-lon: lo,
-scale: .7 + rng() * .5,
-flip: rng() < .5 ? -1 : 1,
-seed: Math.floor(rng() * 4) * 25 + 3
-});
+const a = rng() * Math.PI * 2, q = Math.sqrt(rng()) * r;
+const la = lat + Math.cos(a) * q, lo = lon + Math.sin(a) * q / Math.max(.2, Math.cos(lat));
+if (!inHome(la, lo))
+add(la, lo, true);
 }
+}
+const loose = Math.round(300 / R53C);
+for (let i = 0; i < loose; i++) {
+const lat = Math.asin(rng() * 1.94 - .97), lon = rng() * Math.PI * 2 - Math.PI;
+if (!inHome(lat, lon))
+add(lat, lon, false);
 }
 return list;
 }
@@ -43369,7 +43390,13 @@ if (!list.length)
 return;
 const base = Math.max(40 * r53K, p.width * .21) * .56;
 const W = p.W || p.width * 3, H = world.scene && world.scene.H || 2000;
+const T0 = R53V.T0 || HOME_VIEW_TILT, Tp = R53V.Tp || T0;
+const fl = p.viewLat + T0, fo = p.viewLon;
+const fx = Math.cos(fl) * Math.sin(fo), fy = Math.sin(fl), fz = Math.cos(fl) * Math.cos(fo);
+const reach = Math.cos(Math.min(Math.PI, Math.PI / 2 - Tp + .22 + (W / Math.max(1, p.R))));
 for (const d of list) {
+if (d.vx * fx + d.vy * fy + d.vz * fz < reach)
+continue;
 const proj = projectSphere(d.lat, d.lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
 if (!proj.visible)
 continue;
@@ -43507,6 +43534,7 @@ st.textContent = "@media (orientation:landscape) and (max-height:620px){" +
 ".rank-circle-wrap{top:calc(env(safe-area-inset-top,0px) + 12px);left:calc(env(safe-area-inset-left,0px) + 14px);transform:none;}" +
 ".focus-bottom{left:auto;right:calc(env(safe-area-inset-right,0px) + 14px);padding:0;align-items:flex-end;width:min(300px,40vw);}" +
 ".focus-launch-info{text-align:right;}" +
+"#starMapCloseBtn.star-map-close{left:auto!important;right:calc(env(safe-area-inset-right,0px) + 14px)!important;top:calc(env(safe-area-inset-top,0px) + 12px)!important;bottom:auto!important;transform:none!important;}" +
 "}";
 document.head.appendChild(st);
 })();
@@ -49124,7 +49152,7 @@ if (!cl)
 return;
 let lift = opts.lift || 1.05;
 if (r53Scene(R))
-lift = 1 + (lift - 1) * Math.max(.2, R53V.s);
+lift = 1 + (lift - 1) * R53C;
 const Rc = R * lift;
 const time = opts.time || 0;
 const fps = opts.fps || 8;
@@ -49686,10 +49714,9 @@ const authored = {};
 PLANETS.forEach(p => {
 if (Number.isFinite(p.x) &&
 Number.isFinite(p.y)) {
-authored[p.id] = {
-x: p.x / 100 * width,
-y: p.y / 100 * mapHeight
-};
+authored[p.id] = width > mapHeight * 1.15
+? { x: width * (.13 + .8 * (1 - p.y / 100)), y: mapHeight * (.12 + .78 * (p.x / 100)) }
+: { x: p.x / 100 * width, y: p.y / 100 * mapHeight };
 }
 });
 for (let pass = 0; pass < 4; pass++) {
@@ -49724,8 +49751,7 @@ const routeLengths = ROUTES
 const L = routeLengths.length
 ? routeLengths.reduce((s, v) => s + v, 0) / routeLengths.length
 : Math.min(width, mapHeight) * .25;
-const home = authored.earth ||
-{ x: width / 2, y: mapHeight * .82 };
+const home = authored.earth || (width > mapHeight * 1.15 ? { x: width * .2, y: mapHeight / 2 } : { x: width / 2, y: mapHeight * .82 });
 const span = n <= 1
 ? 0
 : Math.min(Math.PI * 2 * (n - 1) / n, (80 * (n - 1)) * Math.PI / 180);
@@ -51040,11 +51066,11 @@ Math.max(.3, Math.abs(cosLat));
 roamingLon =
 wrapAngle(roamingLon +
 dirX * eastScreen * roamingSpeedFraction *
-roamingPaceNow() * dt);
+roamingPaceNow() * r53Walk() * dt);
 roamingLat =
 wrapAngle(roamingLat -
 dirY * roamingSpeedFraction *
-roamingPaceNow() * dt);
+roamingPaceNow() * r53Walk() * dt);
 roamingHeadingUp = dirY < -.35;
 if (dirY > .35)
 roamingHeadingUp = false;
@@ -54146,7 +54172,7 @@ const bush = exploreLayout(planetId).decor.find(d => d.id === bushId);
 if (!bush || !exploreBushRipe(planetId, bush))
 return;
 exploreState(planetId).picked[bushId] = Date.now();
-worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: bush.lat - .085, lon: bush.lon + (Math.random() < .5 ? -1 : 1) * .07 } }, { k: "snack", r: "berry", n: 2 });
+worldPlacePut(planetId, { t: "ground", at: { t: "planet", lat: bush.lat - .085 * R53C, lon: bush.lon + (Math.random() < .5 ? -1 : 1) * .07 * R53C } }, { k: "snack", r: "berry", n: 2 });
 savePlanetProgress();
 }
 function exploreHitRock(planetId, rockId, amount) {
@@ -55021,7 +55047,7 @@ c.restore();
 const exploreRepairSent = {};
 function exploreRepairTick(planetId, ruin, rep, p, composeQueue, size, time) {
 const roamPet = roamingActive && !roomState ? getRoamingPet() : null;
-const near = roamPet ? exploreAngle(roamingLat, roamingLon, ruin.lat, ruin.lon) < .16 : false;
+const near = roamPet ? exploreAngle(roamingLat, roamingLon, ruin.lat, ruin.lon) < .16 * R53C : false;
 const key = ruin.id;
 if (rep) {
 const need = rep.need || exploreRepairNeedMs(planetId);
@@ -56493,7 +56519,7 @@ const idleT = petSide *
 petRank * .12);
 const idleAngle = -Math.PI / 2 +
 idleT;
-const wander = Math.sin(time * .8 + seed) * .05;
+const wander = Math.sin(time * .8 + seed) * .05 * R53C;
 let wanderPosition = null;
 if (structurePositionList.length > 1) {
 const wanderClock = time + seed * 3.7;
@@ -56557,10 +56583,9 @@ wander * .4
 : idleAngle + wander;
 const latWander = Math.sin(time * .55 +
 seed * 1.7 +
-petIndex * 2.3) * .12;
+petIndex * 2.3) * .12 * R53C;
 const petLat = targetPosition
-? targetPosition.lat -
-.11 +
+? targetPosition.lat - .11 * R53C +
 latWander * .3
 : (basePosition
 ? basePosition.lat
