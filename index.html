@@ -42190,6 +42190,413 @@ hideHomeTip(false);
 homeTipLastInteraction = performance.now();
 }, HOME_TIP_SHOW_DURATION + 800);
 }
+var r51 = { thumbs: {}, tab: "rank" };
+const R51_ICONS = {
+rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 2c3 2.5 4.5 6 4.5 10.5L14 16h-4l-2.5-3.5C7.5 8 9 4.5 12 2z"/><circle cx="12" cy="9.5" r="1.8"/><path d="M8.5 13.5L5.5 16l1 3 3-2M15.5 13.5l3 2.5-1 3-3-2M10.5 19l1.5 3 1.5-3"/></svg>',
+star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5L2.5 9.3l6.6-.8z"/></svg>',
+check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>',
+wait: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6.5V12l3.5 2.5"/></svg>',
+ship: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l3 9 6 5-9-2-9 2 6-5z"/></svg>',
+station: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5.5" cy="15" r="3.2"/><circle cx="18.5" cy="15" r="3.2"/><circle cx="12" cy="7" r="3.6"/><path d="M8.7 15h6.6M12 10.6v4.4"/></svg>',
+rank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M5 15l7-5 7 5M5 20l7-5 7 5"/><path d="M12 2.5l1.6 3.2 3.4.4-2.5 2.3.7 3.3L12 10l-3.2 1.7.7-3.3L7 6.1l3.4-.4z" fill="currentColor" stroke="none"/></svg>',
+podium: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M2.5 21h19M9 21V9h6v12M3 21v-7h6M15 21v-9h6v9"/><path d="M12 2.8l.9 1.9 2 .2-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.2z" fill="currentColor" stroke="none"/></svg>',
+globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c3 3 3.8 6.2 3.8 9.5S15 18.5 12 21.5M12 2.5C9 5.5 8.2 8.7 8.2 12S9 18.5 12 21.5"/></svg>',
+lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor" fill-opacity=".25"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>',
+close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+music: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 17.5a3 3 0 1 1-2-2.8V5l12-2.5v12a3 3 0 1 1-2-2.8V6.3L9 8z"/></svg>'
+};
+function r51Icon(name, cls) {
+return '<span class="r51-ico' + (cls ? " " + cls : "") + '" aria-hidden="true">' + (R51_ICONS[name] || "") + "</span>";
+}
+(function () {
+try {
+const css = document.createElement("style");
+css.textContent = `
+#focusLeaderboardBtn{display:none !important;}
+#rankDetail{display:none !important;}
+.r51-ico{display:inline-flex;width:1.15em;height:1.15em;vertical-align:-.2em;flex:none;}
+.r51-ico svg{width:100%;height:100%;display:block;}
+
+/* the launch button: a neon tube round a dark glass pill */
+#focusLaunchBtn.focus-btn.primary{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:17px 18px !important;border-radius:999px !important;border:2px solid transparent !important;
+    background:linear-gradient(180deg,rgba(10,22,48,.92),rgba(5,10,26,.96)) padding-box,
+        linear-gradient(90deg,#4fe3ff,#b06bff,#ff5fd8,#4fe3ff) border-box !important;
+    background-size:100% 100%,300% 100% !important;animation:r51Flow 5s linear infinite;
+    color:#effcff !important;font:italic 900 16px/1 system-ui,-apple-system,sans-serif !important;letter-spacing:.14em !important;text-transform:uppercase;
+    text-shadow:0 0 8px rgba(120,230,255,.9),0 0 22px rgba(79,227,255,.55);
+    box-shadow:0 0 18px rgba(79,227,255,.45),0 0 40px rgba(176,107,255,.28),inset 0 0 18px rgba(79,227,255,.18) !important;
+    transition:transform .12s ease,box-shadow .2s ease;}
+#focusLaunchBtn.focus-btn.primary:active{transform:scale(.97);}
+#focusLaunchBtn.focus-btn.primary::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);animation:r51Sheen 4.2s ease-in-out 1s infinite;pointer-events:none;}
+#focusLaunchBtn.focus-btn.primary.orbital-ready{background:linear-gradient(180deg,rgba(30,10,46,.94),rgba(14,5,26,.96)) padding-box,
+        linear-gradient(90deg,#ff5fd8,#ffd76b,#b06bff,#ff5fd8) border-box !important;background-size:100% 100%,300% 100% !important;
+    text-shadow:0 0 8px rgba(255,170,240,.9),0 0 22px rgba(255,95,216,.55);
+    box-shadow:0 0 20px rgba(255,95,216,.5),0 0 44px rgba(255,215,107,.25),inset 0 0 18px rgba(255,95,216,.2) !important;}
+#focusLaunchBtn .r51-ico{width:1.25em;height:1.25em;filter:drop-shadow(0 0 5px currentColor);}
+#focusLaunchBtn img{height:1.2em !important;width:auto !important;}
+@keyframes r51Flow{to{background-position:0 0,300% 0;}}
+@keyframes r51Sheen{0%{left:-60%;}45%,100%{left:130%;}}
+
+/* the rank circle: a little more glow, so it reads as the way into the menu */
+#rankCircleWrap{cursor:pointer;filter:drop-shadow(0 0 10px rgba(79,227,255,.35));}
+
+/* ---------- the rank menu ---------- */
+#leaderboardScreen{padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom)) 12px !important;}
+#leaderboardScreen>.card{display:flex;flex-direction:column;height:100%;max-height:none;padding:14px 14px 12px !important;border-radius:24px !important;
+    border:1.5px solid transparent !important;background:linear-gradient(180deg,rgba(9,16,38,.97),rgba(3,6,18,.98)) padding-box,
+        linear-gradient(160deg,rgba(79,227,255,.7),rgba(176,107,255,.5),rgba(255,95,216,.55)) border-box !important;
+    box-shadow:0 0 30px rgba(79,227,255,.22),0 30px 80px rgba(0,0,0,.6) !important;overflow:hidden !important;}
+#leaderboardScreen .game-over-title{display:none;}
+#leaderboardScreen .r51-head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 10px;}
+#leaderboardScreen .r51-brand{font:italic 900 22px/1 system-ui,-apple-system,sans-serif;letter-spacing:.06em;color:transparent;
+    background:linear-gradient(180deg,#fff,#9ef4ff 45%,#b06bff 80%,#ff5fd8);-webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 0 8px rgba(79,227,255,.55));}
+#leaderboardScreen .r51-x{width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(120,220,255,.6);background:rgba(8,16,36,.8);color:#dff6ff;
+    display:flex;align-items:center;justify-content:center;padding:9px;box-shadow:0 0 12px rgba(79,227,255,.3);}
+#leaderboardTabRow{display:grid !important;grid-template-columns:repeat(3,1fr);gap:6px;padding:4px;margin:0 0 12px !important;border-radius:16px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(120,200,255,.15);}
+#leaderboardTabRow .mp-tab-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 4px !important;border-radius:12px !important;
+    border:1px solid transparent !important;background:transparent !important;color:#8fb2d8 !important;font:800 12px/1 system-ui,sans-serif !important;
+    letter-spacing:.06em;text-transform:uppercase;box-shadow:none !important;transition:all .2s ease;}
+#leaderboardTabRow .mp-tab-btn.active{color:#f2fdff !important;background:linear-gradient(180deg,rgba(79,227,255,.22),rgba(176,107,255,.18)) !important;
+    border-color:rgba(120,230,255,.6) !important;text-shadow:0 0 8px rgba(120,230,255,.8);box-shadow:0 0 14px rgba(79,227,255,.3) !important;}
+#leaderboardScreen .r51-panel{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:0 2px 6px;}
+#leaderboardScreen .r51-panel.hidden{display:none;}
+#leaderboardTabScores .logo{display:none;}
+#leaderboardScreen .leaderboard-box{max-height:none;}
+#leaderboardScreen .leaderboard-row{padding:11px 12px;margin-bottom:6px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(120,200,255,.1);font-size:13px;color:#cfe3f8;}
+#leaderboardScreen .leaderboard-row:nth-child(1){background:linear-gradient(90deg,rgba(255,215,107,.18),rgba(255,215,107,.03));border-color:rgba(255,215,107,.45);}
+#leaderboardScreen .leaderboard-row:nth-child(2){background:linear-gradient(90deg,rgba(200,220,255,.14),rgba(200,220,255,.02));border-color:rgba(200,220,255,.35);}
+#leaderboardScreen .leaderboard-row:nth-child(3){background:linear-gradient(90deg,rgba(255,160,100,.14),rgba(255,160,100,.02));border-color:rgba(255,160,100,.35);}
+#leaderboardScreen .leaderboard-rank{width:30px;font:italic 900 15px/1 system-ui,sans-serif;color:#7fe9ff;text-shadow:0 0 8px rgba(79,227,255,.6);}
+#leaderboardScreen .leaderboard-score{font:900 14px/1 system-ui,sans-serif;color:#fff;}
+#closeLeaderboardButton{display:none !important;}
+
+/* the Rank tab */
+.r51-hero{display:flex;align-items:center;gap:14px;padding:12px;border-radius:18px;margin-bottom:12px;
+    background:radial-gradient(120% 140% at 0% 0%,rgba(79,227,255,.14),transparent 60%),rgba(255,255,255,.03);border:1px solid rgba(120,200,255,.16);}
+.r51-emblem{width:104px;height:104px;flex:none;}
+.r51-hero-txt{flex:1;min-width:0;}
+.r51-rankname{font:italic 900 30px/1 system-ui,-apple-system,sans-serif;letter-spacing:.02em;color:#fff;}
+.r51-points{margin-top:6px;font:900 15px/1 system-ui,sans-serif;color:#ffe9a8;text-shadow:0 0 10px rgba(255,215,107,.45);}
+.r51-points small{font-weight:700;font-size:10px;letter-spacing:.14em;color:#9fb4d6;text-shadow:none;margin-left:4px;}
+.r51-bar{margin-top:10px;height:8px;border-radius:8px;background:rgba(255,255,255,.07);overflow:hidden;}
+.r51-bar i{display:block;height:100%;border-radius:8px;box-shadow:0 0 10px currentColor;}
+.r51-next{margin-top:6px;font:700 11px/1.3 system-ui,sans-serif;color:#a9c4e6;}
+.r51-card{padding:12px;border-radius:18px;margin-bottom:12px;background:rgba(255,255,255,.03);border:1px solid rgba(120,200,255,.14);}
+.r51-h{font:900 11px/1 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7fe9ff;text-shadow:0 0 8px rgba(79,227,255,.45);margin:0 0 10px;}
+.r51-skill{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;position:relative;}
+.r51-sk{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;font:800 clamp(6.5px,1.85vw,8px)/1 system-ui,sans-serif;letter-spacing:0;text-transform:uppercase;color:#5d7598;text-align:center;white-space:nowrap;}
+.r51-sk svg{width:34px;height:34px;}
+.r51-sk.on{color:#dff6ff;}
+.r51-sk.now{color:#fff;text-shadow:0 0 8px rgba(255,215,107,.8);}
+.r51-sk.now svg{animation:r51Pulse 1.8s ease-in-out infinite;}
+.r51-skilltrack{position:relative;height:6px;border-radius:6px;background:rgba(255,255,255,.07);margin:10px 4% 2px;}
+.r51-skilltrack i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:linear-gradient(90deg,#4fe3ff,#b06bff,#ffd76b);box-shadow:0 0 10px rgba(176,107,255,.6);}
+.r51-skilltrack b{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff,0 0 20px #ffd76b;}
+.r51-road{position:relative;padding-left:4px;}
+.r51-step{position:relative;display:flex;gap:12px;padding-bottom:14px;}
+.r51-step::before{content:"";position:absolute;left:21px;top:44px;bottom:-2px;width:3px;border-radius:3px;background:rgba(120,160,220,.18);}
+.r51-step.done::before{background:linear-gradient(180deg,#4fe3ff,#b06bff);box-shadow:0 0 8px rgba(79,227,255,.5);}
+.r51-step:last-child::before{display:none;}
+.r51-node{position:relative;z-index:1;flex:none;width:45px;height:45px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#0a1228;border:2px solid rgba(120,160,220,.35);color:#7f93b4;font:italic 900 17px/1 system-ui,sans-serif;}
+.r51-node small{font:800 7px/1 system-ui,sans-serif;letter-spacing:.12em;font-style:normal;margin-bottom:2px;}
+.r51-step.done .r51-node{border-color:#7fe9ff;color:#fff;background:radial-gradient(circle at 50% 35%,rgba(79,227,255,.35),#0a1228 70%);box-shadow:0 0 14px rgba(79,227,255,.55);}
+.r51-step.now .r51-node{border-color:#ffd76b;color:#fff;box-shadow:0 0 0 4px rgba(255,215,107,.18),0 0 18px rgba(255,215,107,.6);animation:r51Pulse 1.8s ease-in-out infinite;}
+.r51-step-body{flex:1;min-width:0;}
+.r51-step-pts{font:700 10px/1 system-ui,sans-serif;color:#7f93b4;letter-spacing:.08em;margin:4px 0 8px;}
+.r51-step.done .r51-step-pts{color:#9dffc8;}
+.r51-tiles{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;}
+.r51-tiles::-webkit-scrollbar{display:none;}
+.r51-tile{position:relative;flex:none;width:76px;border-radius:14px;padding:6px 4px 7px;text-align:center;background:rgba(255,255,255,.04);border:1px solid rgba(120,200,255,.16);}
+.r51-tile img,.r51-tile .r51-eq{width:56px;height:56px;display:block;margin:0 auto 4px;}
+.r51-tile span{display:block;font:800 9px/1.15 system-ui,sans-serif;color:#d6e8ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.r51-tile em{display:block;font:700 7.5px/1 system-ui,sans-serif;font-style:normal;letter-spacing:.12em;text-transform:uppercase;color:#7f93b4;margin-top:3px;}
+.r51-tile.locked img,.r51-tile.locked .r51-eq{filter:grayscale(1) brightness(.55);}
+.r51-tile.locked span{color:#7f93b4;}
+.r51-tile .r51-lock{position:absolute;top:5px;right:5px;width:16px;height:16px;color:#9fb4d6;}
+.r51-tile.unlocked{border-color:rgba(125,255,176,.35);box-shadow:0 0 10px rgba(125,255,176,.12);}
+.r51-hist{display:flex;justify-content:space-between;font:700 11px/1.2 system-ui,sans-serif;color:#a9c4e6;padding:6px 2px;border-bottom:1px solid rgba(255,255,255,.05);}
+@keyframes r51Pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+`;
+document.head.appendChild(css);
+}
+catch (error) { }
+})();
+function r51LaunchIcon(mode, text) {
+if (/fly space station|fly station/i.test(text))
+return "station";
+if (mode === "star-map")
+return "star";
+if (mode === "toggle-ready")
+return /ready —|waiting/i.test(text) ? "check" : "wait";
+if (mode === "select-ship")
+return "ship";
+if (mode === "launch" || mode === "r40-fly")
+return "rocket";
+return null;
+}
+function r51TidyLaunch() {
+const btn = document.getElementById("focusLaunchBtn");
+if (!btn || btn.dataset.r51 === btn.innerHTML)
+return;
+const hasImg = /<img/i.test(btn.innerHTML) && !/data:image\/svg\+xml,%3Csvg%20xmlns%3D%22http%3A\/\/www.w3.org\/2000\/svg%22%20viewBox%3D%220%200%20100%20150/.test(btn.innerHTML);
+let text = btn.textContent.replace(/[☀-➿\u{1F000}-\u{1FAFF}️‍]/gu, "").replace(/\s+/g, " ").trim();
+const icon = r51LaunchIcon(btn.dataset.mode, text);
+if (hasImg) {
+const img = btn.querySelector("img");
+btn.innerHTML = (img ? img.outerHTML : "") + "<span>" + text + "</span>";
+}
+else
+btn.innerHTML = (icon ? r51Icon(icon) : "") + "<span>" + text + "</span>";
+btn.dataset.r51 = btn.innerHTML;
+}
+(function () {
+const btn = document.getElementById("focusLaunchBtn");
+if (!btn || !window.MutationObserver)
+return;
+new MutationObserver(r51TidyLaunch).observe(btn, { childList: true, characterData: true, subtree: true });
+r51TidyLaunch();
+})();
+(function () {
+try {
+const screen = document.getElementById("leaderboardScreen");
+const card = screen && screen.querySelector(".card");
+const row = document.getElementById("leaderboardTabRow");
+if (!card || !row)
+return;
+const head = document.createElement("div");
+head.className = "r51-head";
+head.innerHTML = '<div class="r51-brand">DESTROID</div><button type="button" class="r51-x" aria-label="Close">' + R51_ICONS.close + '</button>';
+card.insertBefore(head, card.firstChild);
+head.querySelector(".r51-x").addEventListener("pointerdown", e => {
+e.preventDefault();
+e.stopPropagation();
+r51CloseMenu();
+});
+row.innerHTML =
+'<button class="mp-tab-btn active" data-lb-tab="rank">' + r51Icon("rank") + 'Rank</button>' +
+'<button class="mp-tab-btn" id="leaderboardTabBtnScores" data-lb-tab="scores">' + r51Icon("podium") + 'Leaders</button>' +
+'<button class="mp-tab-btn" id="leaderboardTabBtnMultiplayer" data-lb-tab="multiplayer">' + r51Icon("globe") + 'Multiplayer</button>';
+const rank = document.createElement("div");
+rank.id = "r51RankTab";
+rank.className = "r51-panel";
+row.after(rank);
+["leaderboardTabScores", "leaderboardTabMultiplayer"].forEach(id => {
+const el = document.getElementById(id);
+if (el)
+el.classList.add("r51-panel");
+});
+row.addEventListener("pointerdown", e => {
+const b = e.target.closest("[data-lb-tab]");
+if (!b)
+return;
+e.preventDefault();
+e.stopImmediatePropagation();
+try {
+sound("click");
+}
+catch (error) { }
+r51SetTab(b.getAttribute("data-lb-tab"));
+}, { capture: true });
+}
+catch (error) {
+console.error("Rank menu setup failed:", error);
+}
+})();
+function r51SetTab(tab) {
+r51.tab = tab;
+document.querySelectorAll("#leaderboardTabRow [data-lb-tab]").forEach(b => b.classList.toggle("active", b.getAttribute("data-lb-tab") === tab));
+const show = { r51RankTab: tab === "rank", leaderboardTabScores: tab === "scores", leaderboardTabMultiplayer: tab === "multiplayer" };
+Object.keys(show).forEach(id => {
+const el = document.getElementById(id);
+if (el)
+el.classList.toggle("hidden", !show[id]);
+});
+if (tab === "rank")
+r51RenderRank();
+if (tab === "scores")
+loadLeaderboard(mainLeaderboard, mainLeaderboardStatus);
+if (tab === "multiplayer")
+renderMultiplayerPanel();
+}
+function r51OpenMenu(tab) {
+try {
+initAudio();
+}
+catch (error) { }
+try {
+sound("click");
+}
+catch (error) { }
+startScreen.classList.add("hidden");
+leaderboardScreen.classList.remove("hidden");
+r51SetTab(tab || "rank");
+}
+function r51CloseMenu() {
+try {
+sound("click");
+}
+catch (error) { }
+leaderboardScreen.classList.add("hidden");
+startScreen.classList.remove("hidden");
+renderPlanetMap();
+}
+function toggleRankDetail() {
+r51OpenMenu("rank");
+}
+(function () {
+const lb = document.getElementById("leaderboardScreen");
+if (!lb || !window.MutationObserver)
+return;
+let was = lb.classList.contains("hidden");
+new MutationObserver(() => {
+const now = lb.classList.contains("hidden");
+if (was && !now && !r51.opening) {
+const any = ["r51RankTab", "leaderboardTabScores", "leaderboardTabMultiplayer"].some(id => {
+const el = document.getElementById(id);
+return el && !el.classList.contains("hidden");
+});
+if (!any)
+r51SetTab("scores");
+}
+was = now;
+}).observe(lb, { attributes: true, attributeFilter: ["class"] });
+})();
+function r51Emblem(info) {
+const col = info.tier.color;
+const C = 2 * Math.PI * 44;
+const n = info.tierIndex + 1;
+return '<svg class="r51-emblem" viewBox="0 0 104 104">' +
+'<defs><linearGradient id="r51g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fe3ff"/><stop offset=".55" stop-color="' + col + '"/><stop offset="1" stop-color="#ff5fd8"/></linearGradient>' +
+'<filter id="r51glow"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+'<path d="M52 8l34 14v30c0 22-15 36-34 44C33 88 18 74 18 52V22z" fill="#0a1228" stroke="rgba(120,200,255,.25)" stroke-width="1.5"/>' +
+'<circle cx="52" cy="52" r="44" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="5"/>' +
+'<circle cx="52" cy="52" r="44" fill="none" stroke="url(#r51g)" stroke-width="5" stroke-linecap="round" filter="url(#r51glow)" ' +
+'stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - info.progress)).toFixed(1) + '" transform="rotate(-90 52 52)"/>' +
+'<text x="52" y="44" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="800" letter-spacing="2" fill="#9fb4d6">RANK</text>' +
+'<text x="52" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="32" font-style="italic" font-weight="900" fill="#fff" filter="url(#r51glow)">' + n + '</text>' +
+'</svg>';
+}
+function r51Insignia(i, on) {
+const col = on ? (i === 5 ? "#ffd76b" : "#7fe9ff") : "#3a4c6a";
+let inner = "";
+if (i === 5)
+inner = '<path d="M17 4l3.4 7 7.6.9-5.6 5.2 1.5 7.5L17 20.9l-6.9 3.7 1.5-7.5L6 12l7.6-.9z" fill="' + col + '"/>';
+else {
+for (let k = 0; k <= i; k++) {
+const y = 24 - k * 4.6;
+inner += '<path d="M7 ' + y + 'l10-6.5 10 6.5" fill="none" stroke="' + col + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+}
+}
+return '<svg viewBox="0 0 34 34"' + (on ? ' style="filter:drop-shadow(0 0 4px ' + col + ')"' : '') + '>' + inner + '</svg>';
+}
+function r51Unlocks() {
+const out = {};
+const add = (rank, item) => {
+if (!rank)
+return;
+(out[rank] = out[rank] || []).push(item);
+};
+PLANETS.forEach(p => add(p.unlockRank, { kind: "planet", id: p.id, name: p.name }));
+MUSIC_STYLES.forEach(s => add(s.unlockRank, { kind: "music", name: s.name, genre: s.genre }));
+PLANETS.forEach(planet => {
+try {
+getPetRosterForPlanet(planet.id).forEach((sp, i) => add(getPetStyleUnlockRank(planet.id, i), { kind: "pet", planet: planet.id, species: sp, name: SPECIES_DISPLAY_NAMES[sp] || String(sp), where: planet.name }));
+}
+catch (error) { }
+});
+return out;
+}
+function r51Thumb(item) {
+const key = item.kind + ":" + (item.id || item.planet || "") + ":" + (item.species !== undefined ? item.species : item.name);
+if (r51.thumbs[key])
+return r51.thumbs[key];
+let html = "";
+if (item.kind === "music") {
+let seed = 0;
+String(item.name).split("").forEach(ch => { seed = (seed * 31 + ch.charCodeAt(0)) % 997; });
+const hue = seed % 360;
+let bars = "";
+for (let i = 0; i < 7; i++) {
+const h = 10 + ((seed * (i + 3) * 7) % 34);
+bars += '<rect x="' + (6 + i * 7) + '" y="' + (50 - h) + '" width="4.5" height="' + h + '" rx="2.2" fill="hsl(' + ((hue + i * 14) % 360) + ',95%,66%)"/>';
+}
+html = '<svg class="r51-eq" viewBox="0 0 56 56"><rect width="56" height="56" rx="14" fill="#0b1430"/>' + bars +
+'<g transform="translate(36,5) scale(.6)" fill="#fff" opacity=".85"><path d="M9 17.5a3 3 0 1 1-2-2.8V5l12-2.5v12a3 3 0 1 1-2-2.8V6.3L9 8z"/></g></svg>';
+}
+else {
+try {
+const cv = document.createElement("canvas");
+cv.width = cv.height = 112;
+const c = cv.getContext("2d");
+if (item.kind === "planet")
+drawSpacePlanet(c, item.id, 56, 56, 40, {});
+else {
+const g = c.createRadialGradient(56, 62, 4, 56, 62, 52);
+g.addColorStop(0, "rgba(79,227,255,.25)");
+g.addColorStop(1, "rgba(79,227,255,0)");
+c.fillStyle = g;
+c.fillRect(0, 0, 112, 112);
+drawSpacePet(c, item.planet, 56, 62, 64, 100, 0, item.species, false, null, 1);
+}
+html = '<img alt="" src="' + cv.toDataURL() + '">';
+}
+catch (error) {
+html = '<div class="r51-eq"></div>';
+}
+}
+r51.thumbs[key] = html;
+return html;
+}
+function r51RenderRank() {
+const el = document.getElementById("r51RankTab");
+if (!el)
+return;
+const info = getRankInfo();
+const n = info.tierIndex + 1;
+const col = info.tier.color;
+let html = '<div class="r51-hero">' + r51Emblem(info) + '<div class="r51-hero-txt">' +
+'<div class="r51-rankname" style="text-shadow:0 0 14px ' + col + '">' + info.tier.name.toUpperCase() + '</div>' +
+'<div class="r51-points">' + info.total.toLocaleString() + '<small>POINTS</small></div>' +
+'<div class="r51-bar"><i style="width:' + Math.round(info.progress * 100) + '%;background:linear-gradient(90deg,#4fe3ff,' + col + ');color:' + col + '"></i></div>' +
+'<div class="r51-next">' + (info.nextTier ? "<b>" + info.pointsToNext.toLocaleString() + "</b> points to " + info.nextTier.name : "Top rank reached") + '</div>' +
+'</div></div>';
+const est = (typeof aiModel !== "undefined" && aiModel ? aiModel.skillEstimate : 0) || 0;
+let cur = 0;
+SKILL_TITLES.forEach((s, i) => { if (est >= s.min)
+cur = i; });
+html += '<div class="r51-card"><div class="r51-h">Pilot skill</div><div class="r51-skill">' +
+SKILL_TITLES.map((s, i) => '<div class="r51-sk' + (i <= cur ? " on" : "") + (i === cur ? " now" : "") + '">' + r51Insignia(i, i <= cur) + s.name + '</div>').join("") +
+'</div><div class="r51-skilltrack"><i style="width:' + Math.round(clamp(est, 0, 1) * 100) + '%"></i><b style="left:' + Math.round(clamp(est, 0, 1) * 100) + '%"></b></div></div>';
+const un = r51Unlocks();
+const ranks = Object.keys(un).map(Number).sort((a, b) => a - b);
+html += '<div class="r51-card"><div class="r51-h">Unlock roadmap</div><div class="r51-road">';
+ranks.forEach(r => {
+const tier = RANK_TIERS[r - 1];
+const done = r <= n, now = r === n;
+html += '<div class="r51-step' + (done ? " done" : "") + (now ? " now" : "") + '" data-rank="' + r + '"><div class="r51-node"><small>RANK</small>' + r + '</div><div class="r51-step-body">' +
+'<div class="r51-step-pts">' + (tier ? tier.threshold.toLocaleString() + " PTS" : "") + (done ? " · UNLOCKED" : "") + '</div><div class="r51-tiles">' +
+un[r].map(it => '<div class="r51-tile ' + (done ? "unlocked" : "locked") + '">' + r51Thumb(it) + (done ? "" : '<span class="r51-lock">' + R51_ICONS.lock + '</span>') +
+'<span>' + it.name + '</span><em>' + (it.kind === "planet" ? "Planet" : it.kind === "music" ? it.genre : it.where) + '</em></div>').join("") +
+'</div></div></div>';
+});
+html += '</div></div>';
+const hist = (planetSave.rankHistory || []).slice(0, 8);
+if (hist.length) {
+html += '<div class="r51-card"><div class="r51-h">Recent points</div>' +
+hist.map(h => '<div class="r51-hist"><span>' + h.reason + '</span><b style="color:' + (h.amount > 0 ? "#8dffb0" : "#ff8d8d") + '">' + (h.amount > 0 ? "+" : "") + h.amount + '</b></div>').join("") + '</div>';
+}
+el.innerHTML = html;
+requestAnimationFrame(() => {
+const step = el.querySelector('.r51-step.now') || el.querySelector('.r51-step:not(.done)');
+if (step && el.scrollTop === 0 && step.offsetTop > el.clientHeight * .8)
+el.scrollTop = step.offsetTop - el.clientHeight * .35;
+});
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -71148,7 +71555,7 @@ h.amount +
 : '<div style="font-size:9px;color:#5c7ba0;' +
 'text-align:center;">No activity yet</div>';
 }
-function toggleRankDetail() {
+function toggleRankDetail__r51() {
 const detailEl = document.getElementById("rankDetail");
 if (!detailEl)
 return;
