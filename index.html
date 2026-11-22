@@ -16075,7 +16075,7 @@ return openShipBubble__orig(shipId, x, y);
 let runShieldHearts = 0;
 const SHIELD_HEART_MAX = 3;
 function shieldHeartsHtml(n) {
-return n > 0 ? '<span class="shield-heart">' + "♥".repeat(n) + '</span>' : "";
+return n > 0 ? '<span class="shield-heart">' + "💙".repeat(n) + '</span>' : "";
 }
 function loseOneHeart() {
 try {
@@ -16211,7 +16211,7 @@ worldShowBubble({
 x, y,
 iconHtml: '<img src="' + shipThumbUrl(ship) + '" alt="" style="width:1.4em;height:1.4em;object-fit:contain">',
 title: "Enemy ship",
-meta: "😈 Enemy pilot · " + "♥".repeat(Math.max(0, ship.lives || 3)) + "<span class=\"shield-heart\">" + "♥".repeat(ship.shieldHearts || 0) + "</span> · " + getItemInfo(ship.equipment).name + ((ship.satCargo || []).length ? " · 🛰 " + ship.satCargo.length : ""),
+meta: "😈 Enemy pilot · " + "♥".repeat(Math.max(0, ship.lives || 3)) + "<span class=\"shield-heart\">" + "💙".repeat(ship.shieldHearts || 0) + "</span> · " + getItemInfo(ship.equipment).name + ((ship.satCargo || []).length ? " · 🛰 " + ship.satCargo.length : ""),
 text: pilots.length
 ? "Locked while its enemy pilot holds it. Seat one of your pilot pets and it's yours — hearts, shield hearts, powerup, satellites and hold."
 : "Locked while its enemy pilot holds it. Bring a licensed pilot pet here and seat it to steal the ship.",
@@ -17349,7 +17349,7 @@ return ('<button class="shape-btn' + (n ? ' selected' : '') + '" style="width:10
 }
 function shieldBuildPreviewHtml(planetId) {
 const n = shieldBuildCount(planetId);
-return n ? '<span class="shield-heart">' + "♥".repeat(n) + '</span>' : "";
+return n ? '<span class="shield-heart">' + "💙".repeat(n) + '</span>' : "";
 }
 function queueShipBuild__r30(planetId, options) {
 const want = Math.min(shieldUnlocked(planetId), (options && options.shield) || 0);
@@ -20971,7 +20971,7 @@ catch (error) { }
 const ring = [];
 for (let i = 0; i < 40; i++) {
 const a = i / 40 * Math.PI * 2;
-ring.push(r27PenProject(g.cen.lat + Math.cos(a) * R26_PEN.r, Math.sin(a) * R26_PEN.r / Math.cos(g.cen.lat)));
+ring.push(r27PenProject(g.cen.lat + Math.cos(a) * R26_PEN.r, (g.cen.lon || 0) + Math.sin(a) * R26_PEN.r / Math.cos(g.cen.lat)));
 }
 c.save();
 c.beginPath();
@@ -20999,7 +20999,7 @@ const a = i / N * Math.PI * 2;
 const gap = Math.abs(Math.atan2(Math.sin(a - Math.PI), Math.cos(a - Math.PI)));
 if (gap < gateHalf)
 continue;
-posts.push({ a, gate: gap < gateHalf + Math.PI * 2 / N, q: r27PenProject(g.cen.lat + Math.cos(a) * rr, Math.sin(a) * rr / Math.cos(g.cen.lat)), v: (1 - Math.cos(a)) / 2 });
+posts.push({ a, gate: gap < gateHalf + Math.PI * 2 / N, q: r27PenProject(g.cen.lat + Math.cos(a) * rr, (g.cen.lon || 0) + Math.sin(a) * rr / Math.cos(g.cen.lat)), v: (1 - Math.cos(a)) / 2 });
 }
 const height = v => (26 + 30 * v) * (g.W / 420);
 const top = (q, h) => { const dx = q.x - g.gcx, dy = q.y - g.gcy, l = Math.hypot(dx, dy) || 1; return { x: q.x + dx / l * h, y: q.y + dy / l * h }; };
@@ -43021,20 +43021,17 @@ catch (error) { }
 var R53V = { R: -1, s: 1, c0: 1, s0: 0, cp: 1, sp: 0, key: "", inScene: false };
 var R53O = { x: 0, y: 0, z: 0 };
 var R53P = { U: 420, K: 1, Hs: 600, Tp: .93, Rbig: 1100, cy: 0, land: false };
-var r53U = 420, r53K = 1;
+var r53U = 420, r53K = 1, r53UP = 420, r53Zs = 1, r53ZT = 0, r53Rim = null;
 function r53Fwd(x, y, z) {
 const V = R53V;
 let y1 = y * V.c0 - z * V.s0, z1 = y * V.s0 + z * V.c0;
 const r = Math.sqrt(x * x + y1 * y1);
 if (r > 1e-9) {
-const d = Math.atan2(r, z1) * V.s, f = Math.sin(d) / r;
+const h = Math.atan2(r, z1) * .5;
+const d = 2 * Math.atan2(V.s * Math.sin(h), Math.cos(h)), f = Math.sin(d) / r;
 x *= f;
 y1 *= f;
 z1 = Math.cos(d);
-}
-else if (z1 < 0) {
-z1 = Math.cos(Math.PI * V.s);
-y1 = -Math.sin(Math.PI * V.s);
 }
 R53O.x = x;
 R53O.y = y1 * V.cp + z1 * V.sp;
@@ -43046,10 +43043,8 @@ const V = R53V;
 let y1 = y * V.cp - z * V.sp, z1 = y * V.sp + z * V.cp;
 const r = Math.sqrt(x * x + y1 * y1);
 if (r > 1e-9) {
-let d = Math.atan2(r, z1) / V.s;
-if (d > 3.1)
-d = 3.1;
-const f = Math.sin(d) / r;
+const h = Math.atan2(r, z1) * .5;
+const d = 2 * Math.atan2(Math.sin(h), V.s * Math.cos(h)), f = Math.sin(d) / r;
 x *= f;
 y1 *= f;
 z1 = Math.cos(d);
@@ -43134,10 +43129,19 @@ const Hs = U * (land ? 2.05 : 1.45);
 const Tp = land ? 1.18 : .94;
 const Fy = height * (land ? .64 : .665);
 const Rbig = land ? Math.max(width * 1.6, height * .34 / (1 - Math.sin(Tp))) : Math.max(width * 2.6, U * 2.6);
-R53P = { U, K: Math.min(1, U / 420), Hs, Tp, Rbig, cy: Fy + Rbig * Math.sin(Tp), land };
-r53U = U;
+const now = performance.now(), dt = r53ZT ? Math.min(.1, (now - r53ZT) / 1000) : 0;
+r53ZT = now;
+const zt = roamingActive && !roomState ? 1.6 : 1;
+r53Zs += (zt - r53Zs) * (dt ? 1 - Math.exp(-dt * 5) : 1);
+R53P = { U, K: Math.min(1, U / 420), Hs: Hs * r53Zs, Tp, Rbig, cy: Fy + Rbig * Math.sin(Tp), land, Z: r53Zs };
+r53U = U * r53Zs;
+r53UP = U;
 r53K = R53P.K;
 return Rbig;
+}
+function r53SkyY(height) {
+const rim = r53Rim == null ? height * .42 : r53Rim;
+return Math.max(height * .12, rim - Math.max(13 * r53K, r53UP * .038) * .55);
 }
 function r53Engage(radius, flight) {
 const P = R53P;
@@ -43157,7 +43161,7 @@ R53V.key = s.toFixed(4) + "|" + Tp.toFixed(4) + "|" + T0;
 function r53Persp(proj) {
 if (!R53V || !(R53V.R > 0) || !proj)
 return 1;
-return Math.max(.3, Math.min(1.25, (proj.z + .12) / (R53V.cp + .12)));
+return Math.max(.3, Math.min(1.05, (proj.z + .12) / (R53V.cp + .12)));
 }
 function r53GlobeKey(R) {
 return r53Scene(R) ? R53V.key : "";
@@ -56049,7 +56053,7 @@ const spread = nextTier.length > 1
 ? index / (nextTier.length - 1)
 : .5;
 const px = width * (selectedStartPlanet === "nemesis" ? .8 : .2 + spread * .6);
-const py = height * (selectedStartPlanet === "nemesis" ? .395 : .46) +
+const py = r53SkyY(height) +
 Math.sin(time * .35 + index) * 6;
 const pr = Math.max(r53K * 13, r53U * .038) * (selectedStartPlanet === "nemesis" ? 1.5 : 1);
 const unlockedNext = p.requirement <= highScore;
@@ -56122,6 +56126,7 @@ height / 2 -
 petNaturalProj.y;
 }
 r20SetScene(cx, cy, radius, roamViewLat);
+r53Rim = cy - radius;
 if (roamingActive) {
 const shipLat = SHIP_LAT;
 const angularDistance = Math.acos(clamp(Math.sin(shipLat) *
@@ -56137,7 +56142,7 @@ let touchingShip = false;
 if (angularDistance <= ROAM_RETURN_ANGLE) {
 const shipScreen = projectSphere(shipLat, 0, roamViewLat, roamViewLon, cx, cy, radius);
 const petScreen = projectSphere(roamingLat, roamingLon, roamViewLat, roamViewLon, cx, cy, radius);
-const petReach = Math.max(r53K * 26, r53U * .075) * .3;
+const petReach = Math.max(r53K * 26, r53UP * .075) * .3;
 const halfW = r53U * .06 + petReach;
 const halfH = r53U * .11 + petReach;
 const ex = (shipScreen.x - petScreen.x) / halfW;
@@ -56767,7 +56772,7 @@ performance.now() / 1000 *
 ROAM_WALK_ANIM_BOOST *
 Math.max(.6, Math.min(2.2, roamingPaceNow() * roamingSpeedFraction / ROAM_BASE_PACE))
 : roamSeed;
-const roamPetSize = Math.max(r53K * 26, r53U * .075);
+const roamPetSize = Math.max(r53K * 26, r53UP * .075);
 let roamPetScale = 1;
 let roamPetAlpha = 1;
 if (roamPetTransitionKind === "enter" ||
@@ -56894,7 +56899,7 @@ remoteSeed +=
 seedSource.
 charCodeAt(i);
 }
-drawPetOnTerrain(c, globeTerrainAt(selectedStartPlanet, roamer.presence.lat, roamer.presence.lon), remoteProj.x, remoteProj.y, Math.max(r53K * 26, r53U * .075), performance.now() / 1000, () => withPetBack(!!roamer.presence.back, () => drawSpacePet(c, selectedStartPlanet, remoteProj.x, remoteProj.y, Math.max(r53K * 26, r53U * .075), (getPetByIdAtPlanet(selectedStartPlanet, roamer.presence.petId) || { energy: 100 }).energy, remoteSeed +
+drawPetOnTerrain(c, globeTerrainAt(selectedStartPlanet, roamer.presence.lat, roamer.presence.lon), remoteProj.x, remoteProj.y, Math.max(r53K * 26, r53UP * .075), performance.now() / 1000, () => withPetBack(!!roamer.presence.back, () => drawSpacePet(c, selectedStartPlanet, remoteProj.x, remoteProj.y, Math.max(r53K * 26, r53UP * .075), (getPetByIdAtPlanet(selectedStartPlanet, roamer.presence.petId) || { energy: 100 }).energy, remoteSeed +
 (roamer.presence.moving
 ? performance.now() / 1000 * ROAM_WALK_ANIM_BOOST
 : 0), roamer.presence.
@@ -56905,7 +56910,7 @@ petSpecies ||
 const theirPet = roamer.presence.petId &&
 getPetByIdAtPlanet(selectedStartPlanet, roamer.presence.petId);
 if (theirPet && theirPet.carry) {
-const remoteSize = Math.max(r53K * 26, r53U * .075);
+const remoteSize = Math.max(r53K * 26, r53UP * .075);
 drawWorldItem(c, theirPet.carry, remoteProj.x, remoteProj.y - remoteSize * .78, Math.max(18, remoteSize * .62), {});
 }
 c.save();
@@ -56918,7 +56923,7 @@ c.shadowColor =
 "rgba(0,0,0,.8)";
 c.shadowBlur = 4;
 c.fillText(roamer.name, remoteProj.x, remoteProj.y -
-Math.max(r53K * 26, r53U * .075) * .62);
+Math.max(r53K * 26, r53UP * .075) * .62);
 c.restore();
 }
 });
