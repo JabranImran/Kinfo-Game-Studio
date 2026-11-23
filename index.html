@@ -3219,7 +3219,7 @@ transition:opacity .45s ease;-webkit-user-select:none;user-select:none;touch-act
 #kgsSplash.kgs-out{opacity:0;pointer-events:none;}
 #kgsSplash canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
 #kgsSplash .kgs-logo{position:absolute;left:50%;top:44%;width:min(64vw,330px);aspect-ratio:853/635;transform:translate(-50%,-50%);}
-#kgsSplash .kgs-pop{position:absolute;inset:0;opacity:0;animation:kgsShow .01s linear 3.29s forwards,kgsPop .46s cubic-bezier(.3,1.6,.5,1) 3.5s;}
+#kgsSplash .kgs-pop{position:absolute;inset:0;opacity:0;animation:kgsShow .01s linear 3.8s forwards,kgsPop .46s cubic-bezier(.3,1.6,.5,1) 4.08s;}
 #kgsSplash .kgs-part{position:absolute;inset:0;}
 #kgsSplash .kgs-part svg{width:100%;height:100%;display:block;overflow:visible;}
 #kgsSplash .kgs-eyes{z-index:1;}
@@ -3624,6 +3624,10 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
         return function frame(t){
 
+            /* the closing beats play out 1.7x slower: spin settles, horns unfurl,
+               crown flattens — then the finished logo takes over */
+            t=t<2.6?t:(t<3.79?2.6+(t-2.6)/1.7:3.3+(t-3.79));
+
             var phi=spin(t),ps=pose(t);
 
             MORPH=ease(seg(t,2.92,3.24));
@@ -3942,7 +3946,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
     var Wd=window.innerWidth,Hd=window.innerHeight;
 
-    var END=3.5,stopped=false,worker=null;
+    var END=4.1,stopped=false,worker=null;
 
     try{
 
@@ -4004,7 +4008,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
     /* sparkles with the one pop, once it's all landed */
     var pop=el.querySelector(".kgs-pop");
 
-    [[14,6,3.55],[88,2,3.6],[50,-8,3.66],[6,62,3.7],[96,60,3.58],[50,96,3.75]].forEach(function(g){
+    [[14,6,4.13],[88,2,4.18],[50,-8,4.24],[6,62,4.28],[96,60,4.16],[50,96,4.33]].forEach(function(g){
 
         var d=document.createElement("div");
 
@@ -4140,14 +4144,14 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
         [0.3,function(a){whir(a,1.6,70,260,.07);}],
         [1.0,function(a){tone(a,520,470,.22,"triangle",.06);tone(a+.24,560,500,.22,"triangle",.06);}],
         [1.8,function(a){noise(a,.85,3200,900,160,.32,1.6);tone(a+.1,220,55,.8,"sine",.18);}],
-        [2.62,function(a){tone(a,110,42,.28,"sine",.32);noise(a,.18,400,200,120,.18,.9);}],
-        [2.62,function(a){whir(a,.66,260,55,.06);}],
-        [2.66,function(a){noise(a,.55,5200,2600,1400,.07,3);tone(a,320,960,.5,"triangle",.07);}],
-        [2.74,function(a){noise(a,.5,5600,2800,1500,.07,3);tone(a,340,1020,.45,"triangle",.07);}],
-        [2.72,function(a){[0,.05,.1,.16,.21].forEach(function(o,i){tone(a+o,1600-i*90,700,.07,"sine",.12);});}],
-        [2.9,function(a){tone(a,1250,380,.18,"sine",.3);}],
-        [2.98,function(a){tone(a,1150,340,.18,"sine",.28);}],
-        [3.5,function(a){tone(a,880,1760,.08,"square",.05);tone(a+.03,659,0,1.5,"sine",.14);tone(a+.03,988,0,1.4,"sine",.1);tone(a+.03,1319,0,1.2,"triangle",.06);}]
+        [2.634,function(a){tone(a,110,42,.28,"sine",.32);noise(a,.18,400,200,120,.18,.9);}],
+        [2.634,function(a){whir(a,.66,260,55,.06);}],
+        [2.702,function(a){noise(a,.55,5200,2600,1400,.07,3);tone(a,320,960,.5,"triangle",.07);}],
+        [2.838,function(a){noise(a,.5,5600,2800,1500,.07,3);tone(a,340,1020,.45,"triangle",.07);}],
+        [2.804,function(a){[0,.05,.1,.16,.21].forEach(function(o,i){tone(a+o,1600-i*90,700,.07,"sine",.12);});}],
+        [3.11,function(a){tone(a,1250,380,.18,"sine",.3);}],
+        [3.246,function(a){tone(a,1150,340,.18,"sine",.28);}],
+        [4.08,function(a){tone(a,880,1760,.08,"square",.05);tone(a+.03,659,0,1.5,"sine",.14);tone(a+.03,988,0,1.4,"sine",.1);tone(a+.03,1319,0,1.2,"triangle",.06);}]
     ];
 
     function schedule(){
@@ -4200,7 +4204,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
     }
 
     /* ---------- done when the animation's finished and the game is ready ---------- */
-    var minMs=4400,ready=document.readyState==="complete",closed=false;
+    var minMs=4950,ready=document.readyState==="complete",closed=false;
 
     function close(){
 
@@ -6728,12 +6732,12 @@ const currentRole = pet.role || "builder";
 if (newRole === "pilot" &&
 currentRole !== "pilot" &&
 !pet.pilotLicensed) {
-if (!spendCoins(planetId, PET_PILOT_ASSIGNMENT_FEE))
+const r54fee = r54LicenceFee(planetId);
+if (r54fee && !spendCoins(planetId, r54fee))
 return;
 pet.pilotLicensed = true;
 addRankPoints(10, "Assigned a pilot");
-showShipToast("Pilot licence purchased — " +
-PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML);
+showShipToast(r54fee ? "Pilot licence purchased — " + r54fee + " " + COIN_ICON_HTML : "First pilot licence on this planet — free!");
 }
 pet.role = newRole;
 savePlanetProgress();
@@ -11737,7 +11741,7 @@ x: p.x, y: p.y - 100 * p.s,
 iconHtml: pod.icon,
 title: petShortName(planetId, pet) + " isn't a pilot",
 text: "Only pilots train in the simulators.",
-buttons: [{ label: pet.pilotLicensed ? "Make pilot" : "Buy pilot licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML, primary: true, disabled: !pet.pilotLicensed && getTotalAvailableCoins(planetId) < PET_PILOT_ASSIGNMENT_FEE, keepOpen: true, action: () => {
+buttons: [{ label: pet.pilotLicensed ? "Make pilot" : "Buy pilot licence · " + r54FeeText(), primary: true, disabled: !pet.pilotLicensed && getTotalAvailableCoins(planetId) < r54LicenceFee(), keepOpen: true, action: () => {
 worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" });
 setTimeout(() => {
 const again = getPets(planetId).find(x => x.id === pet.id);
@@ -11801,7 +11805,7 @@ worldShowBubble({
 x: p.x, y: p.y - 50 * p.s,
 iconHtml: "🪪",
 title: "Pilot licences",
-meta: pets.filter(x => x.pilotLicensed).length + " of " + pets.length + " licensed · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML + " each",
+meta: pets.filter(x => x.pilotLicensed).length + " of " + pets.length + " licensed · " + (r54LicenceFee() ? r54FeeText() + " each" : "first one free"),
 text: pets.length ? "A licence is for life — the pet keeps it if it goes back to building." : "No pets on this planet yet. Adopt one at the Shop.",
 buttons: pets.slice(0, 7).map(pet => {
 const name = petShortName(planetId, pet);
@@ -11812,9 +11816,9 @@ return { label: petRowLabel(planetId, pet, "🪪 Licensed · ✈ Pilot", "✓"),
 if (pet.pilotLicensed)
 return { label: petRowLabel(planetId, pet, "🪪 Licensed · 🔧 Builder", "Make pilot"), keepOpen: true, action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); } };
 return {
-label: petRowLabel(planetId, pet, "No licence yet", "Buy · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML),
+label: petRowLabel(planetId, pet, "No licence yet", "Buy · " + r54FeeText()),
 primary: true,
-disabled: coins < PET_PILOT_ASSIGNMENT_FEE,
+disabled: coins < r54LicenceFee(),
 keepOpen: true,
 action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }); refresh(); }
 };
@@ -34885,6 +34889,10 @@ mpSend({ type: "nxStats" });
 catch (error) { }
 }, 8000);
 function mpHandleMessage(message) {
+try {
+mpHandleMessage__r54wrap(message);
+}
+catch (error) { }
 if (message && message.type === "nxStats") {
 r38.stats = message;
 return;
@@ -37072,7 +37080,7 @@ const rx = lx * cy2 + ly * sy, ry = -lx * sy + ly * cy2;
 return { X: cx + rx * s, Y: cy + (ry * ct - lz * st) * s, D: ry * st + lz * ct };
 };
 }
-function r41DrawHull(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
+function r41DrawHull__r54(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
 opts = opts || {};
 const R = r38ModR(m);
 const P = r41Proj(cx, cy, s, tilt, yaw);
@@ -37807,7 +37815,7 @@ planetSave.perkStock[pid][d.r] = Math.max(0, (planetSave.perkStock[pid][d.r] || 
 else if (d.k === "snack")
 addSnackStock(pid, n);
 }
-function r41Take(src, d) {
+function r41Take__r54(src, d) {
 if (!src)
 return false;
 if (src.t === "r41vault") {
@@ -38221,7 +38229,7 @@ const m = r38.world.mods[mid];
 const p = set.pos[mid];
 const P = r41Proj(view.cx, view.cy, view.s, view.tilt, view.yaw);
 const q = P(p.x - view.ox, p.y - view.oy, r41FloorZ(m));
-world.drops.push({ x: q.X, y: q.Y, r: r38ModR(m) * .8 * view.s, kind: "floor", accept: (d, src) => src && (src.t === "r41pet" || src.t === "r41vault" || src.t === "r41floor") && d.k !== "coin", drop: (d, src) => {
+world.drops.push({ x: q.X, y: q.Y, r: r38ModR(m) * .8 * view.s, kind: "floor", accept: (d, src) => src && (src.t === "r41pet" || src.t === "r41vault" || src.t === "r41floor" || src.t === "r54tower") && d.k !== "coin", drop: (d, src) => {
 const f = r41ScreenToDeck(r41.lastPtr, m, mid);
 if (f)
 r41Move(src, { t: "r41floor", mid, x: f.x, y: f.y }, d);
@@ -38351,7 +38359,7 @@ if (j.moved && !r41.walk)
 r41.yawT = j.yaw0 + (p.x - j.x0) * .008;
 event.stopImmediatePropagation();
 }
-function worldPointerUp(event) {
+function worldPointerUp__r54(event) {
 if (!r41On())
 return worldPointerUp__r41(event);
 r41.lastPtr = worldPointerPos(event);
@@ -39341,7 +39349,7 @@ c.restore();
 r42Label(c, label, x, y + Math.max(11, 5 * s), col);
 world.hits.push({ x, y: top + h * .6, r: Math.max(22, 18 * s), z: 6, onTap: () => tab === "structure-pilot-training" ? r44CtlOverlay(selectedStartPlanet) : worldOpenHolo(tab, { title: label }) });
 }
-function r41DrawThing(c, set, m, o, s, tilt, t, pid, opts) {
+function r41DrawThing__r54(c, set, m, o, s, tilt, t, pid, opts) {
 s *= .8;
 const x = o.p.X, y = o.p.Y;
 const hits = opts.hits, drops = opts.drops;
@@ -40801,7 +40809,7 @@ Object.values(ship.r44Cargo).forEach(v => { n += Math.max(0, v || 0); });
 return n;
 }
 const R44_HOLD_KINDS = ["item", "snack", "extra"];
-function worldPlaceTake(planetId, place, d) {
+function worldPlaceTake__r54(planetId, place, d) {
 if (place && d) {
 if (place.t === "vault" && d.k === "sat") {
 const h = satHangar(planetId);
@@ -43208,7 +43216,7 @@ stock: [.168, .0],
 "powerup-forge": [.272, .122],
 board: [-.1, .205],
 "ship-factory": [.118, .215],
-"satellite-factory": [-.235, .305],
+"satellite-factory": [-.165, .415],
 "bio-dome": [.235, -.205]
 };
 var R53_EXTRA = [[.26, .32], [0, .38], [-.42, .2], [.42, .2], [-.14, .44], [.14, .44], [-.4, .4], [.4, .4]];
@@ -43225,7 +43233,7 @@ return r53LL(R53_PEN[0], R53_PEN[1]);
 function yardSlotLatLon(slot) {
 const side = slot % 2 === 0 ? -1 : 1;
 const rank = Math.floor(slot / 2);
-return r53LL(side * (.135 + rank * .15), .47 + (rank % 2) * .05);
+return r53LL(side * (.135 + rank * .15), .6 + (rank % 2) * .05);
 }
 var R53_FOREST = {
 earth: ["tree", "pine", "pine"],
@@ -43248,7 +43256,7 @@ out.push([R53_SLOT[k][0], R53_SLOT[k][1], .105]);
 R53_EXTRA.slice(0, 2).forEach(a => out.push([a[0], a[1], .09]));
 for (let i = 0; i < 8; i++) {
 const side = i % 2 === 0 ? -1 : 1, rank = Math.floor(i / 2);
-out.push([side * (.135 + rank * .15), .47 + (rank % 2) * .05, .085]);
+out.push([side * (.135 + rank * .15), .6 + (rank % 2) * .05, .085]);
 }
 return out;
 }
@@ -43536,6 +43544,218 @@ st.textContent = "@media (orientation:landscape) and (max-height:620px){" +
 ".focus-launch-info{text-align:right;}" +
 "#starMapCloseBtn.star-map-close{left:auto!important;right:calc(env(safe-area-inset-right,0px) + 14px)!important;top:calc(env(safe-area-inset-top,0px) + 12px)!important;bottom:auto!important;transform:none!important;}" +
 "}";
+document.head.appendChild(st);
+})();
+function r54Tower(src) {
+const m = r38.world && r38.world.mods[src.mid];
+const tw = m && (m.towers || [])[src.i];
+return tw ? { m, tw } : null;
+}
+function r54Equip(m, i, src, d) {
+const tw = (m.towers || [])[i];
+if (!tw || tw.sat)
+return;
+if (src && src.t === "r54tower" && src.mid === m.id && src.i === i)
+return;
+if (!r41Take(src, { k: "sat", r: d.r, n: 1 }))
+return;
+const s = r44SatOf(d.r);
+tw.sat = { id: satNewId(), type: s.type, mode: s.mode, hp: SAT_HP };
+r38ModChanged(m);
+savePlanetProgress();
+sound("arrival");
+showShipToast(satTypeName(s.type) + " satellite loaded onto the tower");
+}
+function r54FirstEmpty(m) {
+return (m.towers || []).findIndex(tw => tw && !tw.sat);
+}
+function r41Take(src, d) {
+if (src && src.t === "r54tower") {
+const at = r54Tower(src);
+if (!at || !at.tw.sat || r44SatKey(at.tw.sat) !== d.r)
+return false;
+at.tw.sat = null;
+r38ModChanged(at.m);
+return true;
+}
+return r41Take__r54(src, d);
+}
+function worldPlaceTake(planetId, place, d) {
+if (place && place.t === "r54tower")
+return r41Take(place, d) ? { k: "sat", r: d.r, n: 1 } : null;
+return worldPlaceTake__r54(planetId, place, d);
+}
+function r54SatHit(m, i, x, y, size) {
+const tw = m.towers[i];
+if (!tw || !tw.sat)
+return;
+const desc = { k: "sat", r: r44SatKey(tw.sat), n: 1 };
+const src = { t: "r54tower", mid: m.id, i };
+const dragging = world.drag && world.drag.active && world.drag.src && world.drag.src.t === "r54tower" && world.drag.src.mid === m.id && world.drag.src.i === i;
+world.hits.push({
+x, y, r: Math.max(18, size * .8), z: 11,
+desc, src, draggable: true,
+onTap: () => worldShowBubble({
+x, y: y - size,
+iconHtml: r44SatIconHtml(tw.sat.type),
+title: "Satellite tower",
+meta: satTypeName(tw.sat.type) + " satellite on guard",
+text: "Drag the satellite off the tower to take it down.",
+buttons: []
+})
+});
+return dragging;
+}
+function r41DrawHull(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
+const out = r41DrawHull__r54(c, set, m, cx, cy, s, tilt, yaw, t, opts);
+try {
+if (r41.walk && r41.walk.mode === "out" && (m.towers || []).some(Boolean)) {
+const R = r38ModR(m);
+const P = r41Proj(cx, cy, s, tilt, yaw);
+const lift = (lx, ly) => {
+const d2 = Math.min(R * R * .98, lx * lx + ly * ly);
+return P(lx, ly, Math.sqrt(R * R - d2));
+};
+m.towers.forEach((tw, i) => {
+if (!tw)
+return;
+const o = r38TowerOffset(m, i);
+const b = lift(o.x, o.y);
+if (b.D <= 0)
+return;
+const h = 26 * s, top = b.Y - h - 9 * s;
+world.drops.push({
+x: b.X, y: top, r: Math.max(26, 20 * s), kind: "tower",
+accept: (d, src) => d && d.k === "sat" && !tw.sat && !(src && src.t === "r54tower" && src.mid === m.id && src.i === i),
+drop: (d, src) => r54Equip(m, i, src, d)
+});
+if (tw.sat && r54SatHit(m, i, b.X, top, 10 * s)) {
+c.save();
+c.strokeStyle = "rgba(201,214,255,.7)";
+c.setLineDash([3, 3]);
+c.beginPath();
+c.arc(b.X, top, 6.5 * s, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+}
+});
+}
+}
+catch (error) { }
+return out;
+}
+function r41DrawThing(c, set, m, o, s, tilt, t, pid, opts) {
+const out = r41DrawThing__r54(c, set, m, o, s, tilt, t, pid, opts);
+try {
+if (o.kind === "core" && r39CoreToken(m) === "tower" && opts && opts.drops) {
+const sc = s * .8, x = o.p.X, y = o.p.Y, cy2 = y - 19 * sc;
+opts.drops.push({
+x, y: cy2, r: 22 * sc, kind: "core",
+accept: (d, src) => d && d.k === "sat" && r54FirstEmpty(m) >= 0,
+drop: (d, src) => {
+const i = r54FirstEmpty(m);
+if (i >= 0)
+r54Equip(m, i, src, d);
+}
+});
+(m.towers || []).forEach((tw, i) => {
+if (!tw || !tw.sat)
+return;
+const a = t * 1.4 + i * 2.1;
+const sx = x + Math.cos(a) * 17 * sc, sy = cy2 - 6 * sc + Math.sin(a) * 6 * sc;
+const dragging = world.drag && world.drag.active && world.drag.src && world.drag.src.t === "r54tower" && world.drag.src.mid === m.id && world.drag.src.i === i;
+drawWorldItem(c, { k: "sat", r: r44SatKey(tw.sat), n: 1 }, sx, sy, Math.max(16, 12 * sc), { dim: dragging });
+const hit = {
+x: sx, y: sy, r: Math.max(16, 10 * sc), z: 12,
+desc: { k: "sat", r: r44SatKey(tw.sat), n: 1 },
+src: { t: "r54tower", mid: m.id, i },
+draggable: true,
+onTap: () => worldShowBubble({
+x: sx, y: sy - 20,
+iconHtml: r44SatIconHtml(tw.sat.type),
+title: "Tower satellite",
+meta: satTypeName(tw.sat.type) + " on guard",
+text: "Drag it off the core to take it down — or drop another satellite here while a tower is empty.",
+buttons: []
+})
+};
+(opts.hits || world.hits).push(hit);
+});
+}
+}
+catch (error) { }
+return out;
+}
+function worldPointerUp(event) {
+const g = world.drag;
+const r = worldPointerUp__r54(event);
+try {
+if (g && g.active && g.src && g.src.t === "r54tower") {
+const at = r54Tower(g.src);
+if (at && at.tw.sat && r44SatKey(at.tw.sat) === g.desc.r) {
+const pet = typeof r41Pet === "function" ? r41Pet() : null;
+if (pet && !pet.carry)
+r41Move(g.src, { t: "r41pet" }, g.desc);
+else
+r41Move(g.src, { t: "r41vault", pid: r39Pid(at.m.id) }, g.desc);
+showShipToast("Satellite taken off the tower");
+}
+}
+}
+catch (error) { }
+return r;
+}
+function r54LicenceFee(planetId) {
+const pid = planetId || selectedStartPlanet;
+const pets = getPets(pid);
+const any = pets.some(p => p.pilotLicensed || (p.role || "builder") === "pilot");
+return any ? PET_PILOT_ASSIGNMENT_FEE : 0;
+}
+function r54FeeText(planetId) {
+const f = r54LicenceFee(planetId);
+return f ? f + " " + COIN_ICON_HTML : "Free";
+}
+function r54OpenRoomMap() {
+try {
+r51CloseMenu();
+}
+catch (error) { }
+setTimeout(() => {
+try {
+openStarMap();
+}
+catch (error) { }
+}, 60);
+}
+function mpHandleMessage__r54wrap(message) {
+if (message && (message.type === "hosted" || message.type === "joined"))
+setTimeout(r54OpenRoomMap, 250);
+}
+function openStarMap(mode) {
+const r = openStarMap__r54(mode);
+try {
+if (typeof mp !== "undefined" && mp.connected && mp.roomCode && (mode || "navigate") !== "destination") {
+const n = (mp.roster || []).length || 1;
+document.getElementById("starMapHint").innerHTML = '<span class="r54-code">ROOM <b>' + escapeHTML(mp.roomCode) + '</b></span> ' + n + ' player' + (n === 1 ? "" : "s") + ' · drag to explore everyone\'s worlds';
+}
+}
+catch (error) { }
+return r;
+}
+function renderStarMapOwnerRow() {
+renderStarMapOwnerRow__r54();
+try {
+const row = document.getElementById("starMapOwnerRow");
+if (row && mp.connected && mp.roomCode && !row.classList.contains("hidden") && !row.querySelector(".r54-code"))
+row.insertAdjacentHTML("afterbegin", '<span class="r54-code" title="Room code">ROOM <b>' + escapeHTML(mp.roomCode) + '</b></span>');
+}
+catch (error) { }
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".r54-code{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;border:1px dashed rgba(120,220,255,.5);color:#9fdcff;font:800 10px/1 system-ui,sans-serif;letter-spacing:.12em;white-space:nowrap;}" +
+".r54-code b{color:#fff;letter-spacing:.22em;font-size:12px;}" +
+"#r54MapBtn{margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;}";
 document.head.appendChild(st);
 })();
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
@@ -45848,7 +46068,8 @@ escapeHTML(player.name || "Player") +
 });
 html +=
 '</div>';
-const others = mp.roster.filter(p => p.id !== mp.myId);
+html += '<button class="big-button" id="r54MapBtn">Open the room\'s star map</button>';
+const others = [];
 if (others.length) {
 html +=
 '<div class="customizer-section-title" ' +
@@ -45920,6 +46141,10 @@ mpJoinRoom(codeInput.value, nameInput
 ? nameInput.value
 : "");
 renderMultiplayerPanel();
+return;
+}
+if (event.target.closest("#r54MapBtn")) {
+r54OpenRoomMap();
 return;
 }
 const leaveBtn = event.target.closest("#mpLeaveBtn");
@@ -50898,7 +51123,7 @@ const layout = mpGetSystemLayout();
 return (layout[mp.myId] ||
 { dx: 0, dy: 0 });
 }
-function renderStarMapOwnerRow() {
+function renderStarMapOwnerRow__r54() {
 const row = document.getElementById("starMapOwnerRow");
 if (!row)
 return;
@@ -50931,7 +51156,7 @@ player.name +
 });
 row.innerHTML = html;
 }
-function openStarMap(mode) {
+function openStarMap__r54(mode) {
 starMapMode =
 mode || "navigate";
 if (starMapMode === "destination" &&
@@ -53591,7 +53816,7 @@ x: p.x, y: p.y - 100 * p.s,
 iconHtml: pod.icon,
 title: pod.label.charAt(0) + pod.label.slice(1).toLowerCase() + " simulator",
 text: "Only pilots train here. Make " + (SPECIES_DISPLAY_NAMES[pet.species] || "this pet") + " a pilot first.",
-buttons: [{ label: pet.pilotLicensed ? "Make Pilot" : "Buy pilot licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML, primary: true, action: () => worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }) }]
+buttons: [{ label: pet.pilotLicensed ? "Make Pilot" : "Buy pilot licence · " + r54FeeText(), primary: true, action: () => worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }) }]
 });
 return;
 }
@@ -53871,7 +54096,7 @@ x: p.x, y: p.y - 60 * p.s,
 iconHtml: "✈",
 title: "Pilots only",
 text: (SPECIES_DISPLAY_NAMES[pet.species] || "This pet") + " needs to be a pilot to fly." + (hasTraining ? "" : " Pilots train at Pilot Training — build one from the shop."),
-buttons: hasTraining ? [{ label: pet.pilotLicensed ? "Make Pilot" : "Buy pilot licence · " + PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML, primary: true, action: () => worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }) }] : []
+buttons: hasTraining ? [{ label: pet.pilotLicensed ? "Make Pilot" : "Buy pilot licence · " + r54FeeText(), primary: true, action: () => worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.id, "data-role": "pilot" }) }] : []
 });
 return;
 }
@@ -59785,7 +60010,7 @@ return "available";
 const roleBadge = {
 "active": "ACTIVE",
 "available": "READY",
-"needs-licence": PET_PILOT_ASSIGNMENT_FEE + " " + COIN_ICON_HTML,
+"needs-licence": r54FeeText(),
 "needs-structure": "🔒"
 };
 let roleRowHtml = '<div class="pet-roles-title">Roles</div>' +
@@ -59822,12 +60047,12 @@ st.icon + ' <b>' + st.name + '</b> on this planet.</div>' +
 '🛒 Build ' + st.name + ' in the Shop</button>';
 }
 else if (shownState === "needs-licence") {
-const canPay = getTotalAvailableCoins(id) >= PET_PILOT_ASSIGNMENT_FEE;
+const canPay = getTotalAvailableCoins(id) >= r54LicenceFee();
 roleRowHtml +=
 '<button class="neon-btn primary" data-action="set-pet-role" ' +
 'data-pet="' + pet.id + '" data-role="pilot" ' +
 (canPay ? '' : 'disabled') + '>' +
-'Buy pilot licence · ' + PET_PILOT_ASSIGNMENT_FEE + ' ' + COIN_ICON_HTML +
+'Buy pilot licence · ' + r54FeeText() +
 '</button>' +
 (canPay
 ? '<div class="pet-role-panel-note">One-off — it keeps the licence if you switch roles later.</div>'
