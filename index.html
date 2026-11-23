@@ -3219,7 +3219,7 @@ transition:opacity .45s ease;-webkit-user-select:none;user-select:none;touch-act
 #kgsSplash.kgs-out{opacity:0;pointer-events:none;}
 #kgsSplash canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
 #kgsSplash .kgs-logo{position:absolute;left:50%;top:44%;width:min(64vw,330px);aspect-ratio:853/635;transform:translate(-50%,-50%);}
-#kgsSplash .kgs-pop{position:absolute;inset:0;opacity:0;animation:kgsShow .01s linear 3.8s forwards,kgsPop .46s cubic-bezier(.3,1.6,.5,1) 4.08s;}
+#kgsSplash .kgs-pop{position:absolute;inset:0;opacity:0;animation:kgsShow .01s linear 4.12s forwards,kgsPop .46s cubic-bezier(.3,1.6,.5,1) 4.12s;}
 #kgsSplash .kgs-part{position:absolute;inset:0;}
 #kgsSplash .kgs-part svg{width:100%;height:100%;display:block;overflow:visible;}
 #kgsSplash .kgs-eyes{z-index:1;}
@@ -3553,6 +3553,8 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
                 var sp=spring(u);
 
+                sp=sp+(1-sp)*seg(t,3.16,3.29);
+
                 var rr=Math.max(6,88*Math.min(1.08,sp));
 
                 var drop=30+122*sp;
@@ -3626,7 +3628,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
             /* the closing beats play out 1.7x slower: spin settles, horns unfurl,
                crown flattens — then the finished logo takes over */
-            t=t<2.6?t:(t<3.79?2.6+(t-2.6)/1.7:3.3+(t-3.79));
+            t=t<2.6?t:(t<3.79?2.6+(t-2.6)/1.7:(t<4.12?3.2999:3.3+(t-4.12)));
 
             var phi=spin(t),ps=pose(t);
 
@@ -3891,9 +3893,19 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
                 ctx.closePath();
 
+                /* as it lands the inside wall melts away, so the notches open onto the eyes like the logo */
+                var ia=qd.outer?1:1-seg(t,3.02,3.24);
+
+                if(ia<=0)
+                    continue;
+
+                ctx.globalAlpha=appear*ia;
+
                 ctx.fill();
 
                 ctx.stroke();
+
+                ctx.globalAlpha=appear;
 
             }
 
@@ -3946,7 +3958,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
 
     var Wd=window.innerWidth,Hd=window.innerHeight;
 
-    var END=4.1,stopped=false,worker=null;
+    var END=4.5,stopped=false,worker=null;
 
     try{
 
@@ -4008,7 +4020,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
     /* sparkles with the one pop, once it's all landed */
     var pop=el.querySelector(".kgs-pop");
 
-    [[14,6,4.13],[88,2,4.18],[50,-8,4.24],[6,62,4.28],[96,60,4.16],[50,96,4.33]].forEach(function(g){
+    [[14,6,4.2],[88,2,4.25],[50,-8,4.31],[6,62,4.35],[96,60,4.23],[50,96,4.4]].forEach(function(g){
 
         var d=document.createElement("div");
 
@@ -4151,7 +4163,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
         [2.804,function(a){[0,.05,.1,.16,.21].forEach(function(o,i){tone(a+o,1600-i*90,700,.07,"sine",.12);});}],
         [3.11,function(a){tone(a,1250,380,.18,"sine",.3);}],
         [3.246,function(a){tone(a,1150,340,.18,"sine",.28);}],
-        [4.08,function(a){tone(a,880,1760,.08,"square",.05);tone(a+.03,659,0,1.5,"sine",.14);tone(a+.03,988,0,1.4,"sine",.1);tone(a+.03,1319,0,1.2,"triangle",.06);}]
+        [4.12,function(a){tone(a,880,1760,.08,"square",.05);tone(a+.03,659,0,1.5,"sine",.14);tone(a+.03,988,0,1.4,"sine",.1);tone(a+.03,1319,0,1.2,"triangle",.06);}]
     ];
 
     function schedule(){
@@ -4204,7 +4216,7 @@ opacity:0;transform:scale(0);animation:kgsGlint .75s ease-out forwards;}
     }
 
     /* ---------- done when the animation's finished and the game is ready ---------- */
-    var minMs=4950,ready=document.readyState==="complete",closed=false;
+    var minMs=5250,ready=document.readyState==="complete",closed=false;
 
     function close(){
 
@@ -29328,7 +29340,7 @@ r35SwipeEl("down").classList.toggle("on", ready && !landButton.classList.contain
 }
 catch (error) { }
 }, 200);
-const R36_UNLOAD_MS = 15000;
+const R36_UNLOAD_MS = 5000;
 let r36Landed = null;
 function landAtCurrentPlanetInner__r39() {
 const planetId = typeof currentPlanetId !== "undefined" ? currentPlanetId : null;
@@ -29370,11 +29382,11 @@ worldShowBubble({
 x: p.x, y: p.y,
 iconHtml: "📦",
 title: "Landed with cargo",
-meta: '<span class="r36-count">To the Vault in ' + r36Left() + 's</span>',
+meta: '<span class="r36-count">' + (r39IsStn(L.planetId) ? "To the space module in " : "To the Vault in ") + r36Left() + 's</span>',
 text: "Aboard: " + what + ". Pets and satellites stay on the ship either way.",
 r36: true,
 buttons: [
-{ label: "🏦 Send to the Vault", primary: true, action: () => r36Unload() },
+{ label: r39IsStn(L.planetId) ? "Send to the space module" : "🏦 Send to the Vault", primary: true, action: () => r36Unload() },
 { label: "🚀 Keep it on the ship", action: () => {
 r36Landed.kept = true;
 r36Landed = null;
@@ -30192,7 +30204,7 @@ if (!n || n.solo || !n.online)
 return;
 r38NetRaw(n, to ? { type: "nxMsg", to, d } : { type: "nxMsg", d });
 }
-function r38Op(d) {
+function r38Op__r55(d) {
 if (r38IsHost()) {
 r38HostOp(r38MyId(), d);
 return;
@@ -37012,7 +37024,7 @@ const btn = document.getElementById("focusLaunchBtn");
 if (!btn)
 return;
 const stn = r39IsStn(pid) && !!r39.landed && !running;
-const fly = stn && !r40ShipsHere(pid);
+const fly = stn;
 if (fly) {
 if (btn.dataset.mode !== "r40-fly") {
 btn._r40old = { mode: btn.dataset.mode, html: btn.innerHTML };
@@ -37045,7 +37057,7 @@ r39FlyStation();
 })();
 function roomShipFixtures__r44(c, list, planetId, st, time) {
 roomShipFixtures__r40(c, list, planetId, st, time);
-if (!r39IsStn(planetId) || !r39.landed)
+if (true)
 return;
 list.push({ v: .14, draw: () => {
 const p = roomWallPt(.5, .72);
@@ -37580,11 +37592,11 @@ c.restore();
 const things = r41DeckThings(m).map(o => Object.assign(o, { p: P(o.x, o.y, fz) }));
 const wk = r41.walk;
 const here = wk && wk.mode === "in" && wk.mid === m.id;
-const drawList = things.map(o => ({ D: o.p.D, draw: () => r41DrawThing(c, set, m, o, s, tilt, t, pid, opts) }));
+const drawList = things.map(o => ({ D: o.p.D, draw: () => r41DrawThing(c, set, m, o, s * r55InQ.thing, tilt, t, pid, opts) }));
 if (here) {
 const p = set.pos[m.id];
 const q = P(wk.x - p.x, wk.y - p.y, fz);
-drawList.push({ D: q.D, draw: () => r41DrawWalker(c, q.X, q.Y, s) });
+drawList.push({ D: q.D, draw: () => r41DrawWalker(c, q.X, q.Y, s * r55InQ.pet) });
 }
 (r39Rec(m).floor || []).forEach((f, i) => {
 const q = P(f.x, f.y, fz);
@@ -37965,7 +37977,7 @@ showShipToast(thenIn ? "Your astronaut climbs down the hatch" : "Your astronaut 
 if (thenIn)
 r41GoIn(thenIn);
 }
-function r41Board() {
+function r41Board__r55() {
 const wk = r41.walk;
 if (!wk)
 return;
@@ -37994,7 +38006,7 @@ wk.since = performance.now();
 selectedStartPlanet = r39Pid(mid);
 sound("click");
 }
-function r41GoOut(mid) {
+function r41GoOut__r55(mid) {
 const wk = r41.walk;
 const set = r41Set();
 const m = r38.world.mods[mid];
@@ -38017,7 +38029,7 @@ return;
 const p = r41Set().pos[mid];
 wk.target = { x: p.x + lx, y: p.y + ly, then };
 }
-function r41Step(dt) {
+function r41Step__r55(dt) {
 const wk = r41.walk;
 const set = r41Set();
 if (!wk || !set)
@@ -38179,6 +38191,7 @@ const k = Math.min(1, dt * 4);
 ["x", "y", "s", "tilt"].forEach(key => { r41.cam[key] += (want[key] - r41.cam[key]) * k; });
 r41.yaw += (r41.yawT - r41.yaw) * Math.min(1, dt * 6);
 const cam = r41.cam;
+r55UpdateInQ(width, height, cam.s);
 r41Backdrop(c, width, height, t);
 const view = { cx: width / 2, cy: height * (inside ? .6 : .6), s: cam.s, tilt: cam.tilt, yaw: r41.yaw, ox: cam.x, oy: cam.y, cut: inside };
 r41.view = view;
@@ -38410,7 +38423,7 @@ const m = wk && r38.world && r38.world.mods[wk.mid];
 if (!m)
 return base;
 const rf = r38ModR(m) * .95;
-return Math.max(base * .8, Math.min(base, width * .49 / rf));
+return Math.min(Math.max(base * .8, Math.min(base, width * .49 / rf)), height * .36 / rf);
 }
 var r42 = { tok: {}, ico: {}, beam: null, labels: null };
 function r42Sprite(id) {
@@ -39158,22 +39171,22 @@ c.arc(cx, cy, R * s, Math.PI * 1.02, Math.PI * 1.98);
 c.stroke();
 c.restore();
 const things = r41DeckThings(m).map(o => Object.assign(o, { p: P(o.x, o.y, fz) }));
-const drawList = things.map(o => ({ D: o.p.D, draw: () => r41DrawThing(c, set, m, o, s, tilt, t, pid, opts) }));
+const drawList = things.map(o => ({ D: o.p.D, draw: () => r41DrawThing(c, set, m, o, s * r55InQ.thing, tilt, t, pid, opts) }));
 doors.filter(d => d.D >= 0).forEach(d => drawList.push({ D: d.D, draw: () => r42Door(c, P, m, d, rf, fz, R, s, t, look, true) }));
 const wk = r41.walk;
 if (wk && wk.mode === "in" && wk.mid === m.id) {
 const p = set.pos[m.id];
 const q = P(wk.x - p.x, wk.y - p.y, fz);
-drawList.push({ D: q.D, draw: () => r41DrawWalker(c, q.X, q.Y, s) });
+drawList.push({ D: q.D, draw: () => r41DrawWalker(c, q.X, q.Y, s * r55InQ.pet) });
 }
 r42Residents(m, pid, rf, t).forEach(rs => {
 const q = P(rs.x, rs.y, fz);
-drawList.push({ D: q.D, draw: () => r42DrawResident(c, rs, q.X, q.Y, s, opts) });
+drawList.push({ D: q.D, draw: () => r42DrawResident(c, rs, q.X, q.Y, s * r55InQ.pet, opts) });
 });
 (r39Rec(m).floor || []).forEach((f, i) => {
 const q = P(f.x, f.y, fz);
 drawList.push({ D: q.D - .01, draw: () => {
-const size = 12 * s;
+const size = 12 * s * r55InQ.thing;
 drawWorldItem(c, f.d, q.X, q.Y - size * .45, size, {});
 opts.hits && opts.hits.push({ x: q.X, y: q.Y - size * .45, r: size * .75, z: 5, draggable: true, src: { t: "r41floor", mid: m.id, i }, desc: f.d, onTap: () => worldShowBubble({ x: q.X, y: q.Y - size, iconHtml: r42Ico("crate"), title: typeof worldItemName === "function" ? worldItemName(f.d) : "Item", text: "Drag it onto your astronaut to pick it up, or onto a shelf to store it.", buttons: [] }) });
 } });
@@ -39276,7 +39289,7 @@ c.lineWidth = 2.4 * s;
 c.stroke();
 c.restore();
 }
-function r42Residents(m, pid, rf, t) {
+function r42Residents__r55(m, pid, rf, t) {
 const pets = (getPets(pid) || []).filter(p => p && !p.dead && !(typeof isPetOutRoaming === "function" && isPetOutRoaming(p.id))).slice(0, 6);
 return pets.map((pet, i) => {
 let seed = 0;
@@ -43606,7 +43619,7 @@ buttons: []
 });
 return dragging;
 }
-function r41DrawHull(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
+function r41DrawHull__r55(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
 const out = r41DrawHull__r54(c, set, m, cx, cy, s, tilt, yaw, t, opts);
 try {
 if (r41.walk && r41.walk.mode === "out" && (m.towers || []).some(Boolean)) {
@@ -43758,6 +43771,331 @@ st.textContent = ".r54-code{display:inline-flex;align-items:center;gap:5px;paddi
 "#r54MapBtn{margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;}";
 document.head.appendChild(st);
 })();
+var R55NX_KEY = "destroid-nexus-stations-v1";
+var r55Nx = { enteredAt: 0, restored: false, last: 0 };
+function r55NxLoad() {
+try {
+return JSON.parse(localStorage.getItem(R55NX_KEY) || "{}") || {};
+}
+catch (error) {
+return {};
+}
+}
+function r55NxSave(o) {
+try {
+localStorage.setItem(R55NX_KEY, JSON.stringify(o));
+}
+catch (error) { }
+}
+function r55NxForget(setId) {
+const rec = r55NxLoad();
+if (rec[setId]) {
+delete rec[setId];
+r55NxSave(rec);
+}
+}
+function r55NxTick() {
+if (typeof r38 === "undefined" || !r38.nexus || !r38.world || r38.world.kind !== "nexus") {
+r55Nx.enteredAt = 0;
+r55Nx.restored = false;
+return;
+}
+const now = Date.now();
+if (!r55Nx.enteredAt)
+r55Nx.enteredAt = now;
+if (now - r55Nx.last < 2000)
+return;
+r55Nx.last = now;
+const w = r38.world, me = r38MyId(), rec = r55NxLoad();
+let changed = false;
+const settled = now - r55Nx.enteredAt > 5000;
+if (settled && !r55Nx.restored) {
+r55Nx.restored = true;
+Object.keys(rec).forEach(id => {
+const r = rec[id];
+if (!r || !r.pk || !r.pk.set) {
+delete rec[id];
+changed = true;
+return;
+}
+const here = w.sets[id];
+if (here) {
+if (here.claim && here.claim.pid !== me) {
+delete rec[id];
+changed = true;
+}
+return;
+}
+if (r.pk.mods.some(m => w.mods[m.id])) {
+delete rec[id];
+changed = true;
+return;
+}
+const pk = JSON.parse(JSON.stringify(r.pk));
+pk.set.landed = {};
+pk.set.drv = null;
+pk.set.vx = pk.set.vy = 0;
+pk.set.claim = { pid: me, name: r38MyName(), colour: r38MyColour(), awayAt: null };
+try {
+r38Unpack(JSON.parse(JSON.stringify(pk)));
+r38Op({ k: "bring", pk });
+floatingText("YOUR STATION IS RIGHT WHERE YOU LEFT IT", W / 2, H * .3, "#d79dff");
+}
+catch (error) { }
+});
+}
+Object.values(w.sets).forEach(s => {
+if (s.claim && s.claim.pid === me) {
+rec[s.id] = { pk: r38Pack(s, w), at: now };
+changed = true;
+}
+});
+if (settled) {
+Object.keys(rec).forEach(id => {
+const s = w.sets[id];
+if (!s || (s.claim && s.claim.pid !== me)) {
+delete rec[id];
+changed = true;
+}
+});
+}
+if (changed)
+r55NxSave(rec);
+}
+setInterval(() => {
+try {
+r55NxTick();
+}
+catch (error) { }
+}, 1000);
+function r38Op(d) {
+if (d && d.k === "take" && d.set)
+r55NxForget(d.set);
+return r38Op__r55(d);
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = "body.r39-stn #focusLogo{display:none !important;}" +
+"body.r39-stn #r39Bar .r39-strip,body.r39-stn #r39Bar .r39-fly{display:none !important;}" +
+"body.r39-stn #r39Bar .r39-row2{justify-content:center;}" +
+"@media (orientation:landscape) and (max-height:620px){body.r39-stn #r39Bar{display:none !important;}}";
+document.head.appendChild(st);
+const btn = document.getElementById("focusLaunchBtn");
+if (btn)
+btn.addEventListener("pointerdown", e => {
+if (btn.dataset.mode === "r40-fly") {
+e.stopImmediatePropagation();
+e.preventDefault();
+}
+}, { capture: true });
+})();
+function r55IsAstro(p) {
+return !!p && (p.role || "builder") === "pilot";
+}
+function r55Walking(petId) {
+return !!(r41.walk && r41.walk.pet && r41.walk.pet.id === petId);
+}
+function r55HullPets(c, m, lift, s, t, opts) {
+const pid = r39Pid(m.id);
+const R = r38ModR(m);
+(getPets(pid) || []).filter(p => p && !p.dead && r55IsAstro(p) && !r55Walking(p.id)).slice(0, 4).forEach((pet, i) => {
+let seed = 0;
+for (let k = 0; k < pet.id.length; k++)
+seed += pet.id.charCodeAt(k);
+const dir = seed % 2 ? 1 : -1;
+const a = seed * .61 + t * .09 * dir;
+const r = R * (.42 + .1 * Math.sin(t * .3 + seed));
+const lx = Math.cos(a) * r, ly = Math.sin(a) * r;
+const b = lift(lx, ly);
+if (b.D <= 0)
+return;
+const size = 15 * s;
+const face = Math.sin(a) * dir > 0 ? 1 : -1;
+c.save();
+c.fillStyle = "rgba(0,0,0,.22)";
+c.beginPath();
+c.ellipse(b.X, b.Y, size * .4, size * .13, 0, 0, Math.PI * 2);
+c.fill();
+try {
+drawSpacePet(c, pet.homePlanetId || "earth", b.X, b.Y - size * .5, size, pet.energy, seed + t * 2, pet.species, false, pet.hat || null, face);
+}
+catch (error) { }
+c.restore();
+world.hits.push({ x: b.X, y: b.Y - size * .5, r: Math.max(16, size * .7), z: 7, onTap: () => {
+selectedStartPlanet = pid;
+worldPetBubble(pet, b.X, b.Y - size);
+} });
+});
+}
+function r41DrawHull(c, set, m, cx, cy, s, tilt, yaw, t, opts) {
+const out = r41DrawHull__r55(c, set, m, cx, cy, s, tilt, yaw, t, opts);
+try {
+if (typeof r41On === "function" && r41On() && opts && opts.drops !== undefined) {
+const R = r38ModR(m);
+const P = r41Proj(cx, cy, s, tilt, yaw);
+const lift = (lx, ly) => {
+const d2 = Math.min(R * R * .98, lx * lx + ly * ly);
+return P(lx, ly, Math.sqrt(R * R - d2));
+};
+r55HullPets(c, m, lift, s, t, opts);
+}
+}
+catch (error) { }
+return out;
+}
+function r42Residents(m, pid, rf, t) {
+return r42Residents__r55(m, pid, rf, t).filter(rs => !r55IsAstro(rs.pet) && !r55Walking(rs.pet.id));
+}
+function startRoamingPet(petId) {
+const pid = selectedStartPlanet;
+if (typeof r41On === "function" && r41On() && r39IsStn(pid)) {
+const pet = (getPets(pid) || []).find(p => p.id === petId);
+if (!pet)
+return;
+worldHideBubble();
+const mid = r39Mid(pid);
+const set = r41Set();
+const m = r38.world.mods[mid];
+if (!m || !set)
+return;
+const p = set.pos[mid];
+if (r55IsAstro(pet)) {
+const h = r38HatchOffset(m);
+r41.walk = { mode: "out", pet, fromPid: pid, mid, x: p.x + h.x, y: p.y + h.y + 12, face: 1, target: null, since: performance.now() };
+showShipToast("Out on the hull — walk into a ship to go aboard");
+}
+else {
+const lad = r41DeckThings(m).find(o => o.kind === "ladder") || { x: 0, y: 0 };
+r41.walk = { mode: "in", pet, fromPid: pid, mid, x: p.x + lad.x + 6, y: p.y + lad.y + 6, face: 1, target: null, since: performance.now() };
+showShipToast("Walk the deck — only astronauts can go out on the hull");
+}
+sound("click");
+return;
+}
+return startRoamingPet__r55(petId);
+}
+function r55TakePetFrom(pid, pet) {
+const list = planetSave.pets[pid] || [];
+const i = list.findIndex(p => p.id === pet.id);
+if (i >= 0)
+list.splice(i, 1);
+}
+function r55HasRoom(ship) {
+try {
+return shipCargoRoom(ship) >= PET_CARGO_SLOTS;
+}
+catch (error) {
+return true;
+}
+}
+function r55PutInCargo(ship, pet) {
+ship.cargoPets = ship.cargoPets || [];
+ship.cargoPets.push(pet);
+}
+function r41GoOut(mid) {
+const wk = r41.walk;
+if (wk && wk.pet && !r55IsAstro(wk.pet)) {
+const pid = r39Pid(mid);
+const ships = getShips(pid) || [];
+const ship = ships.find(r55HasRoom);
+if (!ship && ships.length) {
+showShipToast("The ship's hold is full — unload some cargo first");
+return;
+}
+if (ship && wk.fromPid) {
+if (wk.pet.carry) {
+r41VaultAdd(pid, wk.pet.carry, 1);
+wk.pet.carry = null;
+}
+r55TakePetFrom(wk.fromPid, wk.pet);
+r55PutInCargo(ship, wk.pet);
+r41.walk = null;
+savePlanetProgress();
+sound("arrival");
+showShipToast((SPECIES_DISPLAY_NAMES[wk.pet.species] || "Your pet") + " climbs up into the ship's cargo hold");
+return;
+}
+showShipToast(ship ? "Only astronauts can go out on the hull" : "Only astronauts can go out on the hull — there's no ship on this module to climb into");
+return;
+}
+return r41GoOut__r55(mid);
+}
+function r55EnterShip(sm, shipId) {
+const wk = r41.walk;
+if (!wk)
+return;
+const pid = r39Pid(sm);
+const ship = (getShips(pid) || []).find(s => s.id === shipId);
+if (!ship)
+return;
+if (wk.pet && wk.pet.carry) {
+r41VaultAdd(pid, wk.pet.carry, 1);
+wk.pet.carry = null;
+}
+if (wk.fromPid) {
+const seat = !ship.pendingPilot && r55IsAstro(wk.pet);
+if (!seat && !r55HasRoom(ship)) {
+showShipToast("The hold's full — " + (SPECIES_DISPLAY_NAMES[wk.pet.species] || "your pet") + " waits out on the hull");
+}
+else {
+r55TakePetFrom(wk.fromPid, wk.pet);
+if (seat)
+ship.pendingPilot = wk.pet;
+else
+r55PutInCargo(ship, wk.pet);
+savePlanetProgress();
+}
+}
+r41.walk = null;
+sound("click");
+selectedStartPlanet = pid;
+selectedLaunchShipId = shipId;
+try {
+worldHideBubble();
+enterRoomView("ship", shipId);
+}
+catch (error) { }
+}
+function r41Board() {
+const wk = r41.walk;
+if (wk && wk.shipId) {
+const sm = r41ShipModule(r41Set(), wk.shipId);
+if (sm) {
+r55EnterShip(sm, wk.shipId);
+return;
+}
+}
+return r41Board__r55();
+}
+function r41Step(dt) {
+const r = r41Step__r55(dt);
+try {
+const wk = r41.walk;
+if (wk && wk.mode === "out" && wk.fromPid && performance.now() - wk.since > 700) {
+const set = r41Set(), w = r38.world;
+for (const mid of set.mods) {
+const m = w.mods[mid], p = set.pos[mid];
+const ships = getShips(r39Pid(mid)) || [];
+for (let i = 0; i < ships.length; i++) {
+const o = r38PadOffset(m, Math.min(i, (m.size || 1) - 1));
+if (Math.hypot(wk.x - (p.x + o.x), wk.y - (p.y + o.y)) < 7) {
+r55EnterShip(mid, ships[i].id);
+return r;
+}
+}
+}
+}
+}
+catch (error) { }
+return r;
+}
+var r55InQ = { pet: 1, thing: 1 };
+function r55UpdateInQ(width, height, camS) {
+const hull = Math.min(width, height) * .22 / R38_MOD_R;
+const q = Math.max(.42, Math.min(1, hull / Math.max(.01, camS)));
+r55InQ.pet = q;
+r55InQ.thing = Math.min(1, q * 1.3);
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -51329,7 +51667,7 @@ performance.now();
 toggleRoamingUI(true);
 renderPlanetFocus();
 }
-function startRoamingPet(petId) {
+function startRoamingPet__r55(petId) {
 if (roomState && roomState.viewOnly)
 leaveRoomView();
 const planetId = selectedStartPlanet;
