@@ -10393,7 +10393,7 @@ buttons: [
 ]
 });
 }
-function roomSatFactoryFixtures__r33(c, list, planetId, st, time) {
+function roomSatFactoryFixtures__r33__r56(c, list, planetId, st, time) {
 roomTerminal(c, list, .2, "ORBITAL WORKS", st.colour, "structure-satellite-factory");
 list.push({ v: .45, draw: () => {
 const p = roomFloorPt(.55, .45);
@@ -20985,28 +20985,17 @@ c.restore();
 }
 }
 catch (error) { }
-const ring = [];
-for (let i = 0; i < 40; i++) {
-const a = i / 40 * Math.PI * 2;
-ring.push(r27PenProject(g.cen.lat + Math.cos(a) * R26_PEN.r, (g.cen.lon || 0) + Math.sin(a) * R26_PEN.r / Math.cos(g.cen.lat)));
-}
-c.save();
-c.beginPath();
-ring.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
-c.closePath();
-c.fillStyle = "rgba(141,255,176,.08)";
-c.fill();
-c.restore();
+r56PenGround(c, W, H);
 c.save();
 c.font = "900 15px system-ui,sans-serif";
 c.textAlign = "center";
 c.fillStyle = "#eafcff";
 c.shadowColor = st.colour;
 c.shadowBlur = 14;
-c.fillText("PET PEN", W / 2, H * .09);
+c.fillText("PET PATCH", W / 2, H * .09);
 c.restore();
 }
-function r27PenFence(c, list) {
+function r27PenFence__old(c, list) {
 const g = roomGeo;
 const N = 30, rr = R26_PEN.r;
 const gateHalf = .2;
@@ -21100,7 +21089,7 @@ world.hits.push({ x: mx, y: sy + sh / 2, r: Math.max(54, sw * .6), z: 40, onTap:
 } });
 }
 }
-function r27PenFixtures(c, list, planetId, st, time) {
+function r27PenFixtures__r56(c, list, planetId, st, time) {
 r27PenFence(c, list);
 list.push({ v: .04, draw: () => {
 const box = roomDrawBox(c, .5, .04, 140, 40, "#ffcf6b", "FOOD SHELF", "rgba(46,30,12,.95)");
@@ -22941,7 +22930,7 @@ c.stroke();
 c.restore();
 return { x, y, w, h };
 }
-function r30FactoryButtons(c, g, planetId, job, kind) {
+function r30FactoryButtons__r56(c, g, planetId, job, kind) {
 const tab = kind === "ship" ? "structure-ship-factory" : "structure-satellite-factory";
 const title = kind === "ship" ? "SHIP FACTORY" : "SATELLITE FACTORY";
 world.hits.push({ x: g.x, y: g.ringY, r: g.r, z: 6, onTap: () => job ? r30BuildBubble(planetId, job, g.x, g.ringY - g.r * .7) : worldOpenHolo(tab, { title }) });
@@ -27600,7 +27589,7 @@ r33GoThrough(door.to);
 }
 }
 }
-function roomShopFixtures(c, list, planetId, st, time) {
+function roomShopFixtures__r56(c, list, planetId, st, time) {
 const savePen = roomPetPenFixture;
 roomPetPenFixture = function () { };
 try {
@@ -28161,7 +28150,7 @@ cost += t.cost;
 cost += Math.min(shieldUnlocked(planetId), shipBuildToggles.shield || 0) * SHIELD_BUILD_COST;
 return cost;
 }
-function roomFactoryFixtures__r34(c, list, planetId, st, time) {
+function roomFactoryFixtures__r34__r56(c, list, planetId, st, time) {
 if (!r33Theme())
 return roomFactoryFixtures__r33(c, list, planetId, st, time);
 r33ApplyFav(planetId);
@@ -28253,13 +28242,7 @@ catch (error) { }
 }
 else {
 const model = resolvePadShip(ships) || { cargoPets: [] };
-c.globalAlpha = job ? .55 + .35 * ((Date.now() - (job.startedAt || 0)) / ((job.durationSeconds || 1) * 1000)) : .35 + .1 * Math.sin(t * 3);
-c.shadowColor = "#5ff3ff";
-c.shadowBlur = 18;
-try {
-drawShipAtScale(c, model, .55 * s, !!job);
-}
-catch (error) { }
+r56Holo(c, model, .55 * s, job);
 }
 c.restore();
 if (job) {
@@ -28328,7 +28311,7 @@ sound("click");
 } });
 });
 if (ship) {
-const hurt = (Number(ship.lives) || 3) < 3;
+const hurt = false;
 r33Pill(c, hurt ? p.x - 70 : p.x, p.y + 64 * s, world.shownShipId === ship.id ? "✈ Flying this one" : "✈ Fly this ship", "#7dffb0", world.shownShipId !== ship.id, () => worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id }));
 if (hurt)
 r33Pill(c, p.x + 72, p.y + 64 * s, "❤ Restore heart · " + SHIP_SERVICES["restore-heart"].cost + "¢", "#ff6b8a", !isShipInService(ship), () => r33ConfirmService(planetId, ship, "restore-heart"));
@@ -28355,7 +28338,7 @@ worldShowBubble({
 x: p.x, y: p.y - 90,
 iconHtml: ROCKET_ICON_HTML,
 title: "Ship on the table",
-text: "Flip its switches on the right to retrofit upgrades (builders do the work), or use the arrows to look at another — or a fresh one.",
+text: "Tap the + slots on the board behind to pick upgrades, then Upgrade — builders do the work. Arrows flip to another ship or a fresh one.",
 buttons: []
 });
 }
@@ -29272,7 +29255,13 @@ return;
 list.push({ v: .15, draw: () => {
 const p = roomWallPt(.5, .9);
 const selected = world.shownShipId === ship.id;
-r33Pill(c, p.x, p.y, selected ? "🚀 Selected · tap to launch" : "✈ Select for launch", selected ? "#7dffb0" : "#5ff3ff", true, () => {
+const r56stn = r39IsStn(planetId);
+r33Pill(c, p.x, p.y, r56stn ? "🚀 Launch ship" : selected ? "🚀 Selected · tap to launch" : "✈ Select for launch", selected || r56stn ? "#7dffb0" : "#5ff3ff", true, () => {
+if (r56stn && !selected) {
+worldRunAction({ "data-action": "select-launch-ship", "data-ship": ship.id });
+roomLaunchShip(ship);
+return;
+}
 if (selected)
 roomLaunchShip(ship);
 else
@@ -35773,7 +35762,7 @@ return planetBoardTitle__r39(tab);
 function r26PenEntries(queue, p) {
 if (r39IsStn(selectedStartPlanet) && !hasStructure(selectedStartPlanet, "bio-dome"))
 return;
-return r26PenEntries__r39(queue, p);
+return r26PenEntries__r56(queue, p);
 }
 function r28StructureLabel(item) {
 if (r39IsStn(selectedStartPlanet) && item.structureId === "stock")
@@ -44095,6 +44084,1136 @@ const hull = Math.min(width, height) * .22 / R38_MOD_R;
 const q = Math.max(.42, Math.min(1, hull / Math.max(.01, camS)));
 r55InQ.pet = q;
 r55InQ.thing = Math.min(1, q * 1.3);
+}
+function roomLaunchShip(ship) {
+if (r39IsStn(selectedStartPlanet)) {
+if (roomState && roomState.viewOnly)
+leaveRoomView();
+roomState = null;
+if (roamingActive)
+endRoaming();
+setTimeout(() => {
+try {
+launchWithAnimation();
+}
+catch (error) { }
+}, 140);
+return;
+}
+return roomLaunchShip__r56(ship);
+}
+var R56_PATCH = {
+earth: { grout: "#4c3b2a", stone: ["#a39a8a", "#8f8676", "#b3aa98"], edge: "#5d8a3f", garden: ["bush", "flower", "bush", "grass", "flower"], name: "cobbles" },
+mars: { grout: "#5a2a1e", stone: ["#b0583c", "#94492f", "#c06a48"], edge: "#7a3b2a", garden: ["cactus", "rock", "spire"], name: "flagstones" },
+europa: { grout: "#6d93a8", stone: ["#d8ecf6", "#bcd8e8", "#e6f4fb"], edge: "#8fb4c8", garden: ["icecrystal", "icicle"], name: "ice tiles" },
+titan: { grout: "#3b2c1e", stone: ["#8a6a45", "#76593a", "#9a7a52"], edge: "#5d4a33", garden: ["mushroom", "grass", "mushroom"], name: "slate" },
+neptune: { grout: "#3f6f86", stone: ["#e6d6ae", "#d6c398", "#efe2c0"], edge: "#2f5a70", garden: ["coral", "kelp", "flower"], name: "shell sand" },
+kepler: { grout: "#1f3328", stone: ["#4f7a5d", "#3f6650", "#5e8a6a"], edge: "#2c4a3a", garden: ["glowshroom", "sporepod", "mushroom"], name: "moss stones" },
+aurora: { grout: "#33325a", stone: ["#8a86d0", "#6f6bb4", "#a29ee2"], edge: "#4b4a7a", garden: ["crystal", "flower"], name: "crystal tiles" },
+helios: { grout: "#2a1a16", stone: ["#6a4134", "#553429", "#7a4b3c"], edge: "#3a2a26", garden: ["emberflower", "rock"], name: "basalt" },
+nova: { grout: "#a9b6d8", stone: ["#ffffff", "#e4ebfb", "#f2f6ff"], edge: "#cfd8f0", garden: ["cloudpuff", "flower"], name: "cloud tiles" },
+zenith: { grout: "#b3ab98", stone: ["#f2eee4", "#e3ddcf", "#faf7ef"], edge: "#d8d2c4", garden: ["crystal", "monolith"], name: "marble" },
+nemesis: { grout: "#1c1220", stone: ["#4a3350", "#3a2840", "#58405e"], edge: "#2a1d2e", garden: ["spire", "rock"], name: "obsidian" }
+};
+function r56PatchStyle(planetId) {
+return R56_PATCH[planetId] || R56_PATCH.earth;
+}
+function r56Hash(n) {
+const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+return x - Math.floor(x);
+}
+function r56Seed(planetId) {
+let h = 0;
+for (let i = 0; i < planetId.length; i++)
+h = (h * 31 + planetId.charCodeAt(i)) % 9973;
+return h;
+}
+function r56PatchR(a, planetId) {
+const sd = r56Seed(planetId);
+return 1.16 + .1 * Math.sin(2 * a + sd * .37) + .07 * Math.sin(3 * a + sd * .91) + .04 * Math.sin(5 * a + sd * 1.3);
+}
+function r56LL(cen, x, y) {
+const R = R26_PEN.r;
+return { lat: cen.lat + y * R, lon: (cen.lon || 0) + x * R / Math.cos(cen.lat) };
+}
+function r56DrawPatchGround(c, cen, proj, planetId, detail) {
+const S = r56PatchStyle(planetId);
+const ring = (k) => {
+const pts = [];
+for (let i = 0; i < 56; i++) {
+const a = i / 56 * Math.PI * 2, r = r56PatchR(a, planetId) * k;
+const ll = r56LL(cen, Math.sin(a) * r, -Math.cos(a) * r);
+pts.push(proj(ll.lat, ll.lon));
+}
+return pts;
+};
+const outer = ring(1), inner = ring(.93);
+if (outer.every(q => !q.visible))
+return;
+const path = pts => {
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+};
+c.save();
+path(outer);
+c.fillStyle = S.edge;
+c.fill();
+path(inner);
+c.fillStyle = S.grout;
+c.fill();
+c.clip();
+const step = detail ? .15 : .22;
+let n = 0;
+for (let y = -1.3; y < 1.3; y += step) {
+const row = Math.round(y / step);
+for (let x = -1.3 + (row % 2 ? step / 2 : 0); x < 1.3; x += step) {
+n++;
+const jx = x + (r56Hash(n) - .5) * step * .25, jy = y + (r56Hash(n + 99) - .5) * step * .25;
+const a = Math.atan2(jx, -jy), rr = Math.hypot(jx, jy);
+if (rr > r56PatchR(a, planetId) * .95)
+continue;
+const p0 = r56LL(cen, jx, jy), p1 = r56LL(cen, jx + step * .5, jy), p2 = r56LL(cen, jx, jy + step * .5);
+const q0 = proj(p0.lat, p0.lon);
+if (!q0.visible)
+continue;
+const q1 = proj(p1.lat, p1.lon), q2 = proj(p2.lat, p2.lon);
+const ex = { x: (q1.x - q0.x) * .82, y: (q1.y - q0.y) * .82 }, ey = { x: (q2.x - q0.x) * .82, y: (q2.y - q0.y) * .82 };
+c.fillStyle = S.stone[n % S.stone.length];
+c.beginPath();
+for (let k = 0; k < 7; k++) {
+const t = k / 7 * Math.PI * 2, w = .9 + .12 * r56Hash(n * 7 + k);
+const px = q0.x + (ex.x * Math.cos(t) + ey.x * Math.sin(t)) * w, py = q0.y + (ex.y * Math.cos(t) + ey.y * Math.sin(t)) * w;
+k ? c.lineTo(px, py) : c.moveTo(px, py);
+}
+c.closePath();
+c.fill();
+if (detail) {
+c.fillStyle = "rgba(255,255,255,.12)";
+c.beginPath();
+c.ellipse(q0.x - ex.x * .2 - ey.x * .25, q0.y - ex.y * .2 - ey.y * .25, Math.max(1, Math.hypot(ex.x, ex.y) * .35), Math.max(.6, Math.hypot(ey.x, ey.y) * .2), Math.atan2(ex.y, ex.x), 0, Math.PI * 2);
+c.fill();
+}
+}
+}
+c.restore();
+}
+function r56Beds(planetId) {
+const S = r56PatchStyle(planetId);
+const beds = [];
+const sd = r56Seed(planetId);
+const angles = [.62, 1.72, 4.56, 5.66];
+angles.forEach((a0, i) => {
+const a = a0 + (r56Hash(sd + i) - .5) * .25;
+const r = r56PatchR(a, planetId) * 1.02;
+const plants = [];
+const n = 2 + Math.floor(r56Hash(sd * 3 + i) * 2);
+for (let j = 0; j < n; j++) {
+const da = (j - (n - 1) / 2) * .17, dr = (r56Hash(i * 11 + j) - .5) * .12;
+plants.push({ a: a + da, r: r + dr, type: S.garden[(i + j) % S.garden.length], scale: .75 + r56Hash(i * 5 + j * 3) * .4, flip: r56Hash(i + j * 2) < .5 ? -1 : 1, seed: Math.floor(r56Hash(i * 9 + j) * 4) * 25 + 3 });
+}
+if (planetId === "earth" && i % 2 === 0)
+plants.push({ a: a + .02, r: r - .08, type: "bush", scale: 1.05, flip: 1, seed: 3 });
+beds.push({ a, r, plants });
+});
+return beds;
+}
+function r56BedSoil(c, cen, proj, planetId, bed) {
+const S = r56PatchStyle(planetId);
+const pts = [];
+for (let i = 0; i < 14; i++) {
+const t = i / 14 * Math.PI * 2;
+const x = Math.sin(bed.a) * bed.r + Math.cos(t) * .24, y = -Math.cos(bed.a) * bed.r + Math.sin(t) * .13;
+const ll = r56LL(cen, x, y);
+pts.push(proj(ll.lat, ll.lon));
+}
+if (pts.every(q => !q.visible))
+return;
+c.save();
+c.beginPath();
+pts.forEach((q, i) => i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y));
+c.closePath();
+c.fillStyle = planetId === "earth" ? "#4a3020" : S.grout;
+c.fill();
+c.strokeStyle = planetId === "earth" ? "#7d6a50" : S.stone[0];
+c.lineWidth = 1.4;
+c.stroke();
+c.restore();
+}
+function r26PenEntries__r56(queue, p) {
+if (roomState || flightProgress > .001 && r19SurfScale < .2)
+return;
+const planetId = selectedStartPlanet;
+const cen = r26PenCentre();
+const R = R26_PEN.r;
+const proj = (lat, lon) => projectSphere(lat, lon, p.viewLat, p.viewLon, p.cx, p.cy, p.R);
+const centre = proj(cen.lat, cen.lon);
+const front = proj(cen.lat - R * 1.1, cen.lon || 0);
+if (!centre.visible && !front.visible)
+return;
+const c = p.c;
+queue.push({ z: -1e8, alpha: 1, r20Fade: 1, draw: () => {
+r56DrawPatchGround(c, cen, proj, planetId, false);
+r56Beds(planetId).forEach(b => r56BedSoil(c, cen, proj, planetId, b));
+} });
+const base = Math.max(40 * r53K, p.width * .21) * .42;
+r56Beds(planetId).forEach(bed => bed.plants.forEach(pl => {
+const ll = r56LL(cen, Math.sin(pl.a) * pl.r, -Math.cos(pl.a) * pl.r);
+const q = proj(ll.lat, ll.lon);
+if (!q.visible)
+return;
+const size = base * pl.scale * r19SurfScale * r53Persp(q);
+queue.push({ z: p.groundDepthAt(q.x, q.y), alpha: 1, r20Fade: 1, draw: () => {
+const sp = r53Sprite(pl, size, planetId);
+const k = size / sp.px;
+c.translate(q.x, q.y);
+r20Orient(c, q.x, q.y, "radial");
+c.drawImage(sp.cv, -sp.ax * k, -sp.ay * k, sp.w * k, sp.h * k);
+} });
+}));
+if (front.visible) {
+const h = Math.max(r53K * 9, p.width * .042) * r19SurfScale;
+queue.push({ z: p.groundDepthAt(front.x, front.y) + .001, alpha: 1, r20Fade: 1, draw: () => {
+c.save();
+r20Around(c, front.x, front.y, "radial", 1);
+const fs = Math.max(7, Math.round(9 * r19SurfScale + 3));
+c.font = "900 " + fs + "px system-ui,sans-serif";
+const label = "PETS";
+const tw = c.measureText(label).width + 14;
+c.strokeStyle = "#ffcf6b";
+c.lineWidth = Math.max(1.4, 2 * r19SurfScale);
+c.beginPath();
+c.moveTo(front.x - tw * .4, front.y);
+c.lineTo(front.x - tw * .4, front.y - h * 1.5);
+c.moveTo(front.x + tw * .4, front.y);
+c.lineTo(front.x + tw * .4, front.y - h * 1.5);
+c.stroke();
+c.fillStyle = "rgba(10,16,34,.92)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(front.x - tw / 2, front.y - h * 1.5 - fs * 1.1, tw, fs * 1.4, fs * .5);
+else
+c.rect(front.x - tw / 2, front.y - h * 1.5 - fs * 1.1, tw, fs * 1.4);
+c.fill();
+c.strokeStyle = "#8dffb0";
+c.lineWidth = 1;
+c.stroke();
+c.fillStyle = "#eafcff";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, front.x, front.y - h * 1.5 - fs * .4);
+c.restore();
+} });
+}
+r27PenProps(queue, p, cen);
+const edge = proj(cen.lat, (cen.lon || 0) + R * 1.1 / Math.cos(cen.lat));
+const ringR = Math.max(20, Math.hypot(edge.x - centre.x, edge.y - centre.y));
+if (!roamingActive) {
+const fc = document.getElementById("planetFocusCanvas");
+if (fc && fc._focusHitAreas)
+fc._focusHitAreas.push({ x: centre.x, y: centre.y - h0(p) * .4, r: ringR * .95, tab: "pets", structureId: "pet-pen" });
+}
+if (roamingActive && !roomState && roamPetTransitionKind !== "exit" && performance.now() - roamingStartTime > ROAM_RETURN_GRACE_SECONDS * 1000) {
+const d = Math.hypot(roamingLat - cen.lat, (roamingLon - (cen.lon || 0)) * Math.cos(cen.lat));
+const cooling = performance.now() - worldLastRoomExitAt < WORLD_ENTER_COOLDOWN_MS || (worldLastRoomExitKey === "s:pet-pen" && d < R * 1.3);
+if (d < R * .7 && !cooling)
+enterRoom("structure", "pet-pen");
+else if (worldLastRoomExitKey === "s:pet-pen" && d >= R * 1.3)
+worldLastRoomExitKey = null;
+}
+}
+function h0(p) {
+return Math.max(r53K * 9, p.width * .042) * r19SurfScale;
+}
+function r56PenGround(c, W, H) {
+const g = roomGeo;
+r56DrawPatchGround(c, g.cen, r27PenProject, selectedStartPlanet, true);
+r56Beds(selectedStartPlanet).forEach(b => r56BedSoil(c, g.cen, r27PenProject, selectedStartPlanet, b));
+}
+function r27PenFence(c, list) {
+const g = roomGeo;
+const planetId = selectedStartPlanet;
+const base = 56 * (g.W / 420);
+r56Beds(planetId).forEach(bed => bed.plants.forEach(pl => {
+const ll = r56LL(g.cen, Math.sin(pl.a) * pl.r, -Math.cos(pl.a) * pl.r);
+const q = r27PenProject(ll.lat, ll.lon);
+if (!q.visible)
+return;
+const v = (1 - Math.cos(pl.a)) / 2;
+list.push({ v: v * 1.04 + .02, draw: () => {
+const size = base * pl.scale * (.7 + .45 * v);
+const sp = r53Sprite(pl, size, planetId);
+const k = size / sp.px;
+c.save();
+c.drawImage(sp.cv, q.x - sp.ax * k, q.y - sp.ay * k, sp.w * k, sp.h * k);
+c.restore();
+} });
+}));
+const ll = r56LL(g.cen, 0, -r56PatchR(0, planetId) * .98);
+const q = r27PenProject(ll.lat, ll.lon);
+list.push({ v: 1.08, draw: () => {
+const pulse = .6 + .4 * Math.sin(performance.now() / 1000 * 3);
+const sw = 96, sh = 30, sx = q.x - sw / 2, sy = q.y - 64;
+c.save();
+c.strokeStyle = "#c9a06a";
+c.lineWidth = 5;
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(q.x, q.y);
+c.lineTo(q.x, sy + sh);
+c.stroke();
+c.fillStyle = "rgba(6,30,20,.95)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(sx, sy, sw, sh, 8);
+else
+c.rect(sx, sy, sw, sh);
+c.fill();
+c.strokeStyle = "#7dffb0";
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 8 + 6 * pulse;
+c.lineWidth = 2;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#bfffd9";
+c.font = "900 14px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("▼ EXIT ▼", q.x, sy + sh / 2 + 1);
+c.restore();
+world.hits.push({ x: q.x, y: sy + sh / 2, r: Math.max(54, sw * .6), z: 40, onTap: () => leaveRoom() });
+} });
+}
+function r56BenchItems(planetId) {
+return worldVaultContents(planetId).filter(d => !r26IsFood(d) && (d.k === "item" || d.k === "extra" || d.k === "sat" || d.k === "tower"));
+}
+function r56DrawBench(c, planetId, u, v) {
+const p = roomFloorPt(u, v), s = p.s;
+const w = 96 * s, h = 14 * s, legH = 18 * s;
+const top = p.y - legH - h;
+c.save();
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, w * .55, 6 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#5e3a20";
+[-.4, .4].forEach(f => c.fillRect(p.x + f * w - 3 * s, top + h, 6 * s, legH));
+const g = c.createLinearGradient(0, top, 0, top + h);
+g.addColorStop(0, "#c99257");
+g.addColorStop(1, "#8a5a30");
+c.fillStyle = g;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(p.x - w / 2, top, w, h, 4 * s);
+else
+c.rect(p.x - w / 2, top, w, h);
+c.fill();
+c.strokeStyle = "rgba(255,226,180,.35)";
+c.lineWidth = 1;
+for (let i = 1; i < 3; i++) {
+c.beginPath();
+c.moveTo(p.x - w / 2 + 3 * s, top + h * i / 3);
+c.lineTo(p.x + w / 2 - 3 * s, top + h * i / 3);
+c.stroke();
+}
+c.restore();
+const items = r56BenchItems(planetId);
+const n = Math.max(1, items.length);
+const size = Math.min(30 * s, w * .9 / n);
+if (!items.length) {
+c.save();
+c.fillStyle = "rgba(234,252,255,.55)";
+c.font = "700 " + Math.round(8 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("powerups & gear land here", p.x, top - 6 * s);
+c.restore();
+}
+items.forEach((d, i) => {
+const x = p.x - w * .45 + w * .9 * (i + .5) / n, y = top - size * .45;
+const dragging = world.drag && world.drag.active && worldSameItem(world.drag.desc, d) && world.drag.src && world.drag.src.t === "vault";
+drawWorldItem(c, d, x, y, size, { dim: dragging, count: d.n });
+world.hits.push({ x, y, r: size * .65, z: 8, desc: { k: d.k, r: d.r, n: 1 }, src: { t: "vault" }, draggable: true, onTap: () => worldStockBubble(d, { t: "vault" }, { x, y }) });
+});
+c.save();
+c.fillStyle = "#eafcff";
+c.font = "800 " + Math.round(7 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("GEAR BENCH", p.x, p.y + 12 * s);
+c.restore();
+}
+function r27PenFixtures(c, list, planetId, st, time) {
+r27PenFixtures__r56(c, list, planetId, st, time);
+list.push({ v: .34, draw: () => r56DrawBench(c, planetId, .66, .34) });
+}
+function r56ShopShelf(c, list, planetId, st) {
+const ids = Object.keys(STRUCTURES).filter(id => !hasStructure(planetId, id) && !((id === "ship-factory" || id === "pilot-training") && planetId === "earth"));
+list.push({ v: -1.9, draw: () => {
+const a = roomWallPt(.04, .4), b = roomWallPt(.78, .4);
+c.save();
+c.fillStyle = "#a8743e";
+c.fillRect(a.x, a.y - 3, b.x - a.x, 5);
+c.fillStyle = "#5e3a20";
+c.fillRect(a.x, a.y + 2, b.x - a.x, 7);
+c.restore();
+if (!ids.length) {
+const p = roomWallPt(.41, .3);
+c.save();
+c.fillStyle = "rgba(255,230,246,.6)";
+c.font = "700 11px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText("Every building's built here", p.x, p.y);
+c.restore();
+}
+} });
+const n = Math.max(1, ids.length);
+ids.forEach((id, i) => {
+const sub = [];
+roomBlueprintFixture(c, sub, planetId, st, id, .5, .5, i);
+const f = sub[0];
+if (!f)
+return;
+const u = .06 + .7 * (i + .5) / n;
+list.push({ v: -1.8, draw: () => {
+const realF = roomFloorPt;
+const q = roomWallPt(u, .4);
+const k = Math.min(.95, (roomGeo.backW * .7 / Math.max(n, 4)) / 62);
+roomFloorPt = function () {
+return { x: q.x, y: q.y - 2, s: k };
+};
+try {
+f.draw();
+}
+finally {
+roomFloorPt = realF;
+}
+} });
+});
+}
+function roomShopFixtures(c, list, planetId, st, time) {
+const saveBp = roomBlueprintFixture, saveTr = roomTransporterFixture, saveBox = roomDrawBox;
+roomBlueprintFixture = function () { };
+roomTransporterFixture = function () { };
+roomDrawBox = function (cc, u, v, w, h, colour, label, fill) {
+if (label === "PICK-UP TRAY")
+return { x: -9999, top: -9999, w: 120, h: 34, s: 1 };
+return saveBox.apply(this, arguments);
+};
+try {
+roomShopFixtures__r56(c, list, planetId, st, time);
+}
+finally {
+roomBlueprintFixture = saveBp;
+roomTransporterFixture = saveTr;
+setTimeout(() => {
+roomDrawBox = saveBox;
+}, 0);
+}
+r56ShopShelf(c, list, planetId, st);
+}
+var r56Sel = {};
+var r56HoloCv = null;
+function r56Est(sec) {
+try {
+const r = siteRateFor(1);
+return r > 0 ? sec / r : sec;
+}
+catch (error) {
+return sec;
+}
+}
+function r56Dur(sec) {
+sec = Math.round(sec);
+return sec < 60 ? sec + "s" : Math.floor(sec / 60) + "m" + (sec % 60 ? " " + (sec % 60) + "s" : "");
+}
+function r56Heart(c, x, y, r, fill, stroke, glow) {
+c.save();
+c.beginPath();
+c.moveTo(x, y + r * .9);
+c.bezierCurveTo(x - r * 1.25, y + r * .1, x - r * 1.05, y - r * .95, x, y - r * .35);
+c.bezierCurveTo(x + r * 1.05, y - r * .95, x + r * 1.25, y + r * .1, x, y + r * .9);
+c.closePath();
+if (glow) {
+c.shadowColor = glow;
+c.shadowBlur = 12;
+}
+if (fill) {
+c.fillStyle = fill;
+c.fill();
+}
+c.shadowBlur = 0;
+if (stroke) {
+c.strokeStyle = stroke;
+c.lineWidth = Math.max(1.2, r * .14);
+c.stroke();
+}
+c.restore();
+}
+function r56Plus(c, x, y, r, col) {
+c.save();
+c.strokeStyle = col;
+c.lineWidth = Math.max(1.6, r * .22);
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(x - r * .45, y);
+c.lineTo(x + r * .45, y);
+c.moveTo(x, y - r * .45);
+c.lineTo(x, y + r * .45);
+c.stroke();
+c.restore();
+}
+function r56Lock(c, x, y, r, col) {
+c.save();
+c.strokeStyle = col;
+c.fillStyle = col;
+c.lineWidth = Math.max(1.2, r * .16);
+c.beginPath();
+c.arc(x, y - r * .2, r * .32, Math.PI, 0);
+c.stroke();
+c.fillRect(x - r * .45, y - r * .2, r * .9, r * .7);
+c.restore();
+}
+function r56Btn(c, x, y, w, h, label, col, on, act) {
+c.save();
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+else
+c.rect(x - w / 2, y - h / 2, w, h);
+c.fillStyle = on ? r33Shade(col, .35) : "rgba(40,46,58,.9)";
+c.fill();
+c.strokeStyle = on ? col : "#5a6270";
+c.lineWidth = 1.6;
+if (on) {
+c.shadowColor = col;
+c.shadowBlur = 10;
+}
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = on ? "#ffffff" : "#9aa4b4";
+c.font = "900 " + Math.round(h * .42) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(label, x, y + 1);
+c.restore();
+world.hits.push({ x, y, r: Math.max(h * .8, Math.min(w / 2, 70)), z: 11, onTap: () => {
+if (on)
+act();
+} });
+world.hits.push({ x: x - w * .3, y, r: h * .7, z: 11, onTap: () => {
+if (on)
+act();
+} });
+world.hits.push({ x: x + w * .3, y, r: h * .7, z: 11, onTap: () => {
+if (on)
+act();
+} });
+}
+function r56Tier(bonus) {
+bonus = bonus || 0;
+return bonus >= CARGO_TIER_BONUS.dualPerk ? 3 : bonus >= CARGO_TIER_BONUS.petBay ? 2 : bonus >= CARGO_TIER_BONUS.cargoHold ? 1 : 0;
+}
+function r56TierBonus(t) {
+return t > 0 ? CARGO_TIER_BONUS[R33_TOGGLES[t - 1].tier] : 0;
+}
+function r56NewTier(planetId) {
+let t = 0;
+R33_TOGGLES.forEach((tg, i) => {
+if (shipBuildToggles[tg.key] && hasPurchasedToggleUpgrade(planetId, "ship-factory", tg.toggle))
+t = i + 1;
+});
+return t;
+}
+function r56SetNewTier(planetId, t) {
+R33_TOGGLES.forEach((tg, i) => {
+shipBuildToggles[tg.key] = i === t - 1;
+});
+r33SaveFav(planetId);
+}
+function r56TierOpen(planetId, t, ship) {
+if (t < 1)
+return true;
+const tg = R33_TOGGLES[t - 1];
+if (ship) {
+const svc = SHIP_SERVICES[tg.service];
+return !svc.requiresUpgrade || isUpgradePurchased(planetId, svc.requiresUpgrade);
+}
+return hasPurchasedToggleUpgrade(planetId, "ship-factory", tg.toggle);
+}
+function r56Rack(c, x, y, w, h, t, col) {
+c.save();
+c.strokeStyle = "#8a94a8";
+c.lineWidth = 1.4;
+c.strokeRect(x, y, w, h);
+const shelves = 4;
+for (let i = 1; i < shelves; i++) {
+c.beginPath();
+c.moveTo(x, y + h * i / shelves);
+c.lineTo(x + w, y + h * i / shelves);
+c.stroke();
+}
+const filled = 1 + t;
+for (let i = 0; i < shelves; i++) {
+const row = shelves - 1 - i;
+const on = i < filled;
+const cy = y + h * row / shelves;
+const n = 3;
+for (let j = 0; j < n; j++) {
+const bw = w / n * .72, bh = h / shelves * .66;
+const bx = x + w * (j + .5) / n - bw / 2, by = cy + h / shelves - bh - 1;
+c.fillStyle = on ? (j % 2 ? "#c98a3c" : "#e0a457") : "rgba(255,255,255,.05)";
+c.fillRect(bx, by, bw, bh);
+if (on) {
+c.strokeStyle = "rgba(60,30,10,.5)";
+c.lineWidth = 1;
+c.strokeRect(bx, by, bw, bh);
+}
+}
+}
+c.restore();
+}
+function r56Plan() {
+return withMySave(() => {
+if (!planetSave.r56Plan)
+planetSave.r56Plan = {};
+return planetSave.r56Plan;
+});
+}
+setInterval(() => {
+try {
+if (typeof planetSave === "undefined" || !planetSave || !planetSave.r56Plan)
+return;
+const plan = planetSave.r56Plan;
+Object.keys(plan).forEach(id => {
+const e = plan[id];
+const ship = e && (getShips(e.pid) || []).find(s => s.id === id);
+if (!ship || !e.list || !e.list.length) {
+delete plan[id];
+return;
+}
+if (isShipInService(ship))
+return;
+const next = e.list.shift();
+if (!isShipServiceApplicable(ship, next))
+return;
+const before = getBuildQueue(e.pid).length;
+queueShipService(e.pid, id, next);
+if (getBuildQueue(e.pid).length === before) {
+delete plan[id];
+showShipToast("Upgrades paused — not enough coins or no builder with energy");
+}
+});
+}
+catch (error) { }
+}, 1500);
+function r56Board(c, planetId, ship, ships, pick, newJob, svcJob) {
+const a = roomWallPt(.05, .04), b = roomWallPt(.95, .97);
+const x = a.x, y = a.y, w = b.x - a.x, h = b.y - a.y;
+const s = Math.max(.6, Math.min(1.25, w / 300));
+const t = performance.now() / 1000;
+c.save();
+c.fillStyle = "#161a22";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x - 4, y - 4, w + 8, h + 8, 10);
+else
+c.rect(x - 4, y - 4, w + 8, h + 8);
+c.fill();
+const g = c.createLinearGradient(0, y, 0, y + h);
+g.addColorStop(0, "#0c1a2e");
+g.addColorStop(1, "#070c16");
+c.fillStyle = g;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x, y, w, h, 8);
+else
+c.rect(x, y, w, h);
+c.fill();
+c.strokeStyle = "rgba(95,243,255,.5)";
+c.lineWidth = 1.2;
+c.stroke();
+c.globalAlpha = .05;
+c.fillStyle = "#5ff3ff";
+for (let yy = y + ((t * 14) % 4); yy < y + h; yy += 4)
+c.fillRect(x, yy, w, 1);
+c.globalAlpha = 1;
+c.fillStyle = "#5ff3ff";
+c.font = "900 " + Math.round(10 * s + 1) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText(ship ? "UPGRADE " + r44ShipName(ship, pick - 1, ships.length).toUpperCase() : "NEW SHIP", x + w / 2, y + 7 * s);
+c.restore();
+const busy = ship ? svcJob : newJob;
+const labelX = x + 12 * s;
+const slotX0 = x + w * .36;
+const rowH = (h - 30 * s - 44 * s) / (ship && r56PerkPets(ship).length ? 4 : 3);
+let ry = y + 26 * s + rowH / 2;
+const label = (txt, yy) => {
+c.save();
+c.fillStyle = "#bfd3ea";
+c.font = "800 " + Math.round(8.5 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillText(txt, labelX, yy);
+c.restore();
+};
+const key = ship ? ship.id : "new:" + planetId;
+const sel = r56Sel[key] || (r56Sel[key] = { h: 0, s: 0, t: ship ? r56Tier(ship.materialCapBonus) : 0 });
+const plan = ship && planetSave.r56Plan && planetSave.r56Plan[ship.id];
+const locked = !!busy || !!plan;
+const hr = Math.min(11 * s, rowH * .3);
+const gap = hr * 3.1;
+label("Hearts", ry);
+const lives = ship ? Math.max(0, Math.min(3, Number(ship.lives) || 3)) : 3;
+if (ship && sel.h > 3 - lives)
+sel.h = 3 - lives;
+for (let i = 0; i < 3; i++) {
+const hx = slotX0 + i * gap, hy = ry;
+if (i < lives) {
+r56Heart(c, hx, hy, hr, "#ff5a7e", "#ffd1dc", "#ff5a7e");
+continue;
+}
+const mi = i - lives;
+const on = mi < sel.h;
+r56Heart(c, hx, hy + 1, hr, on ? "rgba(255,90,126,.35)" : "rgba(0,0,0,.45)", on ? "#ff9ab0" : "#4a5262", on ? "#ff5a7e" : null);
+r56Plus(c, hx, hy - hr * .05, hr, on ? "#ffffff" : "#7a8494");
+if (!locked)
+world.hits.push({ x: hx, y: hy, r: hr * 1.4, z: 11, onTap: () => {
+sel.h = sel.h > mi ? mi : mi + 1;
+sound("click");
+} });
+}
+if (!ship) {
+c.save();
+c.fillStyle = "rgba(191,211,234,.55)";
+c.font = "700 " + Math.round(7 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillText("full", slotX0 + 3 * gap - hr, ry);
+c.restore();
+}
+ry += rowH;
+label("Shields", ry);
+const owned = ship ? (ship.shieldHearts || 0) : 0;
+const open = shieldUnlocked(planetId);
+if (ship) {
+sel.s = Math.max(0, Math.min(sel.s, open - owned));
+}
+const chosen = ship ? sel.s : Math.min(open, shipBuildToggles.shield || 0);
+for (let k = 1; k <= SHIELD_HEART_MAX; k++) {
+const hx = slotX0 + (k - 1) * gap, hy = ry;
+if (k <= owned) {
+r56Heart(c, hx, hy, hr, "#4fc8ff", "#d4f6ff", "#4fc8ff");
+continue;
+}
+if (k > open) {
+r56Heart(c, hx, hy + 1, hr, "rgba(0,0,0,.5)", "#3a4150", null);
+r56Lock(c, hx, hy, hr, "#6a7282");
+world.hits.push({ x: hx, y: hy, r: hr * 1.4, z: 11, onTap: () => r34UpgradeBubble(planetId, SHIELD_UPGRADE_IDS[k - 1], hx, hy - 20) });
+continue;
+}
+const idx = k - owned;
+const on = idx <= chosen;
+r56Heart(c, hx, hy + 1, hr, on ? "rgba(79,200,255,.35)" : "rgba(0,0,0,.45)", on ? "#9fe6ff" : "#4a5262", on ? "#4fc8ff" : null);
+r56Plus(c, hx, hy - hr * .05, hr, on ? "#ffffff" : "#7a8494");
+if (!locked)
+world.hits.push({ x: hx, y: hy, r: hr * 1.4, z: 11, onTap: () => {
+if (ship)
+sel.s = sel.s >= idx ? idx - 1 : idx;
+else {
+shipBuildToggles.shield = chosen >= idx ? idx - 1 : idx;
+r33SaveFav(planetId);
+}
+sound("click");
+} });
+}
+ry += rowH;
+label("Hold", ry);
+const curT = ship ? r56Tier(ship.materialCapBonus) : 0;
+let tier = ship ? Math.max(curT, sel.t) : r56NewTier(planetId);
+if (ship)
+sel.t = tier;
+const rackH = Math.min(rowH * .82, 38 * s), rackW = rackH * 1.05;
+r56Rack(c, slotX0 - hr, ry - rackH / 2, rackW, rackH, tier, "#ffb347");
+const capX = slotX0 - hr + rackW + gap * .9;
+const cap = getShipCargoCapacity(r56TierBonus(tier));
+const minT = ship ? curT : 0;
+const canDown = !locked && tier > minT;
+const nextOpen = tier < 3 && r56TierOpen(planetId, tier + 1, ship);
+const canUp = !locked && tier < 3 && nextOpen;
+const bR = Math.min(11 * s, rowH * .28);
+const stepper = (sx, on, lockIt, sign, act) => {
+c.save();
+c.beginPath();
+c.arc(sx, ry, bR, 0, Math.PI * 2);
+c.fillStyle = on ? "rgba(255,179,71,.2)" : "rgba(0,0,0,.4)";
+c.fill();
+c.strokeStyle = on ? "#ffb347" : "#4a5262";
+c.lineWidth = 1.6;
+c.stroke();
+c.restore();
+if (lockIt)
+r56Lock(c, sx, ry, bR, "#6a7282");
+else if (sign > 0)
+r56Plus(c, sx, ry, bR * 1.3, on ? "#ffe2b8" : "#5a6270");
+else {
+c.save();
+c.strokeStyle = on ? "#ffe2b8" : "#5a6270";
+c.lineWidth = Math.max(1.6, bR * .28);
+c.lineCap = "round";
+c.beginPath();
+c.moveTo(sx - bR * .55, ry);
+c.lineTo(sx + bR * .55, ry);
+c.stroke();
+c.restore();
+}
+world.hits.push({ x: sx, y: ry, r: bR * 1.5, z: 11, onTap: act });
+};
+stepper(capX, canDown, false, -1, () => {
+if (!canDown)
+return;
+if (ship)
+sel.t = tier - 1;
+else
+r56SetNewTier(planetId, tier - 1);
+sound("click");
+});
+c.save();
+c.fillStyle = "#ffe2b8";
+c.font = "900 " + Math.round(11 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText(String(cap), capX + bR + 16 * s, ry);
+c.restore();
+const upLock = tier < 3 && !nextOpen;
+stepper(capX + 2 * bR + 32 * s, canUp, upLock, 1, () => {
+if (upLock) {
+const up = r34ToggleUpgradeId(R33_TOGGLES[tier].toggle);
+if (up)
+r34UpgradeBubble(planetId, up, capX + 2 * bR + 32 * s, ry - 20);
+return;
+}
+if (!canUp)
+return;
+if (ship)
+sel.t = tier + 1;
+else
+r56SetNewTier(planetId, tier + 1);
+sound("click");
+});
+ry += rowH;
+if (ship) {
+const pets = r56PerkPets(ship);
+if (pets.length) {
+label("Perks", ry);
+const each = (x + w - slotX0) / Math.max(1, pets.length);
+pets.forEach((e, i) => {
+const px = slotX0 - hr + i * each;
+try {
+drawSpacePet(c, e.pet.homePlanetId || planetId, px + 8 * s, ry + 6 * s, 20 * s, 100, t * 1.5 + i, e.pet.species, false, e.pilot ? "pilot" : "builder", 1);
+}
+catch (error) { }
+c.save();
+c.fillStyle = e.col;
+c.font = "900 " + Math.round(8 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillText(e.val, px + 20 * s, ry - 4 * s);
+c.fillStyle = "rgba(191,211,234,.8)";
+c.font = "700 " + Math.round(6.5 * s + 2) + "px system-ui,sans-serif";
+c.fillText(e.label, px + 20 * s, ry + 7 * s);
+c.restore();
+});
+ry += rowH;
+}
+}
+const by = y + h - 22 * s, bw = Math.min(w - 24 * s, 250 * s), bh = Math.max(26, 30 * s);
+if (busy) {
+const frac = busy.site ? siteFraction(busy) : Math.min(1, (Date.now() - (busy.startedAt || 0)) / ((busy.durationSeconds || 1) * 1000));
+c.save();
+c.fillStyle = "rgba(0,0,0,.5)";
+c.fillRect(x + w / 2 - bw / 2, by - bh / 2, bw, bh);
+c.fillStyle = "rgba(125,255,176,.35)";
+c.fillRect(x + w / 2 - bw / 2, by - bh / 2, bw * frac, bh);
+c.strokeStyle = "#7dffb0";
+c.lineWidth = 1.4;
+c.strokeRect(x + w / 2 - bw / 2, by - bh / 2, bw, bh);
+c.fillStyle = "#eafff2";
+c.font = "900 " + Math.round(bh * .4) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+const left = (plan && plan.list && plan.list.length ? " · " + plan.list.length + " more queued" : "");
+c.fillText((ship ? "Upgrading" : "Building") + " · " + formatRemainingText(busy) + left, x + w / 2, by + 1);
+c.restore();
+world.hits.push({ x: x + w / 2, y: by, r: Math.min(bw / 2, 80), z: 11, onTap: () => r30BuildBubble(planetId, busy, x + w / 2, by - 40) });
+return;
+}
+if (!ship) {
+const cost = r33NewCost(planetId);
+const can = getTotalAvailableCoins(planetId) >= cost;
+r56Btn(c, x + w / 2, by, bw, bh, "Build ship · " + cost + " ¢ · " + "~" + r56Dur(r56Est(computeShipBuildDuration(planetId))), "#7dffb0", can, () => {
+worldRunAction({ "data-action": "queue-ship" });
+r33ApplyFav(planetId);
+sound("arrival");
+});
+return;
+}
+const list = [];
+for (let i = 0; i < sel.h; i++)
+list.push("restore-heart");
+for (let i = 0; i < sel.s; i++)
+list.push("shield-heart");
+if (sel.t > curT)
+list.push(R33_TOGGLES[sel.t - 1].service);
+const cost = list.reduce((n, id) => n + SHIP_SERVICES[id].cost, 0);
+const time = list.reduce((n, id) => n + computeShipServiceDuration(planetId, id), 0);
+const can = list.length && getTotalAvailableCoins(planetId) >= cost;
+r56Btn(c, x + w / 2, by, bw, bh, list.length ? "Upgrade · " + cost + " ¢ · ~" + r56Dur(r56Est(time)) : "Tap + to choose upgrades", "#ffcc33", !!can, () => {
+const P = r56Plan();
+P[ship.id] = { pid: planetId, list: list.slice() };
+r56Sel[key] = { h: 0, s: 0, t: r56Tier(ship.materialCapBonus) };
+sound("arrival");
+showShipToast("Upgrades queued — your builders get to work");
+});
+}
+function r56PerkPets(ship) {
+const out = [];
+const add = (pet, pilot) => {
+const perk = pet && getPerkForSpecies(pet.species);
+const d = perk && R34_PERK_STAT[perk.effectType];
+if (!d)
+return;
+const v = perk.effectValue * Math.max(1, pet.perkLevel || 1);
+out.push({ pet, pilot, label: d[0], col: d[1], val: d[2](v) });
+};
+if (ship.pendingPilot)
+add(ship.pendingPilot, true);
+(ship.cargoPets || []).forEach(p => add(p, false));
+return out.slice(0, 3);
+}
+function r56Holo(c, model, scale, job) {
+const dpr = Math.min(2, window.devicePixelRatio || 1);
+const W0 = 360, H0 = 320;
+if (!r56HoloCv) {
+r56HoloCv = document.createElement("canvas");
+}
+const cv = r56HoloCv;
+if (cv.width !== W0 * dpr) {
+cv.width = W0 * dpr;
+cv.height = H0 * dpr;
+}
+const x = cv.getContext("2d");
+x.setTransform(dpr, 0, 0, dpr, 0, 0);
+x.clearRect(0, 0, W0, H0);
+x.save();
+x.translate(W0 / 2, H0 * .72);
+try {
+drawShipAtScale(x, model, scale, false);
+}
+catch (error) { }
+x.restore();
+const t = performance.now() / 1000;
+x.globalCompositeOperation = "source-atop";
+const g = x.createLinearGradient(0, 0, 0, H0);
+g.addColorStop(0, "rgba(150,250,255,.62)");
+g.addColorStop(1, "rgba(80,160,255,.62)");
+x.fillStyle = g;
+x.fillRect(0, 0, W0, H0);
+x.globalCompositeOperation = "destination-out";
+x.fillStyle = "rgba(0,0,0,.5)";
+for (let yy = (t * 24) % 5; yy < H0; yy += 5)
+x.fillRect(0, yy, W0, 2);
+x.globalCompositeOperation = "source-over";
+const k = job ? Math.max(0, Math.min(1, (Date.now() - (job.startedAt || 0)) / ((job.durationSeconds || 1) * 1000))) : 0;
+const flick = (Math.sin(t * 23) > .93 ? .5 : 1) * (.55 + .1 * Math.sin(t * 3));
+c.save();
+const bg = c.createLinearGradient(0, 6, 0, -H0 * .6);
+bg.addColorStop(0, "rgba(95,243,255,.28)");
+bg.addColorStop(1, "rgba(95,243,255,0)");
+c.fillStyle = bg;
+c.beginPath();
+c.moveTo(-26 * scale, 6);
+c.lineTo(-90 * scale, -H0 * .6);
+c.lineTo(90 * scale, -H0 * .6);
+c.lineTo(26 * scale, 6);
+c.closePath();
+c.fill();
+c.globalAlpha = flick + (job ? .25 * k : 0);
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 16;
+c.globalCompositeOperation = "lighter";
+c.drawImage(cv, -W0 / 2 + Math.sin(t * 40) * (Math.sin(t * 23) > .93 ? 3 : 0), -H0 * .72, W0, H0);
+c.restore();
+}
+var r56FactoryBuildersOnly = false;
+function r30FactoryButtons(c, g, planetId, job, kind) {
+if (kind === "ship" && r56FactoryBuildersOnly) {
+world.hits.push({ x: g.x, y: g.ringY, r: g.r, z: 6, onTap: () => job ? r30BuildBubble(planetId, job, g.x, g.ringY - g.r * .7) : null });
+if (!job)
+return;
+const crew = (job.workers || []).length;
+const b2 = r30Pill(c, g.x, g.textY + 30, "＋ Builder (" + crew + ")", "#5ff3ff", true);
+world.hits.push({ x: b2.x, y: b2.y, r: Math.min(b2.w / 2, 50), z: 9, onTap: () => {
+const rp = roamingActive && getRoamingPet();
+const petId = rp && r30IsBuilder(rp) && !(job.workers || []).includes(rp.id) ? rp.id : "";
+worldRunAction(petId ? { "data-action": "r30-build", "data-job": r30Key(job), "data-pet": petId } : { "data-action": "r30-build", "data-job": r30Key(job) });
+} });
+return;
+}
+if (kind === "sat" && r56SatCount(planetId)) {
+const real = worldOpenHolo;
+worldOpenHolo = function (tab, opts) {
+if (tab === "structure-satellite-factory") {
+showShipToast("Tap a satellite on the rack to build it");
+return;
+}
+return real.apply(this, arguments);
+};
+try {
+return r30FactoryButtons__r56(c, g, planetId, job, kind);
+}
+finally {
+setTimeout(() => {
+worldOpenHolo = real;
+}, 0);
+}
+}
+return r30FactoryButtons__r56(c, g, planetId, job, kind);
+}
+function roomFactoryFixtures__r34(c, list, planetId, st, time) {
+if (!r33Theme())
+return roomFactoryFixtures__r34__r56(c, list, planetId, st, time);
+const realT = roomTerminal, realS = r33StatsBoard, realB = r33SwitchBoard;
+roomTerminal = function (cc, ll, wx, label) {
+if (label === "BUILD CONSOLE")
+return;
+return realT.apply(this, arguments);
+};
+r33StatsBoard = function () { };
+r33SwitchBoard = function () { };
+const start = list.length;
+try {
+roomFactoryFixtures__r34__r56(c, list, planetId, st, time);
+}
+finally {
+roomTerminal = realT;
+}
+list.slice(start).forEach(it => {
+const d = it.draw;
+it.draw = () => {
+const a = r33StatsBoard, b = r33SwitchBoard;
+r33StatsBoard = function () { };
+r33SwitchBoard = function () { };
+r56FactoryBuildersOnly = true;
+try {
+d();
+}
+finally {
+r33StatsBoard = a;
+r33SwitchBoard = b;
+r56FactoryBuildersOnly = false;
+}
+};
+});
+r33StatsBoard = realS;
+r33SwitchBoard = realB;
+list.push({ v: -1.1, draw: () => {
+const ships = (getShips(planetId) || []).filter(s => !s.enemy);
+const pick = r33FactoryPick[planetId] || 0;
+const ship = pick > 0 ? ships[pick - 1] : null;
+const newJob = getBuildQueue(planetId).find(b => b.type === "ship");
+const svcJob = ship && getBuildQueue(planetId).find(b => b.type === "ship-service" && b.shipId === ship.id);
+r56Board(c, planetId, ship, ships, pick, newJob, svcJob);
+} });
+}
+function r56SatCount(planetId) {
+const cr = satCredits(planetId);
+return Object.keys(cr).filter(k => cr[k] > 0).length;
+}
+function r56SatBubble(planetId, type, x, y) {
+const n = satCredits(planetId)[type] || 0;
+const coins = getTotalAvailableCoins(planetId);
+worldShowBubble({
+x, y,
+iconHtml: isForgedItemId(type) ? forgedIconHtml(type) : getItemIconHtml(type),
+title: satTypeName(type) + " satellite",
+meta: n + " blueprint" + (n === 1 ? "" : "s") + " in stock · " + r56Dur(SAT_BUILD_SECONDS),
+text: "Power: " + satPowerText(type) + ". Manual: " + satModeBlurb(type, "manual") + " Automatic: " + satModeBlurb(type, "auto"),
+buttons: ["manual", "auto"].map(mode => ({
+label: (mode === "auto" ? "Automatic" : "Manual") + " · " + SAT_COST[mode] + " " + COIN_ICON_HTML,
+primary: mode === "auto",
+disabled: coins < SAT_COST[mode] || n < 1,
+action: () => worldRunAction({ "data-action": "sat-build", "data-item": type, "data-option": mode })
+}))
+});
+}
+function roomSatFactoryFixtures__r33(c, list, planetId, st, time) {
+roomSatFactoryFixtures__r33__r56(c, list, planetId, st, time);
+list.push({ v: -1.05, draw: () => {
+const a = roomWallPt(.42, .08), b = roomWallPt(.96, .9);
+const x = a.x, y = a.y, w = b.x - a.x, h = b.y - a.y;
+const cr = satCredits(planetId);
+const types = Object.keys(cr).filter(k => cr[k] > 0);
+c.save();
+c.fillStyle = "#141922";
+c.fillRect(x - 3, y - 3, w + 6, h + 6);
+c.fillStyle = "#0a1220";
+c.fillRect(x, y, w, h);
+c.strokeStyle = st.colour;
+c.globalAlpha = .6;
+c.strokeRect(x + .5, y + .5, w - 1, h - 1);
+c.globalAlpha = 1;
+c.fillStyle = st.colour;
+c.font = "900 " + Math.round(Math.max(9, w * .045)) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText("BLUEPRINTS IN STOCK", x + w / 2, y + 5);
+c.restore();
+if (!types.length) {
+c.save();
+c.fillStyle = "rgba(234,252,255,.6)";
+c.font = "700 " + Math.round(Math.max(9, w * .04)) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("Sell a powerup at the Vault", x + w / 2, y + h * .48);
+c.fillText("to stock a satellite blueprint", x + w / 2, y + h * .48 + 14);
+c.restore();
+world.hits.push({ x: x + w / 2, y: y + h / 2, r: Math.min(w, h) * .45, z: 7, onTap: () => worldOpenHolo("structure-satellite-factory", { title: "SATELLITE FACTORY" }) });
+return;
+}
+const cols = Math.min(3, types.length), rows = Math.ceil(Math.min(types.length, 9) / cols);
+const cw = w / cols, ch = (h - 20) / Math.max(1, rows);
+const t = performance.now() / 1000;
+types.slice(0, 9).forEach((type, i) => {
+const cx = x + cw * (i % cols + .5), cy = y + 20 + ch * (Math.floor(i / cols) + .45);
+c.save();
+c.strokeStyle = "rgba(160,190,220,.25)";
+c.beginPath();
+c.moveTo(x + 6, y + 20 + ch * (Math.floor(i / cols) + .85));
+c.lineTo(x + w - 6, y + 20 + ch * (Math.floor(i / cols) + .85));
+c.stroke();
+const sc = Math.min(cw, ch) / 70;
+c.translate(cx, cy + Math.sin(t * 1.4 + i) * 2);
+c.scale(sc, sc);
+c.translate(-W / 2, -H / 2);
+try {
+satDrawOne(c, { id: "rack" + i, type, mode: "auto", hp: SAT_HP, cd: 0, space: "field", ox: 0, oy: 0 });
+}
+catch (error) { }
+c.restore();
+c.save();
+c.fillStyle = "#ffcc33";
+c.font = "900 " + Math.round(Math.max(9, cw * .13)) + "px system-ui,sans-serif";
+c.textAlign = "right";
+c.textBaseline = "top";
+c.fillText("×" + cr[type], cx + cw * .42, cy - ch * .4);
+c.fillStyle = "#d8e6f6";
+c.font = "700 " + Math.round(Math.max(7, cw * .1)) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(satTypeName(type).split(" ")[0], cx, cy + ch * .18);
+c.restore();
+world.hits.push({ x: cx, y: cy, r: Math.min(cw, ch) * .45, z: 8, onTap: () => r56SatBubble(planetId, type, cx, cy - 20) });
+});
+} });
 }
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
@@ -53948,7 +55067,7 @@ x: p.x, y: p.y - size * .5,
 iconHtml: info.iconHtml,
 title: info.name,
 meta: d.price + " " + COIN_ICON_HTML + (d.stockLimited ? " · " + d.n + " in stock" : ""),
-text: info.text + " Bought things wait on the pick-up tray.",
+text: info.text + " Bought things go to the Vault — and the gear bench in the pet patch.",
 buttons: [{ label: "Buy · " + d.price + " " + COIN_ICON_HTML, primary: true, disabled: !canBuy, action: () => worldRunAction(d.buy) }]
 });
 } });
@@ -54461,7 +55580,7 @@ roamingReturnToPets = null;
 roomState = null;
 startExitingRoaming();
 }
-function roomLaunchShip(ship) {
+function roomLaunchShip__r56(ship) {
 if (roomState && roomState.viewOnly)
 leaveRoomView();
 roomState = null;
