@@ -11796,7 +11796,7 @@ x: p.x, y: p.y - 100 * p.s,
 iconHtml: pod.icon,
 title: pod.label.charAt(0) + pod.label.slice(1).toLowerCase() + " simulator",
 meta: pilots.length ? "Pick a pilot to train — or drag one onto the pod" : "No pilots here yet",
-text: pilots.length ? "" : "Get a pet licensed at the licence desk and it can train here.",
+text: pilots.length ? "" : "Give a pet the helmet at the stand to make it an astronaut — then it can train here.",
 buttons: pilots.length
 ? pilots.slice(0, 6).map(pet => ({
 label: petRowLabel(planetId, pet, "Lv " + getPetStatLevel(pet, pod.stat) + " · " + (pet.pilotPoints || 0).toLocaleString() + " ⭐", "Train ▸"),
@@ -11837,7 +11837,7 @@ action: () => { worldRunAction({ "data-action": "set-pet-role", "data-pet": pet.
 })
 });
 }
-function roomLicenceDeskFixture(c, list, planetId, st) {
+function roomLicenceDeskFixture__old(c, list, planetId, st) {
 list.push({ v: .7, draw: () => {
 const box = roomDrawBox(c, .18, .7, 62, 30, "#ffd76b", "PILOT LICENCES");
 const t = performance.now() / 1000;
@@ -15411,7 +15411,7 @@ return item ? item.id : "emp";
 const PET_SHADOW_DESC = typeof CanvasRenderingContext2D !== "undefined"
 ? Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "shadowBlur")
 : null;
-function drawSpacePet(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale) {
+function drawSpacePet__r57(c, planetId, x, y, size, energy, walkSeed, species, isWorking, hatId, facingScale) {
 const e = Number.isFinite(energy) ? energy : 100;
 const scale = Math.max(0, Math.min(1, (e - 6) / 54));
 if (!PET_SHADOW_DESC || scale >= 1 || !c)
@@ -17971,14 +17971,22 @@ r20S.vLat = vLat;
 const now = performance.now();
 const dt = r20Last ? Math.min(.1, (now - r20Last) / 1000) : 0;
 r20Last = now;
-const target = roamingActive && !roomState ? 1 : 0;
+const target = roamingActive && !roomState ? 1 : R57_HOME_K;
 r20K += (target - r20K) * Math.min(1, dt * 4);
 if (Math.abs(target - r20K) < .003)
 r20K = target;
 }
 function r20Matrix(x, y, mode) {
 const { cx, cy, R, vLat } = r20S;
-let nx = (x - cx) / R, ny = (cy - y) / R;
+let nx, ny;
+if (r57Feel.on) {
+nx = (x - r57Feel.cx) / r57Feel.R;
+ny = (r57Feel.cy - y) / r57Feel.R;
+}
+else {
+nx = (x - cx) / R;
+ny = (cy - y) / R;
+}
 let q = nx * nx + ny * ny;
 if (q > 1) {
 const s = 1 / Math.sqrt(q);
@@ -20660,6 +20668,7 @@ if (held)
 return;
 const py = p.y - size * .5;
 try {
+r57Cur = pet;
 drawSpacePet(c, planetId, p.x, py, size, pet.energy, seed + time * 2, pet.species, false, pet.hat || null, facing);
 }
 catch (error) { }
@@ -22714,14 +22723,14 @@ if (r30Ruined(selectedStartPlanet, structureId))
 return false;
 return planetTapOpensRoom__r30(structureId);
 }
-function enterRoom(kind, id) {
+function enterRoom__r57(kind, id) {
 if (kind === "structure" && r30Ruined(selectedStartPlanet, id)) {
 r30RuinedNotice(selectedStartPlanet, id);
 return;
 }
 return enterRoom__r30(kind, id);
 }
-function enterRoomView(kind, id) {
+function enterRoomView__r57(kind, id) {
 if (kind === "structure" && r30Ruined(selectedStartPlanet, id)) {
 r30RuinedNotice(selectedStartPlanet, id);
 return;
@@ -27147,6 +27156,8 @@ c.restore();
 c.restore();
 }
 function r33FrontDoor(c, W, H, st, time, th) {
+if (r57PauseDraw)
+return;
 const d0 = roomFloorPt(.34, 1), d1 = roomFloorPt(.66, 1);
 const pulse = .6 + .4 * Math.sin(time * 3);
 c.save();
@@ -27687,7 +27698,7 @@ leaveRoom();
 return;
 }
 list.push({ v: -3, draw: () => {
-const a = roomWallPt(.24, .04), b = roomWallPt(.76, .7);
+const a = roomWallPt(.24, .04), b = roomWallPt(.57, .7);
 const w = b.x - a.x, h = b.y - a.y;
 c.save();
 c.beginPath();
@@ -28326,7 +28337,7 @@ list.push({ v: .5, draw: () => r33SwitchBoard(c, planetId, ship) });
 r30DrawCrew(c, list, planetId, time, ["ship", "ship-service"]);
 void jobs;
 }
-function r33Pill(c, x, y, label, col, on, act) {
+function r33Pill__r57(c, x, y, label, col, on, act) {
 const b = r30Pill(c, x, y, label, col, on, false);
 world.hits.push({ x: b.x, y: b.y, r: Math.min(b.w / 2, 60), z: 9, onTap: () => {
 if (on)
@@ -28870,6 +28881,7 @@ const ship = roomState && worldShip(planetId, roomState.id);
 if (!ship || !r33Theme())
 return;
 list.push({ v: -1, draw: () => {
+return;
 const rows = r34ShipRows(ship);
 const a = roomWallPt(.79, .06), b = roomWallPt(.98, .72);
 const s = Math.max(.6, (b.x - a.x) / 110);
@@ -29357,7 +29369,7 @@ return { x: host.width / 2, y: host.height * .5 };
 function r36Left() {
 return Math.max(0, Math.ceil((r36Landed.at + R36_UNLOAD_MS - performance.now()) / 1000));
 }
-function r36ShowBubble() {
+function r36ShowBubble__old() {
 const L = r36Landed;
 const ship = (getShips(L.planetId) || []).find(s => s.id === L.shipId);
 if (!ship) {
@@ -40925,7 +40937,7 @@ if (r39IsStn(planetId))
 return;
 forSale.push({ k: "mat", r: r39TokMat("tower"), n: 1, price: R44_TOWER_PRICE, buy: { "data-action": "r44-buy-tower" } });
 }
-function worldRunAction(attrs) {
+function worldRunAction__r57(attrs) {
 if (attrs && attrs["data-action"] === "r44-buy-tower") {
 const pid = selectedStartPlanet;
 if (!spendCoins(pid, R44_TOWER_PRICE)) {
@@ -41242,7 +41254,7 @@ r44RenameShip(ship, r.left + r.width / 2, r.top);
 }
 catch (error) { }
 })();
-function roomShipFixtures(c, list, planetId, st, time) {
+function roomShipFixtures__r57(c, list, planetId, st, time) {
 roomShipFixtures__r44(c, list, planetId, st, time);
 try {
 const ship = (getShips(planetId) || []).find(s => s.id === (roomState && (roomState.shipId || roomState.id)));
@@ -41756,11 +41768,10 @@ c.moveTo(xs[0], gy + 2);
 c.lineTo(xs[4], gy + 2);
 c.stroke();
 c.setLineDash([]);
-c.fillStyle = "#3a3324";
-c.fillRect(xs[1] - 18, gy - 14, 36, 14);
-c.strokeStyle = "#ffd76b";
-c.lineWidth = 1.5;
-c.strokeRect(xs[1] - 18, gy - 14, 36, 14);
+c.fillStyle = "#9aa6b8";
+c.fillRect(xs[1] - 1.5, gy - 14, 3, 14);
+c.fillRect(xs[1] - 9, gy - 2, 18, 2);
+r57Helmet(c, xs[1], gy - 19, 7, t, false);
 c.save();
 c.translate(xs[1], gy - 26);
 c.scale(Math.cos(t * 1.3), 1);
@@ -41810,7 +41821,7 @@ if (helm)
 r34Helmet(c, x, gy - 10, sz);
 }
 catch (error) { }
-const labels = ["PET", "LICENCE|DESK", "ASTRO-|NAUT", "SHIP", "SEAT"];
+const labels = ["PET", "HELMET|STAND", "ASTRO-|NAUT", "SHIP", "SEAT"];
 const on = ph < 1 ? 0 : ph < 1.6 ? 1 : ph < 2.2 ? 2 : ph < 3.2 ? 3 : 4;
 c.font = "800 8px system-ui,sans-serif";
 c.textAlign = "center";
@@ -41825,7 +41836,7 @@ c.save();
 c.font = "700 9px system-ui,sans-serif";
 c.fillStyle = "#bfe9ff";
 c.textAlign = "center";
-c.fillText(pilot ? "A pilot is ready — seat it in a ship to plan a mission" : "Licence a pet at the desk, then seat it in a ship", R.x + R.w / 2, R.y + 30);
+c.fillText(pilot ? "A pilot is ready — seat it in a ship to plan a mission" : "Give a pet the helmet at the stand, then seat it in a ship", R.x + R.w / 2, R.y + 30);
 c.restore();
 if (pilot && ship)
 r44CtlBtn(c, push, R.x + R.w / 2, R.y + R.h - 18, R.w * .6, 24, "SEAT " + (SPECIES_DISPLAY_NAMES[pilot.species] || "PILOT").toUpperCase() + " IN " + r44ShipName(ship, r44CtlShips(pid).indexOf(ship), r44CtlShips(pid).length).toUpperCase(), col, true, () => assignPendingPilot(pid, ship.id, pilot.id));
@@ -45215,6 +45226,1149 @@ world.hits.push({ x: cx, y: cy, r: Math.min(cw, ch) * .45, z: 8, onTap: () => r5
 });
 } });
 }
+var r57Feel = { on: false, cx: 0, cy: 0, R: 1 };
+function r57FeelSet(cx, cy, R) {
+r57Feel.on = false;
+if (!R53V || !R53V.inScene || !r53Match(R))
+return;
+const T0 = R53V.T0 || HOME_VIEW_TILT, Tp = R53V.Tp || T0;
+const blend = Math.max(0, Math.min(1, (Tp - T0) / Math.max(.001, (R53P.Tp || Tp) - T0)));
+const fR = R * (1 - (1 - R53C * R57_FEEL) * blend);
+const Fy = cy - R * Math.sin(Tp);
+r57Feel = { on: true, cx, cy: Fy + fR * Math.sin(T0), R: fR };
+}
+var R57_HOME_K = .6;
+var R57_FEEL = .72;
+function r57Now() {
+return performance.now();
+}
+function r57Buzz(ms) {
+try {
+if (navigator.vibrate)
+navigator.vibrate(ms);
+}
+catch (error) { }
+}
+function r57Ease(k) {
+return 1 - Math.pow(1 - Math.max(0, Math.min(1, k)), 3);
+}
+var r57Fx = [];
+function r57Spark(x, y, kind, opts) {
+r57Fx.push(Object.assign({ x, y, kind, t0: r57Now() }, opts || {}));
+if (r57Fx.length > 220)
+r57Fx.splice(0, r57Fx.length - 220);
+}
+function r57DrawFx(c) {
+const now = r57Now();
+r57Fx = r57Fx.filter(f => {
+const age = (now - f.t0) / 1000;
+const life = f.life || .7;
+if (age < 0)
+return true;
+if (age > life)
+return false;
+const k = age / life;
+c.save();
+if (f.kind === "ring") {
+c.globalAlpha = (1 - k) * .9;
+c.strokeStyle = f.col || "#7dffb0";
+c.lineWidth = 2.5 * (1 - k) + .5;
+c.shadowColor = f.col || "#7dffb0";
+c.shadowBlur = 10;
+c.beginPath();
+c.arc(f.x, f.y, (f.r0 || 8) + (f.r1 || 34) * r57Ease(k), 0, Math.PI * 2);
+c.stroke();
+}
+else if (f.kind === "spark") {
+const a = f.a, d = (f.d || 40) * r57Ease(k);
+const x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d - (f.up || 0) * k;
+c.globalAlpha = 1 - k;
+c.fillStyle = f.col || "#fff6c2";
+c.shadowColor = f.col || "#ffd76b";
+c.shadowBlur = 8;
+const r = (f.r || 2.4) * (1 - k * .6);
+c.beginPath();
+c.moveTo(x, y - r * 2);
+c.lineTo(x + r * .6, y - r * .6);
+c.lineTo(x + r * 2, y);
+c.lineTo(x + r * .6, y + r * .6);
+c.lineTo(x, y + r * 2);
+c.lineTo(x - r * .6, y + r * .6);
+c.lineTo(x - r * 2, y);
+c.lineTo(x - r * .6, y - r * .6);
+c.closePath();
+c.fill();
+}
+else if (f.kind === "dust") {
+const a = f.a, d = (f.d || 30) * r57Ease(k);
+const x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d * .35 - 8 * k;
+c.globalAlpha = (1 - k) * .55;
+c.fillStyle = f.col || "#c9b89a";
+c.beginPath();
+c.arc(x, y, (f.r || 6) * (.6 + k), 0, Math.PI * 2);
+c.fill();
+}
+else if (f.kind === "heart") {
+const x = f.x + Math.sin(age * 6 + (f.ph || 0)) * 5, y = f.y - 36 * k;
+c.globalAlpha = 1 - k;
+r56Heart(c, x, y, (f.r || 6) * (.7 + .5 * Math.min(1, k * 4)), f.col || "#ff7ab0", null, f.col || "#ff7ab0");
+}
+else if (f.kind === "bang") {
+const y = f.y - 14 * r57Ease(Math.min(1, k * 3));
+c.globalAlpha = k < .7 ? 1 : (1 - k) / .3;
+c.strokeStyle = "rgba(10,16,34,.9)";
+c.lineWidth = 3;
+c.font = "900 15px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.strokeText(f.txt || "!", f.x, y);
+c.fillStyle = f.col || "#ffd76b";
+c.fillText(f.txt || "!", f.x, y);
+}
+c.restore();
+return true;
+});
+}
+function r57Burst(x, y, col, n, opts) {
+for (let i = 0; i < n; i++)
+r57Spark(x, y, "spark", Object.assign({ a: Math.random() * Math.PI * 2, d: 20 + Math.random() * 30, col, life: .55 + Math.random() * .35, up: 10 }, opts || {}));
+}
+function r57NewSet(pid) {
+if (!planetSave.r57New)
+planetSave.r57New = {};
+if (!planetSave.r57New[pid])
+planetSave.r57New[pid] = {};
+return planetSave.r57New[pid];
+}
+function r57MarkNew(pid, structureId) {
+if (!pid || !structureId)
+return;
+if (roomState && roomState.kind === "structure" && roomState.id === structureId && selectedStartPlanet === pid)
+return;
+r57NewSet(pid)[structureId] = Date.now();
+}
+function r57ClearNew(pid, structureId) {
+const s = planetSave.r57New && planetSave.r57New[pid];
+if (s && s[structureId]) {
+delete s[structureId];
+try {
+savePlanetProgress();
+}
+catch (error) { }
+}
+}
+var r57Watch = {};
+function r57WatchTick() {
+if (typeof planetSave === "undefined" || !planetSave)
+return;
+const pid = selectedStartPlanet;
+if (!pid)
+return;
+const w = r57Watch[pid] || (r57Watch[pid] = {});
+const q = getBuildQueue(pid) || [];
+const keys = {};
+q.forEach(j => {
+try {
+keys[j.type + ":" + r30Key(j)] = j;
+}
+catch (error) { }
+});
+if (w.jobs) {
+Object.keys(w.jobs).forEach(k => {
+if (keys[k])
+return;
+const j = w.jobs[k];
+if (j.type === "ship" || j.type === "ship-service")
+r57MarkNew(pid, "ship-factory");
+else if (j.type === "satellite")
+r57MarkNew(pid, "satellite-factory");
+else if (j.type === "structure" && hasStructure(pid, j.structureId))
+r57MarkNew(pid, j.structureId);
+if (j.type === "ship") {
+const known = w.ships || [];
+(getShips(pid) || []).forEach(s => {
+if (!known.includes(s.id))
+r57Reveal("ship:" + s.id);
+});
+}
+});
+}
+w.jobs = keys;
+w.ships = (getShips(pid) || []).map(s => s.id);
+const built = Object.keys(STRUCTURES).filter(id => hasStructure(pid, id));
+if (w.built) {
+built.forEach(id => {
+if (!w.built.includes(id)) {
+r57Reveal("s:" + id);
+r57MarkNew(pid, id);
+}
+});
+}
+w.built = built;
+let n = 0;
+try {
+worldVaultContents(pid).forEach(d => {
+if (d.k !== "coin")
+n += d.n || 0;
+});
+}
+catch (error) { }
+if (w.vault != null && n > w.vault)
+r57MarkNew(pid, "stock");
+w.vault = n;
+const pets = (getPets(pid) || []).length;
+if (w.pets != null && pets > w.pets)
+r57MarkNew(pid, "pet-pen");
+w.pets = pets;
+}
+setInterval(() => {
+try {
+r57WatchTick();
+}
+catch (error) { }
+}, 700);
+function enterRoom(kind, id) {
+if (kind === "structure")
+r57ClearNew(selectedStartPlanet, id);
+return enterRoom__r57.apply(this, arguments);
+}
+function enterRoomView(kind, id) {
+if (kind === "structure")
+r57ClearNew(selectedStartPlanet, id);
+return enterRoomView__r57.apply(this, arguments);
+}
+function r57DrawNewGlow(c, canvas) {
+const set = planetSave.r57New && planetSave.r57New[selectedStartPlanet];
+if (!set || !canvas._focusHitAreas)
+return;
+const t = r57Now() / 1000;
+const seen = {};
+canvas._focusHitAreas.forEach(h => {
+const id = h.structureId;
+if (!id || !set[id] || seen[id])
+return;
+seen[id] = 1;
+const pulse = .5 + .5 * Math.sin(t * 3.2);
+const r = Math.max(18, h.r || 30);
+c.save();
+c.globalCompositeOperation = "lighter";
+const g = c.createRadialGradient(h.x, h.y, r * .2, h.x, h.y, r * 1.45);
+g.addColorStop(0, "rgba(125,255,200," + (.16 + .14 * pulse) + ")");
+g.addColorStop(.6, "rgba(95,243,255," + (.08 + .08 * pulse) + ")");
+g.addColorStop(1, "rgba(95,243,255,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(h.x, h.y, r * 1.45, 0, Math.PI * 2);
+c.fill();
+c.restore();
+c.save();
+c.strokeStyle = "rgba(125,255,200," + (.35 + .45 * pulse) + ")";
+c.shadowColor = "#7dffc8";
+c.shadowBlur = 14;
+c.lineWidth = 2;
+c.beginPath();
+c.ellipse(h.x, h.y + r * .62, r * (.95 + .12 * pulse), r * .3 * (.95 + .12 * pulse), 0, 0, Math.PI * 2);
+c.stroke();
+for (let i = 0; i < 4; i++) {
+const k = (t * .55 + i / 4) % 1;
+const x = h.x + Math.sin(i * 2.3 + t) * r * .6, y = h.y + r * .5 - k * r * 1.7;
+c.globalAlpha = Math.sin(k * Math.PI) * .9;
+c.fillStyle = "#bfffe6";
+c.beginPath();
+c.arc(x, y, 1.8, 0, Math.PI * 2);
+c.fill();
+}
+c.globalAlpha = 1;
+const ty = h.y - r * 1.35 - Math.sin(t * 3.2) * 2;
+c.font = "900 9px system-ui,sans-serif";
+const tw = c.measureText("NEW").width + 10;
+c.fillStyle = "rgba(8,40,30,.92)";
+c.beginPath();
+if (c.roundRect)
+c.roundRect(h.x + r * .45 - tw / 2, ty - 7, tw, 14, 7);
+else
+c.rect(h.x + r * .45 - tw / 2, ty - 7, tw, 14);
+c.fill();
+c.strokeStyle = "#7dffc8";
+c.lineWidth = 1.2;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#d8fff0";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("NEW", h.x + r * .45, ty + .5);
+c.restore();
+});
+}
+var r57Reveals = {};
+function r57Reveal(key) {
+r57Reveals[key] = { t0: r57Now(), done: false };
+try {
+sound("arrival");
+}
+catch (error) { }
+}
+function r57PopKey(item) {
+if (!item)
+return "";
+if (item.kind === "ship")
+return "ship:" + (item.shipId || item.id || "");
+return item.structureId ? "s:" + item.structureId : "";
+}
+function r57Pop(c, item, x, y, size) {
+const key = r57PopKey(item);
+const R = r57Reveals[key];
+if (!R)
+return;
+const age = (r57Now() - R.t0) / 1000;
+if (age > 1.4) {
+delete r57Reveals[key];
+return;
+}
+if (!R.done) {
+R.done = true;
+r57Nudge(x, y - size * .4);
+r57Buzz([12, 40, 18]);
+for (let i = 0; i < 12; i++)
+r57Spark(x, y, "dust", { a: Math.random() * Math.PI * 2, d: size * .5 + Math.random() * size * .5, r: size * .09, life: .9 });
+r57Burst(x, y - size * .6, "#fff3b0", 14, { d: size * .9, life: .9 });
+r57Spark(x, y, "ring", { r0: size * .3, r1: size * .9, col: "#7dffc8", life: .8 });
+}
+const k = Math.min(1, age / .75);
+let sy;
+if (k < .55)
+sy = r57Ease(k / .55) * 1.18;
+else
+sy = 1.18 - .18 * Math.sin((k - .55) / .45 * Math.PI / 2);
+const sx = sy < 1 ? 1 + (1 - sy) * .25 : 1 - (sy - 1) * .4;
+c.scale(Math.max(.02, sx), Math.max(.02, sy));
+}
+function r57Nudge(x, y) {
+const fc = document.getElementById("planetFocusCanvas");
+if (!fc)
+return;
+fc.style.transformOrigin = x + "px " + y + "px";
+fc.style.transition = "transform .35s cubic-bezier(.2,.9,.3,1.2)";
+fc.style.transform = "scale(1.06)";
+setTimeout(() => {
+fc.style.transition = "transform .7s ease-in-out";
+fc.style.transform = "";
+}, 650);
+}
+var r57React = {};
+var r57Noticed = {};
+function r57PetHop(petId, kind) {
+r57React[petId] = { t0: r57Now(), kind: kind || "hop" };
+}
+function worldRunAction(attrs) {
+try {
+const a = attrs && attrs["data-action"];
+const pet = attrs && attrs["data-pet"];
+if (pet && /feed|hat|perk-food|carry-feed|train/.test(a || ""))
+r57PetHop(pet, "love");
+}
+catch (error) { }
+return worldRunAction__r57.apply(this, arguments);
+}
+function worldPetBubble(pet, x, y) {
+try {
+r57PetHop(pet.id, "hop");
+}
+catch (error) { }
+return worldPetBubble__r57.apply(this, arguments);
+}
+function r57DrawHomePet(c, pet, px, py, size, seed, working) {
+let face = 1, anim = seed, dy = 0, sq = 1;
+const now = r57Now();
+if (roamingActive && !roomState && typeof getRoamingPet === "function") {
+const rp = getRoamingPet();
+if (rp && rp.id !== pet.id && world.scene && world.scene.mode === "planet") {
+const S = world.scene;
+const q = projectSphere(roamingLat, roamingLon, S.viewLat, S.viewLon, S.cx, S.cy, S.R);
+const d = Math.hypot(q.x - px, q.y - py);
+if (d < Math.max(60, size * 3.2) && !working) {
+face = q.x < px ? -1 : 1;
+anim = Math.floor(seed);
+if (!r57Noticed[pet.id] || now - r57Noticed[pet.id] > 9000) {
+r57Noticed[pet.id] = now;
+r57Spark(px, py - size * 1.1, "bang", { txt: Math.random() < .5 ? "!" : "♪", life: 1.1 });
+r57PetHop(pet.id, "hop");
+}
+}
+}
+}
+r57Cur = pet;
+drawSpacePet(c, selectedStartPlanet, px, py, size, pet.energy, anim, pet.species, working, "builder", face);
+}
+var r57Cur = null;
+function drawSpacePet(c, planetId, x, y, size) {
+const pet = r57Cur;
+r57Cur = null;
+const R = pet && r57React[pet.id];
+if (!R)
+return drawSpacePet__r57.apply(this, arguments);
+const now = r57Now();
+const age = (now - R.t0) / 1000;
+const dur = R.kind === "love" ? 1.1 : .55;
+if (age > dur) {
+delete r57React[pet.id];
+return drawSpacePet__r57.apply(this, arguments);
+}
+const hops = R.kind === "love" ? 2 : 1;
+const k = ((age / dur) * hops) % 1;
+const dy = -Math.sin(k * Math.PI) * size * .45;
+const sq = k < .12 || k > .88 ? .85 : 1.06;
+if (R.kind === "love" && !R.hearts) {
+R.hearts = true;
+const M = c.getTransform(), dpr = Math.min(2, window.devicePixelRatio || 1);
+const hx = (M.a * x + M.c * (y - size * .9) + M.e) / dpr, hy = (M.b * x + M.d * (y - size * .9) + M.f) / dpr;
+for (let i = 0; i < 3; i++)
+r57Fx.push({ x: hx + (i - 1) * size * .3, y: hy, kind: "heart", t0: now + i * 140, life: 1, ph: i, r: Math.max(4, size * .16) });
+}
+const args = Array.prototype.slice.call(arguments);
+args[3] = y + dy;
+c.save();
+c.translate(x, y + size * .5);
+c.scale(1 / Math.sqrt(sq), sq);
+c.translate(-x, -(y + size * .5));
+try {
+return drawSpacePet__r57.apply(this, args);
+}
+finally {
+c.restore();
+}
+}
+var R57_DAY_MS = 8 * 60 * 1000;
+var R57_TIME = null;
+function r57DayPhase() {
+if (R57_TIME != null)
+return R57_TIME;
+return (Date.now() % R57_DAY_MS) / R57_DAY_MS;
+}
+function r57Night(ph) {
+if (ph < .5)
+return 0;
+if (ph < .6)
+return (ph - .5) / .1;
+if (ph < .88)
+return 1;
+if (ph < .98)
+return 1 - (ph - .88) / .1;
+return 0;
+}
+function r57Dusk(ph) {
+const a = Math.max(0, 1 - Math.abs(ph - .55) / .07), b = Math.max(0, 1 - Math.abs(ph - .93) / .06);
+return Math.max(a, b);
+}
+function r57DrawDayNight(c, canvas, W, H) {
+if (!world.scene || world.scene.mode !== "planet" || r39IsStn(selectedStartPlanet) || flightProgress > .05)
+return;
+const S = world.scene;
+const ph = r57DayPhase();
+const night = r57Night(ph) * .74, dusk = r57Dusk(ph);
+if (ph < .6 || ph > .9) {
+const dk = ph > .9 ? (ph - .9) / .7 : (ph + .1) / .7;
+const rim = S.cy - S.R;
+const sx = W * (-.05 + 1.1 * dk);
+const sy = rim - Math.sin(dk * Math.PI) * Math.max(40, rim * .75) + 8;
+const vis = Math.min(1, Math.sin(dk * Math.PI) * 3);
+if (vis > 0) {
+c.save();
+c.globalCompositeOperation = "lighter";
+const g = c.createRadialGradient(sx, sy, 2, sx, sy, 60);
+const warm = dusk > .2;
+g.addColorStop(0, warm ? "rgba(255,210,150," + .9 * vis + ")" : "rgba(255,250,225," + .9 * vis + ")");
+g.addColorStop(.18, warm ? "rgba(255,150,80," + .45 * vis + ")" : "rgba(255,236,170," + .4 * vis + ")");
+g.addColorStop(1, "rgba(255,200,120,0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(sx, sy, 60, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+}
+if (night < .01 && dusk < .01)
+return;
+c.save();
+c.beginPath();
+c.arc(S.cx, S.cy, S.R, 0, Math.PI * 2);
+c.clip();
+if (dusk > .01) {
+c.globalCompositeOperation = "soft-light";
+c.fillStyle = "rgba(255,120,60," + (.55 * dusk) + ")";
+c.fillRect(0, 0, W, H);
+}
+if (night > .01) {
+c.globalCompositeOperation = "multiply";
+c.fillStyle = "rgb(" + Math.round(255 - 200 * night) + "," + Math.round(255 - 185 * night) + "," + Math.round(255 - 110 * night) + ")";
+c.fillRect(0, 0, W, H);
+}
+c.restore();
+const lights = Math.max(0, Math.min(1, (r57Night(ph) - .25) / .5));
+if (lights > 0 && canvas._focusHitAreas) {
+const t = r57Now() / 1000;
+c.save();
+c.globalCompositeOperation = "lighter";
+const lit = {};
+canvas._focusHitAreas.forEach((h, i) => {
+if (!h.structureId && !h.swipeable)
+return;
+const key = h.structureId || "ship";
+if (lit[key])
+return;
+lit[key] = 1;
+const r = Math.max(14, h.r || 24);
+const fl = .85 + .15 * Math.sin(t * 2 + i * 1.7);
+const col = h.swipeable ? "95,243,255" : "255,196,110";
+const g = c.createRadialGradient(h.x, h.y + r * .1, 1, h.x, h.y + r * .1, r * 1.25);
+g.addColorStop(0, "rgba(" + col + "," + .55 * lights * fl + ")");
+g.addColorStop(.4, "rgba(" + col + "," + .18 * lights * fl + ")");
+g.addColorStop(1, "rgba(" + col + ",0)");
+c.fillStyle = g;
+c.beginPath();
+c.arc(h.x, h.y + r * .1, r * 1.25, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "rgba(" + col + "," + .14 * lights + ")";
+c.beginPath();
+c.ellipse(h.x, h.y + r * .75, r * 1.1, r * .28, 0, 0, Math.PI * 2);
+c.fill();
+});
+c.restore();
+}
+}
+var r57Drag = { on: false, t0: 0, x: 0, y: 0, vx: 0, vy: 0 };
+function r57DragTick() {
+const g = world.drag;
+const on = !!(g && g.active);
+if (on && !r57Drag.on) {
+r57Drag = { on: true, t0: r57Now(), x: g.x, y: g.y, vx: 0, vy: 0 };
+r57Buzz(12);
+r57Spark(g.x, g.y - 18, "ring", { r0: 6, r1: 22, col: "#5ff3ff", life: .35 });
+}
+else if (!on && r57Drag.on) {
+r57Drag.on = false;
+r57Buzz(8);
+r57Spark(r57Drag.x, r57Drag.y - 18, "ring", { r0: 4, r1: 26, col: "#7dffb0", life: .4 });
+r57Burst(r57Drag.x, r57Drag.y - 18, "#c8fff0", 6, { d: 18, life: .4, up: 0 });
+}
+else if (on) {
+r57Drag.vx = r57Drag.vx * .6 + (g.x - r57Drag.x) * .4;
+r57Drag.vy = r57Drag.vy * .6 + (g.y - r57Drag.y) * .4;
+r57Drag.x = g.x;
+r57Drag.y = g.y;
+}
+}
+function r57DrawDragged(c, desc, x, y, size) {
+const age = (r57Now() - r57Drag.t0) / 1000;
+const wob = Math.exp(-age * 7) * Math.cos(age * 28) * .28;
+const sp = Math.min(.22, Math.hypot(r57Drag.vx, r57Drag.vy) * .012);
+const ang = Math.atan2(r57Drag.vy, r57Drag.vx);
+c.save();
+c.translate(x, y);
+c.fillStyle = "rgba(0,0,0,.25)";
+c.beginPath();
+c.ellipse(0, size * .75, size * .35, size * .1, 0, 0, Math.PI * 2);
+c.fill();
+c.rotate(ang);
+c.scale(1 + sp, 1 - sp * .6);
+c.rotate(-ang);
+c.scale(1 - wob * .6, 1 + wob);
+drawWorldItem(c, desc, 0, 0, size, {});
+c.restore();
+}
+var r57Coin = { shown: null, pid: null, flights: [], tap: { x: 0, y: 0, t: 0 } };
+(function () {
+const st = document.createElement("style");
+st.textContent = "#r57Coins{position:absolute;right:calc(env(safe-area-inset-right,0px) + 66px);top:calc(env(safe-area-inset-top,0px) + 18px);z-index:30;display:flex;align-items:center;gap:6px;padding:6px 12px 6px 7px;border-radius:999px;" +
+"background:rgba(8,14,30,.78);border:1px solid rgba(255,210,90,.55);box-shadow:0 0 14px rgba(255,200,80,.18);color:#ffe7a8;font:900 14px/1 system-ui,sans-serif;pointer-events:none;transition:transform .12s;}" +
+"#r57Coins.bump{transform:scale(1.14);}" +
+"@media (orientation:landscape) and (max-height:620px){#r57Coins{right:auto;left:calc(env(safe-area-inset-left,0px) + 14px);top:calc(env(safe-area-inset-top,0px) + 84px);}}" +
+"#r57Coins .r57-c{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff6c2,#ffcc33 45%,#c98a14);box-shadow:0 0 8px rgba(255,204,51,.7);}";
+document.head.appendChild(st);
+window.addEventListener("pointerdown", e => {
+r57Coin.tap = { x: e.clientX, y: e.clientY, t: r57Now() };
+}, { capture: true, passive: true });
+})();
+function r57CoinEl() {
+let el = document.getElementById("r57Coins");
+if (!el) {
+const host = document.getElementById("planetFocus");
+if (!host)
+return null;
+el = document.createElement("div");
+el.id = "r57Coins";
+el.innerHTML = '<span class="r57-c"></span><span class="r57-n">0</span>';
+host.appendChild(el);
+}
+return el;
+}
+function r57CoinSprite(c, x, y, r, spin) {
+const w = Math.abs(Math.cos(spin));
+c.save();
+c.translate(x, y);
+c.scale(Math.max(.25, w), 1);
+const g = c.createRadialGradient(-r * .3, -r * .35, 1, 0, 0, r);
+g.addColorStop(0, "#fff6c2");
+g.addColorStop(.5, "#ffcc33");
+g.addColorStop(1, "#c98a14");
+c.fillStyle = g;
+c.shadowColor = "#ffcc33";
+c.shadowBlur = 8;
+c.beginPath();
+c.arc(0, 0, r, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function r57CoinTick(c, W, H) {
+const el = r57CoinEl();
+if (!el)
+return;
+const pid = selectedStartPlanet;
+let real = 0;
+try {
+real = getBank(pid);
+}
+catch (error) { }
+const canvas = c.canvas, cr = canvas.getBoundingClientRect(), er = el.getBoundingClientRect();
+const tx = er.left - cr.left + 16, ty = er.top - cr.top + er.height / 2;
+if (r57Coin.pid !== pid || r57Coin.shown == null) {
+r57Coin.pid = pid;
+r57Coin.shown = real;
+r57Coin.flights = [];
+}
+const pending = r57Coin.flights.reduce((n, f) => n + f.v, 0);
+const target = r57Coin.shown + pending;
+if (real > target) {
+const gain = real - target;
+const n = Math.max(1, Math.min(14, Math.round(Math.sqrt(gain) * 2)));
+let sx = W / 2, sy = H * .55;
+const tp = r57Coin.tap;
+if (r57Now() - tp.t < 2500) {
+sx = tp.x - cr.left;
+sy = tp.y - cr.top;
+}
+else if (canvas._focusHitAreas) {
+const v = canvas._focusHitAreas.find(h => h.structureId === "stock");
+if (v) {
+sx = v.x;
+sy = v.y;
+}
+}
+let left = gain;
+for (let i = 0; i < n; i++) {
+const v = i === n - 1 ? left : Math.floor(gain / n);
+left -= v;
+r57Coin.flights.push({ v, t0: r57Now() + i * 55, x0: sx + (Math.random() - .5) * 20, y0: sy + (Math.random() - .5) * 14, arc: 60 + Math.random() * 70, spin: Math.random() * 6 });
+}
+r57Buzz(6);
+}
+else if (real < target) {
+r57Coin.shown = real - pending;
+if (r57Coin.shown < 0) {
+r57Coin.shown = real;
+r57Coin.flights = [];
+}
+}
+const now = r57Now();
+r57Coin.flights = r57Coin.flights.filter(f => {
+const k = (now - f.t0) / 620;
+if (k < 0) {
+r57CoinSprite(c, f.x0, f.y0, 9, 0);
+return true;
+}
+if (k >= 1) {
+r57Coin.shown += f.v;
+el.classList.add("bump");
+setTimeout(() => el.classList.remove("bump"), 110);
+return false;
+}
+const e = k * k * (3 - 2 * k);
+const x = f.x0 + (tx - f.x0) * e, y = f.y0 + (ty - f.y0) * e - f.arc * Math.sin(k * Math.PI);
+r57CoinSprite(c, x, y, 9 * (1 - .3 * k), f.spin + k * 12);
+return true;
+});
+const shown = Math.round(r57Coin.shown);
+const nEl = el.querySelector(".r57-n");
+if (nEl && nEl.textContent !== String(shown))
+nEl.textContent = String(shown);
+}
+function worldDrawOverlay(c, W, H) {
+try {
+r57DragTick();
+}
+catch (error) { }
+const r = worldDrawOverlay__r57(c, W, H);
+try {
+r57DrawFx(c);
+if (!r57PauseDraw)
+r57CoinTick(c, W, H);
+}
+catch (error) { }
+return r;
+}
+function r57HomeOverlay(c, canvas, W, H) {
+try {
+r57DrawDayNight(c, canvas, W, H);
+}
+catch (error) { }
+try {
+if (!roomState && flightProgress < .02)
+r57DrawNewGlow(c, canvas);
+}
+catch (error) { }
+}
+function r57ShelfImg(ship) {
+const cv = document.createElement("canvas");
+const dpr = 2, W = 124, H = 84;
+cv.width = W * dpr;
+cv.height = H * dpr;
+const c = cv.getContext("2d");
+c.scale(dpr, dpr);
+c.fillStyle = "#1c2433";
+c.fillRect(6, 4, W - 12, H - 10);
+c.strokeStyle = "#7f8ca3";
+c.lineWidth = 2;
+c.strokeRect(6, 4, W - 12, H - 10);
+const rows = 2;
+for (let i = 1; i <= rows; i++) {
+const y = 4 + (H - 10) * i / rows;
+c.fillStyle = "#a7b3c7";
+c.fillRect(6, y - 3, W - 12, 3);
+}
+let list = [];
+try {
+list = worldShipCargo(ship).filter(d => d.k !== "pet" && d.k !== "sat");
+}
+catch (error) { }
+const per = 4;
+list.slice(0, per * rows).forEach((d, i) => {
+const row = Math.floor(i / per), col = i % per;
+const x = 6 + (W - 12) * (col + .5) / per, y = 4 + (H - 10) * (row + 1) / rows - 15;
+try {
+drawWorldItem(c, d, x, y, 22, { count: d.n });
+}
+catch (error) { }
+});
+return cv.toDataURL();
+}
+function r36ShowBubble() {
+const L = r36Landed;
+const ship = (getShips(L.planetId) || []).find(s => s.id === L.shipId);
+if (!ship) {
+r36Landed = null;
+return;
+}
+const stn = r39IsStn(L.planetId);
+const vaultSrc = stn ? "" : r53StructImgSrc("stock");
+const left = Math.max(0, L.at + R36_UNLOAD_MS - performance.now());
+const p = r36ShipScreen();
+const html = '<div class="r57-land">' +
+'<button class="r57-shelf" data-wb="1" aria-label="Keep it on the ship"><img src="' + r57ShelfImg(ship) + '" alt=""><span>keep</span></button>' +
+'<div class="r57-flow"><div class="r57-fill" style="animation-duration:' + (left / 1000).toFixed(2) + 's"></div><div class="r57-chev">›››</div></div>' +
+'<button class="r57-vault" data-wb="0" aria-label="Send to the vault">' +
+(vaultSrc ? '<img src="' + vaultSrc + '" alt="">' : '<span class="r57-mod"></span>') +
+'<span>' + (stn ? "module" : "vault") + ' <b class="r57-count">' + Math.ceil(left / 1000) + 's</b></span></button>' +
+'</div>';
+worldShowBubble({
+x: p.x, y: p.y,
+title: "",
+text: html,
+r36: true,
+buttons: [
+{ label: "vault", action: () => r36Unload() },
+{ label: "keep", action: () => {
+if (r36Landed)
+r36Landed.kept = true;
+r36Landed = null;
+showShipToast("Cargo stays aboard");
+} }
+]
+});
+const el = document.getElementById("worldBubble");
+if (el) {
+el.classList.add("r57-landb");
+const off = () => {
+if (el.classList.contains("hidden") || !el._spec || !el._spec.r36) {
+el.classList.remove("r57-landb");
+return;
+}
+const b = el.querySelector(".r57-count");
+if (b && r36Landed)
+b.textContent = Math.max(0, Math.ceil((r36Landed.at + R36_UNLOAD_MS - performance.now()) / 1000)) + "s";
+setTimeout(off, 250);
+};
+setTimeout(off, 300);
+}
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".world-bubble.r57-landb{width:auto !important;padding:10px 12px !important;}" +
+".world-bubble.r57-landb .world-bubble-head,.world-bubble.r57-landb .world-bubble-buttons,.world-bubble.r57-landb .world-bubble-meta,.world-bubble.r57-landb .world-bubble-close{display:none !important;}" +
+".world-bubble.r57-landb .world-bubble-text{margin:0 !important;}" +
+".r57-land{display:flex;align-items:center;justify-content:center;gap:8px;}" +
+".r57-land button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font:800 10px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#cfe2f6;}" +
+".r57-land button:active{transform:scale(.94);}" +
+".r57-shelf img{width:84px;height:57px;display:block;border-radius:6px;}" +
+".r57-vault img{width:58px;height:58px;display:block;filter:drop-shadow(0 0 8px rgba(125,255,200,.55));}" +
+".r57-vault b{color:#7dffc8;}" +
+".r57-mod{width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f4f7fb,#aab4c4 55%,#5b6576);box-shadow:0 0 0 3px rgba(95,243,255,.6),0 0 14px rgba(95,243,255,.5);display:block;margin:3px;}" +
+".r57-flow{position:relative;width:62px;height:14px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(125,255,200,.35);overflow:hidden;}" +
+".r57-fill{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,rgba(125,255,200,.25),#7dffc8);box-shadow:0 0 10px #7dffc8;animation:r57fill linear forwards;}" +
+".r57-chev{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:900 13px/1 system-ui;color:#eafff6;letter-spacing:-2px;text-shadow:0 0 6px #000;animation:r57chev 1s linear infinite;}" +
+"@keyframes r57fill{to{transform:scaleX(1)}}" +
+"@keyframes r57chev{0%{transform:translateX(-6px);opacity:.4}50%{opacity:1}100%{transform:translateX(6px);opacity:.4}}";
+document.head.appendChild(st);
+})();
+function r57Helmet(c, x, y, r, t, glow) {
+c.save();
+c.translate(x, y);
+c.fillStyle = "#8a96a8";
+c.beginPath();
+c.ellipse(0, r * .82, r * .72, r * .2, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#c9d2de";
+c.fillRect(-r * .7, r * .6, r * 1.4, r * .22);
+const g = c.createRadialGradient(-r * .35, -r * .45, r * .1, 0, 0, r * 1.05);
+g.addColorStop(0, "#ffffff");
+g.addColorStop(.6, "#e3e9f2");
+g.addColorStop(1, "#9aa6b8");
+c.fillStyle = g;
+if (glow) {
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 18;
+}
+c.beginPath();
+c.arc(0, 0, r, Math.PI * .92, Math.PI * 2.08);
+c.closePath();
+c.fill();
+c.shadowBlur = 0;
+const v = c.createLinearGradient(-r * .6, -r * .5, r * .6, r * .4);
+v.addColorStop(0, "#1c6fa8");
+v.addColorStop(.5, "#0c2a4c");
+v.addColorStop(1, "#3fd7ff");
+c.fillStyle = v;
+c.beginPath();
+c.ellipse(0, -r * .02, r * .68, r * .5, 0, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "#ffd76b";
+c.lineWidth = Math.max(1.2, r * .08);
+c.stroke();
+const gx = ((t * .5) % 1.6 - .8) * r * 1.1;
+c.save();
+c.beginPath();
+c.ellipse(0, -r * .02, r * .68, r * .5, 0, 0, Math.PI * 2);
+c.clip();
+c.fillStyle = "rgba(255,255,255,.35)";
+c.beginPath();
+c.moveTo(gx - r * .18, -r * .6);
+c.lineTo(gx + r * .02, -r * .6);
+c.lineTo(gx - r * .18, r * .6);
+c.lineTo(gx - r * .38, r * .6);
+c.closePath();
+c.fill();
+c.restore();
+c.fillStyle = "#7dffb0";
+c.shadowColor = "#7dffb0";
+c.shadowBlur = 8 * (.6 + .4 * Math.sin(t * 4));
+c.beginPath();
+c.arc(r * .86, -r * .18, r * .1, 0, Math.PI * 2);
+c.fill();
+c.restore();
+}
+function roomLicenceDeskFixture(c, list, planetId, st) {
+list.push({ v: .7, draw: () => {
+const p = roomFloorPt(.18, .7), s = p.s;
+const t = r57Now() / 1000;
+const poleH = 58 * s, r = 19 * s;
+c.save();
+c.fillStyle = "rgba(0,0,0,.3)";
+c.beginPath();
+c.ellipse(p.x, p.y + 2 * s, 26 * s, 7 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#3a4352";
+c.beginPath();
+c.ellipse(p.x, p.y, 22 * s, 6 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#5a6577";
+c.fillRect(p.x - 20 * s, p.y - 6 * s, 40 * s, 6 * s);
+c.beginPath();
+c.ellipse(p.x, p.y - 6 * s, 20 * s, 5.5 * s, 0, 0, Math.PI * 2);
+c.fill();
+c.fillStyle = "#9aa6b8";
+c.fillRect(p.x - 2.5 * s, p.y - poleH, 5 * s, poleH - 6 * s);
+c.strokeStyle = "rgba(95,243,255," + (.5 + .3 * Math.sin(t * 2.5)) + ")";
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 10;
+c.lineWidth = 2;
+c.beginPath();
+c.ellipse(p.x, p.y - 6 * s, 16 * s, 4.4 * s, 0, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+const hy = p.y - poleH - r * .75 + Math.sin(t * 1.6) * 1.5 * s;
+r57Helmet(c, p.x, hy, r, t, true);
+c.save();
+c.translate(p.x, hy - r - 16 * s);
+c.scale(Math.cos(t * 1.3), 1);
+c.fillStyle = "rgba(255,215,107,.18)";
+c.strokeStyle = "#ffd76b";
+c.shadowColor = "#ffd76b";
+c.shadowBlur = 10;
+c.lineWidth = 1.4;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(-14 * s, -9 * s, 28 * s, 18 * s, 3 * s);
+else
+c.rect(-14 * s, -9 * s, 28 * s, 18 * s);
+c.fill();
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = "#ffd76b";
+c.beginPath();
+c.arc(-6 * s, 0, 4 * s, 0, Math.PI * 2);
+c.fill();
+c.fillRect(0, -3.5 * s, 9 * s, 1.6);
+c.fillRect(0, 1 * s, 7 * s, 1.6);
+c.restore();
+const pets = getPets(planetId);
+const licensed = pets.filter(x => x.pilotLicensed).length;
+c.save();
+c.textAlign = "center";
+c.fillStyle = "#eafcff";
+c.font = "900 " + Math.round(7.5 * s + 2) + "px system-ui,sans-serif";
+c.fillText("BECOME AN ASTRONAUT", p.x, p.y + 16 * s);
+c.fillStyle = "#ffd76b";
+c.font = "800 " + Math.round(6.5 * s + 2) + "px system-ui,sans-serif";
+c.fillText(licensed + "/" + pets.length + " licensed" + (r54LicenceFee(planetId) ? "" : " · first one free"), p.x, p.y + 27 * s);
+c.restore();
+world.hits.push({ x: p.x, y: hy, r: Math.max(30, 34 * s), z: 6, onTap: () => roomLicenceBubble() });
+world.hits.push({ x: p.x, y: p.y - poleH * .4, r: Math.max(24, 24 * s), z: 6, onTap: () => roomLicenceBubble() });
+} });
+}
+function r57ShipBoard(c, planetId, ship, B) {
+const x = B.x, y = B.y, w = B.w, h = B.h;
+const s = Math.max(.55, Math.min(1.1, w / 130));
+const t = r57Now() / 1000;
+c.save();
+c.fillStyle = "#161a22";
+c.fillRect(x - 3, y - 3, w + 6, h + 6);
+const g = c.createLinearGradient(0, y, 0, y + h);
+g.addColorStop(0, "#0c1a2e");
+g.addColorStop(1, "#070c16");
+c.fillStyle = g;
+c.fillRect(x, y, w, h);
+c.strokeStyle = "rgba(95,243,255,.5)";
+c.lineWidth = 1.2;
+c.strokeRect(x + .5, y + .5, w - 1, h - 1);
+c.globalAlpha = .05;
+c.fillStyle = "#5ff3ff";
+for (let yy = y + ((t * 14) % 4); yy < y + h; yy += 4)
+c.fillRect(x, yy, w, 1);
+c.globalAlpha = 1;
+c.fillStyle = "#5ff3ff";
+c.font = "900 " + Math.round(8 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "top";
+c.fillText("SHIP STATUS", x + w / 2, y + 5 * s);
+c.restore();
+const perks = r56PerkPets(ship);
+const rows = 3 + (perks.length ? 1 : 0);
+const top = y + 20 * s, rowH = (h - 24 * s) / rows;
+const hr = Math.min(8.5 * s, rowH * .22, w / 13);
+const gap = hr * 2.7;
+let ry = top + rowH * .6;
+const label = (txt, yy) => {
+c.save();
+c.fillStyle = "#8fa7c7";
+c.font = "800 " + Math.round(6 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "bottom";
+c.fillText(txt.toUpperCase(), x + w / 2, yy - hr - 3);
+c.restore();
+};
+const x0 = n => x + w / 2 - (n - 1) * gap / 2;
+label("Hearts", ry + 2);
+const lv = Math.max(0, Math.min(3, Number(ship.lives == null ? 3 : ship.lives)));
+for (let i = 0; i < 3; i++) {
+const hx = x0(3) + i * gap;
+if (i < lv)
+r56Heart(c, hx, ry, hr, "#ff5a7e", "#ffd1dc", "#ff5a7e");
+else
+r56Heart(c, hx, ry + 1, hr, "rgba(0,0,0,.45)", "#4a5262", null);
+}
+ry += rowH;
+label("Shields", ry + 2);
+const owned = ship.shieldHearts || 0;
+let open = SHIELD_HEART_MAX;
+try {
+open = shieldUnlocked(planetId);
+}
+catch (error) { }
+for (let k = 1; k <= SHIELD_HEART_MAX; k++) {
+const hx = x0(SHIELD_HEART_MAX) + (k - 1) * gap;
+if (k <= owned)
+r56Heart(c, hx, ry, hr, "#4fc8ff", "#d4f6ff", "#4fc8ff");
+else if (k > open) {
+r56Heart(c, hx, ry + 1, hr, "rgba(0,0,0,.5)", "#3a4150", null);
+r56Lock(c, hx, ry, hr, "#6a7282");
+}
+else
+r56Heart(c, hx, ry + 1, hr, "rgba(0,0,0,.45)", "#4a5262", null);
+}
+ry += rowH;
+label("Hold", ry + 2);
+const tier = r56Tier(ship.materialCapBonus);
+const cap = getShipCargoCapacity(ship.materialCapBonus);
+let used = 0;
+try {
+used = getShipCargoUsed(ship);
+}
+catch (error) { }
+const rh = Math.min(rowH * .5, 24 * s), rw = rh * 1.05;
+r56Rack(c, x + w / 2 - rw - 4 * s, ry - rh / 2, rw, rh, tier, "#ffb347");
+c.save();
+c.fillStyle = used >= cap ? "#ff9a7a" : "#ffe2b8";
+c.font = "900 " + Math.round(9 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillText(used + "/" + cap, x + w / 2 + 4 * s, ry);
+c.restore();
+ry += rowH;
+if (perks.length) {
+label("Perks", ry + 2);
+const each = w / perks.length;
+perks.forEach((e, i) => {
+const cx = x + each * (i + .5);
+try {
+drawSpacePet(c, e.pet.homePlanetId || planetId, cx - 9 * s, ry + 5 * s, 15 * s, 100, t * 1.5 + i, e.pet.species, false, e.pilot ? "pilot" : "builder", 1);
+}
+catch (error) { }
+c.save();
+c.fillStyle = e.col;
+c.font = "900 " + Math.round(6.5 * s + 2) + "px system-ui,sans-serif";
+c.textAlign = "left";
+c.textBaseline = "middle";
+c.fillText(e.val, cx, ry - 1 * s);
+c.restore();
+});
+}
+world.hits.push({ x: x + w / 2, y: y + h / 2, r: Math.min(w, h) * .5, z: 5, onTap: () => worldOpenHolo("ships", { shipId: ship.id, shipOnly: ship.id, title: "SHIP" }) });
+}
+function roomShipFixtures(c, list, planetId, st, time) {
+roomShipFixtures__r57(c, list, planetId, st, time);
+const ship = roomState && worldShip(planetId, roomState.shipId || roomState.id);
+if (!ship || !r33Theme())
+return;
+list.push({ v: -1, draw: () => {
+const a = roomWallPt(.6, .05), b = roomWallPt(.985, .95);
+r57ShipBoard(c, planetId, ship, { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y });
+} });
+}
+var r57PauseDraw = false;
+var r57PauseLoop = 0;
+function r57MockShip() {
+const pid = lastLaunchPlanetId || selectedStartPlanet;
+const real = ((planetSave.ships && planetSave.ships[pid]) || []).find(s => s.id === currentShipId) || {};
+return Object.assign({}, real, {
+id: currentShipId || "run",
+lives,
+shieldHearts: runShieldHearts,
+materials: Object.assign({}, runMaterials || {}),
+coins: runCoins || 0,
+cargoPets: (currentShipCargoPets || []).slice(),
+pendingPilot: currentShipPendingPilot || null,
+equipment: currentShipEquipment,
+materialCapBonus: currentShipMaterialCapBonus || 0,
+styleId: currentShipStyleId,
+styleOwnerId: currentShipStyleOwnerId
+});
+}
+function r57PaintPause(cv) {
+if (!cv || !cv.isConnected)
+return false;
+const dpr = Math.min(2, window.devicePixelRatio || 1);
+const W = cv.clientWidth || 300, H = cv.clientHeight || 340;
+if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+cv.width = Math.round(W * dpr);
+cv.height = Math.round(H * dpr);
+}
+const c = cv.getContext("2d");
+const VW = 420, VH = 640, k = W / VW;
+c.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+const ship = r57MockShip();
+const pid = lastLaunchPlanetId || selectedStartPlanet;
+const save = { rs: roomState, geo: roomGeo, scene: world.scene, hits: world.hits, drops: world.drops, drag: world.drag, ws: worldShip, sp: selectedStartPlanet, fb: world.flyBacks, fx: r57Fx };
+roomState = { kind: "ship", id: ship.id, shipId: ship.id, viewOnly: true, t0: 0, u: .5, v: .86, inside: {} };
+world.hits = [];
+world.drops = [];
+world.drag = null;
+world.flyBacks = [];
+r57Fx = [];
+selectedStartPlanet = pid;
+worldShip = function (p, id) {
+return id === ship.id ? ship : save.ws(p, id);
+};
+r57PauseDraw = true;
+try {
+drawRoomScene(c, VW, VH, r57Now() / 1000);
+}
+catch (error) { }
+finally {
+r57PauseDraw = false;
+worldShip = save.ws;
+roomState = save.rs;
+roomGeo = save.geo;
+world.scene = save.scene;
+world.hits = save.hits;
+world.drops = save.drops;
+world.drag = save.drag;
+world.flyBacks = save.fb;
+r57Fx = save.fx;
+selectedStartPlanet = save.sp;
+}
+return true;
+}
+function renderPauseShipCard__r43() {
+const container = document.getElementById("pauseShipCardContent");
+if (!container)
+return;
+if (!currentShipId) {
+container.innerHTML = "";
+return;
+}
+container.innerHTML = '<div class="r57-pause"><canvas id="r57PauseShip"></canvas>' +
+'<div class="r57-pause-cap">Your ship as it flies — unloading and swapping pets wait until you land</div></div>';
+cancelAnimationFrame(r57PauseLoop);
+const cv = document.getElementById("r57PauseShip");
+const loop = () => {
+if (!paused || !r57PaintPause(cv))
+return;
+r57PauseLoop = requestAnimationFrame(loop);
+};
+loop();
+}
+function r33Pill(c, x, y, label, col, on, act) {
+if (r57PauseDraw)
+return { x: -9999, y: -9999, w: 0, h: 0 };
+return r33Pill__r57.apply(this, arguments);
+}
+function pauseGame() {
+const r = pauseGame__r57.apply(this, arguments);
+document.body.classList.toggle("r57-paused", !!paused);
+return r;
+}
+function resumeGame() {
+document.body.classList.remove("r57-paused");
+cancelAnimationFrame(r57PauseLoop);
+return resumeGame__r57.apply(this, arguments);
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = "body.r57-paused .r35-swipe{display:none !important;}" +
+".r57-pause{margin:2px 0 6px;}" +
+"#r57PauseShip{display:block;width:100%;aspect-ratio:420/540;border-radius:14px;border:1px solid rgba(95,243,255,.3);background:#03050f;}" +
+".r57-pause-cap{font:600 11px/1.35 system-ui,sans-serif;color:#8fa7c7;text-align:center;margin-top:8px;}";
+document.head.appendChild(st);
+})();
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -54271,7 +55425,7 @@ return;
 }
 world.flyBacks.push({ desc: g.desc, x0: p.x, y0: p.y, x1: g.hit.x, y1: g.hit.y, t0: performance.now(), size: g.hit.r * 1.2 });
 }
-function worldDrawOverlay(c, W, H) {
+function worldDrawOverlay__r57(c, W, H) {
 const g = world.drag;
 if (g && g.active) {
 world.drops.forEach(t => {
@@ -54301,7 +55455,7 @@ catch (error) { }
 }
 }
 else {
-drawWorldItem(c, g.desc, g.x, g.y - 18, Math.max(34, (g.hit.r || 20) * 1.4), {});
+r57DrawDragged(c, g.desc, g.x, g.y - 18, Math.max(34, (g.hit.r || 20) * 1.4));
 }
 }
 const now = performance.now();
@@ -54463,7 +55617,7 @@ if (!overlay || overlay.classList.contains("hidden"))
 planetDetailId = null;
 }
 }
-function worldPetBubble(pet, x, y) {
+function worldPetBubble__r57(pet, x, y) {
 const planetId = selectedStartPlanet;
 worldShowBubble({
 x, y,
@@ -55193,6 +56347,7 @@ const held = world.drag && world.drag.active && world.drag.src && world.drag.src
 if (held)
 return;
 try {
+r57Cur = pet;
 drawSpacePet(c, planetId, p.x, p.y - size * .5, size, pet.energy, seed + time * 2, pet.species, role === "builder", pet.hat || "builder", facing);
 }
 catch (error) { }
@@ -57834,6 +58989,7 @@ height / 2 -
 petNaturalProj.y;
 }
 r20SetScene(cx, cy, radius, roamViewLat);
+r57FeelSet(cx, cy, radius);
 r53Rim = cy - radius;
 if (roamingActive) {
 const shipLat = SHIP_LAT;
@@ -58076,6 +59232,7 @@ c.save();
 c.translate(ix, iy);
 const upAngle = Math.atan2(iy - cy, ix - cx);
 const r20M = r20Orient(c, ix, iy, "radial");
+r57Pop(c, item, ix, iy, r19SurfScale * Math.max(r53K * 60, r53U * .175));
 const iconSize = r19SurfScale *
 Math.max(r53K * (item.kind === "ship" ? 40 : 60), r53U * (item.kind === "ship" ? .115 : .175));
 const renderBody = (rc = c) => {
@@ -58312,7 +59469,7 @@ targetPosition !== null;
 c.save();
 r20Around(c, px, py, "upright", 1);
 try {
-drawSpacePet(c, selectedStartPlanet, px, py, petSize, pet.energy, seed, pet.species, isPetWorking, "builder");
+r57DrawHomePet(c, pet, px, py, petSize, seed, isPetWorking);
 }
 catch (petDrawError) {
 console.error("Surface pet draw failed:", petDrawError);
@@ -58676,6 +59833,7 @@ finally {
 c.restore();
 }
 });
+r57HomeOverlay(c, canvas, width, height);
 if (!shipSorted) {
 drawShipLayer();
 }
@@ -71184,7 +72342,7 @@ phaseSubtitle.textContent =
 "Your ship is ready. Land to save it, or depart into the asteroid field.";
 updateHUD();
 }
-function pauseGame() {
+function pauseGame__r57() {
 if (!running ||
 gameOver)
 return;
@@ -71193,7 +72351,7 @@ switchPauseTab("menu", true);
 renderPauseShipCard();
 pauseScreen.classList.remove("hidden");
 }
-function resumeGame() {
+function resumeGame__r57() {
 paused = false;
 pauseScreen.classList.add("hidden");
 lastTime =
@@ -72113,7 +73271,7 @@ month: "short",
 day: "numeric"
 });
 }
-function renderPauseShipCard__r43() {
+function renderPauseShipCard__r43__old() {
 const container = document.getElementById("pauseShipCardContent");
 if (!container)
 return;
