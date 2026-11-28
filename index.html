@@ -27970,7 +27970,7 @@ else
 worldMove(src, { t: "bay", s: ship.id }, dd);
 }
 });
-world.hits.push({ x: p.x, y: iy, r: size * .9, z: 7, onTap: () => worldShowBubble({
+world.hits.push({ x: p.x, y: iy, r: size * .9, z: 7, onTap: () => r61CoreMenu(ship, p.x, top) || worldShowBubble({
 x: p.x, y: top,
 iconHtml: info.iconHtml,
 title: "Reactor core: " + info.name,
@@ -36001,7 +36001,7 @@ const i = pets.findIndex(p => p.r39Astro === ship.id);
 if (i >= 0)
 ship.pendingPilot = pets.splice(i, 1)[0];
 }
-function completeDeparture() {
+function completeDeparture__r61() {
 if (r39IsStn(currentPlanetId)) {
 if (running && !gameOver) {
 if (currentShipId)
@@ -37972,7 +37972,7 @@ r41AstroOut(ship);
 function r41ShipModule(set, shipId) {
 return set.mods.find(id => (getShips(r39Pid(id)) || []).some(s => s.id === shipId)) || null;
 }
-function r41AstroOut(ship, thenIn) {
+function r41AstroOut__r61(ship, thenIn) {
 const set = r41Set();
 if (!ship || !ship.pendingPilot) {
 showShipToast("No astronaut aboard that ship");
@@ -38182,7 +38182,7 @@ r41.last = now;
 const t = now / 1000;
 const set = r41Set();
 r41Step(dt);
-const wk = r41.walk;
+const wk = r41.walk || r61PeekWalk();
 const inside = wk && wk.mode === "in";
 let tx, ty;
 if (wk) {
@@ -38222,11 +38222,7 @@ const m = r38.world.mods[mid], h = r38HatchOffset(m);
 r41WalkTo(mid, h.x, h.y, () => r41GoIn(mid));
 return;
 }
-const s = (getShips(selectedStartPlanet) || []).find(x => x.id === sel) || (getShips(selectedStartPlanet) || [])[0];
-if (s && s.pendingPilot)
-r41AstroOut(s, mid);
-else
-showShipToast("Swipe a ship with an astronaut down to step out, then walk to the hatch");
+r61PeekIn(mid);
 },
 onShip: (pd, m) => {
 if (inside)
@@ -38266,6 +38262,10 @@ r41Move(src, { t: "r41floor", mid, x: f.x, y: f.y }, d);
 });
 }
 r41DrawSet(c, set, view, t, opts);
+try {
+r61PadHits(set, view);
+}
+catch (error) { }
 try {
 r44HullDrops(set, view, inside);
 }
@@ -38331,7 +38331,7 @@ document.head.appendChild(css);
 }
 catch (error) { }
 })();
-function r41Hint(c, w, h, wk, inside) {
+function r41Hint__r61(c, w, h, wk, inside) {
 const text = !wk ? "Swipe your ship down to step out · drag to look around" : inside ? "Drag to walk · climb the hatch ladder to go back out" : "Drag to walk the hull · the hatch takes you inside · walk to your ship to board";
 c.save();
 c.fillStyle = "rgba(191,246,255,.6)";
@@ -43962,7 +43962,7 @@ return out;
 function r42Residents(m, pid, rf, t) {
 return r42Residents__r55(m, pid, rf, t).filter(rs => !r55IsAstro(rs.pet) && !r55Walking(rs.pet.id));
 }
-function startRoamingPet(petId) {
+function startRoamingPet__r61(petId) {
 const pid = selectedStartPlanet;
 if (typeof r41On === "function" && r41On() && r39IsStn(pid)) {
 const pet = (getPets(pid) || []).find(p => p.id === petId);
@@ -44008,7 +44008,7 @@ function r55PutInCargo(ship, pet) {
 ship.cargoPets = ship.cargoPets || [];
 ship.cargoPets.push(pet);
 }
-function r41GoOut(mid) {
+function r41GoOut__r61(mid) {
 const wk = r41.walk;
 if (wk && wk.pet && !r55IsAstro(wk.pet)) {
 const pid = r39Pid(mid);
@@ -44036,7 +44036,7 @@ return;
 }
 return r41GoOut__r55(mid);
 }
-function r55EnterShip(sm, shipId) {
+function r55EnterShip__r61(sm, shipId) {
 const wk = r41.walk;
 if (!wk)
 return;
@@ -44112,7 +44112,7 @@ const q = Math.max(.42, Math.min(1, hull / Math.max(.01, camS)));
 r55InQ.pet = q * R59K;
 r55InQ.thing = Math.min(1, q * 1.3) * R59K;
 }
-function roomLaunchShip(ship) {
+function roomLaunchShip__r61(ship) {
 if (r39IsStn(selectedStartPlanet)) {
 if (roomState && roomState.viewOnly)
 leaveRoomView();
@@ -46367,12 +46367,12 @@ if (r57PauseDraw)
 return { x: -9999, y: -9999, w: 0, h: 0 };
 return r33Pill__r57.apply(this, arguments);
 }
-function pauseGame() {
+function pauseGame__r61() {
 const r = pauseGame__r57.apply(this, arguments);
 document.body.classList.toggle("r57-paused", !!paused);
 return r;
 }
-function resumeGame() {
+function resumeGame__r61() {
 document.body.classList.remove("r57-paused");
 cancelAnimationFrame(r57PauseLoop);
 return resumeGame__r57.apply(this, arguments);
@@ -48155,6 +48155,1166 @@ return;
 catch (error) { }
 return r36OrbitEdge__r60(distance);
 }
+function r61MovePet(pet, fromPid, toPid) {
+if (!pet || !toPid || fromPid === toPid)
+return;
+if (fromPid)
+r55TakePetFrom(fromPid, pet);
+const list = getPets(toPid);
+if (list && !list.some(p => p.id === pet.id))
+list.push(pet);
+}
+function r61RoamInShip(pid, shipId, pet, u, v) {
+if (!pet)
+return false;
+worldHideBubble();
+try {
+worldCloseHolo();
+}
+catch (error) { }
+roomState = null;
+selectedStartPlanet = pid;
+roamingActive = true;
+roamingPetId = pet.id;
+roamingShipId = null;
+roamingReturnToPets = null;
+roamingBoardOnExit = null;
+roamingDragging = false;
+roamingIsMoving = false;
+roamingSpeedFraction = 0;
+roamingLastFrameTime = 0;
+roamingFacingTarget = 1;
+roamingFacingScale = 1;
+roamingSmoothedJoyDx = 0;
+roamingHeadingUp = true;
+roamingStartTime = performance.now();
+roamPetTransitionKind = "enter";
+roamPetTransitionStart = performance.now();
+enterRoom("ship", shipId);
+if (!roomState) {
+roamingActive = false;
+roamingPetId = null;
+return false;
+}
+roomState.u = u == null ? .5 : u;
+roomState.v = v == null ? .88 : v;
+if (r39IsStn(pid))
+roomState.r61stn = { pid, shipId };
+toggleRoamingUI(true);
+return true;
+}
+function r55EnterShip(sm, shipId) {
+const wk = r41.walk;
+if (!wk || !wk.pet)
+return r55EnterShip__r61(sm, shipId);
+const pid = r39Pid(sm);
+const ship = (getShips(pid) || []).find(s => s.id === shipId);
+if (!ship)
+return;
+const pet = wk.pet;
+if (pet.carry) {
+r41VaultAdd(pid, pet.carry, 1);
+pet.carry = null;
+}
+if (!wk.fromPid)
+return r55EnterShip__r61(sm, shipId);
+r61MovePet(pet, wk.fromPid, pid);
+savePlanetProgress();
+r41.walk = null;
+selectedLaunchShipId = shipId;
+sound("click");
+r61RoamInShip(pid, shipId, pet, .5, .88);
+}
+function r41GoOut(mid) {
+const wk = r41.walk;
+if (wk && wk.pet && !r55IsAstro(wk.pet) && wk.fromPid) {
+const pid = r39Pid(mid);
+const ship = (getShips(pid) || [])[0];
+if (ship) {
+if (wk.pet.carry) {
+r41VaultAdd(pid, wk.pet.carry, 1);
+wk.pet.carry = null;
+}
+const pet = wk.pet;
+r61MovePet(pet, wk.fromPid, pid);
+savePlanetProgress();
+r41.walk = null;
+sound("click");
+r61RoamInShip(pid, ship.id, pet, .5, .88);
+return;
+}
+}
+return r41GoOut__r61(mid);
+}
+function r41AstroOut(ship, thenIn) {
+const r = r41AstroOut__r61(ship, thenIn);
+try {
+const wk = r41.walk;
+if (wk && ship && ship.pendingPilot && wk.pet === ship.pendingPilot) {
+const set = r41Set();
+const mid = r41ShipModule(set, ship.id) || r39Mid(selectedStartPlanet);
+const pid = r39Pid(mid);
+const pet = ship.pendingPilot;
+ship.pendingPilot = null;
+pet.r39Astro = ship.id;
+const list = getPets(pid);
+if (!list.some(p => p.id === pet.id))
+list.push(pet);
+wk.fromPid = pid;
+savePlanetProgress();
+}
+}
+catch (error) { }
+return r;
+}
+function leaveRoom() {
+const st = roomState;
+if (st && st.r61stn && !st.viewOnly && roamingActive) {
+const pet = getRoamingPet();
+const pid = st.r61stn.pid;
+const mid = r39Mid(pid);
+worldCloseHolo();
+worldHideBubble();
+worldLastRoomExitAt = performance.now();
+roomState = null;
+roamingActive = false;
+roamingPetId = null;
+roamPetTransitionKind = null;
+toggleRoamingUI(false);
+try {
+const set = r41Set();
+const m = r38.world.mods[mid];
+const p = set.pos[mid];
+if (pet && m && p) {
+if (r55IsAstro(pet)) {
+const idx = Math.max(0, (getShips(pid) || []).findIndex(s => s.id === st.r61stn.shipId));
+const o = r38PadOffset(m, Math.min(idx, (m.size || 1) - 1));
+r41.walk = { mode: "out", pet, fromPid: pid, mid, x: p.x + o.x, y: p.y + o.y + 14 * R59K * 1.6, face: 1, target: null, since: performance.now() };
+}
+else {
+const lad = r41DeckThings(m).find(o => o.kind === "ladder") || { x: 0, y: 0 };
+r41.walk = { mode: "in", pet, fromPid: pid, mid, x: p.x + lad.x + 6, y: p.y + lad.y + 6, face: 1, target: null, since: performance.now() };
+}
+}
+}
+catch (error) { }
+sound("click");
+renderPlanetFocus();
+return;
+}
+return leaveRoom__r61();
+}
+function r61StayAboard(shipId) {
+setTimeout(() => {
+try {
+if (!roomState && !roamingActive)
+enterRoomView("ship", shipId);
+}
+catch (error) { }
+}, 0);
+}
+function roomSitInSeat(ship) {
+const pet = getRoamingPet();
+if (!pet)
+return;
+if (roamingShipId === ship.id) {
+roomState = null;
+endRoaming();
+r61StayAboard(ship.id);
+showShipToast((SPECIES_DISPLAY_NAMES[pet.species] || "Your pilot") + " is back in the pilot seat");
+return;
+}
+const r = roomSitInSeat__r61(ship);
+if (!roamingActive && ship.pendingPilot && ship.pendingPilot.id === pet.id) {
+try {
+delete ship.pendingPilot.r39Astro;
+}
+catch (error) { }
+r61StayAboard(ship.id);
+}
+return r;
+}
+function roomBoardPetBay(ship) {
+const pet = getRoamingPet();
+if (!pet || !roamingPetId)
+return;
+if (shipCargoRoom(ship) < PET_CARGO_SLOTS) {
+showShipToast("Not enough cargo room — a pet takes " + PET_CARGO_SLOTS + " slots");
+return;
+}
+roamingBoardOnExit = { planetId: selectedStartPlanet, shipId: ship.id, petId: pet.id };
+roamingReturnToPets = null;
+roomState = null;
+endRoaming();
+r61StayAboard(ship.id);
+}
+function r61Loitering(petId) {
+const now = performance.now();
+return r60Loiter.some(l => l.pet.id === petId && now - l.t0 < 9000);
+}
+function isPetOutRoaming(petId) {
+if (r61Loitering(petId))
+return true;
+return isPetOutRoaming__r61(petId);
+}
+function r61LoiterValid(L, planetId) {
+if (roamingActive && roamingPetId === L.pet.id)
+return false;
+if (r41.walk && r41.walk.pet && r41.walk.pet.id === L.pet.id)
+return false;
+const ships = getShips(planetId) || [];
+if (ships.some(s => (s.pendingPilot && s.pendingPilot.id === L.pet.id) || (s.cargoPets || []).some(p => p && p.id === L.pet.id)))
+return false;
+return true;
+}
+var r61RoamFrom = null;
+function r60LoiterFixtures(c, list, planetId) {
+const now = performance.now();
+r60Loiter = r60Loiter.filter(l => now - l.t0 < 9000 && r61LoiterValid(l, planetId));
+r60Loiter.forEach(L => {
+const age = (now - L.t0) / 1000;
+let u, v, alpha = 1, walking = false;
+if (age < 6) {
+u = L.u + Math.sin(age * .9 + L.seed) * .06;
+v = Math.min(.75, L.v + .12 + Math.sin(age * .6 + L.seed * 2) * .04);
+walking = Math.abs(Math.cos(age * .9 + L.seed)) > .4;
+}
+else {
+const k = Math.min(1, (age - 6) / 2.6);
+const u0 = L.u + Math.sin(6 * .9 + L.seed) * .06, v0 = Math.min(.75, L.v + .12 + Math.sin(6 * .6 + L.seed * 2) * .04);
+u = u0 + (.5 - u0) * k;
+v = v0 + (.97 - v0) * k;
+walking = true;
+alpha = k > .8 ? (1 - k) / .2 : 1;
+}
+L.cu = u;
+L.cv = v;
+list.push({ v, draw: () => {
+const p = roomFloorPt(u, v), s = p.s;
+c.save();
+c.globalAlpha = alpha;
+try {
+drawSpacePet(c, L.pet.homePlanetId || planetId, p.x, p.y - 14 * s, 28 * s, L.pet.energy, walking ? now / 250 : Math.floor(L.seed), L.pet.species, false, L.pet.hat || "builder", Math.cos(age * .9 + L.seed) > 0 ? 1 : -1);
+}
+catch (error) { }
+c.restore();
+if (age < 6.5)
+world.hits.push({ x: p.x, y: p.y - 16 * s, r: Math.max(20, 20 * s), z: 9, onTap: () => {
+const real = (getPets(planetId) || []).find(x => x.id === L.pet.id) || L.pet;
+L.t0 = now - Math.min(age, 1);
+r61RoamFrom = { petId: L.pet.id, shipId: roomState && roomState.id, u: L.cu, v: L.cv };
+worldPetBubble(real, p.x, p.y - 30 * s);
+} });
+} });
+});
+}
+function startRoamingPet(petId) {
+const rf = r61RoamFrom;
+r61RoamFrom = null;
+if (rf && rf.petId === petId && roomState && roomState.kind === "ship" && roomState.viewOnly && roomState.id === rf.shipId && !roamingActive) {
+const pid = selectedStartPlanet;
+const pet = (getPets(pid) || []).find(p => p.id === petId);
+if (pet) {
+r60Loiter = r60Loiter.filter(l => l.pet.id !== petId);
+if (r39IsStn(pid)) {
+r61RoamInShip(pid, rf.shipId, pet, rf.u, rf.v);
+return;
+}
+roomState = null;
+toggleRoamingUI(false);
+startRoamingPet__r61(petId);
+if (roamingActive) {
+roamPetTransitionKind = null;
+enterRoom("ship", rf.shipId);
+if (roomState) {
+roomState.u = rf.u;
+roomState.v = rf.v;
+}
+}
+return;
+}
+}
+return startRoamingPet__r61(petId);
+}
+var r61Peek = null;
+function r61PeekWalk() {
+if (!r61Peek)
+return null;
+try {
+const set = r41Set();
+const m = r38.world.mods[r61Peek.mid];
+const p = set && set.pos[r61Peek.mid];
+if (!m || !p || r41.walk || running) {
+r61Peek = null;
+return null;
+}
+return { mode: "in", mid: r61Peek.mid, x: p.x, y: p.y, peek: true, pet: null };
+}
+catch (error) {
+r61Peek = null;
+return null;
+}
+}
+function r61PeekIn(mid) {
+const m = r38.world.mods[mid];
+if (!m)
+return;
+r61Peek = { mid };
+let y = r59BackAngle(m) + Math.PI / 2;
+y += Math.round((r41.yawT - y) / (Math.PI * 2)) * Math.PI * 2;
+r41.yawT = y;
+sound("click");
+}
+function r61PeekOut() {
+r61Peek = null;
+sound("click");
+}
+function r41Hint(c, w, h, wk, inside) {
+if (wk && wk.peek) {
+let name = "Module";
+try {
+name = (getPlanet(r39Pid(wk.mid)) || {}).name || name;
+}
+catch (error) { }
+r33Pill(c, w / 2, 206, "Back outside", "#5ff3ff", true, () => r61PeekOut());
+c.save();
+c.fillStyle = "rgba(191,246,255,.8)";
+c.font = "900 13px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillText(String(name).toUpperCase(), w / 2, 180);
+c.restore();
+return;
+}
+if (!wk) {
+c.save();
+c.fillStyle = "rgba(191,246,255,.6)";
+c.font = "700 11px system-ui";
+c.textAlign = "center";
+c.fillText("Drag to look around · tap a hatch to look inside · tap a pad to visit", w / 2, h - 112);
+c.restore();
+return;
+}
+return r41Hint__r61(c, w, h, wk, inside);
+}
+function r61PadHits(set, view) {
+if (r41.walk || r61Peek || running)
+return;
+const cur = r39Mid(selectedStartPlanet);
+const P = r41Proj(view.cx, view.cy, view.s, view.tilt, view.yaw);
+set.mods.forEach(mid => {
+if (mid === cur)
+return;
+const m = r38.world.mods[mid], p = set.pos[mid];
+if (!m || !p)
+return;
+for (let i = 0; i < (m.size || 1); i++) {
+const o = r38PadOffset(m, i);
+const hz = r41Height(set, p.x + o.x, p.y + o.y, false) || { z: 0 };
+const q = P(p.x + o.x - view.ox, p.y + o.y - view.oy, hz.z);
+world.hits.push({ x: q.X, y: q.Y, r: Math.max(22, 20 * R59K * view.s), z: 3, onTap: () => {
+selectedStartPlanet = r39Pid(mid);
+sound("click");
+renderPlanetFocus();
+} });
+}
+});
+}
+function r61LaunchShip() {
+const pid = selectedStartPlanet;
+const ships = getShips(pid) || [];
+return ships.find(s => s.id === selectedLaunchShipId) || ships[0] || null;
+}
+function r61HasPilot(ship, pid) {
+if (!ship)
+return false;
+if (ship.pendingPilot)
+return true;
+return (getPets(pid) || []).some(p => p.r39Astro === ship.id);
+}
+function r61InNexus() {
+return !!(r38.nexus || (r38.world && r38.world.kind === "nexus"));
+}
+function launchWithAnimation() {
+try {
+const pid = selectedStartPlanet;
+if (!running && r39IsStn(pid) && r61InNexus()) {
+const ship = r61LaunchShip();
+if (ship && !r61HasPilot(ship, pid)) {
+sound("click");
+showShipToast("Out in the Nexus a ship needs a pet in the pilot seat to fly");
+return;
+}
+}
+}
+catch (error) { }
+return launchWithAnimation__r61.apply(this, arguments);
+}
+function completeDeparture() {
+try {
+if (r39IsStn(currentPlanetId) && running && !gameOver && !currentShipPendingPilot && !r61InNexus()) {
+const home = r44Home(currentPlanetId);
+if (currentShipId)
+removeShip(currentPlanetId, currentShipId);
+currentPlanetId = home;
+fieldStartPlanetId = home;
+enterAsteroidField(false);
+return;
+}
+}
+catch (error) { }
+return completeDeparture__r61();
+}
+function roomLaunchShip(ship) {
+try {
+const pid = selectedStartPlanet;
+if (r39IsStn(pid) && r61InNexus() && ship && !r61HasPilot(ship, pid)) {
+sound("click");
+showShipToast("Out in the Nexus a ship needs a pet in the pilot seat to fly");
+return;
+}
+}
+catch (error) { }
+return roomLaunchShip__r61(ship);
+}
+function r55Walking(petId) {
+if (r41.walk && r41.walk.pet && r41.walk.pet.id === petId)
+return true;
+if (roamingActive && roamingPetId === petId)
+return true;
+return r61Loitering(petId);
+}
+function r61Journey() {
+if (!running || gameOver || worldState !== "field")
+return null;
+const leg = Math.max(1, currentFieldLegPoints());
+const done = clamp((score - fieldStartScore) / leg, 0, 1);
+const toPlanet = !!planetPhasePending;
+let name = "Home";
+try {
+name = (getPlanet(currentPlanetId) || {}).name || name;
+}
+catch (error) { }
+return { leg, done, toPlanet, left: Math.max(0, Math.ceil(fieldStartScore + leg - score)), planetId: currentPlanetId, name,
+pos: toPlanet ? 1 - done : done };
+}
+function r61CanReverse() {
+const j = r61Journey();
+return !!j && !pendingFieldExit && !coPilotSessionShipKey && capsuleMode !== "death";
+}
+function r61Reverse() {
+const j = r61Journey();
+if (!j || !r61CanReverse())
+return;
+const earned = Math.max(0, Math.min(j.leg, score - fieldStartScore));
+planetPhasePending = !planetPhasePending;
+planetPhaseCompleted = !planetPhasePending;
+const leg2 = Math.max(1, currentFieldLegPoints());
+fieldStartScore = score - Math.max(0, leg2 - earned);
+r61Jr.flip = performance.now();
+try {
+sound("click");
+}
+catch (error) { }
+updateHUD();
+r61JrRender();
+r61Jr.toast = planetPhasePending ? "TURNING BACK TO " + j.name.toUpperCase() : "HEADING OUT TO THE STAR MAP";
+}
+var r61Jr = { el: null, loop: 0, flip: 0, shown: 0, toast: null };
+function r61JrEl() {
+if (r61Jr.el && r61Jr.el.isConnected)
+return r61Jr.el;
+const res = document.getElementById("resumeButton");
+if (!res)
+return null;
+const d = document.createElement("div");
+d.id = "r61Jr";
+d.className = "r61-jr hidden";
+d.innerHTML = '<canvas id="r61JrCv"></canvas>' +
+'<div class="r61-jr-row"><div class="r61-jr-txt" id="r61JrTxt"></div>' +
+'<button type="button" class="r61-jr-rev" id="r61JrRev">' +
+'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9a4 4 0 0 1 0 8H6"/><path d="M10 3.5 6.5 7 10 10.5"/><path d="M9 11.5 5.5 15 9 18.5"/></svg>' +
+'<span>Reverse</span></button></div>';
+res.insertAdjacentElement("afterend", d);
+d.querySelector("#r61JrRev").addEventListener("click", e => {
+e.stopPropagation();
+r61Reverse();
+});
+r61Jr.el = d;
+return d;
+}
+function r61JrRender() {
+const el = r61JrEl();
+if (!el)
+return;
+const j = r61Journey();
+el.classList.toggle("hidden", !j);
+if (!j)
+return;
+const txt = el.querySelector("#r61JrTxt");
+const dest = j.toPlanet ? j.name : "the star map";
+txt.innerHTML = '<b>' + j.left.toLocaleString() + '</b> pts to ' + dest;
+const btn = el.querySelector("#r61JrRev");
+btn.disabled = !r61CanReverse();
+btn.style.display = coPilotSessionShipKey ? "none" : "";
+btn.querySelector("span").textContent = j.toPlanet ? "Reverse to the star map" : "Reverse to " + j.name;
+btn.classList.toggle("back", j.toPlanet);
+}
+function r61JrDraw() {
+const cv = document.getElementById("r61JrCv");
+const j = r61Journey();
+if (!cv || !j)
+return;
+const w = cv.clientWidth, h = cv.clientHeight;
+if (!w || !h)
+return;
+const dpr = Math.min(2, window.devicePixelRatio || 1);
+if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+cv.width = Math.round(w * dpr);
+cv.height = Math.round(h * dpr);
+}
+const c = cv.getContext("2d");
+c.setTransform(dpr, 0, 0, dpr, 0, 0);
+c.clearRect(0, 0, w, h);
+const t = performance.now() / 1000;
+const cy = h * .44;
+const pr = Math.min(h * .3, 30);
+const px = pr + 14, nx = w - pr - 14;
+const x0 = px + pr + 8, x1 = nx - pr * .8 - 8;
+const flipK = Math.min(1, (performance.now() - r61Jr.flip) / 650);
+r61Jr.shown = r61Jr.shown == null ? j.pos : r61Jr.shown + (j.pos - r61Jr.shown) * .12;
+const sx = x0 + (x1 - x0) * r61Jr.shown;
+const dir = j.toPlanet ? -1 : 1;
+c.save();
+for (let i = 0; i < 26; i++) {
+const a = r33Hash(i * 3.1), b = r33Hash(i * 7.7);
+c.globalAlpha = .25 + .5 * r33Hash(i * 1.3);
+c.fillStyle = "#cfe8ff";
+c.fillRect(((a * w + t * 6 * dir * (.4 + b)) % w + w) % w, b * h, 1.3, 1.3);
+}
+c.restore();
+c.save();
+c.lineCap = "round";
+c.strokeStyle = "rgba(120,160,210,.35)";
+c.lineWidth = 2;
+c.setLineDash([3, 7]);
+c.lineDashOffset = -t * 22 * dir;
+c.beginPath();
+c.moveTo(x0, cy);
+c.lineTo(x1, cy);
+c.stroke();
+c.setLineDash([]);
+const g = c.createLinearGradient(x0, 0, x1, 0);
+g.addColorStop(0, "#7dffb0");
+g.addColorStop(1, "#5ff3ff");
+c.strokeStyle = g;
+c.lineWidth = 3;
+c.shadowColor = "#5ff3ff";
+c.shadowBlur = 8;
+c.beginPath();
+if (j.toPlanet) {
+c.moveTo(x1, cy);
+c.lineTo(sx, cy);
+}
+else {
+c.moveTo(x0, cy);
+c.lineTo(sx, cy);
+}
+c.stroke();
+c.restore();
+c.save();
+c.strokeStyle = "#ffd76b";
+c.lineWidth = 2;
+c.lineCap = "round";
+c.lineJoin = "round";
+for (let k = 0; k < 3; k++) {
+const ph = (t * 1.4 + k / 3) % 1;
+const cx = sx + dir * (18 + ph * 34);
+if (cx < x0 - 4 || cx > x1 + 4)
+continue;
+c.globalAlpha = Math.sin(ph * Math.PI) * .9;
+c.beginPath();
+c.moveTo(cx - dir * 4, cy - 5);
+c.lineTo(cx + dir * 2, cy);
+c.lineTo(cx - dir * 4, cy + 5);
+c.stroke();
+}
+c.restore();
+try {
+drawSpacePlanet(c, j.planetId, px, cy, pr, {});
+}
+catch (error) {
+c.fillStyle = "#3f7fd0";
+c.beginPath();
+c.arc(px, cy, pr, 0, Math.PI * 2);
+c.fill();
+}
+c.save();
+const pulse = .5 + .5 * Math.sin(t * 2.4);
+c.strokeStyle = "rgba(183,141,255,.55)";
+c.lineWidth = 1.2;
+[[-.9, -.75], [.85, -.7], [.2, .95]].forEach(([dx, dy], i) => {
+c.beginPath();
+c.moveTo(nx, cy);
+c.lineTo(nx + dx * pr * 1.05, cy + dy * pr * 1.05);
+c.stroke();
+c.fillStyle = "#d8c6ff";
+c.beginPath();
+c.arc(nx + dx * pr * 1.05, cy + dy * pr * 1.05, 2.2 + i * .4, 0, Math.PI * 2);
+c.fill();
+});
+const ng = c.createRadialGradient(nx, cy, 1, nx, cy, pr * .9);
+ng.addColorStop(0, "#ffffff");
+ng.addColorStop(.25, "#c9b2ff");
+ng.addColorStop(1, "rgba(120,80,255,0)");
+c.fillStyle = ng;
+c.beginPath();
+c.arc(nx, cy, pr * .9, 0, Math.PI * 2);
+c.fill();
+c.strokeStyle = "rgba(201,178,255," + (.5 + .4 * pulse) + ")";
+c.lineWidth = 1.6;
+c.beginPath();
+c.arc(nx, cy, pr * .55 + pulse * 3, 0, Math.PI * 2);
+c.stroke();
+c.restore();
+c.save();
+c.font = "800 9px system-ui,sans-serif";
+c.textAlign = "center";
+c.fillStyle = j.toPlanet ? "#ffd76b" : "#8fa7c7";
+c.fillText(j.name.toUpperCase(), px, h - 6);
+c.fillStyle = j.toPlanet ? "#8fa7c7" : "#ffd76b";
+c.fillText("STAR MAP", nx, h - 6);
+c.restore();
+let ang = dir > 0 ? 0 : Math.PI;
+if (flipK < 1)
+ang = (dir > 0 ? Math.PI : 0) + (dir > 0 ? 1 : -1) * Math.PI * easeZoom(flipK);
+try {
+r38DrawShip(c, sx, cy, ang, "#6ee7ff", null, r59CurRaw(), .42);
+}
+catch (error) {
+c.fillStyle = "#6ee7ff";
+c.beginPath();
+c.arc(sx, cy, 6, 0, Math.PI * 2);
+c.fill();
+}
+}
+function pauseGame() {
+const r = pauseGame__r61.apply(this, arguments);
+try {
+r61Jr.shown = null;
+r61JrRender();
+cancelAnimationFrame(r61Jr.loop);
+const loop = () => {
+if (!paused)
+return;
+try {
+r61JrDraw();
+}
+catch (error) { }
+r61Jr.loop = requestAnimationFrame(loop);
+};
+loop();
+}
+catch (error) { }
+return r;
+}
+function resumeGame() {
+cancelAnimationFrame(r61Jr.loop);
+const r = resumeGame__r61.apply(this, arguments);
+if (r61Jr.toast) {
+try {
+floatingText(r61Jr.toast, W / 2, H * .3, "#ffd76b");
+}
+catch (error) { }
+r61Jr.toast = null;
+}
+return r;
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".r61-jr{margin:4px 0 10px;padding:8px 10px 10px;border-radius:14px;border:1px solid rgba(95,243,255,.28);background:linear-gradient(180deg,#071226,#040814);}" +
+".r61-jr.hidden{display:none;}" +
+"#r61JrCv{display:block;width:100%;height:84px;}" +
+".r61-jr-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px;}" +
+".r61-jr-txt{font:600 12px/1.3 system-ui,sans-serif;color:#bcd0ea;text-align:left;}" +
+".r61-jr-txt b{font-weight:900;color:#ffd76b;font-size:14px;}" +
+".r61-jr-rev{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,215,107,.6);background:rgba(255,215,107,.12);color:#fff2c8;font:800 12px system-ui,sans-serif;cursor:pointer;}" +
+".r61-jr-rev:disabled{opacity:.4;cursor:default;}" +
+".r61-jr-rev svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .35s;}" +
+".r61-jr-rev.back svg{transform:scaleX(-1);}" +
+".r61-ico{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;font-size:22px;flex:0 0 30px;}" +
+".r61-ico svg,.r61-ico img{max-width:100%;max-height:100%;}";
+document.head.appendChild(st);
+})();
+function r61StockPids(pid) {
+const out = [pid];
+try {
+if (r39IsStn(pid) && r39.landed) {
+const set = r38.world.sets[r39.landed.setId];
+(set && set.mods || []).forEach(mid => {
+const p = r39Pid(mid);
+if (!out.includes(p))
+out.push(p);
+});
+}
+}
+catch (error) { }
+return out;
+}
+function r61PowerStock(pid) {
+const all = {};
+r61StockPids(pid).forEach(p => {
+Object.entries((planetSave.itemStock || {})[p] || {}).forEach(([id, n]) => {
+if (!(n > 0) || id === "emp")
+return;
+const e = all[id] || (all[id] = { id, n: 0, from: [] });
+e.n += n;
+e.from.push(p);
+});
+});
+return Object.values(all).sort((a, b) => getItemInfo(a.id).name.localeCompare(getItemInfo(b.id).name));
+}
+function r61ItemRow(id, sub, act) {
+return '<span class="tp-ship pet-row"><span class="r61-ico">' + getItemIconHtml(id) + '</span>' +
+'<span class="tp-main"><span class="tp-name">' + getItemInfo(id).name + '</span><span class="tp-sub">' + sub + '</span></span>' +
+'<span class="pet-row-act">' + act + '</span></span>';
+}
+function r61Equip(ship, it) {
+const pid = selectedStartPlanet;
+if (it.id !== "emp" && getItemStock(pid, it.id) <= 0) {
+const from = it.from.find(p => p !== pid && getItemStock(p, it.id) > 0);
+if (!from)
+return;
+addItemStock(from, it.id, -1);
+addItemStock(pid, it.id, 1);
+}
+worldHideBubble();
+worldRunAction({ "data-action": "equip-item", "data-ship": ship.id, "data-item": it.id });
+try {
+sound("arrival");
+}
+catch (error) { }
+}
+function r61CoreMenu(ship, x, y) {
+const pid = selectedStartPlanet;
+const stn = r39IsStn(pid);
+const cur = ship.equipment && ship.equipment !== "emp" ? ship.equipment : "emp";
+const stock = r61PowerStock(pid).filter(it => it.id !== cur);
+const where = stn ? "the station" : "the vault";
+const buttons = stock.slice(0, 6).map(it => ({
+label: r61ItemRow(it.id, "×" + it.n + " in " + where, "Fit"),
+primary: true,
+action: () => r61Equip(ship, it)
+}));
+if (cur !== "emp")
+buttons.push({ label: r61ItemRow("emp", "Standard — always on hand", "Fit"), action: () => r61Equip(ship, { id: "emp", from: [] }) });
+worldShowBubble({
+x, y,
+iconHtml: getItemIconHtml(cur),
+title: "Power core",
+meta: "Fitted: " + getItemInfo(cur).name,
+text: stock.length ? "Pick a power-up from " + where + " to fit — the one in the core now goes back." : "No power-ups in " + where + " yet — buy them at a shop or forge your own.",
+buttons
+});
+return true;
+}
+function r60PetDoor(c, list, planetId, ship) {
+list.push({
+v: .25,
+walk: { u: .635, v: .43, r: .06, id: "petdoor", onWalk: () => roomBoardPetBay(ship) },
+draw: () => {
+const a = roomFloorPt(.66, .4), s = a.s;
+const h = 110 * s, cw = 24 * s;
+const x = a.x - cw, top = a.y - h;
+const room = shipCargoRoom(ship);
+const ok = room >= PET_CARGO_SLOTS;
+const t = performance.now() / 1000;
+c.save();
+c.fillStyle = "#1a2030";
+c.fillRect(x, top, cw, h);
+c.strokeStyle = "#56627c";
+c.lineWidth = 3 * s;
+c.beginPath();
+c.moveTo(a.x, top);
+c.lineTo(x, top);
+c.lineTo(x, a.y);
+c.lineTo(a.x, a.y);
+c.stroke();
+c.fillStyle = "#3a4458";
+c.fillRect(x, top + h / 3 - 3 * s, cw, 5 * s);
+const dx = x + 3 * s, dw = cw - 6 * s, dt = top + h / 3 + 5 * s, dh = a.y - dt - 2 * s;
+const g = c.createLinearGradient(dx, 0, dx + dw, 0);
+g.addColorStop(0, "#3a4458");
+g.addColorStop(1, "#283246");
+c.fillStyle = g;
+c.beginPath();
+if (c.roundRect)
+c.roundRect(dx, dt, dw, dh, [dw * .5, dw * .5, 1.5 * s, 1.5 * s]);
+else
+c.rect(dx, dt, dw, dh);
+c.fill();
+const col = ok ? "#ff9f3a" : "#ff6b6b";
+c.strokeStyle = col;
+c.lineWidth = 1.6 * s;
+c.shadowColor = col;
+c.shadowBlur = ok ? 5 + 3 * Math.sin(t * 3) : 3;
+c.stroke();
+c.shadowBlur = 0;
+c.fillStyle = ok ? "#ffcf9a" : "#ff9a9a";
+const px = dx + dw / 2, py = dt + dh * .5;
+c.beginPath();
+c.ellipse(px, py + 2.6 * s, 3.8 * s, 3 * s, 0, 0, Math.PI * 2);
+c.fill();
+[[-3.4, -2.2], [-1.2, -3.9], [1.2, -3.9], [3.4, -2.2]].forEach(([ex, ey]) => {
+c.beginPath();
+c.arc(px + ex * s, py + ey * s, 1.35 * s, 0, Math.PI * 2);
+c.fill();
+});
+c.fillStyle = col;
+c.beginPath();
+c.arc(x + cw / 2, top + h / 6, 3 * s, 0, Math.PI * 2);
+c.fill();
+c.restore();
+world.hits.push({ x: px, y: dt + dh / 2, r: Math.max(20, dh * .55), z: 9, onTap: () => worldShowBubble({
+x: px, y: dt - 6,
+iconHtml: r42Ico("crate", "#ff9f3a"),
+title: "Pet door",
+meta: ok ? room + " slots free · a pet takes " + PET_CARGO_SLOTS : "The hold's full",
+text: getPets(planetId).length ? "Pick a pet to bring aboard — or walk one through the door." : "No pets here to bring aboard.",
+buttons: petChoiceButtons(planetId, () => ok, pp => "Load " + petShortName(planetId, pp), pp => worldRunAction({ "data-action": "load-pet", "data-ship": ship.id, "data-pet": pp.id }))
+}) });
+}
+});
+}
+var R61_ICONS = {
+paw: '<g fill="currentColor" stroke="none"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6" cy="10" r="2"/><circle cx="9.6" cy="6.4" r="2"/><circle cx="14.4" cy="6.4" r="2"/><circle cx="18" cy="10" r="2"/></g>',
+sat: '<rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="2" y="10" width="5" height="4" rx=".6"/><rect x="17" y="10" width="5" height="4" rx=".6"/><path d="M7 12h2.5M14.5 12H17M12 9.5V6M10 4.5h4"/>',
+crate: '<rect x="3.5" y="6" width="17" height="13.5" rx="1.6"/><path d="M3.5 10.5h17M10 10.5v3h4v-3"/>',
+lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/><path d="M12 14.5v2.5"/>',
+rocket: '<path d="M12 2.5c3 2.4 4.4 6 4.4 10.2L14.2 16H9.8l-2.2-3.3C7.6 8.5 9 4.9 12 2.5z"/><circle cx="12" cy="9" r="1.6"/><path d="M9.8 16 9 20.5l3-1.8 3 1.8-.8-4.5"/>',
+bolt: '<path fill="currentColor" stroke="none" d="M13.5 2 4.5 13.5h6L9.5 22l9-11.5h-6z"/>',
+wrench: '<path d="M14.8 3.6a4.8 4.8 0 0 0-4.5 6.6L3.6 17a2 2 0 0 0 2.8 2.8l6.8-6.8a4.8 4.8 0 0 0 6.6-4.5l-2.9 2.9-2.7-.7-.7-2.7z"/>',
+hammer: '<path d="M14 5.5 18.5 10M9 4h6l3 3-3.5 3.5L11 7H9zM12.2 9.2 4 17.4a1.8 1.8 0 0 0 2.6 2.6L14.8 11.8"/>',
+gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+plane: '<path fill="currentColor" stroke="none" d="M21 15.5l-8-3.2V6a1.5 1.5 0 0 0-3 0v6.3l-8 3.2v2.1l8-2v3.6l-2.2 1.6V22l3.7-1 3.7 1v-1.2L13 19.2v-3.6l8 2z"/>',
+skull: '<path d="M12 3a7.5 7.5 0 0 0-7.5 7.5c0 2.6 1.3 4.4 3 5.5V19h9v-3c1.7-1.1 3-2.9 3-5.5A7.5 7.5 0 0 0 12 3z"/><circle cx="9" cy="11" r="1.6" fill="currentColor"/><circle cx="15" cy="11" r="1.6" fill="currentColor"/><path d="M10.5 19v2M13.5 19v2"/>',
+warn: '<path d="M12 3.5 21.5 20h-19z"/><path d="M12 10v4.5M12 17.3v.2"/>',
+swirl: '<path d="M12 12a2 2 0 1 1 2-2 4 4 0 1 1-4-4 6 6 0 1 1-6 6 8 8 0 0 1 8-8"/>',
+burst: '<path fill="currentColor" stroke="none" d="m12 2 2 6 6-3-3 6 6 2-6 2 3 6-6-3-2 6-2-6-6 3 3-6-6-2 6-2-3-6 6 3z"/>',
+heart: '<path fill="currentColor" stroke="none" d="M12 20.5s-7.6-4.6-9.4-9.3C1.2 7.6 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.8 3.1 4.4 6.7-1.8 4.7-9.4 9.3-9.4 9.3z"/>',
+shield: '<path d="M12 2.5 19.5 5.5v6c0 4.8-3.2 8.6-7.5 10-4.3-1.4-7.5-5.2-7.5-10v-6z"/>',
+plant: '<path d="M12 21v-9M12 12c0-4.4 3-7.5 7.5-7.5 0 4.4-3 7.5-7.5 7.5zM12 15.5c0-3.4-2.6-6-6.5-6 0 3.4 2.6 6 6.5 6z"/>',
+trophy: '<path d="M7.5 4h9v5a4.5 4.5 0 0 1-9 0zM7.5 6H4.5a3 3 0 0 0 3 4M16.5 6h3a3 3 0 0 1-3 4M12 13.5V17M8.5 20.5h7M9.5 17h5v3.5h-5z"/>',
+medal: '<circle cx="12" cy="15" r="5"/><path d="M9 10.5 6.5 3h4l1.5 4M15 10.5 17.5 3h-4L12 7"/><path d="M12 12.8v4.4"/>',
+planet: '<circle cx="12" cy="12" r="6"/><ellipse cx="12" cy="12" rx="10.5" ry="3.6" transform="rotate(-20 12 12)"/>',
+sparkle: '<path fill="currentColor" stroke="none" d="M12 2c.8 5 2.9 7.2 8 8-5.1.8-7.2 3-8 8-.8-5-2.9-7.2-8-8 5.1-.8 7.2-3 8-8zM19 15c.3 2 1.1 2.7 3 3-1.9.3-2.7 1-3 3-.3-2-1.1-2.7-3-3 1.9-.3 2.7-1 3-3z"/>',
+cart: '<path d="M3 4h2.5l2.2 11h10.8l2-7.5H6.6"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>',
+bank: '<path d="M3 9.5 12 4l9 5.5zM5 10v8M9.7 10v8M14.3 10v8M19 10v8M3 20.5h18"/>',
+sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
+check: '<path d="M4.5 12.5 9.5 17.5 19.5 6.5"/>',
+timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5M18.5 6.5l1.5-1.5"/>',
+compass: '<circle cx="12" cy="12" r="9"/><path fill="currentColor" stroke="none" d="M15.5 8.5 13 13l-4.5 2.5L11 11z"/>',
+map: '<path d="M3 6l6-2.5 6 2.5 6-2.5v14.5l-6 2.5-6-2.5-6 2.5zM9 3.5v14.5M15 6v14.5"/>',
+flame: '<path d="M12 2.5c1 3.5 5.5 5.6 5.5 10.5a5.5 5.5 0 0 1-11 0c0-2.4 1.1-4 2.4-5.2.2 1.6.9 2.6 2 3.1C10.4 8.2 10.5 5.5 12 2.5z"/>',
+comet: '<circle cx="16.5" cy="7.5" r="3.5"/><path d="M13.5 10.5 3.5 20.5M12 8 5 15M16 12.5l-5.5 5.5"/>',
+web: '<path d="M12 2.5v19M2.5 12h19M5.3 5.3l13.4 13.4M18.7 5.3 5.3 18.7"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8"/>',
+pencil: '<path d="M4 20l1-4.5L15.5 5l3.5 3.5L8.5 19z"/>',
+coin: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/>',
+pause: '<path d="M8.5 5v14M15.5 5v14"/>',
+food: '<circle cx="12" cy="12" r="8.5"/><g fill="currentColor" stroke="none"><circle cx="9" cy="9.5" r="1.3"/><circle cx="14.5" cy="8.5" r="1.1"/><circle cx="15" cy="14" r="1.4"/><circle cx="9.5" cy="15" r="1.1"/></g>',
+palette: '<path d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><g fill="currentColor" stroke="none"><circle cx="7.5" cy="11" r="1.3"/><circle cx="10" cy="7" r="1.3"/><circle cx="15" cy="7.5" r="1.3"/></g>',
+card: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M6 15.5h5M13.5 10h4.5M13.5 13.5h4.5"/>',
+swords: '<path d="M4 4l11 11M15 15l2 2M17 17l3 3M20 4 9 15M9 15l-2 2M7 17l-3 3M13 17l4-4M7 13l4 4"/>',
+people: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><circle cx="16.5" cy="9" r="2.5"/><path d="M15.5 14.2c3 0 5 1.9 5 5"/>',
+snow: '<path d="M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8 20.2 7.2M9.5 4 12 6.5 14.5 4M9.5 20 12 17.5 14.5 20"/>',
+joystick: '<circle cx="12" cy="6.5" r="3"/><path d="M12 9.5V15M4 16.5h16v4H4z"/>',
+gem: '<path d="M6.5 4h11l4 5.5L12 20.5 2.5 9.5zM2.5 9.5h19M9 4l3 16.5L15 4"/>',
+eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+fish: '<path d="M3 12c3-5 10-6.5 14-1.5L21 7v10l-4-3.5C13 18.5 6 17 3 12z"/><circle cx="8" cy="11" r=".9" fill="currentColor"/>',
+music: '<path d="M9 18V5.5l11-2.5V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/>',
+star: '<path fill="currentColor" stroke="none" d="m12 2.8 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z"/>',
+search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
+atom: '<circle cx="12" cy="12" r="1.6" fill="currentColor"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="3.8" transform="rotate(120 12 12)"/>',
+gift: '<rect x="3.5" y="9" width="17" height="11.5" rx="1"/><path d="M3.5 13h17M12 9v11.5M12 9C10 5 6.5 5.5 7.5 8c.5 1 4.5 1 4.5 1zM12 9c2-4 5.5-3.5 4.5-1-.5 1-4.5 1-4.5 1z"/>',
+bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5h4"/>',
+pin: '<path d="M12 21.5s6.5-6 6.5-11a6.5 6.5 0 0 0-13 0c0 5 6.5 11 6.5 11z"/><circle cx="12" cy="10.5" r="2.4"/>',
+bulb: '<path d="M9 17.5h6M10 20.5h4M8.5 14.5a6 6 0 1 1 7 0c-.6.5-1 1.3-1 2v1h-5v-1c0-.7-.4-1.5-1-2z"/>',
+flask: '<path d="M9.5 3h5M10.5 3v6L4.8 18.3A2 2 0 0 0 6.5 21.5h11a2 2 0 0 0 1.7-3.2L13.5 9V3M7.5 14.5h9"/>',
+flag: '<path d="M5 21.5V3.5M5 4h12l-2.5 4L17 12H5"/>',
+ship: '<path d="M12 2.5 18 17l-6-2.5L6 17z"/>',
+dot: '<path fill="currentColor" stroke="none" d="M12 4.5 19.5 12 12 19.5 4.5 12z"/>'
+};
+var R61_MAP = {
+"🐾": "paw", "🐕": "paw", "🐈": "paw", "🐧": "paw", "🦊": "paw", "🐱": "paw", "🐶": "paw",
+"🛰": "sat", "📡": "sat",
+"📦": "crate", "🗄": "crate", "🧰": "crate",
+"🔒": "lock", "🔓": "lock", "🔐": "lock",
+"🚀": "rocket", "🛸": "ship",
+"⚡": "bolt", "🔋": "bolt",
+"🔧": "wrench", "🛠": "wrench", "🔩": "wrench",
+"🔨": "hammer", "⚒": "hammer", "🏗": "hammer", "🏭": "hammer", "⛏": "hammer",
+"⚙": "gear",
+"✈": "plane", "🧑": "people", "👥": "people", "👤": "people", "🧑‍🚀": "people", "👨‍🚀": "people", "👩‍🚀": "people",
+"☠": "skull", "💀": "skull", "😈": "skull", "👾": "skull",
+"⚠": "warn", "❗": "warn", "❌": "warn", "⛔": "warn", "🚫": "warn",
+"🌀": "swirl", "🕳": "swirl",
+"💥": "burst", "💣": "burst",
+"❤": "heart", "💙": "heart", "🖤": "heart", "💚": "heart", "💛": "heart", "💜": "heart", "🧡": "heart", "💖": "heart",
+"🛡": "shield",
+"🌸": "plant", "🌱": "plant", "🌿": "plant", "🥀": "plant", "🌳": "plant", "🌲": "plant", "🌵": "plant", "🍀": "plant", "🌾": "plant", "🌻": "plant", "🌷": "plant", "🍄": "plant",
+"🏆": "trophy", "🎖": "medal", "🏅": "medal", "🎓": "medal",
+"🏝": "planet", "🪐": "planet", "🌑": "planet", "🌌": "planet", "🌍": "planet", "🌎": "planet", "🌏": "planet", "🌕": "planet", "🌙": "planet",
+"✨": "sparkle", "💫": "sparkle", "🌟": "sparkle", "⭐": "star", "🌠": "comet", "☄": "comet",
+"🛒": "cart", "🛍": "cart", "🏪": "cart",
+"🏦": "bank", "🏧": "bank", "🏛": "bank",
+"☀": "sun", "🌞": "sun",
+"✅": "check", "✔": "check", "☑": "check",
+"⏱": "timer", "⏳": "timer", "⌛": "timer", "⏰": "timer", "🕐": "timer",
+"🧭": "compass", "🗺": "map",
+"🔥": "flame", "♨": "flame",
+"🕸": "web",
+"✏": "pencil", "📝": "pencil",
+"🪙": "coin", "💰": "coin", "💵": "coin", "💸": "coin", "💎": "gem", "💠": "gem", "🔮": "gem",
+"⏸": "pause",
+"🍪": "food", "🍖": "food", "🍗": "food", "🥫": "food", "🍎": "food", "🥕": "food", "🐟": "fish", "🐠": "fish",
+"🎨": "palette", "🪪": "card", "🏷": "card", "📋": "card", "📜": "card",
+"⚔": "swords", "🗡": "swords", "🔫": "swords", "🎯": "swords",
+"❄": "snow", "🧊": "snow",
+"🕹": "joystick", "🎮": "joystick",
+"👁": "eye", "👀": "eye",
+"🎵": "music", "🎶": "music", "🔊": "music", "🔇": "music",
+"🧠": "chip", "🤖": "chip", "💻": "chip", "🖥": "chip",
+"🔍": "search", "🔎": "search",
+"⚛": "atom", "🧪": "flask", "⚗": "flask",
+"🎁": "gift", "🔔": "bell", "📍": "pin", "📌": "pin", "💡": "bulb", "🚩": "flag", "🏁": "flag",
+"🏠": "bank", "🏡": "bank", "🏢": "bank", "🏰": "bank"
+};
+var R61_KEEP = new Set(["★", "☆", "♥", "♡", "✓", "✕", "✖", "✦", "✶", "✧", "☾", "✎", "▲", "▼", "◀", "▶", "↑", "↓", "←", "→", "↔", "⇄", "↻", "↺", "©", "®", "™", "‼", "⁉", "↩", "↪", "⌫", "▸", "◂", "•", "·", "♦", "♣", "♠", "☐", "☑"]);
+var R61_RE = /\p{Extended_Pictographic}(?:️|︎|\p{Emoji_Modifier}|‍\p{Extended_Pictographic}️?)*|️/gu;
+var R61_TEST = /\p{Extended_Pictographic}/u;
+function r61IconFor(seq) {
+const clean = seq.replace(/[️︎]/g, "");
+if (!clean)
+return "";
+if (R61_KEEP.has(clean) && !seq.includes("️"))
+return null;
+if (R61_KEEP.has(clean))
+return null;
+return R61_MAP[clean] || R61_MAP[Array.from(clean)[0]] || "dot";
+}
+function r61Svg(name) {
+return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (R61_ICONS[name] || R61_ICONS.dot) + '</svg>';
+}
+function r61HasEmoji(text) {
+if (!text || !R61_TEST.test(text))
+return false;
+R61_RE.lastIndex = 0;
+let m;
+while ((m = R61_RE.exec(text))) {
+if (r61IconFor(m[0]) !== null)
+return true;
+}
+return false;
+}
+function r61FixNode(node) {
+const par = node.parentNode;
+if (!par || !r61HasEmoji(node.nodeValue))
+return;
+const tag = par.nodeName;
+if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "TITLE")
+return;
+if (tag === "OPTION") {
+node.nodeValue = node.nodeValue.replace(R61_RE, s => r61IconFor(s) === null ? s : "").replace(/^\s+/, "");
+return;
+}
+if (par.isContentEditable)
+return;
+const text = node.nodeValue;
+const frag = document.createDocumentFragment();
+let last = 0;
+R61_RE.lastIndex = 0;
+let m;
+while ((m = R61_RE.exec(text))) {
+const name = r61IconFor(m[0]);
+if (name === null)
+continue;
+if (m.index > last)
+frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+if (name) {
+const sp = document.createElement("span");
+sp.className = "r61i";
+sp.setAttribute("aria-hidden", "true");
+sp.innerHTML = r61Svg(name);
+frag.appendChild(sp);
+}
+last = m.index + m[0].length;
+}
+if (last < text.length)
+frag.appendChild(document.createTextNode(text.slice(last)));
+par.replaceChild(frag, node);
+}
+function r61Sweep(root) {
+if (!root)
+return;
+if (root.nodeType === 3) {
+r61FixNode(root);
+return;
+}
+if (root.nodeType !== 1 && root.nodeType !== 11)
+return;
+const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+const todo = [];
+let n;
+while ((n = tw.nextNode()))
+if (R61_TEST.test(n.nodeValue))
+todo.push(n);
+todo.forEach(r61FixNode);
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".r61i{display:inline-block;width:1.08em;height:1.08em;vertical-align:-.17em;line-height:1;}" +
+".r61i svg{display:block;width:100%;height:100%;}";
+document.head.appendChild(st);
+const pend = new Set();
+let queued = false;
+const flush = () => {
+queued = false;
+const list = Array.from(pend);
+pend.clear();
+list.forEach(n => {
+try {
+if (n.isConnected)
+r61Sweep(n);
+}
+catch (error) { }
+});
+};
+const obs = new MutationObserver(muts => {
+muts.forEach(m => {
+if (m.type === "characterData")
+pend.add(m.target);
+else
+m.addedNodes.forEach(n => pend.add(n));
+});
+if (pend.size && !queued) {
+queued = true;
+Promise.resolve().then(flush);
+}
+});
+const start = () => {
+r61Sweep(document.body);
+obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+};
+if (document.body)
+start();
+else
+document.addEventListener("DOMContentLoaded", start);
+})();
+var r61ImgCache = new Map();
+function r61IconImg(name, col) {
+const key = name + "|" + col;
+let im = r61ImgCache.get(key);
+if (im)
+return im;
+im = new Image();
+const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" color="' + col + '">' + (R61_ICONS[name] || R61_ICONS.dot) + '</svg>';
+im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+if (r61ImgCache.size > 400)
+r61ImgCache.clear();
+r61ImgCache.set(key, im);
+return im;
+}
+var r61TxtCache = new Map();
+function r61TextHas(t) {
+if (typeof t !== "string" || t.length === 0)
+return false;
+let v = r61TxtCache.get(t);
+if (v === undefined) {
+v = r61HasEmoji(t);
+if (r61TxtCache.size > 3000)
+r61TxtCache.clear();
+r61TxtCache.set(t, v);
+}
+return v;
+}
+(function () {
+const P = CanvasRenderingContext2D.prototype;
+const fill = P.fillText, measure = P.measureText, stroke = P.strokeText;
+const strip = t => t.replace(R61_RE, s => {
+const n = r61IconFor(s);
+return n === null ? s : (n ? " " : "");
+});
+P.measureText = function (t) {
+if (r61TextHas(t))
+return measure.call(this, strip(t));
+return measure.call(this, t);
+};
+P.strokeText = function (t, x, y, mw) {
+if (r61TextHas(t))
+return mw === undefined ? stroke.call(this, strip(t), x, y) : stroke.call(this, strip(t), x, y, mw);
+return mw === undefined ? stroke.call(this, t, x, y) : stroke.call(this, t, x, y, mw);
+};
+P.fillText = function (t, x, y, mw) {
+if (!r61TextHas(t))
+return mw === undefined ? fill.call(this, t, x, y) : fill.call(this, t, x, y, mw);
+const total = measure.call(this, strip(t)).width;
+const k = mw !== undefined && total > mw && mw > 0 ? mw / total : 1;
+const em = measure.call(this, " ").width * k;
+const fm = /(\d+(?:\.\d+)?)px/.exec(this.font);
+const size = (fm ? parseFloat(fm[1]) : 12) * k;
+const al = this.textAlign, bl = this.textBaseline;
+let sx = x;
+if (al === "center")
+sx = x - total * k / 2;
+else if (al === "right" || al === "end")
+sx = x - total * k;
+let top;
+if (bl === "middle")
+top = y - size * .5;
+else if (bl === "top" || bl === "hanging")
+top = y;
+else if (bl === "bottom" || bl === "ideographic")
+top = y - size;
+else
+top = y - size * .82;
+const col = typeof this.fillStyle === "string" ? this.fillStyle : "#ffffff";
+this.textAlign = "left";
+try {
+let last = 0;
+R61_RE.lastIndex = 0;
+let m;
+const put = seg => {
+if (!seg)
+return;
+const w = measure.call(this, seg).width * k;
+if (k !== 1)
+fill.call(this, seg, sx, y, w);
+else
+fill.call(this, seg, sx, y);
+sx += w;
+};
+while ((m = R61_RE.exec(t))) {
+const name = r61IconFor(m[0]);
+if (name === null)
+continue;
+put(t.slice(last, m.index));
+if (name) {
+const im = r61IconImg(name, col);
+if (im.complete && im.naturalWidth) {
+const d = size * .92;
+this.drawImage(im, sx + (em - d) / 2, top + (size - d) / 2, d, d);
+}
+sx += em;
+}
+last = m.index + m[0].length;
+}
+put(t.slice(last));
+}
+finally {
+this.textAlign = al;
+}
+};
+})();
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
@@ -55415,7 +56575,7 @@ function startFlightIn(onArrive) {
 flightTarget = 0;
 flightOnArrive = onArrive || null;
 }
-function launchWithAnimation() {
+function launchWithAnimation__r61() {
 if (flightTarget === 1)
 return;
 if (planetDetailId) {
@@ -55772,7 +56932,7 @@ toggleRoamingUI(true);
 renderPlanetFocus();
 }
 let roamingReturnToPets = null;
-function isPetOutRoaming(petId) {
+function isPetOutRoaming__r61(petId) {
 if (roamingActive && roamingPetId === petId)
 return true;
 try {
@@ -57471,7 +58631,7 @@ worldHideBubble();
 sound("click");
 toggleRoamingUI(true);
 }
-function leaveRoom() {
+function leaveRoom__r61() {
 if (!roomState)
 return;
 if (roomState.viewOnly) {
@@ -58473,7 +59633,7 @@ text: (pet ? "Walk a pilot into the seat to make it this ship's pilot." : pilots
 buttons: pilots
 });
 }
-function roomSitInSeat(ship) {
+function roomSitInSeat__r61(ship) {
 const pet = getRoamingPet();
 if (!pet)
 return;
