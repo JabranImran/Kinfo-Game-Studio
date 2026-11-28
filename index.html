@@ -8450,7 +8450,7 @@ return "customShip";
 return ("customShip_" +
 styleId.replace("custom", ""));
 }
-function getShipStyleList() {
+function getShipStyleList__r58() {
 const unlockCount = getShipStyleUnlockCount();
 const list = [
 {
@@ -8530,7 +8530,7 @@ return (typeof mp !== "undefined" &&
 mp.connected &&
 mp.myId) || undefined;
 }
-function getShipStyleShapes(styleId, ownerId, rawOverride) {
+function getShipStyleShapes__r58(styleId, ownerId, rawOverride) {
 if (typeof ShapeObject ===
 "undefined")
 return [];
@@ -18023,15 +18023,20 @@ vx = 0;
 vy = 1;
 }
 let X3x = ex, X3y = -ey;
+if (X3x < 0 && !roomState && !roamingActive) {
+X3x = -X3x;
+X3y = -X3y;
+}
+const r58f = r58FaceFloor();
 const xl = Math.hypot(X3x, X3y);
-if (xl < .22) {
+if (xl < r58f) {
 if (xl < 1e-4) {
 X3x = hx;
 X3y = hy;
 }
 else {
-X3x *= .22 / xl;
-X3y *= .22 / xl;
+X3x *= r58f / xl;
+X3y *= r58f / xl;
 }
 }
 const ul = Math.sqrt(q);
@@ -29021,7 +29026,7 @@ f.style = styleId;
 savePlanetProgress();
 });
 }
-function r34StyleBubble(planetId, ship, x, y) {
+function r34StyleBubble__old(planetId, ship, x, y) {
 const list = getShipStyleList();
 const current = ship ? (ship.styleId || "default") : (r34FavStyle(planetId) || "default");
 const cur = list.find(s => s.id === current) || list[0];
@@ -29089,7 +29094,7 @@ const p = roomFloorPt(.5, .45), s = p.s;
 const styleId = ship ? (ship.styleId || "default") : (r34FavStyle(planetId) || "default");
 const name = (getShipStyleList().find(z => z.id === styleId) || { name: "Default" }).name;
 const y = ship ? p.y + 96 * s : p.y + 34 * s + 30 + 34;
-r33Pill(c, p.x, y, "🎨 " + name + " · change", "#ff8bf0", true, () => r34StyleBubble(planetId, ship, p.x, y - 20));
+r58StylePill(c, p.x, y, styleId, () => r34StyleBubble(planetId, ship, p.x, y - 20));
 } });
 }
 function resolvePadShip(ships) {
@@ -43522,7 +43527,7 @@ if (src)
 r53StructSrc[id] = src;
 return src;
 }
-function r52Html(k) {
+function r52Html__r58(k) {
 const id = typeof R53_STRUCT_EMOJI === "undefined" ? null : R53_STRUCT_EMOJI[k] || R53_STRUCT_EMOJI[String(k).replace(/️/g, "")];
 if (id) {
 const src = r53StructImgSrc(id);
@@ -45789,7 +45794,7 @@ window.addEventListener("pointerdown", e => {
 r57Coin.tap = { x: e.clientX, y: e.clientY, t: r57Now() };
 }, { capture: true, passive: true });
 })();
-function r57CoinEl() {
+function r57CoinEl__old() {
 let el = document.getElementById("r57Coins");
 if (!el) {
 const host = document.getElementById("planetFocus");
@@ -45802,7 +45807,7 @@ host.appendChild(el);
 }
 return el;
 }
-function r57CoinSprite(c, x, y, r, spin) {
+function r57CoinSprite__old(c, x, y, r, spin) {
 const w = Math.abs(Math.cos(spin));
 c.save();
 c.translate(x, y);
@@ -46369,6 +46374,461 @@ st.textContent = "body.r57-paused .r35-swipe{display:none !important;}" +
 ".r57-pause-cap{font:600 11px/1.35 system-ui,sans-serif;color:#8fa7c7;text-align:center;margin-top:8px;}";
 document.head.appendChild(st);
 })();
+(function () {
+try {
+const m = /svg\+xml,([^"]*)"/.exec(COIN_ICON_HTML);
+if (!m)
+return;
+const svg = decodeURIComponent(m[1]);
+R52.svg["🪙"] = svg;
+R52.svg["¢"] = svg;
+delete R52.img["🪙"];
+delete R52.img["¢"];
+const keys = Object.keys(R52.svg).sort((a, b) => b.length - a.length);
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+R52.re = new RegExp("(" + keys.map(esc).join("|") + ")\\uFE0F?", "gu");
+R52.any = new RegExp(R52.re.source, "u");
+}
+catch (error) { }
+})();
+function r52Html(k) {
+if (k === "¢" || k === "🪙" || k === "🪙️")
+return COIN_ICON_HTML;
+return r52Html__r58(k);
+}
+function r57CoinEl() {
+let el = document.getElementById("r57Coins");
+const wrap = document.querySelector(".rank-circle-wrap");
+if (!el) {
+const host = wrap || document.getElementById("planetFocus");
+if (!host)
+return null;
+el = document.createElement("button");
+el.id = "r57Coins";
+el.type = "button";
+el.setAttribute("aria-label", "Coins — open the vault");
+el.innerHTML = '<span class="r57-c">' + COIN_ICON_HTML + '</span><span class="r57-n">0</span>';
+el.addEventListener("pointerdown", e => {
+e.stopPropagation();
+});
+el.addEventListener("click", e => {
+e.stopPropagation();
+e.preventDefault();
+try {
+sound("click");
+if (r39IsStn(selectedStartPlanet))
+return;
+if (hasStructure(selectedStartPlanet, "stock"))
+enterRoomView("structure", "stock");
+else
+showShipToast("Build a Vault to store your coins and treasures");
+}
+catch (error) { }
+});
+host.appendChild(el);
+}
+else if (wrap && el.parentNode !== wrap)
+wrap.appendChild(el);
+return el;
+}
+var r58CoinImg = null;
+function r57CoinSprite(c, x, y, r, spin) {
+if (!r58CoinImg)
+r58CoinImg = r52Img("¢");
+const w = Math.abs(Math.cos(spin));
+c.save();
+c.translate(x, y);
+c.scale(Math.max(.25, w), 1);
+c.shadowColor = "#ffcc33";
+c.shadowBlur = 8;
+if (r58CoinImg.complete && r58CoinImg.naturalWidth)
+c.drawImage(r58CoinImg, -r, -r, r * 2, r * 2);
+c.restore();
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = "#r57Coins{all:unset;box-sizing:border-box;position:absolute;left:calc(100% + 12px);top:50%;right:auto;transform:translateY(-50%);z-index:3;display:flex;align-items:center;gap:6px;" +
+"padding:6px 12px 6px 7px;border-radius:999px;background:rgba(8,14,30,.78);border:1px solid rgba(255,210,90,.55);box-shadow:0 0 14px rgba(255,200,80,.18);" +
+"color:#ffe7a8;font:900 14px/1 system-ui,sans-serif;pointer-events:auto;cursor:pointer;white-space:nowrap;transition:transform .12s;}" +
+"#r57Coins.bump{transform:translateY(-50%) scale(1.14);}" +
+"#r57Coins:active{transform:translateY(-50%) scale(.94);}" +
+"#r57Coins .r57-c{width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:none;box-shadow:none;border-radius:0;}" +
+"#r57Coins .r57-c img{width:18px !important;height:18px !important;vertical-align:0 !important;filter:drop-shadow(0 0 4px rgba(255,204,51,.6));}" +
+"@media (orientation:landscape) and (max-height:620px){#r57Coins{left:50%;top:calc(100% + 8px);transform:translateX(-50%);}#r57Coins.bump{transform:translateX(-50%) scale(1.14);}#r57Coins:active{transform:translateX(-50%) scale(.94);}}";
+document.head.appendChild(st);
+})();
+function r58FaceFloor() {
+if (roomState)
+return .22;
+const k = Math.max(0, Math.min(1, ((R53P && R53P.Z) || 1) - 1) / .6);
+return .9 - (.9 - .22) * k;
+}
+var R58_NAMES = ["Classic", "Manta", "Hornet", "Saucer", "Twin Boom", "Arrowhead", "Beetle", "Crescent", "Hammerhead", "Halo", "Mandible", "Lantern", "Starburst"];
+function r58Name(n) {
+if (n <= 13)
+return R58_NAMES[n - 1];
+return R58_NAMES[1 + ((n - 2) % 12)] + " " + ["II", "III", "IV", "V", "VI"][Math.min(4, Math.floor((n - 14) / 12))];
+}
+function r58Sh(type, x, y, color, scale, points, outline, hole) {
+return { type, x, y, color, scale: scale == null ? 1 : scale, rotation: 0, points: points || null, outlineColor: outline || color, holePoints: hole || null };
+}
+function r58Mir(half) {
+const R = half.map(p => [p[0], p[1]]);
+const L = half.filter(p => p[0] !== 0).map(p => [-p[0], p[1]]).reverse();
+return R.concat(L);
+}
+function r58Ell(cx, cy, rx, ry, n, a0, a1) {
+n = n || 28;
+a0 = a0 == null ? 0 : a0;
+a1 = a1 == null ? Math.PI * 2 : a1;
+const out = [];
+const full = Math.abs(a1 - a0 - Math.PI * 2) < 1e-6;
+for (let i = 0; i < (full ? n : n + 1); i++) {
+const a = a0 + (a1 - a0) * i / n;
+out.push([+(cx + Math.cos(a) * rx).toFixed(1), +(cy + Math.sin(a) * ry).toFixed(1)]);
+}
+return out;
+}
+function r58Cap(cx, y0, y1, w) {
+const r = w, out = [];
+for (let i = 0; i <= 8; i++) {
+const a = Math.PI + Math.PI * i / 8;
+out.push([+(cx + Math.cos(a) * r).toFixed(1), +(y0 + r + Math.sin(a) * r).toFixed(1)]);
+}
+for (let i = 0; i <= 8; i++) {
+const a = Math.PI * i / 8;
+out.push([+(cx + Math.cos(a) * r).toFixed(1), +(y1 - r + Math.sin(a) * r).toFixed(1)]);
+}
+return out;
+}
+function r58Flip(pts) {
+return pts.map(p => [-p[0], p[1]]).reverse();
+}
+function r58Design(n) {
+const H = "#161c30", P = (pts, fill, line, hole) => r58Sh("custom", 200, 0, fill, 1, pts, line, hole);
+const C = (x, y, s, fill, line) => r58Sh("circle", x, y, fill, s, null, line);
+const T = (x, y, s) => r58Sh("thruster", x, y, "#ffb347", s, null, "#ffe28a");
+switch (n) {
+case 2:
+return [
+P(r58Mir([[0, 96], [30, 122], [80, 180], [72, 192], [32, 180], [18, 202], [0, 198]]), "#0e2027", "#2fffc8"),
+P(r58Mir([[0, 62], [8, 80], [14, 118], [14, 200], [8, 212], [0, 214]]), H, "#5ce4ff"),
+C(272, 184, .12, "#2fffc8", "#eafffa"), C(128, 184, .12, "#2fffc8", "#eafffa"),
+C(200, 122, .3, "#5ce4ff", "#eaffff"), C(196, 117, .09, "#eaffff", "#eaffff"),
+T(188, 218, .45), T(212, 218, .45)
+];
+case 3:
+return [
+P([[14, 160], [62, 118], [70, 126], [24, 186]], "#241e0a", "#ffd23f"),
+P(r58Flip([[14, 160], [62, 118], [70, 126], [24, 186]]), "#241e0a", "#ffd23f"),
+P([[10, 192], [32, 216], [10, 212]], "#241e0a", "#ffd23f"),
+P(r58Flip([[10, 192], [32, 216], [10, 212]]), "#241e0a", "#ffd23f"),
+P(r58Mir([[0, 58], [10, 78], [16, 110], [18, 150], [14, 190], [8, 208], [0, 212]]), "#1a1608", "#ffd23f"),
+P([[-17, 128], [17, 128], [17, 137], [-17, 137]], "#ffd23f", "#fff1a8"),
+P([[-17, 158], [17, 158], [16, 167], [-16, 167]], "#ffd23f", "#fff1a8"),
+C(200, 100, .26, "#ffef9a", "#fffbe0"),
+T(200, 220, .55)
+];
+case 4:
+return [
+P(r58Ell(0, 176, 48, 11), "#0d0820", "#8dff6b"),
+P(r58Ell(0, 162, 72, 22, 36), "#1a1030", "#ff5ec4"),
+P(r58Ell(0, 158, 30, 32, 18, Math.PI, Math.PI * 2), "#1d3a26", "#8dff6b"),
+C(200, 144, .22, "#8dff6b", "#eaffe0"),
+C(148, 164, .1, "#ffd23f", "#fff6c2"), C(174, 170, .1, "#5ce4ff", "#eaffff"), C(200, 172, .1, "#ff5ec4", "#ffd1ef"), C(226, 170, .1, "#5ce4ff", "#eaffff"), C(252, 164, .1, "#ffd23f", "#fff6c2"),
+T(200, 192, .5)
+];
+case 5:
+return [
+P([[-40, 140], [40, 140], [36, 166], [-36, 166]], "#1e140a", "#ff9f43"),
+P(r58Cap(38, 96, 206, 11), H, "#ff9f43"),
+P(r58Cap(-38, 96, 206, 11), H, "#ff9f43"),
+P(r58Cap(0, 100, 180, 14), H, "#5ce4ff"),
+C(238, 112, .13, "#ff9f43", "#ffe2c2"), C(162, 112, .13, "#ff9f43", "#ffe2c2"),
+C(200, 126, .26, "#5ce4ff", "#eaffff"),
+T(162, 214, .45), T(238, 214, .45)
+];
+case 6:
+return [
+P(r58Mir([[0, 50], [48, 202], [30, 196], [16, 216], [0, 206]]), "#1e0f16", "#ff4d6d"),
+P(r58Mir([[0, 92], [24, 172], [17, 174], [0, 122]]), "#ff4d6d", "#ffd1dc"),
+C(200, 150, .22, "#ffe6ec", "#ffffff"),
+T(200, 214, .55)
+];
+case 7:
+return [
+P([[38, 124], [60, 114], [62, 121], [40, 134]], "#0f2016", "#57ff8a"),
+P(r58Flip([[38, 124], [60, 114], [62, 121], [40, 134]]), "#0f2016", "#57ff8a"),
+P([[40, 154], [64, 152], [64, 159], [40, 162]], "#0f2016", "#57ff8a"),
+P(r58Flip([[40, 154], [64, 152], [64, 159], [40, 162]]), "#0f2016", "#57ff8a"),
+P([[38, 182], [58, 196], [54, 202], [34, 190]], "#0f2016", "#57ff8a"),
+P(r58Flip([[38, 182], [58, 196], [54, 202], [34, 190]]), "#0f2016", "#57ff8a"),
+P(r58Ell(0, 152, 40, 62, 32), "#0f2016", "#57ff8a"),
+P([[-1.6, 98], [1.6, 98], [1.6, 210], [-1.6, 210]], "#57ff8a", "#c8ffd8"),
+P(r58Ell(0, 88, 18, 14, 18), H, "#d6ff6b"),
+C(192, 84, .12, "#d6ff6b", "#f6ffd6"), C(208, 84, .12, "#d6ff6b", "#f6ffd6"),
+T(200, 216, .5)
+];
+case 8:
+return [
+P(r58Ell(0, 122, 74, 74, 22, -.25, Math.PI + .25).concat(r58Ell(0, 100, 60, 60, 22, -.25, Math.PI + .25).reverse()), "#160f2a", "#b18cff"),
+P(r58Cap(0, 108, 204, 12), H, "#ff8bf0"),
+C(272, 108, .12, "#ff8bf0", "#ffe0fb"), C(128, 108, .12, "#ff8bf0", "#ffe0fb"),
+C(200, 140, .24, "#ff8bf0", "#ffe0fb"),
+T(200, 210, .55)
+];
+case 9:
+return [
+P(r58Mir([[0, 88], [12, 88], [16, 150], [24, 190], [12, 210], [0, 210]]), H, "#4da3ff"),
+P([[18, 168], [42, 204], [18, 200]], "#0f1830", "#4da3ff"),
+P(r58Flip([[18, 168], [42, 204], [18, 200]]), "#0f1830", "#4da3ff"),
+P([[-62, 72], [62, 72], [62, 90], [-62, 90]], "#0f1830", "#4da3ff"),
+C(138, 81, .34, "#0f1830", "#4da3ff"), C(262, 81, .34, "#0f1830", "#4da3ff"),
+C(138, 81, .16, "#4da3ff", "#eaf4ff"), C(262, 81, .16, "#4da3ff", "#eaf4ff"),
+C(200, 124, .24, "#eaf4ff", "#ffffff"),
+T(200, 216, .55)
+];
+case 10:
+return [
+r58Sh("custom", 200, 150, "#2a2208", 1, r58Ell(0, 0, 60, 60, 36), "#ffcc33", r58Ell(0, 0, 47, 47, 36)),
+P([[-48, 146], [-12, 146], [-12, 154], [-48, 154]], "#2a2208", "#ffcc33"),
+P([[12, 146], [48, 146], [48, 154], [12, 154]], "#2a2208", "#ffcc33"),
+P(r58Cap(0, 78, 212, 14), H, "#ffe28a"),
+C(200, 110, .24, "#ffe28a", "#fffbe6"),
+C(200, 90, .08, "#ffffff", "#ffffff"),
+T(200, 218, .55)
+];
+case 11:
+return [
+P([[8, 104], [22, 58], [31, 60], [27, 112]], "#2a160c", "#ff8a3d"),
+P(r58Flip([[8, 104], [22, 58], [31, 60], [27, 112]]), "#2a160c", "#ff8a3d"),
+P(r58Mir([[0, 96], [24, 110], [32, 150], [28, 196], [14, 212], [0, 212]]), "#1a1e2a", "#eaf2ff"),
+P(r58Mir([[0, 118], [14, 124], [18, 160], [0, 168]]), "#2a160c", "#ff8a3d"),
+C(222, 140, .2, "#ff8a3d", "#ffe2cc"),
+C(236, 178, .1, "#eaf2ff", "#ffffff"), C(164, 178, .1, "#eaf2ff", "#ffffff"),
+T(188, 216, .45), T(212, 216, .45)
+];
+case 12:
+return [
+P([[22, 168], [48, 200], [46, 212], [20, 198]], "#0c2026", "#3fffe0"),
+P(r58Flip([[22, 168], [48, 200], [46, 212], [20, 198]]), "#0c2026", "#3fffe0"),
+P(r58Ell(0, 142, 25, 70, 30), "#0c2026", "#3fffe0"),
+P([[-14, 82], [14, 82], [14, 86], [-14, 86]], "#3fffe0", "#eafffb"),
+C(200, 114, .52, "#103a38", "#3fffe0"),
+C(200, 114, .32, "#3fffe0", "#eafffb"),
+C(200, 114, .14, "#ffffff", "#ffffff"),
+P([[-12, 176], [12, 176], [12, 180], [-12, 180]], "#3fffe0", "#eafffb"),
+T(200, 214, .6)
+];
+case 13:
+{
+const pts = [];
+for (let i = 0; i < 16; i++) {
+const a = -Math.PI / 2 + i * Math.PI / 8, r = i % 2 ? 28 : 64;
+pts.push([+(Math.cos(a) * r).toFixed(1), +(150 + Math.sin(a) * r).toFixed(1)]);
+}
+return [
+P(pts, "#1e0f20", "#ff5ec4"),
+C(200, 150, .74, H, "#ffd23f"),
+C(200, 150, .32, "#ffd23f", "#fff6c2"),
+C(196, 146, .1, "#ffffff", "#ffffff"),
+T(200, 208, .45)
+];
+}
+}
+return null;
+}
+var R58_HUES = ["#5ce4ff", "#ff5ec4", "#ffd23f", "#8dff6b", "#ff9f43", "#b18cff", "#ff4d6d", "#3fffe0", "#4da3ff", "#ffcc33"];
+function r58StyleShapes(styleId) {
+const n = parseInt(String(styleId || "").replace("custom", ""), 10);
+if (!n || n < 2)
+return null;
+let d = r58Design(n);
+if (!d) {
+d = r58Design(2 + ((n - 2) % 12));
+if (!d)
+return null;
+const hue = R58_HUES[n % R58_HUES.length];
+d = d.map(s => s.type === "thruster" ? s : Object.assign({}, s, { outlineColor: hue }));
+}
+return d;
+}
+function r58StyleN(styleKey) {
+if (styleKey === "customShip")
+return 1;
+const m = /^customShip_(\d+)$/.exec(styleKey || "");
+return m ? +m[1] : 0;
+}
+function getShipStyleShapes(styleId, ownerId, rawOverride) {
+const key = getShipStyleKey(styleId);
+if (key && !rawOverride && typeof ShapeObject !== "undefined") {
+let saved = null;
+try {
+saved = resolveShipStyleRaw(styleId, ownerId);
+}
+catch (error) { }
+let ok = false;
+try {
+const a = saved && JSON.parse(saved);
+ok = Array.isArray(a) && a.length > 0;
+}
+catch (error) { }
+if (!ok) {
+const d = r58StyleShapes(styleId);
+if (d)
+return d.map(s => new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints));
+}
+}
+return getShipStyleShapes__r58(styleId, ownerId, rawOverride);
+}
+function getShipStyleList() {
+return getShipStyleList__r58().map(s => {
+const n = parseInt(String(s.id).replace("custom", ""), 10);
+return Object.assign({}, s, { name: (s.id === "default" ? "Default" : "Style " + n + " · " + r58Name(n)) });
+});
+}
+setTimeout(function () {
+if (typeof shipCustomizer === "undefined")
+return;
+const load = shipCustomizer.loadDesign;
+shipCustomizer.loadDesign = function () {
+load.call(this);
+if (this.isShipMode && !this.shapes.length) {
+let saved = null;
+try {
+saved = localStorage.getItem(this.targetKey);
+}
+catch (error) { }
+if (!saved) {
+const n = r58StyleN(this.targetKey);
+const d = n === 1 ? DEFAULT_SHIP_STYLE_SHAPES : r58StyleShapes("custom" + n);
+if (d)
+this.shapes = d.map(s => new ShapeObject(s.type, s.x, s.y, s.color, s.scale, s.rotation, s.points, s.outlineColor, s.holePoints));
+}
+}
+};
+}, 0);
+var r58Thumbs = {};
+function r58Thumb(styleId) {
+let sig = "";
+try {
+sig = styleId + "|" + (resolveShipStyleRaw(styleId) || "");
+}
+catch (error) {
+sig = styleId;
+}
+if (r58Thumbs[styleId] && r58Thumbs[styleId].sig === sig)
+return r58Thumbs[styleId].src;
+const cv = document.createElement("canvas");
+cv.width = cv.height = 120;
+const c = cv.getContext("2d");
+try {
+c.translate(60, 62);
+c.scale(.48, .48);
+c.translate(-200, -140);
+getShipStyleShapes(styleId).forEach(sh => sh.draw(c, false, null, null));
+}
+catch (error) { }
+const src = cv.toDataURL();
+r58Thumbs[styleId] = { sig, src };
+return src;
+}
+function r34StyleBubble(planetId, ship, x, y) {
+const list = getShipStyleList();
+const current = ship ? (ship.styleId || "default") : (r34FavStyle(planetId) || "default");
+const cur = list.find(s => s.id === current) || list[0];
+worldShowBubble({
+x, y,
+title: ship ? "This ship's style" : "New ship's style",
+meta: cur.name,
+text: "",
+buttons: list.map(s => ({
+label: '<img class="r58-sty" src="' + r58Thumb(s.id) + '" alt=""><span class="r58-stn">' + (s.locked ? "🔒 " + s.cost + " " + COIN_ICON_HTML : (s.id === "default" ? "Default" : s.name.replace(/^Style /, ""))) + "</span>",
+primary: s.id === current,
+keepOpen: true,
+action: () => {
+if (s.locked)
+runPlanetActionOn(planetId, { "data-action": "unlock-ship-style", "data-style": s.id });
+else if (ship)
+worldRunAction({ "data-action": "assign-ship-style", "data-ship": ship.id, "data-style": s.id, "data-style-owner": (typeof ownStyleOwnerId === "function" ? ownStyleOwnerId() : "") || "" });
+else
+r34SetFavStyle(planetId, s.id);
+setTimeout(() => r34StyleBubble(planetId, ship, x, y), 60);
+}
+})).concat(cur.id === "default" ? [] : [{
+label: "✎ Customise this style",
+action: () => {
+worldHideBubble();
+runPlanetActionOn(planetId, { "data-action": "customize-ship", "data-style": cur.id });
+}
+}])
+});
+const el = document.getElementById("worldBubble");
+if (el) {
+el.classList.add("r58-styleb");
+const off = () => {
+if (el.classList.contains("hidden") || !el.querySelector(".r58-sty")) {
+el.classList.remove("r58-styleb");
+return;
+}
+setTimeout(off, 300);
+};
+setTimeout(off, 300);
+}
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".world-bubble.r58-styleb{width:min(330px,88vw) !important;}" +
+".world-bubble.r58-styleb .world-bubble-buttons{display:grid !important;grid-template-columns:repeat(3,1fr);gap:6px;max-height:46vh;overflow:auto;}" +
+".world-bubble.r58-styleb .world-bubble-buttons .neon-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px 6px !important;min-height:0;}" +
+".world-bubble.r58-styleb .world-bubble-buttons .neon-btn:last-child:not(:has(.r58-sty)){grid-column:1/-1;flex-direction:row;justify-content:center;padding:9px !important;}" +
+".world-bubble img.r58-sty,.r58-sty{width:58px !important;height:58px !important;max-width:none !important;max-height:none !important;display:block;margin:0 auto;}" +
+".r58-stn{font:800 9.5px/1.15 system-ui,sans-serif;letter-spacing:.02em;text-align:center;white-space:nowrap;}" +
+".r58-stn img{height:.95em !important;width:.95em !important;}";
+document.head.appendChild(st);
+})();
+var r58ThumbImgs = {};
+function r58StylePill(c, x, y, styleId, act) {
+const src = r58Thumb(styleId);
+let im = r58ThumbImgs[styleId];
+if (!im || im._src !== src) {
+im = new Image();
+im._src = src;
+im.src = src;
+r58ThumbImgs[styleId] = im;
+}
+const s = 34, h = 30, w = 118;
+const x0 = x - w / 2;
+c.save();
+c.beginPath();
+if (c.roundRect)
+c.roundRect(x0, y - h / 2, w, h, h / 2);
+else
+c.rect(x0, y - h / 2, w, h);
+c.fillStyle = "rgba(42,12,40,.92)";
+c.fill();
+c.strokeStyle = "#ff8bf0";
+c.shadowColor = "#ff8bf0";
+c.shadowBlur = 10;
+c.lineWidth = 1.6;
+c.stroke();
+c.shadowBlur = 0;
+c.beginPath();
+c.arc(x0 + h / 2 + 2, y, s / 2, 0, Math.PI * 2);
+c.fillStyle = "#0a0f1c";
+c.fill();
+c.strokeStyle = "#ff8bf0";
+c.stroke();
+if (im.complete && im.naturalWidth)
+c.drawImage(im, x0 + h / 2 + 2 - s / 2, y - s / 2, s, s);
+c.fillStyle = "#ffe0fb";
+c.font = "900 11px system-ui,sans-serif";
+c.textAlign = "center";
+c.textBaseline = "middle";
+c.fillText("Change style", x0 + h + 2 + (w - h - 2) / 2, y + 1);
+c.restore();
+world.hits.push({ x, y, r: w / 2, z: 9, onTap: act });
+}
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
 if (action === "trap-feed") {
