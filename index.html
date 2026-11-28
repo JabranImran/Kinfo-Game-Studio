@@ -29870,7 +29870,7 @@ return '<div style="font-size:9px;color:' + (have >= n.need ? '#8dffb0' : '#ff8d
 }
 const R38_NEXUS = "nexus";
 const R38_WORLD_R = 2300;
-const R38_MOD_R = 64;
+const R38_MOD_R = 128;
 const R38_BRIDGE = 34;
 const R38_CANNON_R = 200;
 const R38_HOLD_MS = 1100;
@@ -30038,7 +30038,7 @@ shop: null,
 satAt: 0
 };
 }
-function r38NewSet(x, y, mod) {
+function r38NewSet__r59(x, y, mod) {
 const set = {
 id: r38Uid("s"),
 x, y, vx: 0, vy: 0,
@@ -30157,7 +30157,7 @@ function r38Pack(set, w) {
 w = w || r38.world;
 return { set: JSON.parse(JSON.stringify(set)), mods: set.mods.map(id => JSON.parse(JSON.stringify(w.mods[id]))) };
 }
-function r38Unpack(pk, w) {
+function r38Unpack__r59(pk, w) {
 w = w || r38.world;
 const set = pk.set;
 pk.mods.forEach(m => { w.mods[m.id] = m; });
@@ -30374,7 +30374,7 @@ return;
 }
 }
 function r38SendHi(to) {
-r38Send({ k: "hi", name: r38MyName(), colour: r38MyColour(), raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null }, to);
+r38Send({ k: "hi", name: r38MyName(), colour: r38MyColour(), raw: r59CurRaw() }, to);
 }
 function r38OnData__r39(from, d) {
 const net = r38.net;
@@ -30467,6 +30467,10 @@ w.rank = ws.rank;
 w.patches = ws.patches || [];
 w.mods = ws.mods || {};
 w.sets = ws.sets || {};
+try {
+r59FixWorld(w);
+}
+catch (error) { }
 Object.values(w.sets).forEach(s => {
 const o = old[s.id];
 if (o && s.drv && s.drv !== r38MyId()) {
@@ -31450,7 +31454,7 @@ const set = ride && w.sets[ride.setId];
 if (!set)
 return false;
 const pk = r38Pack(set, w);
-pk.raw = typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null;
+pk.raw = r59CurRaw();
 delete w.sets[set.id];
 set.mods.forEach(id => delete w.mods[id]);
 r38SaveHome();
@@ -31936,7 +31940,7 @@ return;
 }
 const pad = r38FreePad(set, h.mid);
 r38.landing = { setId: h.setId, mid: h.mid, pad, at: r38Now() };
-r38Op({ k: "land", set: h.setId, mid: h.mid, pad, raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null });
+r38Op({ k: "land", set: h.setId, mid: h.mid, pad, raw: r59CurRaw() });
 if (w.kind === "home")
 r38AfterState();
 }
@@ -34978,13 +34982,7 @@ if (planetSave[k] && planetSave[k][pid] !== undefined)
 rec[k] = planetSave[k][pid];
 });
 const parked = (rec.ships || []).map(s => {
-let raw = s.styleDesign || null;
-if (!raw) {
-try {
-raw = resolveShipStyleRaw(s.styleId, s.styleOwnerId);
-}
-catch (error) { }
-}
+const raw = r59StyleRaw(s.styleId, s.styleOwnerId, s.styleDesign || null);
 return { id: s.id, raw: raw || null };
 });
 m.parked = parked;
@@ -35117,7 +35115,7 @@ if (typeof mp !== "undefined" && mp.myId && mp.myId !== r38.net.id)
 old.push(mp.myId);
 r39Rekey(old, r38.net.id);
 }
-r38Send({ k: "hi", name: r38MyName(), colour: r38MyColour(), raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null }, to);
+r38Send({ k: "hi", name: r38MyName(), colour: r38MyColour(), raw: r59CurRaw() }, to);
 }
 function r39PlanetR(distance) {
 const grow = clamp((ORBITAL_START_RADIUS / Math.max(distance, 1)) * 70, 14, 180);
@@ -35321,7 +35319,7 @@ r38Toast(m && m.down ? "THAT MODULE IS DAMAGED — NO LANDING TILL IT REINFLATES
 return;
 }
 if (!riding) {
-r38Op({ k: "land", set: setId, mid, pad: Math.max(0, r38FreePad(set, mid)), raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null, shipId: currentShipId || null });
+r38Op({ k: "land", set: setId, mid, pad: Math.max(0, r38FreePad(set, mid)), raw: r59CurRaw(), shipId: currentShipId || null });
 if (w.kind === "home" || !set.claim || set.claim.pid === r38MyId()) {
 set.claim = set.claim || { pid: r38MyId(), name: r38MyName(), colour: r38MyColour(), awayAt: null };
 }
@@ -35612,7 +35610,7 @@ function r39ParkedNow__r43(m) {
 const list = (m.parked || []).slice();
 const ride = r38.ride;
 if (ride && ride.mid === m.id && running && currentShipId && !list.some(p => p.id === currentShipId))
-list.splice(Math.min(ride.pad || 0, list.length), 0, { id: currentShipId, raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null });
+list.splice(Math.min(ride.pad || 0, list.length), 0, { id: currentShipId, raw: r59CurRaw() });
 return list;
 }
 function r38DrawModule(c, set, m, x, y, t) {
@@ -36098,7 +36096,7 @@ orbitalX = set.x + cen.x;
 orbitalY = set.y + cen.y;
 orbitalHeading = -Math.PI / 2;
 if (w.kind === "nexus") {
-r38Op({ k: "land", set: set.id, mid: m.id, pad: e.pad || 0, raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null, shipId: currentShipId });
+r38Op({ k: "land", set: set.id, mid: m.id, pad: e.pad || 0, raw: r59CurRaw(), shipId: currentShipId });
 r38Op({ k: "drive", set: set.id });
 }
 else {
@@ -36175,7 +36173,7 @@ const mine = set && Object.keys(set.landed || {}).some(mid => (set.landed[mid] |
 if (set && !mine && (!set.claim || set.claim.pid === r38MyId())) {
 r39.assertAt = now;
 const mid = set.mods.find(id => (getShips(r39Pid(id)) || []).some(s => s.id === L.shipId)) || L.mid;
-r38Op({ k: "land", set: set.id, mid, pad: 0, raw: typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null, shipId: L.shipId });
+r38Op({ k: "land", set: set.id, mid, pad: 0, raw: r59CurRaw(), shipId: L.shipId });
 }
 }
 }
@@ -37260,24 +37258,24 @@ const o = r38TowerOffset(m, i);
 const b = lift(o.x, o.y);
 if (b.D <= 0)
 return;
-const h = 26 * s;
+const h = 26 * s * R59K;
 c.save();
 c.strokeStyle = "#c9d6ff";
-c.lineWidth = 3 * s;
+c.lineWidth = 3 * s * R59K;
 c.beginPath();
 c.moveTo(b.X, b.Y);
 c.lineTo(b.X, b.Y - h);
 c.stroke();
 c.fillStyle = "#e8eeff";
 c.beginPath();
-c.ellipse(b.X, b.Y - h, 9 * s, 4 * s, -.4, 0, Math.PI * 2);
+c.ellipse(b.X, b.Y - h, 9 * s * R59K, 4 * s * R59K, -.4, 0, Math.PI * 2);
 c.fill();
 if (tw.sat) {
 c.fillStyle = satColour(tw.sat.type);
 c.shadowBlur = 10;
 c.shadowColor = c.fillStyle;
 c.beginPath();
-c.arc(b.X, b.Y - h - 9 * s, 5.5 * s, 0, Math.PI * 2);
+c.arc(b.X, b.Y - h - 9 * s * R59K, 5.5 * s * R59K, 0, Math.PI * 2);
 c.fill();
 }
 c.restore();
@@ -37308,7 +37306,7 @@ r41Dents(c, m, cx, cy, R * s, t);
 pads.sort((a, b) => a.D - b.D).forEach(pd => {
 if (!pd.ship)
 return;
-const sc = .6 * s;
+const sc = .6 * s * R59K;
 r38DrawShip(c, pd.X, pd.Y - 14 * sc, -Math.PI / 2, (claim && claim.colour) || "#6ee7ff", null, pd.ship.raw, sc);
 if (opts.onShip)
 opts.onShip(pd, m);
@@ -38054,7 +38052,7 @@ wk.target = null;
 }
 else if (wk.target) {
 const dx = wk.target.x - wk.x, dy = wk.target.y - wk.y, d = Math.hypot(dx, dy);
-if (d < 2) {
+if (d < 2 * R59K) {
 const then = wk.target.then;
 wk.target = null;
 if (then)
@@ -38066,7 +38064,7 @@ vy = dy / d;
 }
 if (!vx && !vy)
 return;
-const sp = (inside ? 60 : 50) * dt;
+const sp = (inside ? 60 : 50) * dt * R59K;
 const nx = wk.x + vx * sp, ny = wk.y + vy * sp;
 let h = r41Height(set, nx, ny, inside);
 let fx = nx, fy = ny;
@@ -38106,7 +38104,7 @@ for (const mid of set.mods) {
 const m = w.mods[mid];
 const p = set.pos[mid];
 const ho = r38HatchOffset(m);
-if (Math.hypot(wk.x - (p.x + ho.x), wk.y - (p.y + ho.y)) < Math.max(6, r38ModR(m) * .1)) {
+if (Math.hypot(wk.x - (p.x + ho.x), wk.y - (p.y + ho.y)) < Math.max(6 * R59K, r38ModR(m) * .1)) {
 r41GoIn(mid);
 return;
 }
@@ -38117,7 +38115,7 @@ const m = w.mods[sm];
 const idx = Math.max(0, (getShips(r39Pid(sm)) || []).findIndex(s => s.id === wk.shipId));
 const o = r38PadOffset(m, Math.min(idx, (m.size || 1) - 1));
 const p = set.pos[sm];
-if (Math.hypot(wk.x - (p.x + o.x), wk.y - (p.y + o.y)) < 7)
+if (Math.hypot(wk.x - (p.x + o.x), wk.y - (p.y + o.y)) < 7 * R59K)
 r41Board();
 }
 }
@@ -38330,7 +38328,7 @@ c.textAlign = "center";
 c.fillText(text, w / 2, h - 112);
 c.restore();
 }
-function r41ScreenToDeck(ptr, m, mid) {
+function r41ScreenToDeck__r59(ptr, m, mid) {
 const v = r41.view;
 if (!ptr || !v)
 return null;
@@ -38977,7 +38975,7 @@ at(g(0) - .5, .86),
 at(g(0) + .5, .86)
 ];
 }
-function r41DeckThings(m) {
+function r41DeckThings__r59(m) {
 const S = r42Slots(m);
 const st = r39CoreStruct(m);
 const out = [];
@@ -40048,7 +40046,7 @@ const set = w.sets[r38.ride.setId];
 pk = r38Pack(set, w);
 pk.mid = r38.ride.mid;
 pk.pad = r38.ride.pad;
-pk.raw = typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null;
+pk.raw = r59CurRaw();
 r43Transit({ from: currentPlanetId, pk });
 delete w.sets[set.id];
 set.mods.forEach(id => delete w.mods[id]);
@@ -40074,7 +40072,7 @@ r38CannonFire__r43();
 r43.from = R38_NEXUS;
 if (r38.exitPk) {
 if (!r38.exitPk.raw)
-r38.exitPk.raw = typeof currentShipStyleRaw === "string" ? currentShipStyleRaw : null;
+r38.exitPk.raw = r59CurRaw();
 r43Transit({ from, pk: r38.exitPk });
 }
 r43MapTitles();
@@ -43641,13 +43639,13 @@ const o = r38TowerOffset(m, i);
 const b = lift(o.x, o.y);
 if (b.D <= 0)
 return;
-const h = 26 * s, top = b.Y - h - 9 * s;
+const h = 26 * s * R59K, top = b.Y - h - 9 * s * R59K;
 world.drops.push({
 x: b.X, y: top, r: Math.max(26, 20 * s), kind: "tower",
 accept: (d, src) => d && d.k === "sat" && !tw.sat && !(src && src.t === "r54tower" && src.mid === m.id && src.i === i),
 drop: (d, src) => r54Equip(m, i, src, d)
 });
-if (tw.sat && r54SatHit(m, i, b.X, top, 10 * s)) {
+if (tw.sat && r54SatHit(m, i, b.X, top, 10 * s * R59K)) {
 c.save();
 c.strokeStyle = "rgba(201,214,255,.7)";
 c.setLineDash([3, 3]);
@@ -43914,7 +43912,7 @@ const lx = Math.cos(a) * r, ly = Math.sin(a) * r;
 const b = lift(lx, ly);
 if (b.D <= 0)
 return;
-const size = 15 * s;
+const size = 15 * s * R59K;
 const face = Math.sin(a) * dir > 0 ? 1 : -1;
 c.save();
 c.fillStyle = "rgba(0,0,0,.22)";
@@ -43966,7 +43964,7 @@ return;
 const p = set.pos[mid];
 if (r55IsAstro(pet)) {
 const h = r38HatchOffset(m);
-r41.walk = { mode: "out", pet, fromPid: pid, mid, x: p.x + h.x, y: p.y + h.y + 12, face: 1, target: null, since: performance.now() };
+r41.walk = { mode: "out", pet, fromPid: pid, mid, x: p.x + h.x, y: p.y + h.y + 12 * R59K, face: 1, target: null, since: performance.now() };
 showShipToast("Out on the hull — walk into a ship to go aboard");
 }
 else {
@@ -44072,7 +44070,7 @@ return;
 }
 return r41Board__r55();
 }
-function r41Step(dt) {
+function r41Step__r59(dt) {
 const r = r41Step__r55(dt);
 try {
 const wk = r41.walk;
@@ -44083,7 +44081,7 @@ const m = w.mods[mid], p = set.pos[mid];
 const ships = getShips(r39Pid(mid)) || [];
 for (let i = 0; i < ships.length; i++) {
 const o = r38PadOffset(m, Math.min(i, (m.size || 1) - 1));
-if (Math.hypot(wk.x - (p.x + o.x), wk.y - (p.y + o.y)) < 7) {
+if (Math.hypot(wk.x - (p.x + o.x), wk.y - (p.y + o.y)) < 7 * R59K) {
 r55EnterShip(mid, ships[i].id);
 return r;
 }
@@ -44098,8 +44096,8 @@ var r55InQ = { pet: 1, thing: 1 };
 function r55UpdateInQ(width, height, camS) {
 const hull = Math.min(width, height) * .22 / R38_MOD_R;
 const q = Math.max(.42, Math.min(1, hull / Math.max(.01, camS)));
-r55InQ.pet = q;
-r55InQ.thing = Math.min(1, q * 1.3);
+r55InQ.pet = q * R59K;
+r55InQ.thing = Math.min(1, q * 1.3) * R59K;
 }
 function roomLaunchShip(ship) {
 if (r39IsStn(selectedStartPlanet)) {
@@ -46416,12 +46414,7 @@ e.stopPropagation();
 e.preventDefault();
 try {
 sound("click");
-if (r39IsStn(selectedStartPlanet))
-return;
-if (hasStructure(selectedStartPlanet, "stock"))
-enterRoomView("structure", "stock");
-else
-showShipToast("Build a Vault to store your coins and treasures");
+r59OpenVault();
 }
 catch (error) { }
 });
@@ -46733,7 +46726,7 @@ const src = cv.toDataURL();
 r58Thumbs[styleId] = { sig, src };
 return src;
 }
-function r34StyleBubble(planetId, ship, x, y) {
+function r34StyleBubble__r59(planetId, ship, x, y) {
 const list = getShipStyleList();
 const current = ship ? (ship.styleId || "default") : (r34FavStyle(planetId) || "default");
 const cur = list.find(s => s.id === current) || list[0];
@@ -46828,6 +46821,205 @@ c.textBaseline = "middle";
 c.fillText("Change style", x0 + h + 2 + (w - h - 2) / 2, y + 1);
 c.restore();
 world.hits.push({ x, y, r: w / 2, z: 9, onTap: act });
+}
+function r59OpenVault() {
+const pid = selectedStartPlanet;
+if (!r39IsStn(pid)) {
+enterRoomView("structure", "stock");
+return;
+}
+const mid = r39Mid(pid);
+if (r41.walk && r41.walk.mid === mid && r41.walk.mode === "in")
+return;
+const ship = (getShips(pid) || []).find(s => s.pendingPilot);
+if (ship && typeof r41AstroOut === "function") {
+r41AstroOut(ship, mid);
+return;
+}
+const pet = (getPets(pid) || []).find(p => p && !p.dead);
+if (pet) {
+startRoamingPet(pet.id);
+if (r41.walk && r41.walk.mode === "out")
+r41GoIn(mid);
+return;
+}
+showShipToast("Nobody aboard to open the module's storage — bring a pet or a pilot");
+}
+function r59KeepOnScreen(el) {
+if (!el)
+return;
+let n = 0;
+const fit = () => {
+if (el.classList.contains("hidden"))
+return;
+const r = el.getBoundingClientRect();
+const vw = window.innerWidth, vh = window.innerHeight, pad = 8;
+let dx = 0, dy = 0;
+if (r.left < pad)
+dx = pad - r.left;
+else if (r.right > vw - pad)
+dx = vw - pad - r.right;
+if (r.top < pad)
+dy = pad - r.top;
+else if (r.bottom > vh - pad)
+dy = Math.max(pad - r.top, vh - pad - r.bottom);
+if (dx || dy) {
+const cs = getComputedStyle(el);
+el.style.left = (parseFloat(cs.left) || 0) + dx + "px";
+el.style.top = (parseFloat(cs.top) || 0) + dy + "px";
+el.classList.add("r59-moved");
+}
+if (++n < 8)
+requestAnimationFrame(fit);
+};
+requestAnimationFrame(fit);
+}
+function r34StyleBubble(planetId, ship, x, y) {
+const h = window.innerHeight;
+const r = r34StyleBubble__r59(planetId, ship, x, Math.max(Math.min(y, h * .9), h * .62));
+r59KeepOnScreen(document.getElementById("worldBubble"));
+return r;
+}
+(function () {
+const st = document.createElement("style");
+st.textContent = ".world-bubble.r59-moved::after,.world-bubble.r59-moved::before{display:none !important;}" +
+".world-bubble.r58-styleb .world-bubble-buttons{max-height:min(46vh,340px) !important;}";
+document.head.appendChild(st);
+})();
+function r59BackAngle(m) {
+return m.rot + Math.PI / 3 + Math.PI * 2 / 3;
+}
+function r41DeckThings(m) {
+const out = r41DeckThings__r59(m);
+try {
+const R = r38ModR(m), rf = R * .95;
+const B = r59BackAngle(m);
+const shelf = out.find(o => o.kind === "shelf");
+const tok = out.find(o => o.kind === "tokshelf");
+const at = (a, r) => ({ x: Math.cos(a) * rf * r, y: Math.sin(a) * rf * r, a });
+const freed = [];
+const want = [];
+if (shelf)
+want.push({ o: shelf, p: at(tok ? B - .36 : B, .8) });
+if (tok)
+want.push({ o: tok, p: at(B + .36, .8) });
+want.forEach(w => freed.push({ x: w.o.x, y: w.o.y, a: w.o.a }));
+out.forEach(o => {
+if (o === shelf || o === tok || o.kind === "core")
+return;
+const hit = want.some(w => Math.hypot(o.x - w.p.x, o.y - w.p.y) < rf * .34);
+if (hit && freed.length) {
+const f = freed.shift();
+o.x = f.x;
+o.y = f.y;
+o.a = f.a;
+}
+});
+want.forEach(w => Object.assign(w.o, w.p));
+}
+catch (error) { }
+return out;
+}
+function r41Step(dt) {
+const r = r41Step__r59(dt);
+try {
+const wk = r41.walk;
+if (wk && wk.mode === "in") {
+const m = r38.world.mods[wk.mid];
+if (m) {
+let y = r59BackAngle(m) + Math.PI / 2;
+const cur = r41.yawT;
+y += Math.round((cur - y) / (Math.PI * 2)) * Math.PI * 2;
+r41.yawT = y;
+}
+}
+}
+catch (error) { }
+return r;
+}
+function r41ScreenToDeck(ptr, m, mid) {
+const f = r41ScreenToDeck__r59(ptr, m, mid);
+if (f) {
+const R = r38ModR(m) * .95, d = Math.hypot(f.x, f.y), lim = R * .66;
+if (d > lim) {
+f.x *= lim / d;
+f.y *= lim / d;
+}
+}
+return f;
+}
+var R59K = 2;
+function r59Fix(set, w) {
+if (!set || set.k59)
+return set;
+set.k59 = 1;
+Object.keys(set.pos || {}).forEach(id => {
+const p = set.pos[id];
+if (p) {
+p.x *= R59K;
+p.y *= R59K;
+}
+});
+(set.mods || []).forEach(id => {
+const m = w && w.mods && w.mods[id];
+if (!m || m.k59)
+return;
+m.k59 = 1;
+try {
+const rec = r39Rec(m);
+(rec && rec.floor || []).forEach(f => {
+f.x *= R59K;
+f.y *= R59K;
+});
+}
+catch (error) { }
+});
+return set;
+}
+function r38Unpack(pk, w) {
+const set = r38Unpack__r59(pk, w);
+r59Fix(set, w || r38.world);
+return set;
+}
+function r38NewSet(x, y, mod) {
+const set = r38NewSet__r59(x, y, mod);
+set.k59 = 1;
+if (mod)
+mod.k59 = 1;
+return set;
+}
+function r59FixWorld(w) {
+if (!w || !w.sets)
+return;
+Object.values(w.sets).forEach(s => r59Fix(s, w));
+}
+function r59StyleRaw(styleId, ownerId, design) {
+if (design)
+return design;
+let raw = null;
+try {
+raw = resolveShipStyleRaw(styleId, ownerId);
+}
+catch (error) { }
+if (raw)
+return raw;
+try {
+const d = r58StyleShapes(styleId);
+if (d)
+return JSON.stringify(d);
+}
+catch (error) { }
+return null;
+}
+function r59CurRaw() {
+try {
+const pid = lastLaunchPlanetId || selectedStartPlanet;
+const s = currentShipId && (getShips(pid) || []).find(x => x.id === currentShipId);
+return r59StyleRaw(currentShipStyleId || (s && s.styleId), currentShipStyleOwnerId || (s && s.styleOwnerId), s && s.styleDesign);
+}
+catch (error) {
+return null;
+}
 }
 const FEATURE_ACTIONS = new Set(["r30-build", "r30-struct-hit", "trap-feed", "trap-collect", "revive-start", "revive-collect", "pet-combat", "open-star-map", "site-workers", "forge-powerup", "sat-build", "sat-load", "sat-unload", "pet-subtab", "ship-unload-all", "sell-ship-points", "feed-all-pets"]);
 function featureExecuteAction__r30(action, target, planetId) {
